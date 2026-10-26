@@ -10,9 +10,9 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("FleetHUD Mission Control Setup")]
-[assembly: AssemblyProduct("FleetHUD")]
-[assembly: AssemblyCompany("FleetHUD")]
+[assembly: AssemblyTitle("spawnt Setup")]
+[assembly: AssemblyProduct("spawnt")]
+[assembly: AssemblyCompany("spawnt")]
 [assembly: AssemblyVersion("1.2.1.0")]
 [assembly: AssemblyFileVersion("1.2.1.0")]
 
@@ -36,12 +36,12 @@ public class SetupForm : Form
         this.FormBorderStyle = FormBorderStyle.None;
         this.StartPosition = FormStartPosition.CenterScreen;
         this.Size = new Size(480, 270);
-        this.BackColor = Color.FromArgb(13, 17, 23); // #0d1117
-        this.ForeColor = Color.FromArgb(201, 209, 219); // #c9d1d9
+        this.BackColor = Color.FromArgb(12, 17, 25); // #0C1119
+        this.ForeColor = Color.FromArgb(246, 247, 248); // #F6F7F8
         this.DoubleBuffered = true;
 
-        installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FleetHUD");
-        exeDest = Path.Combine(installDir, "fleethud.exe");
+        installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "spawnt");
+        exeDest = Path.Combine(installDir, "spawnt.exe");
 
         // Draggable form
         this.MouseDown += (s, e) => {
@@ -53,7 +53,7 @@ public class SetupForm : Form
 
         // Title
         lblTitle = new Label();
-        lblTitle.Text = "FleetHUD Mission Control";
+        lblTitle.Text = "spawnt";
         lblTitle.Font = new Font("Segoe UI", 15, FontStyle.Bold);
         lblTitle.ForeColor = Color.White;
         lblTitle.Location = new Point(88, 38);
@@ -61,9 +61,9 @@ public class SetupForm : Form
         this.Controls.Add(lblTitle);
 
         Label lblSub = new Label();
-        lblSub.Text = "Setting up native engine and system tray...";
+        lblSub.Text = "Setting up local agent telemetry and desktop tray...";
         lblSub.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-        lblSub.ForeColor = Color.FromArgb(139, 148, 158); // #8b949e
+        lblSub.ForeColor = Color.FromArgb(169, 180, 194); // #A9B4C2
         lblSub.Location = new Point(90, 72);
         lblSub.AutoSize = true;
         this.Controls.Add(lblSub);
@@ -72,7 +72,7 @@ public class SetupForm : Form
         lblStatus = new Label();
         lblStatus.Text = "Initializing setup...";
         lblStatus.Font = new Font("Segoe UI", 9.0f, FontStyle.Regular);
-        lblStatus.ForeColor = Color.FromArgb(56, 189, 248); // #38bdf8
+        lblStatus.ForeColor = Color.FromArgb(255, 37, 68); // #FF2544 Primary Red
         lblStatus.Location = new Point(36, 138);
         lblStatus.Size = new Size(408, 22);
         this.Controls.Add(lblStatus);
@@ -87,9 +87,9 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v1.2.1  ·  64-bit Native";
+        lblVer.Text = "v1.2.1  ·  64-bit Native  ·  Local-First";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
-        lblVer.ForeColor = Color.FromArgb(110, 118, 129);
+        lblVer.ForeColor = Color.FromArgb(133, 145, 163);
         lblVer.Location = new Point(36, 225);
         lblVer.AutoSize = true;
         this.Controls.Add(lblVer);
@@ -106,42 +106,23 @@ public class SetupForm : Form
         Graphics g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Draw border
-        using (Pen p = new Pen(Color.FromArgb(48, 54, 61), 1.5f)) {
+        // Draw 1px hairline border
+        using (Pen p = new Pen(Color.FromArgb(35, 44, 59), 1.0f)) {
             g.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
         }
 
-        // Draw Squircle Logo (at 36, 32, size 42x42)
+        // Draw spawnt logo at (36, 34, size 42x42)
         int x = 36, y = 34, size = 42;
-        using (GraphicsPath path = RoundedRect(new Rectangle(x, y, size, size), 10)) {
-            using (Brush b = new SolidBrush(Color.FromArgb(13, 17, 23))) {
-                g.FillPath(b, path);
-            }
-        }
-
-        // Draw the approved geometric glyph scaled with 0.65x proportional margins.
         float s = (float)size / 2048.0f;
         PointF[] poly = new PointF[] {
-            new PointF(x + 547.34f * s, y + 1500.14f * s),
-            new PointF(x + 547.34f * s, y + 547.86f * s),
-            new PointF(x + 1499.62f * s, y + 547.86f * s)
+            new PointF(x + 290.67f * s, y + 1756.53f * s),
+            new PointF(x + 1757.33f * s, y + 1756.53f * s),
+            new PointF(x + 1757.33f * s, y + 291.47f * s)
         };
-        using (Brush bGlyph = new SolidBrush(Color.White)) {
+        using (Brush bGlyph = new SolidBrush(Color.FromArgb(255, 37, 68))) {
             g.FillPolygon(bGlyph, poly);
-            g.FillRectangle(bGlyph, x + 878.00f * s, y + 871.82f * s, 622.67f * s, 622.67f * s);
+            g.FillRectangle(bGlyph, x + 799.39f * s, y + 789.88f * s, 449.23f * s, 449.23f * s);
         }
-    }
-
-    private GraphicsPath RoundedRect(Rectangle bounds, int radius)
-    {
-        GraphicsPath path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     private void OnTick(object sender, EventArgs e)
@@ -152,7 +133,7 @@ public class SetupForm : Form
             progressBar.Value = 20;
             Directory.CreateDirectory(installDir);
         } else if (step == 4) {
-            lblStatus.Text = "Extracting FleetHUD native engine...";
+            lblStatus.Text = "Extracting spawnt native engine...";
             progressBar.Value = 45;
             ExtractEmbeddedFiles();
         } else if (step == 6) {
@@ -168,11 +149,11 @@ public class SetupForm : Form
             progressBar.Value = 92;
             ConfigureAutostart();
         } else if (step == 12) {
-            lblStatus.Text = "Launching FleetHUD Mission Control...";
+            lblStatus.Text = "Launching spawnt console...";
             progressBar.Value = 100;
         } else if (step == 14) {
             timer.Stop();
-            LaunchFleetHUD();
+            LaunchSpawnt();
             this.Close();
         }
     }
@@ -180,18 +161,18 @@ public class SetupForm : Form
     private void ExtractEmbeddedFiles()
     {
         try {
-            foreach (Process process in Process.GetProcessesByName("fleethud")) {
-                try {
-                    if (String.Equals(process.MainModule.FileName, exeDest, StringComparison.OrdinalIgnoreCase)) {
+            foreach (string pName in new string[] { "spawnt", "fleethud" }) {
+                foreach (Process process in Process.GetProcessesByName(pName)) {
+                    try {
                         process.Kill();
                         process.WaitForExit(3000);
-                    }
-                } catch {}
-                process.Dispose();
+                    } catch {}
+                    process.Dispose();
+                }
             }
             using (Process cleanup = Process.Start(new ProcessStartInfo {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*') -or ($_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and ($_.CommandLine -like '*tray.ps1*' -or $_.CommandLine -like '*FleetHUD*tray.ps1*')) -or ($_.CommandLine -like '*spawnt\\AppProfile*' -or $_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -210,11 +191,18 @@ public class SetupForm : Form
                 using (FileStream fs = new FileStream(dest, FileMode.Create, FileAccess.Write)) {
                     s.CopyTo(fs);
                 }
+
+                // If fleethud.exe was extracted, also copy as spawnt.exe
+                if (fileName.Equals("fleethud.exe", StringComparison.OrdinalIgnoreCase)) {
+                    try {
+                        File.Copy(dest, Path.Combine(installDir, "spawnt.exe"), true);
+                    } catch {}
+                }
             }
 
-            // Copy setup binary itself as FleetHUD-Uninstall.exe
+            // Copy setup binary itself as spawnt-uninstall.exe
             string currentExe = Process.GetCurrentProcess().MainModule.FileName;
-            string uninstallerDest = Path.Combine(installDir, "FleetHUD-Uninstall.exe");
+            string uninstallerDest = Path.Combine(installDir, "spawnt-uninstall.exe");
             if (File.Exists(currentExe)) {
                 try {
                     File.Copy(currentExe, uninstallerDest, true);
@@ -223,20 +211,22 @@ public class SetupForm : Form
         } catch (Exception ex) {
             timer.Stop();
             lblStatus.Text = "Installation failed";
-            MessageBox.Show(ex.Message, "FleetHUD Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, "spawnt Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void RegisterUninstallEntry()
     {
         try {
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\FleetHUD")) {
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\spawnt")) {
                 if (key != null) {
-                    string uninstallExe = Path.Combine(installDir, "FleetHUD-Uninstall.exe");
-                    string ico = Path.Combine(installDir, "fleethud.ico");
-                    key.SetValue("DisplayName", "FleetHUD Mission Control");
+                    string uninstallExe = Path.Combine(installDir, "spawnt-uninstall.exe");
+                    string ico = Path.Combine(installDir, "spawnt.ico");
+                    if (!File.Exists(ico)) ico = Path.Combine(installDir, "fleethud.ico");
+
+                    key.SetValue("DisplayName", "spawnt");
                     key.SetValue("DisplayVersion", "1.2.1");
-                    key.SetValue("Publisher", "FleetHUD");
+                    key.SetValue("Publisher", "spawnt");
                     key.SetValue("DisplayIcon", ico + ",0");
                     key.SetValue("InstallLocation", installDir);
                     key.SetValue("UninstallString", "\"" + uninstallExe + "\" --uninstall");
@@ -244,8 +234,8 @@ public class SetupForm : Form
                     key.SetValue("EstimatedSize", 16500, RegistryValueKind.DWord);
                     key.SetValue("NoModify", 1, RegistryValueKind.DWord);
                     key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
-                    key.SetValue("URLInfoAbout", "https://fleethud.vercel.app");
-                    key.SetValue("HelpLink", "https://fleethud.vercel.app/docs");
+                    key.SetValue("URLInfoAbout", "https://spawnt.xyz");
+                    key.SetValue("HelpLink", "https://spawnt.xyz/docs");
                 }
             }
         } catch {}
@@ -257,27 +247,28 @@ public class SetupForm : Form
             Type shellType = Type.GetTypeFromProgID("WScript.Shell");
             dynamic shell = Activator.CreateInstance(shellType);
             string vbs = Path.Combine(installDir, "open-console.vbs");
-            string ico = Path.Combine(installDir, "fleethud.ico");
+            string ico = Path.Combine(installDir, "spawnt.ico");
+            if (!File.Exists(ico)) ico = Path.Combine(installDir, "fleethud.ico");
 
             // Desktop shortcut
             string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            string desktopLnk = Path.Combine(desktopDir, "FleetHUD.lnk");
+            string desktopLnk = Path.Combine(desktopDir, "spawnt.lnk");
             dynamic scDesktop = shell.CreateShortcut(desktopLnk);
             scDesktop.TargetPath = "wscript.exe";
             scDesktop.Arguments = "\"" + vbs + "\"";
             scDesktop.IconLocation = ico + ",0";
-            scDesktop.Description = "FleetHUD Mission Control";
+            scDesktop.Description = "spawnt";
             scDesktop.WorkingDirectory = installDir;
             scDesktop.Save();
 
             // Start Menu shortcut
             string startMenuDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs");
-            string startLnk = Path.Combine(startMenuDir, "FleetHUD.lnk");
+            string startLnk = Path.Combine(startMenuDir, "spawnt.lnk");
             dynamic scStart = shell.CreateShortcut(startLnk);
             scStart.TargetPath = "wscript.exe";
             scStart.Arguments = "\"" + vbs + "\"";
             scStart.IconLocation = ico + ",0";
-            scStart.Description = "FleetHUD Mission Control";
+            scStart.Description = "spawnt";
             scStart.WorkingDirectory = installDir;
             scStart.Save();
 
@@ -295,13 +286,13 @@ public class SetupForm : Form
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
                 if (key != null) {
                     string vbs = Path.Combine(installDir, "run-tray.vbs");
-                    key.SetValue("FleetHUD", "wscript.exe \"" + vbs + "\"");
+                    key.SetValue("spawnt", "wscript.exe \"" + vbs + "\"");
                 }
             }
         } catch {}
     }
 
-    private void LaunchFleetHUD()
+    private void LaunchSpawnt()
     {
         try {
             string runTray = Path.Combine(installDir, "run-tray.vbs");
@@ -346,13 +337,13 @@ public class UninstallForm : Form
     public UninstallForm(bool quiet)
     {
         this.isQuiet = quiet;
-        installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FleetHUD");
+        installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "spawnt");
 
         this.FormBorderStyle = FormBorderStyle.None;
         this.StartPosition = FormStartPosition.CenterScreen;
         this.Size = new Size(480, 240);
-        this.BackColor = Color.FromArgb(13, 17, 23); // #0d1117
-        this.ForeColor = Color.FromArgb(201, 209, 219); // #c9d1d9
+        this.BackColor = Color.FromArgb(12, 17, 25); // #0C1119
+        this.ForeColor = Color.FromArgb(246, 247, 248); // #F6F7F8
         this.DoubleBuffered = true;
 
         this.MouseDown += (s, e) => {
@@ -363,7 +354,7 @@ public class UninstallForm : Form
         };
 
         lblTitle = new Label();
-        lblTitle.Text = "Uninstall FleetHUD Mission Control";
+        lblTitle.Text = "Uninstall spawnt";
         lblTitle.Font = new Font("Segoe UI", 14, FontStyle.Bold);
         lblTitle.ForeColor = Color.White;
         lblTitle.Location = new Point(88, 38);
@@ -373,7 +364,7 @@ public class UninstallForm : Form
         Label lblSub = new Label();
         lblSub.Text = "Removing native engine, tray services, and shortcuts...";
         lblSub.Font = new Font("Segoe UI", 9.0f, FontStyle.Regular);
-        lblSub.ForeColor = Color.FromArgb(139, 148, 158);
+        lblSub.ForeColor = Color.FromArgb(169, 180, 194);
         lblSub.Location = new Point(90, 70);
         lblSub.AutoSize = true;
         this.Controls.Add(lblSub);
@@ -381,7 +372,7 @@ public class UninstallForm : Form
         lblStatus = new Label();
         lblStatus.Text = "Preparing uninstallation...";
         lblStatus.Font = new Font("Segoe UI", 9.0f, FontStyle.Regular);
-        lblStatus.ForeColor = Color.FromArgb(248, 81, 73); // Red-tinted status
+        lblStatus.ForeColor = Color.FromArgb(255, 37, 68);
         lblStatus.Location = new Point(36, 125);
         lblStatus.Size = new Size(408, 22);
         this.Controls.Add(lblStatus);
@@ -405,48 +396,30 @@ public class UninstallForm : Form
         Graphics g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        using (Pen p = new Pen(Color.FromArgb(48, 54, 61), 1.5f)) {
+        using (Pen p = new Pen(Color.FromArgb(35, 44, 59), 1.0f)) {
             g.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
         }
 
         int x = 36, y = 34, size = 42;
-        using (GraphicsPath path = RoundedRect(new Rectangle(x, y, size, size), 10)) {
-            using (Brush b = new SolidBrush(Color.FromArgb(13, 17, 23))) {
-                g.FillPath(b, path);
-            }
-        }
-
         float s = (float)size / 2048.0f;
         PointF[] poly = new PointF[] {
-            new PointF(x + 547.34f * s, y + 1500.14f * s),
-            new PointF(x + 547.34f * s, y + 547.86f * s),
-            new PointF(x + 1499.62f * s, y + 547.86f * s)
+            new PointF(x + 290.67f * s, y + 1756.53f * s),
+            new PointF(x + 1757.33f * s, y + 1756.53f * s),
+            new PointF(x + 1757.33f * s, y + 291.47f * s)
         };
-        using (Brush bGlyph = new SolidBrush(Color.White)) {
+        using (Brush bGlyph = new SolidBrush(Color.FromArgb(255, 37, 68))) {
             g.FillPolygon(bGlyph, poly);
-            g.FillRectangle(bGlyph, x + 878.00f * s, y + 871.82f * s, 622.67f * s, 622.67f * s);
+            g.FillRectangle(bGlyph, x + 799.39f * s, y + 789.88f * s, 449.23f * s, 449.23f * s);
         }
-    }
-
-    private GraphicsPath RoundedRect(Rectangle bounds, int radius)
-    {
-        GraphicsPath path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     private void OnTick(object sender, EventArgs e)
     {
         step++;
         if (step == 2) {
-            lblStatus.Text = "Stopping running FleetHUD processes...";
+            lblStatus.Text = "Stopping running spawnt processes...";
             progressBar.Value = 25;
-            KillFleetHUDProcesses();
+            KillProcesses();
         } else if (step == 4) {
             lblStatus.Text = "Removing autostart and environment settings...";
             progressBar.Value = 50;
@@ -466,22 +439,24 @@ public class UninstallForm : Form
         } else if (step == 12) {
             timer.Stop();
             if (!isQuiet) {
-                MessageBox.Show("FleetHUD Mission Control was successfully uninstalled from your computer.", "FleetHUD Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("spawnt was successfully uninstalled from your computer.", "spawnt Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             this.Close();
         }
     }
 
-    private void KillFleetHUDProcesses()
+    private void KillProcesses()
     {
         try {
-            foreach (Process p in Process.GetProcessesByName("fleethud")) {
-                try { p.Kill(); p.WaitForExit(2000); } catch {}
-                p.Dispose();
+            foreach (string pName in new string[] { "spawnt", "fleethud" }) {
+                foreach (Process p in Process.GetProcessesByName(pName)) {
+                    try { p.Kill(); p.WaitForExit(2000); } catch {}
+                    p.Dispose();
+                }
             }
             using (Process cleanup = Process.Start(new ProcessStartInfo {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*') -or ($_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and ($_.CommandLine -like '*tray.ps1*' -or $_.CommandLine -like '*FleetHUD*tray.ps1*')) -or ($_.CommandLine -like '*spawnt\\AppProfile*' -or $_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -496,6 +471,7 @@ public class UninstallForm : Form
         try {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
                 if (key != null) {
+                    key.DeleteValue("spawnt", false);
                     key.DeleteValue("FleetHUD", false);
                 }
             }
@@ -519,16 +495,25 @@ public class UninstallForm : Form
     private void RemoveShortcuts()
     {
         try {
-            string desktopLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "FleetHUD.lnk");
-            if (File.Exists(desktopLnk)) File.Delete(desktopLnk);
+            string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            foreach (string name in new string[] { "spawnt.lnk", "FleetHUD.lnk", "FleetHUD Console.lnk" }) {
+                string p = Path.Combine(desktopDir, name);
+                if (File.Exists(p)) File.Delete(p);
+            }
 
-            string startLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\FleetHUD.lnk");
-            if (File.Exists(startLnk)) File.Delete(startLnk);
+            string startMenuDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs");
+            foreach (string name in new string[] { "spawnt.lnk", "FleetHUD.lnk", "FleetHUD Console.lnk" }) {
+                string p = Path.Combine(startMenuDir, name);
+                if (File.Exists(p)) File.Delete(p);
+            }
         } catch {}
     }
 
     private void RemoveUninstallRegistration()
     {
+        try {
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\spawnt", false);
+        } catch {}
         try {
             Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\FleetHUD", false);
         } catch {}
@@ -537,7 +522,6 @@ public class UninstallForm : Form
     private void ScheduleFileCleanup()
     {
         try {
-            // Delete all files in installDir except the currently executing uninstaller
             string currentExe = Process.GetCurrentProcess().MainModule.FileName;
             if (Directory.Exists(installDir)) {
                 foreach (string f in Directory.GetFiles(installDir)) {
@@ -550,7 +534,6 @@ public class UninstallForm : Form
                 }
             }
 
-            // Schedule self-deletion of the remaining uninstaller exe and parent directory
             Process.Start(new ProcessStartInfo {
                 FileName = "cmd.exe",
                 Arguments = "/c timeout /t 2 /nobreak > NUL & rmdir /s /q \"" + installDir + "\"",
@@ -591,8 +574,8 @@ public class Program
         if (isUninstall) {
             if (!isQuiet) {
                 DialogResult dr = MessageBox.Show(
-                    "Are you sure you want to completely remove FleetHUD Mission Control from your computer?",
-                    "FleetHUD Uninstall",
+                    "Are you sure you want to completely remove spawnt from your computer?",
+                    "spawnt Uninstall",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question
                 );

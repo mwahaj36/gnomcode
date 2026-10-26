@@ -1,5 +1,4 @@
 @echo off
-title FleetHUD Setup and Installer
+title spawnt Setup and Installer
 cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install.ps1"
-pause
+call "%~dp0Install-spawnt.bat"
