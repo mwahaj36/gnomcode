@@ -83,7 +83,7 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 - Not an enterprise APM. No SDK instrumentation required.
 - We never store prompts, code, file contents or tool output.
 - No product telemetry / phone-home. Ever. (Update checks are opt-out and send only the version.)
-- No remote/SSH/devcontainer agent tracking before v1.0 (WSL is supported).
+- Remote tracking requires an opt-in collector in the environment; provider-wide hosted-session discovery is not automatic (see §3.15.1).
 
 ### 1.7 Success metrics (first 6 months after public launch)
 
@@ -514,6 +514,28 @@ erDiagram
 - **Seat management:** Lemon Squeezy / Paddle subscription quantity webhook → Supabase Edge Function updates `organizations.max_seats`. Inviting a member beyond `max_seats` increments the subscription seat count automatically (or prompts the owner).
 - **Team-wide guardrails:** When a `team_budget_rules` threshold is breached, a Postgres trigger / Edge Function fires the Slack/Discord webhook and sets a flag in the device's sync response; if `hard_stop_via_hooks = true`, connected daemons enforce the block on the next `PreToolUse` hook.
 
+### 3.15.1 Cloud session collectors
+
+The daemon automatically starts cloud collection when runtime identity is available, reusing its paired account. Other agents can bind `FLEETHUD_CLOUD_AGENT` and `FLEETHUD_CLOUD_SESSION_ID`. A new environment still needs secure account linking.
+
+`fleethud cloud-session` runs on Windows, macOS and Linux and registers cloud
+sessions in the existing local session model (`surface=cloud`). Codex runtime
+identity is detected; all other supported agents accept explicit native IDs.
+A 30-second collector heartbeat means `connected`, not active agent work. Presence
+expires after 90 seconds, and costs/model/usage stay unknown without measured data.
+Native adapters or an explicit metadata-only `--usage-file` supply per-invocation
+usage deltas. Rust pricing computes estimated API-equivalent cost, with unknown
+prices preserved. Stable event IDs and durable offsets prevent duplicate costs.
+
+Opt-in account pairing publishes one row per account/session to
+`fleethud_cloud_sessions`; owner RLS and server timestamps govern visibility.
+The web console combines cloud rows with desktop snapshots and displays cloud
+usage/cost in session rows. Existing summary charts remain desktop reports.
+Remote payloads omit repository labels, paths and titles. No prompts, raw tool
+outputs, or credentials are published. This does not provide access to hidden
+provider-hosted transcripts or token totals. Deployment and provider limitations
+are documented in [Cloud sessions](./CLOUD_SESSIONS.md); see ADR 0004.
+
 ### 3.16 User Profile, Settings & Notifications
 
 #### A. Six Settings Sections
@@ -620,6 +642,8 @@ flowchart LR
 **Release:** `v0.8.0`.
 
 ### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [in progress]
+
+- Cloud collector implementation: portable presence, measured native/imported usage and estimated per-session cost implemented; production migration, account pairing and native Windows/macOS execution pending.
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
@@ -803,6 +827,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0001](./adr/0001-rust-core.md) | Rust for core, CLI, daemon and hooks | Accepted |
 | [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
+| [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
 
 ## 10. Open questions
 

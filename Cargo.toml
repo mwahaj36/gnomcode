@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "1.2.1"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 license-file = "LICENSE"
 repository = "https://github.com/mwahaj36/fleethud"
 homepage = "https://fleethud.pro"
