@@ -42,14 +42,21 @@ pub struct HealthResponse {
     pub timestamp: String,
 }
 
-/// Builds the axum router for FleetHUD local API.
+const DASHBOARD_HTML: &str = include_str!("dashboard.html");
+
+/// Builds the axum router for FleetHUD local API and embedded dashboard.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(dashboard_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/quota", get(quota_handler))
         .with_state(state)
+}
+
+async fn dashboard_handler() -> impl IntoResponse {
+    axum::response::Html(DASHBOARD_HTML)
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
