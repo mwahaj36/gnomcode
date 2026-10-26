@@ -351,6 +351,7 @@
       <h1>FleetHUD</h1>
       <div class="nav-tabs">
         <button class="tab-btn active" id="tab-btn-console" onclick="switchTab('console')">Console</button>
+        <button class="tab-btn" id="tab-btn-pro" onclick="switchTab('pro')">Pro & Guardrails</button>
         <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings')">Settings</button>
         <button class="tab-btn" id="tab-btn-auth" onclick="switchTab('auth')">Auth & Cloud Sync</button>
       </div>
@@ -372,6 +373,10 @@
         <button class="btn-pill" onclick="setTimeline('7d', this)">Last 7 Days</button>
         <button class="btn-pill" onclick="setTimeline('30d', this)">Last 30 Days</button>
         <button class="btn-pill active" onclick="setTimeline('all', this)">All Time</button>
+      </div>
+      <div style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn-pill" onclick="exportData('csv')">Export CSV</button>
+        <button class="btn-pill" onclick="exportData('json')">Export JSON</button>
       </div>
     </div>
 
@@ -610,6 +615,113 @@
     </div>
   </main>
 
+  <!-- ==================== VIEW 4: PRO & GUARDRAILS ==================== -->
+  <main id="view-pro" class="view-content">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+      <!-- License Activation Card -->
+      <div class="card">
+        <div class="card-title">FleetHUD Pro Offline License</div>
+        <div style="margin: 12px 0; display: flex; align-items: center; gap: 10px;">
+          <span style="color: var(--text-muted); font-size: 12px;">Active Tier:</span>
+          <span id="pro-tier-badge" class="badge" style="font-weight: 700;">[FREE]</span>
+        </div>
+        <div id="pro-license-details" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
+          Free tier active. Pro features (Spend Guardrails, Auto-Resume Queue, CSV Analytics Export) unlock with an offline Ed25519-signed license key.
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <input
+            type="text"
+            id="license-key-input"
+            placeholder="Paste Ed25519 license JSON here..."
+            style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
+          >
+          <button class="btn-primary" onclick="activateLicenseKey()">Activate Pro</button>
+          <button class="btn-pill" onclick="removeLicenseKey()">Remove</button>
+        </div>
+        <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
+      </div>
+
+      <!-- Quick Export Card -->
+      <div class="card">
+        <div class="card-title">Analytics & Data Export</div>
+        <p style="font-size: 11px; color: var(--text-muted); margin: 8px 0 16px 0; line-height: 1.5;">
+          Export complete normalized usage records, token breakdowns, model spend, and prompt cache savings for accounting or reporting.
+        </p>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-primary" onclick="exportData('csv')">Export CSV (Excel / Sheets)</button>
+          <button class="btn-pill" onclick="exportData('json')">Export JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resume Queue Section -->
+    <div class="table-container" style="margin-bottom: 20px;">
+      <div class="table-header-controls">
+        <div style="font-weight: 600; font-size: 13px;">Auto-Resume Queue (Rate-Limited Sessions)</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Auto-continues rate-limited sessions as soon as quota resets</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Session ID</th>
+            <th>Agent</th>
+            <th>Working Dir</th>
+            <th>Prompt</th>
+            <th>Max Runs</th>
+            <th>Runs Done</th>
+            <th>Eligible After</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="resume-queue-table">
+          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No armed sessions in queue.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Guardrails Rules Section -->
+    <div class="table-container" style="margin-bottom: 20px;">
+      <div class="table-header-controls">
+        <div style="font-weight: 600; font-size: 13px;">Guardrail Rules</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Rule ID</th>
+            <th>Agent Scope</th>
+            <th>Max Spend (USD)</th>
+            <th>Max Turns</th>
+            <th>Enforcement</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="rules-table">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No custom guardrail rules configured.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Breach Alerts Section -->
+    <div class="table-container">
+      <div class="table-header-controls">
+        <div style="font-weight: 600; font-size: 13px;">Recent Guardrail Alerts</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Rule ID</th>
+            <th>Enforcement</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="alerts-table">
+          <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
   <script>
     let currentTimeline = 'all';
     let currentPage = 1;
@@ -628,7 +740,172 @@
 
       if (tabName === 'settings') {
         loadSettingsData();
+      } else if (tabName === 'pro') {
+        loadProData();
       }
+    }
+
+    async function exportData(fmt) {
+      try {
+        const res = await fetch(`/api/v1/export?range=${currentTimeline}&format=${fmt}`, { headers });
+        if (res.status === 402) {
+          alert("Exporting analytics requires a Pro license. Activate Pro under the 'Pro & Guardrails' tab.");
+          return;
+        }
+        if (!res.ok) {
+          alert("Failed to export data.");
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fleethud-report-${currentTimeline}.${fmt}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        alert("Export failed: " + err);
+      }
+    }
+
+    async function loadProData() {
+      try {
+        const licRes = await fetch('/api/v1/license', { headers });
+        if (licRes.ok) {
+          const lic = await licRes.json();
+          const badge = document.getElementById('pro-tier-badge');
+          const details = document.getElementById('pro-license-details');
+          if (lic.licensed) {
+            badge.innerText = `[${lic.tier.toUpperCase()}]`;
+            badge.style.color = 'var(--green)';
+            details.innerText = `License active for ${lic.customer_name || 'user'}. ${lic.expires_at ? 'Expires ' + lic.expires_at : 'Perpetual license.'}`;
+          } else {
+            badge.innerText = '[FREE]';
+            badge.style.color = 'var(--text-muted)';
+            details.innerText = 'Free tier active. Pro features unlock with an offline Ed25519-signed license key.';
+          }
+        }
+        const qRes = await fetch('/api/v1/resume-queue', { headers });
+        if (qRes.ok) {
+          const queue = await qRes.json();
+          const qTable = document.getElementById('resume-queue-table');
+          if (!queue || queue.length === 0) {
+            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No armed sessions in queue.</td></tr>';
+          } else {
+            qTable.innerHTML = queue.map(e => `
+              <tr>
+                <td style="font-family: var(--font-mono); font-size: 11px;">${e.session_id}</td>
+                <td><span class="badge">${e.agent}</span></td>
+                <td style="color: var(--text-muted); font-size: 11px;">${e.cwd}</td>
+                <td>${e.resume_prompt}</td>
+                <td>${e.max_runs}</td>
+                <td>${e.runs_completed}</td>
+                <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(e.eligible_after)}</td>
+                <td><button class="btn-pill" onclick="disarmResume('${e.session_id}')">Disarm</button></td>
+              </tr>
+            `).join('');
+          }
+        }
+        const rulesRes = await fetch('/api/v1/rules', { headers });
+        if (rulesRes.ok) {
+          const rules = await rulesRes.json();
+          const rTable = document.getElementById('rules-table');
+          if (!rules || rules.length === 0) {
+            rTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No custom guardrail rules configured.</td></tr>';
+          } else {
+            rTable.innerHTML = rules.map(r => `
+              <tr>
+                <td style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">${r.id}</td>
+                <td>${r.agent || 'All Agents'}</td>
+                <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) : 'None'}</td>
+                <td>${r.max_turns || 'None'}</td>
+                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">[${r.action}]</span></td>
+                <td><button class="btn-pill" onclick="deleteRule('${r.id}')">Delete</button></td>
+              </tr>
+            `).join('');
+          }
+        }
+        const alertsRes = await fetch('/api/v1/alerts', { headers });
+        if (alertsRes.ok) {
+          const alerts = await alertsRes.json();
+          const aTable = document.getElementById('alerts-table');
+          if (!alerts || alerts.length === 0) {
+            aTable.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded.</td></tr>';
+          } else {
+            aTable.innerHTML = alerts.map(a => `
+              <tr>
+                <td style="font-family: var(--font-mono); font-size: 11px;">${a.session_id}</td>
+                <td style="font-weight: 600;">${a.rule_id}</td>
+                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">[${a.action}]</span></td>
+                <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(a.created_at)}</td>
+              </tr>
+            `).join('');
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function activateLicenseKey() {
+      const input = document.getElementById('license-key-input');
+      const feedback = document.getElementById('license-feedback');
+      const key = input.value.trim();
+      if (!key) return;
+      try {
+        const res = await fetch('/api/v1/license', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ license_key: key })
+        });
+        if (res.ok) {
+          feedback.style.color = 'var(--green)';
+          feedback.innerText = 'License activated successfully!';
+          input.value = '';
+          loadProData();
+        } else {
+          feedback.style.color = 'var(--red)';
+          feedback.innerText = 'Activation failed. Invalid or expired signature.';
+        }
+      } catch (err) {
+        feedback.style.color = 'var(--red)';
+        feedback.innerText = 'Error: ' + err;
+      }
+    }
+
+    async function removeLicenseKey() {
+      if (!confirm('Remove active license and revert to Free tier?')) return;
+      try {
+        await fetch('/api/v1/license', { method: 'DELETE', headers });
+        loadProData();
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+    async function disarmResume(sid) {
+      try {
+        await fetch('/api/v1/resume-queue/disarm', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sid })
+        });
+        loadProData();
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+    async function deleteRule(ruleId) {
+      try {
+        await fetch(`/api/v1/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE', headers });
+        loadProData();
+      } catch (err) {
+        alert(err);
+      }
+    }
     }
 
     function formatRelativeTime(isoStr) {
