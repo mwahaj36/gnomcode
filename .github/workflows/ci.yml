@@ -1,12 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-  schedule:
-    # Nightly full matrix at 03:00 UTC (runs only if commits exist)
-    - cron: "0 3 * * *"
+  # Manual trigger only while conserving private-repo GitHub Actions minutes.
+  # All commits and PRs are verified locally via `.agents/skills/rust-quality-gate/scripts/check.ps1`.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
