@@ -238,6 +238,21 @@ pub fn calculate_plan_roi(api_equivalent_usd: f64, monthly_plan_usd: f64) -> Pla
     }
 }
 
+/// Maps an agent slug to a clean display name.
+#[must_use]
+pub fn format_agent_display(agent_slug: &str) -> &'static str {
+    match agent_slug.to_lowercase().as_str() {
+        "antigravity" => "Google Antigravity",
+        "codex" => "OpenAI Codex",
+        "claude-code" => "Claude Code",
+        "gemini-cli" => "Google Gemini CLI",
+        "cursor" => "Cursor",
+        "cline" => "Cline",
+        "aider" => "Aider",
+        _ => "Other Agent",
+    }
+}
+
 /// Maps a model name or agent slug to its provider name ("Anthropic", "OpenAI", "Google", "Other").
 #[must_use]
 pub fn classify_provider(agent_slug: &str, model: &str) -> &'static str {

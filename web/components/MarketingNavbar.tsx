@@ -33,8 +33,8 @@ export default function MarketingNavbar() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/40 flex items-center justify-center text-accent font-bold font-mono text-sm group-hover:border-accent transition-colors">
-              F
+            <div className="w-8 h-8 rounded-lg bg-white p-1 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+              <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-base tracking-tight text-foreground font-sans">

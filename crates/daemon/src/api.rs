@@ -81,6 +81,12 @@ pub fn build_router(state: AppState) -> Router {
                 .post(custom_pricing_post_handler)
                 .delete(custom_pricing_delete_handler),
         )
+        .route(
+            "/api/v1/auth/session",
+            get(auth_session_get_handler)
+                .post(auth_session_post_handler)
+                .delete(auth_session_delete_handler),
+        )
         .route("/api/v1/stats", get(stats_handler))
         .route("/api/v1/supabase-config", get(supabase_config_handler))
         .route("/api/v1/live", get(live_snapshot_handler))
@@ -244,39 +250,43 @@ async fn report_handler(
     let mut roi_by_provider = Vec::new();
     let mut combined_plan = 0.0;
 
-    let get_spend = |prov_name: &str| -> f64 {
+    let get_spend = |prov_names: &[&str]| -> f64 {
         report
             .providers
             .iter()
-            .find(|p| p.provider.eq_ignore_ascii_case(prov_name))
+            .find(|p| {
+                prov_names
+                    .iter()
+                    .any(|name| p.provider.eq_ignore_ascii_case(name))
+            })
             .map_or(0.0, |p| p.total_cost_usd)
     };
 
-    let anthropic_spend = get_spend("Anthropic");
-    let openai_spend = get_spend("OpenAI");
-    let google_spend = get_spend("Google");
+    let claude_spend = get_spend(&["Claude Code", "Anthropic", "Anthropic (Claude)"]);
+    let openai_spend = get_spend(&["OpenAI Codex", "OpenAI", "OpenAI (Codex)"]);
+    let google_spend = get_spend(&["Google Antigravity", "Google", "Google (Antigravity)"]);
 
-    if user_profile.claude_plan_usd > 0.0 {
+    if user_profile.claude_plan_usd > 0.0 && claude_spend > 0.0 {
         let eff_plan = user_profile.claude_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(anthropic_spend, eff_plan);
+        let roi = fleethud_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
-            provider: "Anthropic (Claude)".to_owned(),
+            provider: "Claude Code".to_owned(),
             plan_usd: eff_plan,
             monthly_plan_usd: user_profile.claude_plan_usd,
-            spend_usd: anthropic_spend,
+            spend_usd: claude_spend,
             multiplier: roi.multiplier,
             net_savings_usd: roi.net_savings_usd,
             period_label: period_label.to_owned(),
         });
     }
 
-    if user_profile.openai_plan_usd > 0.0 {
+    if user_profile.openai_plan_usd > 0.0 && openai_spend > 0.0 {
         let eff_plan = user_profile.openai_plan_usd * time_factor;
         combined_plan += eff_plan;
         let roi = fleethud_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
-            provider: "OpenAI (Codex)".to_owned(),
+            provider: "OpenAI Codex".to_owned(),
             plan_usd: eff_plan,
             monthly_plan_usd: user_profile.openai_plan_usd,
             spend_usd: openai_spend,
@@ -286,12 +296,12 @@ async fn report_handler(
         });
     }
 
-    if user_profile.google_plan_usd > 0.0 {
+    if user_profile.google_plan_usd > 0.0 && google_spend > 0.0 {
         let eff_plan = user_profile.google_plan_usd * time_factor;
         combined_plan += eff_plan;
         let roi = fleethud_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
-            provider: "Google (Antigravity)".to_owned(),
+            provider: "Google Antigravity".to_owned(),
             plan_usd: eff_plan,
             monthly_plan_usd: user_profile.google_plan_usd,
             spend_usd: google_spend,
@@ -463,6 +473,41 @@ async fn supabase_config_handler() -> impl IntoResponse {
     )
 }
 
+fn session_file_path() -> std::path::PathBuf {
+    fleethud_platform::user_home_dir()
+        .join(".fleethud")
+        .join("session.json")
+}
+
+async fn auth_session_get_handler() -> impl IntoResponse {
+    let path = session_file_path();
+    let session: Option<serde_json::Value> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok());
+
+    (cors_headers(), Json(json!({ "session": session })))
+}
+
+async fn auth_session_post_handler(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let path = session_file_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let content =
+        serde_json::to_string_pretty(&payload).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    std::fs::write(&path, content).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok((cors_headers(), Json(json!({ "success": true }))))
+}
+
+async fn auth_session_delete_handler() -> impl IntoResponse {
+    let path = session_file_path();
+    let _ = std::fs::remove_file(path);
+    (cors_headers(), Json(json!({ "success": true })))
+}
+
 #[derive(Debug, Deserialize, Default)]
 struct LiveQueryParams {
     range: Option<String>,
@@ -516,11 +561,15 @@ async fn live_snapshot_handler(
 
     let mut roi_by_provider = Vec::new();
     let mut combined_plan = 0.0;
-    let get_spend = |prov_name: &str| -> f64 {
+    let get_spend = |prov_names: &[&str]| -> f64 {
         report
             .providers
             .iter()
-            .find(|p| p.provider.eq_ignore_ascii_case(prov_name))
+            .find(|p| {
+                prov_names
+                    .iter()
+                    .any(|name| p.provider.eq_ignore_ascii_case(name))
+            })
             .map_or(0.0, |p| p.total_cost_usd)
     };
 
@@ -545,31 +594,31 @@ async fn live_snapshot_handler(
         }
     };
 
-    let anthropic_spend = get_spend("Anthropic");
-    let openai_spend = get_spend("OpenAI");
-    let google_spend = get_spend("Google");
+    let claude_spend = get_spend(&["Claude Code", "Anthropic", "Anthropic (Claude)"]);
+    let openai_spend = get_spend(&["OpenAI Codex", "OpenAI", "OpenAI (Codex)"]);
+    let google_spend = get_spend(&["Google Antigravity", "Google", "Google (Antigravity)"]);
 
-    if user_profile.claude_plan_usd > 0.0 {
+    if user_profile.claude_plan_usd > 0.0 && claude_spend > 0.0 {
         let eff_plan = user_profile.claude_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(anthropic_spend, eff_plan);
+        let roi = fleethud_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
         roi_by_provider.push(json!({
-            "provider": "Anthropic (Claude)",
+            "provider": "Claude Code",
             "plan_usd": eff_plan,
             "monthly_plan_usd": user_profile.claude_plan_usd,
-            "spend_usd": anthropic_spend,
+            "spend_usd": claude_spend,
             "multiplier": roi.multiplier,
             "net_savings_usd": roi.net_savings_usd,
             "period_label": period_label,
         }));
     }
 
-    if user_profile.openai_plan_usd > 0.0 {
+    if user_profile.openai_plan_usd > 0.0 && openai_spend > 0.0 {
         let eff_plan = user_profile.openai_plan_usd * time_factor;
         combined_plan += eff_plan;
         let roi = fleethud_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(json!({
-            "provider": "OpenAI (Codex)",
+            "provider": "OpenAI Codex",
             "plan_usd": eff_plan,
             "monthly_plan_usd": user_profile.openai_plan_usd,
             "spend_usd": openai_spend,
@@ -579,12 +628,12 @@ async fn live_snapshot_handler(
         }));
     }
 
-    if user_profile.google_plan_usd > 0.0 {
+    if user_profile.google_plan_usd > 0.0 && google_spend > 0.0 {
         let eff_plan = user_profile.google_plan_usd * time_factor;
         combined_plan += eff_plan;
         let roi = fleethud_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(json!({
-            "provider": "Google (Antigravity)",
+            "provider": "Google Antigravity",
             "plan_usd": eff_plan,
             "monthly_plan_usd": user_profile.google_plan_usd,
             "spend_usd": google_spend,
@@ -609,6 +658,9 @@ async fn live_snapshot_handler(
     });
 
     let total_pages = total_count.div_ceil(limit);
+    let paired_session: Option<serde_json::Value> = std::fs::read_to_string(session_file_path())
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok());
 
     Ok((
         cors_headers(),
@@ -625,6 +677,7 @@ async fn live_snapshot_handler(
             "total_pages": total_pages.max(1),
             "active_count": active_count,
             "custom_pricing": custom_pricing,
+            "paired_session": paired_session,
         })),
     ))
 }
