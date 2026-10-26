@@ -12,8 +12,9 @@ use axum::{
     response::{IntoResponse, Json},
     routing::get,
 };
-use fleethud_store::Database;
+use fleethud_store::{Database, UserProfile};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -26,11 +27,28 @@ pub struct AppState {
     pub bearer_token: String,
 }
 
-/// Query parameters for listing sessions.
-#[derive(Debug, Deserialize)]
-pub struct ListParams {
-    /// Maximum count of sessions to return.
+/// Query parameters for listing sessions with pagination & filters.
+#[derive(Debug, Deserialize, Default)]
+pub struct SessionQueryParams {
+    /// 1-indexed page number.
+    pub page: Option<usize>,
+    /// Limit per page (default 10).
     pub limit: Option<usize>,
+    /// Agent slug filter (e.g. `antigravity`, `codex`, `claude-code`, or `all`).
+    pub agent: Option<String>,
+    /// Status filter (`active`, `idle`, or `all`).
+    pub status: Option<String>,
+}
+
+/// Query parameters for reports.
+#[derive(Debug, Deserialize, Default)]
+pub struct ReportQueryParams {
+    /// Range filter (`today`, `7d`, `30d`, `all`, `custom`).
+    pub range: Option<String>,
+    /// Custom ISO start timestamp.
+    pub from: Option<String>,
+    /// Custom ISO end timestamp.
+    pub to: Option<String>,
 }
 
 /// Daemon health endpoint response.
@@ -52,6 +70,17 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/quota", get(quota_handler))
+        .route(
+            "/api/v1/user",
+            get(user_get_handler).post(user_post_handler),
+        )
+        .route(
+            "/api/v1/pricing/custom",
+            get(custom_pricing_get_handler)
+                .post(custom_pricing_post_handler)
+                .delete(custom_pricing_delete_handler),
+        )
+        .route("/api/v1/stats", get(stats_handler))
         .with_state(state)
 }
 
@@ -109,45 +138,189 @@ async fn health_handler(
 async fn list_sessions_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-    Query(params): Query<ListParams>,
+    Query(params): Query<SessionQueryParams>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let limit = params.limit.unwrap_or(20);
+    let page = params.page.unwrap_or(1).max(1);
+    let limit = params.limit.unwrap_or(10).clamp(1, 100);
+    let offset = (page - 1) * limit;
+
     let db = state.db.lock().await;
-    let sessions = db
-        .list_active_sessions(limit)
+    let (sessions, total_count) = db
+        .list_sessions_paginated(
+            params.agent.as_deref(),
+            params.status.as_deref(),
+            offset,
+            limit,
+        )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(sessions))
+
+    let active_count = sessions.iter().filter(|s| s.is_active).count();
+
+    #[derive(Serialize)]
+    struct PaginatedResponse {
+        sessions: Vec<fleethud_store::SessionListItem>,
+        total_count: usize,
+        page: usize,
+        limit: usize,
+        total_pages: usize,
+        active_count: usize,
+    }
+
+    let total_pages = total_count.div_ceil(limit);
+
+    Ok(Json(PaginatedResponse {
+        sessions,
+        total_count,
+        page,
+        limit,
+        total_pages: total_pages.max(1),
+        active_count,
+    }))
 }
 
 async fn report_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
+    Query(params): Query<ReportQueryParams>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    let range = params.range.as_deref().unwrap_or("all");
     let db = state.db.lock().await;
-    let rows = db
-        .generate_usage_report()
+
+    let report = db
+        .generate_usage_report_timeline(range, params.from.as_deref(), params.to.as_deref())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let mut total_cost = 0.0;
-    let mut total_savings = 0.0;
-    for r in &rows {
-        total_cost += r.total_cost_usd;
-        total_savings += r.total_cache_savings_usd;
+
+    let user_profile = db
+        .get_user_profile()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    #[derive(Serialize)]
+    struct PlanRoiInfo {
+        provider: String,
+        plan_usd: f64,
+        spend_usd: f64,
+        multiplier: f64,
+        net_savings_usd: f64,
     }
 
     #[derive(Serialize)]
-    struct FullReport {
-        total_cost_usd: f64,
-        total_cache_savings_usd: f64,
-        items_count: usize,
+    struct EnhancedReport {
+        timeline: fleethud_store::TimelineReport,
+        user_profile: UserProfile,
+        roi_by_provider: Vec<PlanRoiInfo>,
+        combined_roi: PlanRoiInfo,
     }
 
-    Ok(Json(FullReport {
-        total_cost_usd: total_cost,
-        total_cache_savings_usd: total_savings,
-        items_count: rows.len(),
+    let mut roi_by_provider = Vec::new();
+    let mut combined_plan = 0.0;
+
+    let get_spend = |prov_name: &str| -> f64 {
+        report
+            .providers
+            .iter()
+            .find(|p| p.provider.eq_ignore_ascii_case(prov_name))
+            .map_or(0.0, |p| p.total_cost_usd)
+    };
+
+    let anthropic_spend = get_spend("Anthropic");
+    let openai_spend = get_spend("OpenAI");
+    let google_spend = get_spend("Google");
+
+    if user_profile.claude_plan_usd > 0.0 {
+        combined_plan += user_profile.claude_plan_usd;
+        let roi = fleethud_core::pricing::calculate_plan_roi(
+            anthropic_spend,
+            user_profile.claude_plan_usd,
+        );
+        roi_by_provider.push(PlanRoiInfo {
+            provider: "Anthropic (Claude)".to_owned(),
+            plan_usd: user_profile.claude_plan_usd,
+            spend_usd: anthropic_spend,
+            multiplier: roi.multiplier,
+            net_savings_usd: roi.net_savings_usd,
+        });
+    }
+
+    if user_profile.openai_plan_usd > 0.0 {
+        combined_plan += user_profile.openai_plan_usd;
+        let roi =
+            fleethud_core::pricing::calculate_plan_roi(openai_spend, user_profile.openai_plan_usd);
+        roi_by_provider.push(PlanRoiInfo {
+            provider: "OpenAI (Codex)".to_owned(),
+            plan_usd: user_profile.openai_plan_usd,
+            spend_usd: openai_spend,
+            multiplier: roi.multiplier,
+            net_savings_usd: roi.net_savings_usd,
+        });
+    }
+
+    if user_profile.google_plan_usd > 0.0 {
+        combined_plan += user_profile.google_plan_usd;
+        let roi =
+            fleethud_core::pricing::calculate_plan_roi(google_spend, user_profile.google_plan_usd);
+        roi_by_provider.push(PlanRoiInfo {
+            provider: "Google (Antigravity)".to_owned(),
+            plan_usd: user_profile.google_plan_usd,
+            spend_usd: google_spend,
+            multiplier: roi.multiplier,
+            net_savings_usd: roi.net_savings_usd,
+        });
+    }
+
+    let combined_roi_calc =
+        fleethud_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
+    let combined_roi = PlanRoiInfo {
+        provider: "All Plans (Combined)".to_owned(),
+        plan_usd: combined_plan,
+        spend_usd: report.total_cost_usd,
+        multiplier: combined_roi_calc.multiplier,
+        net_savings_usd: combined_roi_calc.net_savings_usd,
+    };
+
+    Ok(Json(EnhancedReport {
+        timeline: report,
+        user_profile,
+        roi_by_provider,
+        combined_roi,
     }))
+}
+
+async fn user_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let profile = db
+        .get_user_profile()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(profile))
+}
+
+async fn user_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(profile): Json<UserProfile>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    db.update_user_profile(&profile)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(profile))
+}
+
+async fn stats_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let stats = db
+        .get_database_stats()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(stats))
 }
 
 async fn quota_handler(
@@ -160,6 +333,53 @@ async fn quota_handler(
         .get_latest_quota_snapshots()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(quota))
+}
+
+async fn custom_pricing_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let pricings = db
+        .get_custom_model_pricings()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "custom_pricing": pricings })))
+}
+
+async fn custom_pricing_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(pricing): Json<fleethud_store::CustomModelPricing>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let mut db = state.db.lock().await;
+    db.set_custom_model_pricing(&pricing)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let pricings = db
+        .get_custom_model_pricings()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "custom_pricing": pricings })))
+}
+
+#[derive(serde::Deserialize)]
+struct DeletePricingQuery {
+    pattern: String,
+}
+
+async fn custom_pricing_delete_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(query): Query<DeletePricingQuery>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let mut db = state.db.lock().await;
+    db.delete_custom_model_pricing(&query.pattern)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let pricings = db
+        .get_custom_model_pricings()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "custom_pricing": pricings })))
 }
 
 #[cfg(test)]

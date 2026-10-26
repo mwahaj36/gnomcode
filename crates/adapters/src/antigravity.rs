@@ -102,11 +102,18 @@ impl SourceAdapter for AntigravityAdapter {
                     }
                 }
             } else if step_type == "PLANNER_RESPONSE" {
-                let model = self
+                let raw_model = self
                     .active_model
                     .as_deref()
                     .or(ctx.fallback_model.as_deref())
-                    .unwrap_or("Gemini 4 Argon (Medium)");
+                    .unwrap_or("Gemini 3.8 Flash (Default)");
+
+                let model = if raw_model.contains("MODEL_PLACEHOLDER") {
+                    "Gemini 3.8 Flash (Default)"
+                } else {
+                    raw_model
+                };
+
                 sess.model = Some(model.to_owned());
 
                 if let Some(calls) = obj.get("tool_calls").and_then(Value::as_array) {
@@ -189,8 +196,18 @@ pub fn parse_model_selection_change(content: &str) -> Option<String> {
     let after = &content[idx + marker.len()..];
     let to_idx = after.find(" to ")?;
     let rest = &after[to_idx + 4..];
-    let end_idx = rest.find(". ")?;
-    let model = rest[..end_idx].trim();
+    let end_idx = if let Some(i) = rest.find(". ") {
+        i
+    } else if let Some(i) = rest.find(".\n") {
+        i
+    } else if let Some(i) = rest.find("</") {
+        i
+    } else if let Some(i) = rest.find('\n') {
+        i
+    } else {
+        rest.len()
+    };
+    let model = rest[..end_idx].trim().trim_end_matches('.');
     if model.is_empty() {
         None
     } else {

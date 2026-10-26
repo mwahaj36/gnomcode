@@ -238,6 +238,37 @@ pub fn calculate_plan_roi(api_equivalent_usd: f64, monthly_plan_usd: f64) -> Pla
     }
 }
 
+/// Maps a model name or agent slug to its provider name ("Anthropic", "OpenAI", "Google", "Other").
+#[must_use]
+pub fn classify_provider(agent_slug: &str, model: &str) -> &'static str {
+    let m = model.to_lowercase();
+    let a = agent_slug.to_lowercase();
+    if a.contains("claude")
+        || m.contains("claude")
+        || m.contains("opus")
+        || m.contains("sonnet")
+        || m.contains("haiku")
+    {
+        "Anthropic"
+    } else if a.contains("codex")
+        || m.contains("gpt")
+        || m.contains("o1")
+        || m.contains("o3")
+        || m.contains("sol")
+    {
+        "OpenAI"
+    } else if a.contains("antigravity")
+        || a.contains("gemini")
+        || m.contains("gemini")
+        || m.contains("argon")
+        || m.contains("flash")
+    {
+        "Google"
+    } else {
+        "Other"
+    }
+}
+
 fn u64_to_f64(val: u64) -> f64 {
     u32::try_from(val).map_or(f64::from(u32::MAX), f64::from)
 }
