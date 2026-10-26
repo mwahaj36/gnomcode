@@ -30,12 +30,31 @@ if (-not (Test-Path $IconPath)) {
 
 Add-Type @"
 using System;
+using System.Drawing;
+using System.Windows.Forms;
 using System.Runtime.InteropServices;
+
 public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
+}
+
+public class DarkMenuColorTable : ProfessionalColorTable {
+    public override Color MenuBorder { get { return Color.FromArgb(48, 54, 61); } }
+    public override Color MenuItemBorder { get { return Color.Transparent; } }
+    public override Color MenuItemSelected { get { return Color.FromArgb(33, 38, 45); } }
+    public override Color ToolStripDropDownBackground { get { return Color.FromArgb(13, 17, 23); } }
+    public override Color ImageMarginGradientBegin { get { return Color.FromArgb(13, 17, 23); } }
+    public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(13, 17, 23); } }
+    public override Color ImageMarginGradientEnd { get { return Color.FromArgb(13, 17, 23); } }
+    public override Color SeparatorDark { get { return Color.FromArgb(48, 54, 61); } }
+    public override Color SeparatorLight { get { return Color.FromArgb(13, 17, 23); } }
+    public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(33, 38, 45); } }
+    public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(33, 38, 45); } }
+    public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(40, 46, 54); } }
+    public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(40, 46, 54); } }
 }
 "@
 
@@ -124,30 +143,42 @@ function Update-TrayIconBadge([int]$count) {
         $bmp = New-Object System.Drawing.Bitmap 32, 32
         $g = [System.Drawing.Graphics]::FromImage($bmp)
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-        $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::SingleBitPerPixelGridFit
 
         if ($baseIcon) {
             $g.DrawIcon($baseIcon, 0, 0)
         } else {
             $whiteBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 255, 255))
             $g.FillEllipse($whiteBrush, 2, 2, 28, 28)
+            $whiteBrush.Dispose()
         }
 
         if ($count -gt 0) {
-            # Crisp green circle badge in lower-right
+            # Large, crisp high-contrast green badge in lower-right
             $greenBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(34, 197, 94))
-            $darkBorderPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(13, 17, 23), 1.5)
-            $badgeRect = New-Object System.Drawing.Rectangle 14, 14, 17, 17
+            $darkPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(13, 17, 23), 2.0)
+            
+            # 18x18 circle at (13, 13)
+            $badgeRect = New-Object System.Drawing.Rectangle 13, 13, 18, 18
             $g.FillEllipse($greenBrush, $badgeRect)
-            $g.DrawEllipse($darkBorderPen, $badgeRect)
+            $g.DrawEllipse($darkPen, $badgeRect)
 
-            $badgeFont = New-Object System.Drawing.Font("Segoe UI", 7.5, [System.Drawing.FontStyle]::Bold)
+            # High-visibility bold typography
+            $badgeFont = New-Object System.Drawing.Font("Arial", 9.5, [System.Drawing.FontStyle]::Bold)
             $badgeTextBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(13, 17, 23))
             $sf = New-Object System.Drawing.StringFormat
             $sf.Alignment = [System.Drawing.StringAlignment]::Center
             $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
             $textStr = if ($count -gt 9) { "9+" } else { "$count" }
-            $g.DrawString($textStr, $badgeFont, $badgeTextBrush, (New-Object System.Drawing.RectangleF 14, 14, 17, 17), $sf)
+            $g.DrawString($textStr, $badgeFont, $badgeTextBrush, (New-Object System.Drawing.RectangleF 13, 14, 18, 18), $sf)
+
+            $greenBrush.Dispose()
+            $darkPen.Dispose()
+            $badgeFont.Dispose()
+            $badgeTextBrush.Dispose()
+            $sf.Dispose()
         }
 
         $hIcon = $bmp.GetHicon()
@@ -162,14 +193,19 @@ function Update-TrayIconBadge([int]$count) {
 }
 
 $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$colorTable = New-Object DarkMenuColorTable
+$contextMenu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer($colorTable)
 $contextMenu.ShowImageMargin = $false
+$contextMenu.ShowCheckMargin = $false
 $contextMenu.BackColor = [System.Drawing.Color]::FromArgb(13, 17, 23)
 $contextMenu.ForeColor = [System.Drawing.Color]::White
 $contextMenu.Font = New-Object System.Drawing.Font("Segoe UI", 9.0)
+$contextMenu.Padding = New-Object System.Windows.Forms.Padding(2, 4, 2, 4)
 
 # 1. Open Console
 $openItem = $contextMenu.Items.Add("Open Mission Control")
-$openItem.Font = New-Object System.Drawing.Font($openItem.Font, [System.Drawing.FontStyle]::Bold)
+$openItem.Font = New-Object System.Drawing.Font("Segoe UI", 9.0, [System.Drawing.FontStyle]::Bold)
+$openItem.ForeColor = [System.Drawing.Color]::White
 $openItem.Add_Click({ Open-Console })
 
 # Separator
@@ -179,17 +215,19 @@ $contextMenu.Items.Add("-") | Out-Null
 $sessionsHeader = $contextMenu.Items.Add("Active Sessions (0)")
 $sessionsHeader.Enabled = $false
 $sessionsHeader.Font = New-Object System.Drawing.Font("Segoe UI", 8.0, [System.Drawing.FontStyle]::Bold)
-$sessionsHeader.ForeColor = [System.Drawing.Color]::FromArgb(158, 170, 184)
+$sessionsHeader.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
 
 # Placeholder item when idle
 $idleSessionItem = $contextMenu.Items.Add("  Fleet Idle (no active agents)")
 $idleSessionItem.Enabled = $false
+$idleSessionItem.ForeColor = [System.Drawing.Color]::FromArgb(110, 118, 129)
 
 # 5 Slots for active sessions
 $sessionMenuItems = @()
 for ($i = 0; $i -lt 5; $i++) {
     $item = $contextMenu.Items.Add("")
     $item.Visible = $false
+    $item.ForeColor = [System.Drawing.Color]::FromArgb(230, 237, 243)
     $sessionMenuItems += $item
 }
 
@@ -197,37 +235,16 @@ for ($i = 0; $i -lt 5; $i++) {
 $contextMenu.Items.Add("-") | Out-Null
 
 # Metrics
-$spendItem = $contextMenu.Items.Add("API-equivalent today: `$0.00")
+$spendItem = $contextMenu.Items.Add("Today: `$0.00 API-equivalent")
 $spendItem.Enabled = $false
-$spendItem.ForeColor = [System.Drawing.Color]::FromArgb(158, 170, 184)
-
-# Copy local bearer token
-$copyTokenItem = $contextMenu.Items.Add("Copy Local Bearer Token")
-$copyTokenItem.Add_Click({
-    if (Test-Path $DaemonInfoPath) {
-        try {
-            $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
-            [System.Windows.Forms.Clipboard]::SetText($info.token)
-            $notifyIcon.ShowBalloonTip(2000, "Token Copied", "Bearer token copied to clipboard for local pairing.", [System.Windows.Forms.ToolTipIcon]::Info)
-        } catch {}
-    }
-})
-
-# Pin FleetHUD explanation
-$pinItem = $contextMenu.Items.Add("Pin FleetHUD to Taskbar Tray")
-$pinItem.Add_Click({
-    [System.Windows.Forms.MessageBox]::Show(
-        "To keep FleetHUD pinned to your taskbar:`n`n1. Click the '^' overflow arrow next to your system clock.`n2. Click and drag the FleetHUD icon into your visible system tray.`n`nWindows will now keep FleetHUD permanently visible.",
-        "Pin FleetHUD to Taskbar",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Information
-    ) | Out-Null
-})
+$spendItem.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+$spendItem.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
 
 $contextMenu.Items.Add("-") | Out-Null
 
 # Exit
 $exitItem = $contextMenu.Items.Add("Quit FleetHUD")
+$exitItem.ForeColor = [System.Drawing.Color]::FromArgb(248, 81, 73)
 $exitItem.Add_Click({
     $notifyIcon.Visible = $false
     if (Test-Path $DaemonInfoPath) {
@@ -240,7 +257,6 @@ $exitItem.Add_Click({
 })
 
 $notifyIcon.ContextMenuStrip = $contextMenu
-$contextMenu.Items | ForEach-Object { $_.BackColor = $contextMenu.BackColor }
 foreach ($item in $sessionMenuItems) {
     $item.Add_Click({
         param($itemSender, $itemArgs)
@@ -277,7 +293,7 @@ $timer.Add_Tick({
 
         $count = $live.active_count
         $spend = if ($live.timeline -and $live.timeline.total_cost_usd) { [double]$live.timeline.total_cost_usd } else { 0.0 }
-        $spendItem.Text = "API-equivalent today: `$$($spend.ToString('0.00'))"
+        $spendItem.Text = "Today: `$$($spend.ToString('0.00')) API-equivalent"
         $sessionsHeader.Text = "Active Sessions ($count)"
 
         Update-TrayIconBadge $count

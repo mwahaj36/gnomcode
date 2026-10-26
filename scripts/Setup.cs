@@ -119,16 +119,16 @@ public class SetupForm : Form
             }
         }
 
-        // Draw the original geometric glyph scaled into 42x42.
+        // Draw the approved geometric glyph scaled with 0.65x proportional margins.
         float s = (float)size / 2048.0f;
         PointF[] poly = new PointF[] {
-            new PointF(x + 290.67f * s, y + 1756.53f * s),
-            new PointF(x + 290.67f * s, y + 291.47f * s),
-            new PointF(x + 1755.73f * s, y + 291.47f * s)
+            new PointF(x + 547.34f * s, y + 1500.14f * s),
+            new PointF(x + 547.34f * s, y + 547.86f * s),
+            new PointF(x + 1499.62f * s, y + 547.86f * s)
         };
         using (Brush bGlyph = new SolidBrush(Color.White)) {
             g.FillPolygon(bGlyph, poly);
-            g.FillRectangle(bGlyph, x + 799.39f * s, y + 789.88f * s, 957.95f * s, 957.95f * s);
+            g.FillRectangle(bGlyph, x + 878.00f * s, y + 871.82f * s, 622.67f * s, 622.67f * s);
         }
     }
 
