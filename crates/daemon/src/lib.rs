@@ -1,6 +1,8 @@
 //! Long-running background daemon: single-instance lock, bearer token security,
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
+pub mod api;
+
 use chrono::Utc;
 use fleethud_ingest::ingest_all;
 use fleethud_platform::fleethud_home;
