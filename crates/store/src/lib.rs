@@ -58,6 +58,158 @@ pub struct ReportRow {
     pub turn_count: u64,
 }
 
+/// User profile with per-provider active subscription plans.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct UserProfile {
+    /// Unique user identifier.
+    pub id: String,
+    /// User handle.
+    pub username: String,
+    /// Display name shown in UI.
+    pub display_name: String,
+    /// Monthly plan price for OpenAI tools (Codex).
+    pub openai_plan_usd: f64,
+    /// Monthly plan price for Anthropic tools (Claude Code).
+    pub claude_plan_usd: f64,
+    /// Monthly plan price for Google tools (Antigravity).
+    pub google_plan_usd: f64,
+    /// Monthly plan price for other tools.
+    pub other_plan_usd: f64,
+    /// ISO timestamp of last update.
+    pub updated_at: String,
+}
+
+impl Default for UserProfile {
+    fn default() -> Self {
+        Self {
+            id: "local_user".to_owned(),
+            username: "developer".to_owned(),
+            display_name: "Local Developer".to_owned(),
+            openai_plan_usd: 20.0,
+            claude_plan_usd: 20.0,
+            google_plan_usd: 0.0,
+            other_plan_usd: 0.0,
+            updated_at: Utc::now().to_rfc3339(),
+        }
+    }
+}
+
+/// Enriched session item for UI list with project name and clean state.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SessionListItem {
+    /// Session ID.
+    pub id: String,
+    /// Agent name.
+    pub agent: String,
+    /// Surface.
+    pub surface: String,
+    /// Project name.
+    pub project_name: String,
+    /// Model name.
+    pub model: String,
+    /// State (tool, thinking, awaiting_approval, idle, ended).
+    pub state: String,
+    /// Whether actively executing in the last 15 minutes.
+    pub is_active: bool,
+    /// Started at timestamp.
+    pub started_at: String,
+    /// Last event timestamp.
+    pub last_event_at: String,
+}
+
+/// Breakdown for a single model under a provider.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ModelReport {
+    /// Model name.
+    pub model: String,
+    /// Agent slug.
+    pub agent: String,
+    /// Input tokens.
+    pub input_tokens: u64,
+    /// Cached tokens read.
+    pub cache_read_tokens: u64,
+    /// Output tokens.
+    pub output_tokens: u64,
+    /// Dollar spend.
+    pub cost_usd: f64,
+    /// Cache savings.
+    pub cache_savings_usd: f64,
+    /// Turn count.
+    pub turn_count: u64,
+}
+
+/// Breakdown for an AI provider (Anthropic, OpenAI, Google).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ProviderReport {
+    /// Provider name ("Anthropic", "OpenAI", "Google", "Other").
+    pub provider: String,
+    /// Total cost in USD.
+    pub total_cost_usd: f64,
+    /// Total prompt cache savings.
+    pub total_cache_savings_usd: f64,
+    /// Percentage of total spend across all providers.
+    pub pct_of_spend: f64,
+    /// Models under this provider.
+    pub models: Vec<ModelReport>,
+}
+
+/// Filtered timeline report with date spans and per-provider ROI comparison.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TimelineReport {
+    /// Range label (e.g. "Today", "Last 7 Days", "All Time").
+    pub range_label: String,
+    /// Earliest event timestamp in range.
+    pub earliest_at: Option<String>,
+    /// Latest event timestamp in range.
+    pub latest_at: Option<String>,
+    /// Total cost across all providers.
+    pub total_cost_usd: f64,
+    /// Total cache savings across all providers.
+    pub total_cache_savings_usd: f64,
+    /// Total input tokens.
+    pub total_input_tokens: u64,
+    /// Total cache read tokens.
+    pub total_cache_read_tokens: u64,
+    /// Total output tokens.
+    pub total_output_tokens: u64,
+    /// Total turns.
+    pub total_turns: u64,
+    /// Providers list.
+    pub providers: Vec<ProviderReport>,
+    /// Total item count.
+    pub items_count: usize,
+}
+
+/// Local database storage statistics.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DatabaseStats {
+    /// Total sessions recorded.
+    pub total_sessions: u64,
+    /// Total turns recorded.
+    pub total_turns: u64,
+    /// Total activity events recorded.
+    pub total_events: u64,
+    /// Total projects tracked.
+    pub total_projects: u64,
+    /// Database size in bytes.
+    pub db_size_bytes: u64,
+}
+
+/// User-configured custom model pricing rate override.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CustomModelPricing {
+    /// Pattern to match against model identifier (e.g. `claude-3-5-sonnet`, `gemini`).
+    pub model_pattern: String,
+    /// Uncached input tokens USD per 1M tokens.
+    pub input_per_mtok_usd: f64,
+    /// Output & reasoning tokens USD per 1M tokens.
+    pub output_per_mtok_usd: f64,
+    /// Cached input tokens USD per 1M tokens read.
+    pub cache_read_per_mtok_usd: f64,
+    /// Timestamp of last modification.
+    pub updated_at: String,
+}
+
 /// Managed SQLite database handle wrapped with FleetHUD schema & queries.
 pub struct Database {
     conn: Connection,
@@ -181,6 +333,28 @@ impl Database {
                 fingerprint TEXT NOT NULL,
                 last_ingested_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS user_profile (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                openai_plan_usd REAL NOT NULL DEFAULT 20.0,
+                claude_plan_usd REAL NOT NULL DEFAULT 20.0,
+                google_plan_usd REAL NOT NULL DEFAULT 0.0,
+                other_plan_usd REAL NOT NULL DEFAULT 0.0,
+                updated_at TEXT NOT NULL
+            );
+
+            INSERT OR IGNORE INTO user_profile (id, username, display_name, openai_plan_usd, claude_plan_usd, google_plan_usd, other_plan_usd, updated_at)
+            VALUES ('local_user', 'developer', 'Local Developer', 20.0, 20.0, 0.0, 0.0, datetime('now'));
+
+            CREATE TABLE IF NOT EXISTS custom_model_pricing (
+                model_pattern TEXT PRIMARY KEY,
+                input_per_mtok_usd REAL NOT NULL,
+                output_per_mtok_usd REAL NOT NULL,
+                cache_read_per_mtok_usd REAL NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             "#,
         )?;
         Ok(())
@@ -297,9 +471,7 @@ impl Database {
         {
             let mut stmt = tx.prepare_cached(
                 r#"
-                INSERT INTO activity_event (
-                    session_id, timestamp, kind, tool_name, summary_redacted, duration_ms
-                )
+                INSERT INTO activity_event (session_id, timestamp, kind, tool_name, summary_redacted, duration_ms)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
             )?;
@@ -314,13 +486,14 @@ impl Database {
                     ActivityKind::RateLimited => "rate_limited",
                     ActivityKind::AutoResume => "auto_resume",
                 };
+                let duration_i64 = a.duration_ms.and_then(|d| i64::try_from(d).ok());
                 stmt.execute(params![
                     a.session_id,
                     a.timestamp.to_rfc3339(),
                     kind_str,
                     a.tool_name,
                     a.summary_redacted,
-                    a.duration_ms.and_then(|d| i64::try_from(d).ok()),
+                    duration_i64,
                 ])?;
             }
         }
@@ -329,14 +502,13 @@ impl Database {
         {
             let mut stmt = tx.prepare_cached(
                 r#"
-                INSERT INTO quota_snapshot (
-                    provider, limit_id, window, used_pct, resets_at, plan, basis, observed_at
-                )
+                INSERT INTO quota_snapshot (provider, limit_id, window, used_pct, resets_at, plan, basis, observed_at)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 "#,
             )?;
             for q in quota {
-                let win_str = match q.window {
+                let resets_str = q.resets_at.map(|dt| dt.to_rfc3339());
+                let window_str = match q.window {
                     QuotaWindow::FiveHour => "five_hour",
                     QuotaWindow::Weekly => "weekly",
                     QuotaWindow::Monthly => "monthly",
@@ -344,9 +516,9 @@ impl Database {
                 stmt.execute(params![
                     q.provider,
                     q.limit_id,
-                    win_str,
+                    window_str,
                     q.used_pct,
-                    q.resets_at.map(|dt| dt.to_rfc3339()),
+                    resets_str,
                     q.plan,
                     q.basis.as_str(),
                     q.observed_at.to_rfc3339(),
@@ -354,7 +526,7 @@ impl Database {
             }
         }
 
-        // 6. Upsert source file checkpoint
+        // 6. Update source file checkpoint
         {
             let mut stmt = tx.prepare_cached(
                 r#"
@@ -380,53 +552,55 @@ impl Database {
         Ok(())
     }
 
-    /// Gets the checkpoint for `file_path`, if previously recorded.
+    /// Queries the latest committed checkpoint for a log file.
     ///
     /// # Errors
-    /// Returns [`Error`] if querying fails.
+    /// Returns [`Error`] if query execution fails.
     pub fn get_checkpoint(&self, file_path: &str) -> Result<Option<SourceCheckpoint>, Error> {
         let mut stmt = self.conn.prepare(
             r#"
             SELECT file_path, last_read_offset, file_size, fingerprint, last_ingested_at
-            FROM source_file WHERE file_path = ?1
+            FROM source_file
+            WHERE file_path = ?1
             "#,
         )?;
-        let res = stmt
-            .query_row(params![file_path], |row| {
-                let offset_i64: i64 = row.get(1)?;
-                let size_i64: i64 = row.get(2)?;
-                let ts_str: String = row.get(4)?;
-                let ts = DateTime::parse_from_rfc3339(&ts_str)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
-                Ok(SourceCheckpoint {
-                    file_path: row.get(0)?,
-                    last_read_offset: u64::try_from(offset_i64.max(0)).unwrap_or(0),
-                    file_size: u64::try_from(size_i64.max(0)).unwrap_or(0),
-                    fingerprint: row.get(3)?,
-                    last_ingested_at: ts,
-                })
-            })
-            .optional()?;
-        Ok(res)
+
+        let mut rows = stmt.query(params![file_path])?;
+        if let Some(row) = rows.next()? {
+            let offset_i64: i64 = row.get(1)?;
+            let size_i64: i64 = row.get(2)?;
+            let ts_str: String = row.get(4)?;
+            let last_ingested_at = DateTime::parse_from_rfc3339(&ts_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+
+            Ok(Some(SourceCheckpoint {
+                file_path: row.get(0)?,
+                last_read_offset: u64::try_from(offset_i64.max(0)).unwrap_or(0),
+                file_size: u64::try_from(size_i64.max(0)).unwrap_or(0),
+                fingerprint: row.get(3)?,
+                last_ingested_at,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
-    /// Queries the most recent live sessions for `fleethud status` CLI display.
+    /// Queries live and recent active agent sessions, ordered by `last_event_at DESC`.
     ///
     /// # Errors
     /// Returns [`Error`] if query execution fails.
     pub fn list_active_sessions(&self, limit: usize) -> Result<Vec<Session>, Error> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT id, agent, surface, project_id, parent_session_id, model,
-                   title, state, pid, started_at, last_event_at
+            SELECT id, agent, surface, project_id, parent_session_id, model, title, state, pid, started_at, last_event_at
             FROM session
             ORDER BY last_event_at DESC
             LIMIT ?1
             "#,
         )?;
 
-        let limit_i64 = i64::try_from(limit).unwrap_or(i64::MAX);
+        let limit_i64 = i64::try_from(limit).unwrap_or(50);
         let rows = stmt.query_map(params![limit_i64], |row| {
             let agent_str: String = row.get(1)?;
             let agent = match agent_str.as_str() {
@@ -446,7 +620,7 @@ impl Database {
                 _ => Surface::Cli,
             };
             let state_str: String = row.get(7)?;
-            let state = match state_str.as_str() {
+            let raw_state = match state_str.as_str() {
                 "thinking" => SessionState::Thinking,
                 "tool" => SessionState::Tool,
                 "awaiting_approval" => SessionState::AwaitingApproval,
@@ -463,13 +637,31 @@ impl Database {
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
 
+            let now = Utc::now();
+            let is_stale = (now - last_event_at).num_minutes() > 15;
+            let state = if is_stale
+                && (raw_state == SessionState::Tool || raw_state == SessionState::Thinking)
+            {
+                SessionState::Idle
+            } else {
+                raw_state
+            };
+
+            let raw_model: Option<String> = row.get(5)?;
+            let model = match raw_model {
+                Some(ref m) if m.contains("MODEL_PLACEHOLDER") => {
+                    Some("Gemini 3.8 Flash (Default)".to_owned())
+                }
+                other => other,
+            };
+
             Ok(Session {
                 id: row.get(0)?,
                 agent,
                 surface,
                 project_id: row.get(3)?,
                 parent_session_id: row.get(4)?,
-                model: row.get(5)?,
+                model,
                 title: row.get(6)?,
                 state,
                 pid: row.get(8)?,
@@ -540,9 +732,24 @@ impl Database {
             })
         })?;
 
+        let custom_prices = self.get_custom_model_pricings().unwrap_or_default();
         let mut out = Vec::new();
         for r in rows {
-            out.push(r?);
+            let mut row = r?;
+            if let Some(custom) = custom_prices.iter().find(|cp| {
+                row.model
+                    .to_lowercase()
+                    .contains(&cp.model_pattern.to_lowercase())
+            }) {
+                let mtok = 1_000_000.0_f64;
+                let in_c = (row.input_tokens as f64 / mtok) * custom.input_per_mtok_usd;
+                let out_c = (row.output_tokens as f64 / mtok) * custom.output_per_mtok_usd;
+                let read_c = (row.cache_read_tokens as f64 / mtok) * custom.cache_read_per_mtok_usd;
+                row.total_cost_usd = in_c + out_c + read_c;
+                let full_in = (row.cache_read_tokens as f64 / mtok) * custom.input_per_mtok_usd;
+                row.total_cache_savings_usd = (full_in - read_c).max(0.0);
+            }
+            out.push(row);
         }
         Ok(out)
     }
@@ -603,6 +810,483 @@ impl Database {
             out.push(r?);
         }
         Ok(out)
+    }
+
+    /// Queries the local user profile and preferences.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn get_user_profile(&self) -> Result<UserProfile, Error> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT id, username, display_name, openai_plan_usd, claude_plan_usd, google_plan_usd, other_plan_usd, updated_at
+            FROM user_profile
+            WHERE id = 'local_user'
+            LIMIT 1
+            "#,
+        )?;
+        let res = stmt
+            .query_row([], |row| {
+                Ok(UserProfile {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    display_name: row.get(2)?,
+                    openai_plan_usd: row.get(3)?,
+                    claude_plan_usd: row.get(4)?,
+                    google_plan_usd: row.get(5)?,
+                    other_plan_usd: row.get(6)?,
+                    updated_at: row.get(7)?,
+                })
+            })
+            .optional()?;
+
+        Ok(res.unwrap_or_default())
+    }
+
+    /// Updates or inserts the local user profile and plan settings.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if database update fails.
+    pub fn update_user_profile(&self, p: &UserProfile) -> Result<(), Error> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            INSERT INTO user_profile (id, username, display_name, openai_plan_usd, claude_plan_usd, google_plan_usd, other_plan_usd, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(id) DO UPDATE SET
+                username = excluded.username,
+                display_name = excluded.display_name,
+                openai_plan_usd = excluded.openai_plan_usd,
+                claude_plan_usd = excluded.claude_plan_usd,
+                google_plan_usd = excluded.google_plan_usd,
+                other_plan_usd = excluded.other_plan_usd,
+                updated_at = excluded.updated_at
+            "#,
+        )?;
+        stmt.execute(params![
+            "local_user",
+            p.username,
+            p.display_name,
+            p.openai_plan_usd,
+            p.claude_plan_usd,
+            p.google_plan_usd,
+            p.other_plan_usd,
+            Utc::now().to_rfc3339()
+        ])?;
+        Ok(())
+    }
+
+    /// Queries all custom model pricing overrides.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn get_custom_model_pricings(&self) -> Result<Vec<CustomModelPricing>, Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT model_pattern, input_per_mtok_usd, output_per_mtok_usd, cache_read_per_mtok_usd, updated_at FROM custom_model_pricing ORDER BY model_pattern",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(CustomModelPricing {
+                model_pattern: r.get(0)?,
+                input_per_mtok_usd: r.get(1)?,
+                output_per_mtok_usd: r.get(2)?,
+                cache_read_per_mtok_usd: r.get(3)?,
+                updated_at: r.get(4)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// Sets or updates a custom model pricing override.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn set_custom_model_pricing(&mut self, pricing: &CustomModelPricing) -> Result<(), Error> {
+        self.conn.execute(
+            r#"
+            INSERT INTO custom_model_pricing (model_pattern, input_per_mtok_usd, output_per_mtok_usd, cache_read_per_mtok_usd, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(model_pattern) DO UPDATE SET
+                input_per_mtok_usd = excluded.input_per_mtok_usd,
+                output_per_mtok_usd = excluded.output_per_mtok_usd,
+                cache_read_per_mtok_usd = excluded.cache_read_per_mtok_usd,
+                updated_at = excluded.updated_at
+            "#,
+            params![
+                pricing.model_pattern,
+                pricing.input_per_mtok_usd,
+                pricing.output_per_mtok_usd,
+                pricing.cache_read_per_mtok_usd,
+                pricing.updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Deletes a custom model pricing override.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn delete_custom_model_pricing(&mut self, model_pattern: &str) -> Result<(), Error> {
+        self.conn.execute(
+            "DELETE FROM custom_model_pricing WHERE model_pattern = ?1",
+            params![model_pattern],
+        )?;
+        Ok(())
+    }
+
+    /// Returns paginated session list with joined project names and dynamic active status.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn list_sessions_paginated(
+        &self,
+        agent_filter: Option<&str>,
+        status_filter: Option<&str>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<SessionListItem>, usize), Error> {
+        let now = Utc::now();
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT s.id, s.agent, s.surface, p.name, s.model, s.state, s.started_at, s.last_event_at
+            FROM session s
+            JOIN project p ON s.project_id = p.id
+            ORDER BY s.last_event_at DESC
+            "#,
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let agent: String = row.get(1)?;
+            let surface: String = row.get(2)?;
+            let project_name: String = row.get(3)?;
+            let raw_model: Option<String> = row.get(4)?;
+            let state_str: String = row.get(5)?;
+            let started_at: String = row.get(6)?;
+            let last_event_at_str: String = row.get(7)?;
+
+            let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or(now);
+
+            let diff_mins = (now - last_event_at).num_minutes();
+            let is_recent = diff_mins <= 15;
+
+            let (state, is_active) = if is_recent
+                && (state_str == "tool"
+                    || state_str == "thinking"
+                    || state_str == "awaiting_approval")
+            {
+                (state_str, true)
+            } else {
+                ("idle".to_owned(), false)
+            };
+
+            let model = match raw_model {
+                Some(ref m) if m.contains("MODEL_PLACEHOLDER") => {
+                    "Gemini 3.8 Flash (Default)".to_owned()
+                }
+                Some(m) if !m.trim().is_empty() => m,
+                _ => "Unspecified".to_owned(),
+            };
+
+            Ok(SessionListItem {
+                id,
+                agent,
+                surface,
+                project_name,
+                model,
+                state,
+                is_active,
+                started_at,
+                last_event_at: last_event_at_str,
+            })
+        })?;
+
+        let mut filtered = Vec::new();
+        for r in rows {
+            let item = r?;
+            if let Some(af) = agent_filter {
+                if !af.is_empty() && af != "all" && item.agent != af {
+                    continue;
+                }
+            }
+            if let Some(sf) = status_filter {
+                if sf == "active" && !item.is_active {
+                    continue;
+                }
+                if sf == "idle" && item.is_active {
+                    continue;
+                }
+            }
+            filtered.push(item);
+        }
+
+        let total_count = filtered.len();
+        let paginated = filtered.into_iter().skip(offset).take(limit).collect();
+        Ok((paginated, total_count))
+    }
+
+    /// Generates timeline-filtered report grouped by provider (Anthropic, OpenAI, Google)
+    /// and model.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn generate_usage_report_timeline(
+        &self,
+        range_kind: &str,
+        from_ts: Option<&str>,
+        to_ts: Option<&str>,
+    ) -> Result<TimelineReport, Error> {
+        let now = Utc::now();
+        let (cutoff, range_label) = match range_kind {
+            "today" => {
+                let start_of_day = now
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .map(|dt| dt.and_utc())
+                    .unwrap_or(now);
+                (Some(start_of_day.to_rfc3339()), "Today".to_owned())
+            }
+            "7d" => {
+                let d = now - chrono::Duration::days(7);
+                (Some(d.to_rfc3339()), "Last 7 Days".to_owned())
+            }
+            "30d" => {
+                let d = now - chrono::Duration::days(30);
+                (Some(d.to_rfc3339()), "Last 30 Days".to_owned())
+            }
+            "custom" if from_ts.is_some() => {
+                (from_ts.map(str::to_owned), "Custom Range".to_owned())
+            }
+            _ => (None, "All Time".to_owned()),
+        };
+
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT
+                p.name AS project_name,
+                s.agent AS agent_str,
+                u.model,
+                SUM(u.input_tokens) AS in_tok,
+                SUM(u.cache_read_tokens) AS read_tok,
+                SUM(u.output_tokens + u.reasoning_tokens) AS out_tok,
+                SUM(u.cost_usd) AS total_cost,
+                SUM(u.cache_savings_usd) AS total_savings,
+                COUNT(u.dedup_key) AS turns,
+                MIN(u.timestamp) AS earliest,
+                MAX(u.timestamp) AS latest
+            FROM usage_record u
+            JOIN session s ON u.session_id = s.id
+            JOIN project p ON s.project_id = p.id
+            WHERE (?1 IS NULL OR u.timestamp >= ?1)
+              AND (?2 IS NULL OR u.timestamp <= ?2)
+            GROUP BY p.name, s.agent, u.model
+            ORDER BY total_cost DESC
+            "#,
+        )?;
+
+        let mut total_spend = 0.0;
+        let mut total_savings = 0.0;
+        let mut total_in = 0u64;
+        let mut total_read = 0u64;
+        let mut total_out = 0u64;
+        let mut total_turns = 0u64;
+        let mut global_earliest: Option<String> = None;
+        let mut global_latest: Option<String> = None;
+
+        struct RawModelItem {
+            agent: String,
+            model: String,
+            in_tok: u64,
+            read_tok: u64,
+            out_tok: u64,
+            cost: f64,
+            savings: f64,
+            turns: u64,
+        }
+        let mut raw_items = Vec::new();
+
+        let rows = stmt.query_map(params![cutoff, to_ts], |row| {
+            let agent: String = row.get(1)?;
+            let raw_m: String = row.get(2)?;
+            let in_tok: i64 = row.get(3)?;
+            let read_tok: i64 = row.get(4)?;
+            let out_tok: i64 = row.get(5)?;
+            let cost: f64 = row.get(6)?;
+            let savings: f64 = row.get(7)?;
+            let turns: i64 = row.get(8)?;
+            let earliest: Option<String> = row.get(9)?;
+            let latest: Option<String> = row.get(10)?;
+
+            let model = if raw_m.contains("MODEL_PLACEHOLDER") {
+                "Gemini 3.8 Flash (Default)".to_owned()
+            } else {
+                raw_m
+            };
+
+            let in_u = u64::try_from(in_tok.max(0)).unwrap_or(0);
+            let read_u = u64::try_from(read_tok.max(0)).unwrap_or(0);
+            let out_u = u64::try_from(out_tok.max(0)).unwrap_or(0);
+            let turns_u = u64::try_from(turns.max(0)).unwrap_or(0);
+
+            Ok((
+                RawModelItem {
+                    agent,
+                    model,
+                    in_tok: in_u,
+                    read_tok: read_u,
+                    out_tok: out_u,
+                    cost,
+                    savings,
+                    turns: turns_u,
+                },
+                earliest,
+                latest,
+            ))
+        })?;
+
+        let custom_prices = self.get_custom_model_pricings().unwrap_or_default();
+
+        for r in rows {
+            let (mut item, e, l) = r?;
+
+            if let Some(custom) = custom_prices.iter().find(|cp| {
+                item.model
+                    .to_lowercase()
+                    .contains(&cp.model_pattern.to_lowercase())
+            }) {
+                let mtok = 1_000_000.0_f64;
+                let in_c = (item.in_tok as f64 / mtok) * custom.input_per_mtok_usd;
+                let out_c = (item.out_tok as f64 / mtok) * custom.output_per_mtok_usd;
+                let read_c = (item.read_tok as f64 / mtok) * custom.cache_read_per_mtok_usd;
+                item.cost = in_c + out_c + read_c;
+                let full_in = (item.read_tok as f64 / mtok) * custom.input_per_mtok_usd;
+                item.savings = (full_in - read_c).max(0.0);
+            }
+
+            total_spend += item.cost;
+            total_savings += item.savings;
+            total_in += item.in_tok;
+            total_read += item.read_tok;
+            total_out += item.out_tok;
+            total_turns += item.turns;
+
+            if let Some(e_str) = e {
+                if global_earliest.as_ref().is_none_or(|cur| &e_str < cur) {
+                    global_earliest = Some(e_str);
+                }
+            }
+            if let Some(l_str) = l {
+                if global_latest.as_ref().is_none_or(|cur| &l_str > cur) {
+                    global_latest = Some(l_str);
+                }
+            }
+
+            raw_items.push(item);
+        }
+
+        use std::collections::BTreeMap;
+        let mut provider_groups: BTreeMap<&'static str, Vec<ModelReport>> = BTreeMap::new();
+        for item in raw_items {
+            let provider = fleethud_core::pricing::classify_provider(&item.agent, &item.model);
+            provider_groups
+                .entry(provider)
+                .or_default()
+                .push(ModelReport {
+                    model: item.model,
+                    agent: item.agent,
+                    input_tokens: item.in_tok,
+                    cache_read_tokens: item.read_tok,
+                    output_tokens: item.out_tok,
+                    cost_usd: item.cost,
+                    cache_savings_usd: item.savings,
+                    turn_count: item.turns,
+                });
+        }
+
+        let mut providers = Vec::new();
+        for target in ["Anthropic", "OpenAI", "Google", "Other"] {
+            if let Some(models) = provider_groups.remove(target) {
+                let mut prov_cost = 0.0;
+                let mut prov_savings = 0.0;
+                for m in &models {
+                    prov_cost += m.cost_usd;
+                    prov_savings += m.cache_savings_usd;
+                }
+                let pct = if total_spend > 0.0 {
+                    (prov_cost / total_spend) * 100.0
+                } else {
+                    0.0
+                };
+                providers.push(ProviderReport {
+                    provider: target.to_owned(),
+                    total_cost_usd: prov_cost,
+                    total_cache_savings_usd: prov_savings,
+                    pct_of_spend: pct,
+                    models,
+                });
+            }
+        }
+
+        let items_count = providers.iter().map(|p| p.models.len()).sum();
+
+        Ok(TimelineReport {
+            range_label,
+            earliest_at: global_earliest,
+            latest_at: global_latest,
+            total_cost_usd: total_spend,
+            total_cache_savings_usd: total_savings,
+            total_input_tokens: total_in,
+            total_cache_read_tokens: total_read,
+            total_output_tokens: total_out,
+            total_turns,
+            providers,
+            items_count,
+        })
+    }
+
+    /// Queries SQLite storage metrics and file size.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn get_database_stats(&self) -> Result<DatabaseStats, Error> {
+        let total_sessions: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM session", [], |r| r.get(0))
+            .unwrap_or(0);
+        let total_turns: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM usage_record", [], |r| r.get(0))
+            .unwrap_or(0);
+        let total_events: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM activity_event", [], |r| r.get(0))
+            .unwrap_or(0);
+        let total_projects: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM project", [], |r| r.get(0))
+            .unwrap_or(0);
+        let page_count: i64 = self
+            .conn
+            .query_row("PRAGMA page_count", [], |r| r.get(0))
+            .unwrap_or(0);
+        let page_size: i64 = self
+            .conn
+            .query_row("PRAGMA page_size", [], |r| r.get(0))
+            .unwrap_or(4096);
+        let db_size_bytes = u64::try_from((page_count * page_size).max(0)).unwrap_or(0);
+
+        Ok(DatabaseStats {
+            total_sessions: u64::try_from(total_sessions.max(0)).unwrap_or(0),
+            total_turns: u64::try_from(total_turns.max(0)).unwrap_or(0),
+            total_events: u64::try_from(total_events.max(0)).unwrap_or(0),
+            total_projects: u64::try_from(total_projects.max(0)).unwrap_or(0),
+            db_size_bytes,
+        })
     }
 }
 
@@ -705,5 +1389,32 @@ mod tests {
             .expect("get checkpoint")
             .expect("checkpoint exists");
         assert_eq!(saved_cp.last_read_offset, 1234);
+    }
+
+    #[test]
+    fn custom_pricing_overrides_and_recalculates_cost() {
+        let mut db = Database::open_in_memory().expect("in-memory db");
+        let initial = db.get_custom_model_pricings().expect("query custom prices");
+        assert!(initial.is_empty());
+
+        let cp = super::CustomModelPricing {
+            model_pattern: "claude-opus".to_owned(),
+            input_per_mtok_usd: 10.0,
+            output_per_mtok_usd: 50.0,
+            cache_read_per_mtok_usd: 1.0,
+            updated_at: Utc::now().to_rfc3339(),
+        };
+        db.set_custom_model_pricing(&cp)
+            .expect("set custom pricing");
+
+        let loaded = db.get_custom_model_pricings().expect("query custom prices");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].model_pattern, "claude-opus");
+        assert_eq!(loaded[0].input_per_mtok_usd, 10.0);
+
+        db.delete_custom_model_pricing("claude-opus")
+            .expect("delete");
+        let after_del = db.get_custom_model_pricings().expect("query custom prices");
+        assert!(after_del.is_empty());
     }
 }

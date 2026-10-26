@@ -48,6 +48,14 @@ pub struct DaemonInfo {
     pub started_at: String,
 }
 
+/// Reads `~/.fleethud/daemon.json` if present to connect to a running daemon.
+#[must_use]
+pub fn read_daemon_info() -> Option<DaemonInfo> {
+    let path = fleethud_home().join("daemon.json");
+    let bytes = fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
 /// Single-instance process lock handle held via file locking (`SPEC §4.4`).
 pub struct DaemonLock {
     _file: File,

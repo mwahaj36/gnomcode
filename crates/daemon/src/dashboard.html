@@ -8,6 +8,7 @@
     :root {
       --bg: #0d1117;
       --card-bg: #161b22;
+      --card-hover: #1c2129;
       --border: #30363d;
       --text: #c9d1d9;
       --text-muted: #8b949e;
@@ -31,15 +32,19 @@
       align-items: center;
       padding-bottom: 20px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 24px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
     h1 {
       font-size: 20px;
       font-weight: 600;
       letter-spacing: -0.5px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
     }
     .badge {
       font-family: var(--font-mono);
@@ -50,11 +55,58 @@
       color: var(--accent);
       border: 1px solid rgba(88, 166, 255, 0.3);
     }
+    .badge-user {
+      cursor: pointer;
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--green);
+      border-color: rgba(63, 185, 80, 0.3);
+    }
+    .badge-user:hover {
+      background: rgba(63, 185, 80, 0.25);
+    }
+    .timeline-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .timeline-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .timeline-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-pill {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      transition: all 0.15s ease;
+    }
+    .btn-pill:hover, .btn-pill.active {
+      background: var(--accent);
+      color: #0d1117;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 16px;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
     .card {
       background: var(--card-bg);
@@ -68,19 +120,99 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
     }
     .metric {
       font-size: 24px;
       font-weight: 600;
       font-family: var(--font-mono);
     }
+    .metric-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-family: var(--font-mono);
+    }
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .provider-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .provider-card:hover {
+      border-color: var(--accent);
+    }
+    .provider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .provider-name {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .model-list {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border);
+      display: none;
+    }
+    .model-list.open {
+      display: block;
+    }
+    .model-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+    }
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+    .table-header-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
     .section-title {
       font-size: 14px;
       font-weight: 600;
-      margin-bottom: 12px;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
+    }
+    .filters {
+      display: flex;
+      gap: 10px;
+    }
+    select, input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: var(--font-mono);
     }
     table {
       width: 100%;
@@ -96,71 +228,167 @@
     th {
       color: var(--text-muted);
       font-weight: 500;
-      background: var(--card-bg);
+      background: rgba(22, 27, 34, 0.8);
     }
     .status-dot {
       display: inline-block;
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      margin-right: 6px;
+      margin-right: 8px;
     }
-    .status-running { background: var(--green); }
-    .status-idle { background: var(--text-muted); }
-    .status-waiting { background: var(--yellow); }
-    .status-error { background: var(--red); }
+    .status-running {
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
+    }
+    .status-waiting {
+      background: var(--yellow);
+      box-shadow: 0 0 8px rgba(210, 153, 34, 0.4);
+    }
+    .status-idle {
+      background: var(--text-muted);
+    }
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100%;
+      max-width: 500px;
+      padding: 24px;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-family: var(--font-mono);
+    }
+    .form-group input {
+      width: 100%;
+      padding: 8px 12px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .btn-primary {
+      background: var(--green);
+      color: #0d1117;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>FLEETHUD <span class="badge">MISSION CONTROL</span></h1>
-    <div id="live-indicator" style="font-family: var(--font-mono); font-size: 12px; color: var(--green);">
+    <div class="header-left">
+      <h1>FleetHUD</h1>
+      <span class="badge">MISSION CONTROL</span>
+      <span class="badge badge-user" id="user-badge" onclick="openProfileModal()">[LOCAL USER] Developer</span>
+    </div>
+    <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">
       [CONNECTED] 127.0.0.1:41738
     </div>
   </header>
 
+  <!-- Timeline Filter Bar -->
+  <div class="timeline-bar">
+    <div class="timeline-label" id="timeline-label">Showing: All Time</div>
+    <div class="timeline-buttons">
+      <button class="btn-pill" onclick="setTimeline('today')">Today</button>
+      <button class="btn-pill" onclick="setTimeline('7d')">Last 7 Days</button>
+      <button class="btn-pill" onclick="setTimeline('30d')">Last 30 Days</button>
+      <button class="btn-pill active" onclick="setTimeline('all')">All Time</button>
+    </div>
+  </div>
+
+  <!-- Top Summary Metrics -->
   <div class="grid">
     <div class="card">
       <div class="card-title">API-Equivalent Spend</div>
       <div class="metric" id="total-spend">$0.00</div>
+      <div class="metric-sub" id="roi-summary">Plan Value: 0.0x</div>
     </div>
     <div class="card">
       <div class="card-title">Prompt Cache Savings</div>
-      <div class="metric" id="total-savings" style="color: var(--green);">$0.00</div>
+      <div class="metric" style="color: var(--green);" id="total-savings">$0.00</div>
+      <div class="metric-sub" id="savings-pct">0% saved vs full price</div>
     </div>
     <div class="card">
-      <div class="card-title">Active Fleet Sessions</div>
+      <div class="card-title">Active Fleet Agents</div>
       <div class="metric" id="active-count">0</div>
+      <div class="metric-sub">Active in last 15 min</div>
     </div>
     <div class="card">
       <div class="card-title">Quota Pools Monitored</div>
       <div class="metric" id="quota-count">0</div>
+      <div class="metric-sub" id="quota-confirmed">1 Confirmed Pool</div>
     </div>
   </div>
 
-  <div class="card" style="margin-bottom: 24px;">
-    <div class="section-title">Live & Recent Agent Sessions</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Session</th>
-          <th>Agent</th>
-          <th>Surface</th>
-          <th>Model</th>
-          <th>State</th>
-          <th>Last Active</th>
-        </tr>
-      </thead>
-      <tbody id="sessions-table">
-        <tr>
-          <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading active sessions...</td>
-        </tr>
-      </tbody>
-    </table>
+  <!-- Multi-Plan ROI Comparison Card -->
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="card-title">
+      <span>Subscription ROI Calculator</span>
+      <span style="cursor: pointer; color: var(--accent);" onclick="openProfileModal()">[Edit Subscriptions]</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px;" id="roi-cards-container">
+      <!-- Injected dynamically -->
+    </div>
   </div>
 
-  <div class="card">
-    <div class="section-title">Per-Model Quota Pools</div>
+  <!-- Spend by Provider (Click to Expand Model Breakdown) -->
+  <div class="section-title" style="margin-bottom: 12px;">Spend by Provider (Click to View Models)</div>
+  <div class="provider-grid" id="providers-container">
+    <!-- Injected dynamically -->
+  </div>
+
+  <!-- Per-Model Quota Pools Table -->
+  <div class="table-container">
+    <div class="table-header-controls">
+      <div class="section-title">Per-Model Quota Pools</div>
+      <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
+        [CONFIRMED] OpenAI Codex exposes exact rate limits. Google & Anthropic track via tokens below.
+      </div>
+    </div>
     <table>
       <thead>
         <tr>
@@ -169,70 +397,408 @@
           <th>Window</th>
           <th>Used %</th>
           <th>Resets At</th>
+          <th>Basis</th>
         </tr>
       </thead>
       <tbody id="quota-table">
-        <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-muted);">Loading quota pools...</td>
-        </tr>
+        <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading quota pools...</td></tr>
       </tbody>
     </table>
   </div>
 
+  <!-- Paginated Sessions Table -->
+  <div class="table-container">
+    <div class="table-header-controls">
+      <div class="section-title">Live & Historical Agent Sessions</div>
+      <div class="filters">
+        <select id="agent-filter" onchange="onFilterChange()">
+          <option value="all">All Agents</option>
+          <option value="antigravity">Antigravity</option>
+          <option value="codex">OpenAI Codex</option>
+          <option value="claude-code">Claude Code</option>
+          <option value="gemini-cli">Gemini CLI</option>
+        </select>
+        <select id="status-filter" onchange="onFilterChange()">
+          <option value="all">All Statuses</option>
+          <option value="active">Active Only</option>
+          <option value="idle">Idle Only</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Agent</th>
+          <th>Surface</th>
+          <th>Model</th>
+          <th>Status</th>
+          <th>Last Active</th>
+        </tr>
+      </thead>
+      <tbody id="sessions-table">
+        <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span id="pagination-info">Page 1 of 1</span>
+      <div>
+        <button class="btn-pill" id="prev-btn" onclick="prevPage()">Previous</button>
+        <button class="btn-pill" id="next-btn" onclick="nextPage()">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Profile & Settings Modal -->
+  <div class="modal-backdrop" id="profile-modal">
+    <div class="modal-content">
+      <div class="modal-title">
+        <span>Local User Profile & Subscriptions</span>
+        <span style="cursor: pointer;" onclick="closeProfileModal()">X</span>
+      </div>
+      <div class="form-group">
+        <label>Display Name</label>
+        <input type="text" id="modal-display-name" placeholder="Your Name">
+      </div>
+      <div class="form-group">
+        <label>OpenAI Monthly Plan ($/mo)</label>
+        <input type="number" id="modal-openai-plan" placeholder="20.00" step="1">
+      </div>
+      <div class="form-group">
+        <label>Anthropic / Claude Monthly Plan ($/mo)</label>
+        <input type="number" id="modal-claude-plan" placeholder="20.00" step="1">
+      </div>
+      <div class="form-group">
+        <label>Google Monthly Plan ($/mo)</label>
+        <input type="number" id="modal-google-plan" placeholder="0.00" step="1">
+      </div>
+      <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);">
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Custom Model Pricing Overrides ($/1M tokens)</div>
+        <div id="custom-pricing-list" style="margin-bottom: 10px; font-family: var(--font-mono); font-size: 11px;"></div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center;">
+          <input type="text" id="custom-model-pattern" placeholder="Model (e.g. claude-3-5)">
+          <input type="number" id="custom-model-in" placeholder="In $" step="0.1">
+          <input type="number" id="custom-model-out" placeholder="Out $" step="0.1">
+          <input type="number" id="custom-model-cache" placeholder="Cache $" step="0.1">
+          <button class="btn-pill" style="height: 34px;" onclick="addCustomPricing()">+ Add</button>
+        </div>
+      </div>
+      <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
+        <div>Database File: ~/.fleethud/state.db</div>
+        <div id="db-stats-text" style="margin-top: 4px;">Loading local storage stats...</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-pill" onclick="closeProfileModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveProfile()">Save Preferences</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    async function loadData() {
-      try {
-        const token = new URLSearchParams(window.location.search).get('token') || '';
-        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    let currentTimeline = 'all';
+    let currentPage = 1;
+    const pageLimit = 10;
+    const token = new URLSearchParams(window.location.search).get('token') || '';
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-        const [sessRes, repRes, quotaRes] = await Promise.all([
-          fetch('/api/v1/sessions', { headers }).then(r => r.ok ? r.json() : []),
-          fetch('/api/v1/report', { headers }).then(r => r.ok ? r.json() : { total_cost_usd: 0, total_cache_savings_usd: 0 }),
-          fetch('/api/v1/quota', { headers }).then(r => r.ok ? r.json() : [])
-        ]);
+    function formatRelativeTime(isoStr) {
+      if (!isoStr) return 'N/A';
+      const d = new Date(isoStr);
+      const diffMs = new Date() - d;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
 
-        document.getElementById('total-spend').textContent = `$${repRes.total_cost_usd.toFixed(2)}`;
-        document.getElementById('total-savings').textContent = `$${repRes.total_cache_savings_usd.toFixed(2)}`;
-        document.getElementById('active-count').textContent = sessRes.length;
-        document.getElementById('quota-count').textContent = quotaRes.length;
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 30) return `${diffDays}d ago`;
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
 
-        const sTable = document.getElementById('sessions-table');
-        if (sessRes.length === 0) {
-          sTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No active sessions found.</td></tr>';
-        } else {
-          sTable.innerHTML = sessRes.map(s => {
-            const dotClass = s.state === 'tool' || s.state === 'thinking' ? 'status-running' :
-                             s.state === 'awaiting_approval' ? 'status-waiting' : 'status-idle';
-            return `<tr>
-              <td>${s.id}</td>
-              <td>${s.agent}</td>
-              <td>${s.surface}</td>
-              <td>${s.model || 'unknown'}</td>
-              <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
-              <td>${new Date(s.last_event_at).toLocaleTimeString()}</td>
-            </tr>`;
-          }).join('');
-        }
+    function formatTokens(n) {
+      if (!n) return '0';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+      return n.toString();
+    }
 
-        const qTable = document.getElementById('quota-table');
-        if (quotaRes.length === 0) {
-          qTable.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No quota pools reported yet.</td></tr>';
-        } else {
-          qTable.innerHTML = quotaRes.map(q => `<tr>
-            <td>${q.provider}</td>
-            <td>${q.limit_id}</td>
-            <td>${q.window}</td>
-            <td>${q.used_pct.toFixed(1)}%</td>
-            <td>${q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : 'N/A'}</td>
-          </tr>`).join('');
-        }
-      } catch (err) {
-        console.error('Failed to refresh data', err);
+    function toggleModelList(prov) {
+      const el = document.getElementById(`models-${prov}`);
+      if (el) el.classList.toggle('open');
+    }
+
+    function setTimeline(range) {
+      currentTimeline = range;
+      document.querySelectorAll('.timeline-buttons .btn-pill').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      loadReport();
+    }
+
+    function onFilterChange() {
+      currentPage = 1;
+      loadSessions();
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        loadSessions();
       }
     }
 
-    loadData();
-    setInterval(loadData, 2000);
+    function nextPage() {
+      currentPage++;
+      loadSessions();
+    }
+
+    async function loadReport() {
+      try {
+        const res = await fetch(`/api/v1/report?range=${currentTimeline}`, { headers }).then(r => r.json());
+        if (!res || !res.timeline) return;
+
+        const tl = res.timeline;
+        document.getElementById('total-spend').textContent = `$${tl.total_cost_usd.toFixed(2)}`;
+        document.getElementById('total-savings').textContent = `$${tl.total_cache_savings_usd.toFixed(2)}`;
+
+        const totalInput = tl.total_input_tokens + tl.total_cache_read_tokens;
+        const savingsPct = totalInput > 0 ? ((tl.total_cache_read_tokens / totalInput) * 100).toFixed(0) : 0;
+        document.getElementById('savings-pct').textContent = `${savingsPct}% cached (${formatTokens(tl.total_cache_read_tokens)} tokens)`;
+
+        // Date range header
+        let dateStr = tl.range_label;
+        if (tl.earliest_at && tl.latest_at) {
+          const e = new Date(tl.earliest_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          const l = new Date(tl.latest_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          dateStr = `Showing: ${tl.range_label} (${e} — ${l})`;
+        }
+        document.getElementById('timeline-label').textContent = dateStr;
+
+        // ROI display
+        if (res.combined_roi && res.combined_roi.plan_usd > 0) {
+          document.getElementById('roi-summary').textContent = `Plan Value: ${res.combined_roi.multiplier.toFixed(1)}x ROI ($${res.combined_roi.net_savings_usd.toFixed(2)} net)`;
+        } else {
+          document.getElementById('roi-summary').textContent = 'Plan Value: Configured below';
+        }
+
+        // Render ROI cards
+        const roiContainer = document.getElementById('roi-cards-container');
+        roiContainer.innerHTML = res.roi_by_provider.map(r => `
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px; font-family: var(--font-mono);">
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${r.provider}</div>
+            <div style="font-size: 18px; font-weight: 600; margin: 4px 0;">${r.multiplier.toFixed(1)}x Return</div>
+            <div style="font-size: 11px; color: ${r.net_savings_usd >= 0 ? 'var(--green)' : 'var(--red)'};">
+              ${r.net_savings_usd >= 0 ? '+' : ''}$${r.net_savings_usd.toFixed(2)} vs API
+            </div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Paid: $${r.plan_usd.toFixed(0)}/mo | Value: $${r.spend_usd.toFixed(2)}</div>
+          </div>
+        `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Configure your plans in profile settings to see live ROI multipliers.</div>';
+
+        // Render Provider Breakdown cards
+        const provContainer = document.getElementById('providers-container');
+        provContainer.innerHTML = tl.providers.map(p => `
+          <div class="provider-card" onclick="toggleModelList('${p.provider}')">
+            <div class="provider-header">
+              <span class="provider-name">${p.provider}</span>
+              <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 600;">$${p.total_cost_usd.toFixed(2)} <span style="font-size: 11px; color: var(--text-muted);">(${p.pct_of_spend.toFixed(0)}%)</span></span>
+            </div>
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
+              ${p.models.length} model(s) • $${p.total_cache_savings_usd.toFixed(2)} saved via caching
+            </div>
+            <div class="model-list" id="models-${p.provider}">
+              ${p.models.map(m => `
+                <div class="model-item">
+                  <span>${m.model}</span>
+                  <span>$${m.cost_usd.toFixed(2)} <span style="color: var(--text-muted);">(${formatTokens(m.input_tokens + m.output_tokens)} tok)</span></span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+
+        // User badge
+        if (res.user_profile) {
+          document.getElementById('user-badge').textContent = `[LOCAL USER] ${res.user_profile.display_name}`;
+        }
+      } catch (e) {
+        console.error('Failed to load report', e);
+      }
+    }
+
+    async function loadSessions() {
+      try {
+        const agent = document.getElementById('agent-filter').value;
+        const status = document.getElementById('status-filter').value;
+        const res = await fetch(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers }).then(r => r.json());
+        if (!res) return;
+
+        document.getElementById('active-count').textContent = res.active_count || 0;
+        document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
+        document.getElementById('prev-btn').disabled = res.page <= 1;
+        document.getElementById('next-btn').disabled = res.page >= res.total_pages;
+
+        const table = document.getElementById('sessions-table');
+        if (!res.sessions || res.sessions.length === 0) {
+          table.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No sessions match the selected filter.</td></tr>';
+          return;
+        }
+
+        table.innerHTML = res.sessions.map(s => {
+          const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
+          return `<tr>
+            <td style="font-weight: 500;">${s.project_name}</td>
+            <td>${s.agent}</td>
+            <td>${s.surface}</td>
+            <td>${s.model}</td>
+            <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
+            <td>${formatRelativeTime(s.last_event_at)}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        console.error('Failed to load sessions', e);
+      }
+    }
+
+    async function loadQuota() {
+      try {
+        const res = await fetch('/api/v1/quota', { headers }).then(r => r.json());
+        const table = document.getElementById('quota-table');
+        document.getElementById('quota-count').textContent = (res && res.length) ? res.length : 0;
+
+        if (!res || res.length === 0) {
+          table.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No local quota pools detected.</td></tr>';
+          return;
+        }
+
+        table.innerHTML = res.map(q => `
+          <tr>
+            <td>${q.provider}</td>
+            <td>${q.limit_id}</td>
+            <td>${q.window}</td>
+            <td style="font-weight: 600; color: ${q.used_pct > 80 ? 'var(--red)' : 'var(--green)'};">${q.used_pct.toFixed(1)}%</td>
+            <td>${q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : 'N/A'}</td>
+            <td><span class="badge" style="font-size: 10px;">EXACT</span></td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error('Failed to load quota', e);
+      }
+    }
+
+    async function openProfileModal() {
+      document.getElementById('profile-modal').classList.add('open');
+      try {
+        const [user, stats] = await Promise.all([
+          fetch('/api/v1/user', { headers }).then(r => r.json()),
+          fetch('/api/v1/stats', { headers }).then(r => r.json())
+        ]);
+        if (user) {
+          document.getElementById('modal-display-name').value = user.display_name;
+          document.getElementById('modal-openai-plan').value = user.openai_plan_usd;
+          document.getElementById('modal-claude-plan').value = user.claude_plan_usd;
+          document.getElementById('modal-google-plan').value = user.google_plan_usd;
+        }
+        if (stats) {
+          document.getElementById('db-stats-text').textContent =
+            `Local Storage: ${stats.total_turns} turns across ${stats.total_projects} projects (${(stats.db_size_bytes / 1024 / 1024).toFixed(2)} MB)`;
+        }
+        await loadCustomPricing();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function loadCustomPricing() {
+      try {
+        const res = await fetch('/api/v1/pricing/custom', { headers }).then(r => r.json());
+        const container = document.getElementById('custom-pricing-list');
+        if (!res || !res.custom_pricing || res.custom_pricing.length === 0) {
+          container.innerHTML = '<span style="color: var(--text-muted);">No custom rate overrides configured (using default catalog).</span>';
+          return;
+        }
+        let html = '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        for (const cp of res.custom_pricing) {
+          html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">
+              <span><strong>${cp.model_pattern}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
+              <button class="btn-pill" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing('${cp.model_pattern}')">Remove</button>
+            </div>`;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function addCustomPricing() {
+      const pattern = document.getElementById('custom-model-pattern').value.trim();
+      const inPrice = parseFloat(document.getElementById('custom-model-in').value) || 0.0;
+      const outPrice = parseFloat(document.getElementById('custom-model-out').value) || 0.0;
+      const cachePrice = parseFloat(document.getElementById('custom-model-cache').value) || 0.0;
+      if (!pattern) return;
+      await fetch('/api/v1/pricing/custom', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_pattern: pattern,
+          input_per_mtok_usd: inPrice,
+          output_per_mtok_usd: outPrice,
+          cache_read_per_mtok_usd: cachePrice,
+          updated_at: new Date().toISOString()
+        })
+      });
+      document.getElementById('custom-model-pattern').value = '';
+      document.getElementById('custom-model-in').value = '';
+      document.getElementById('custom-model-out').value = '';
+      document.getElementById('custom-model-cache').value = '';
+      await loadCustomPricing();
+      loadReport();
+    }
+
+    async function deleteCustomPricing(pattern) {
+      await fetch(`/api/v1/pricing/custom?pattern=${encodeURIComponent(pattern)}`, {
+        method: 'DELETE',
+        headers
+      });
+      await loadCustomPricing();
+      loadReport();
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profile-modal').classList.remove('open');
+    }
+
+    async function saveProfile() {
+      const profile = {
+        id: 'local_user',
+        username: 'developer',
+        display_name: document.getElementById('modal-display-name').value || 'Local Developer',
+        openai_plan_usd: parseFloat(document.getElementById('modal-openai-plan').value) || 0.0,
+        claude_plan_usd: parseFloat(document.getElementById('modal-claude-plan').value) || 0.0,
+        google_plan_usd: parseFloat(document.getElementById('modal-google-plan').value) || 0.0,
+        other_plan_usd: 0.0,
+        updated_at: new Date().toISOString()
+      };
+
+      await fetch('/api/v1/user', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile)
+      });
+
+      closeProfileModal();
+      loadReport();
+    }
+
+    loadReport();
+    loadSessions();
+    loadQuota();
+    setInterval(() => {
+      loadReport();
+      loadSessions();
+      loadQuota();
+    }, 2000);
   </script>
 </body>
 </html>

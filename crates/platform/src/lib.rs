@@ -126,7 +126,7 @@ pub fn read_antigravity_fallback_model() -> Option<String> {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("last_selected_agent_model:") {
             let unquoted = rest.trim().trim_matches('"').trim();
-            if !unquoted.is_empty() {
+            if !unquoted.is_empty() && !unquoted.contains("MODEL_PLACEHOLDER") {
                 return Some(unquoted.to_owned());
             }
         }
@@ -183,6 +183,26 @@ pub fn read_from_offset(path: &Path, offset: u64) -> Result<FileReadChunk, Error
         effective_start_offset,
     })
 }
+
+/// Attaches to the parent console on Windows if invoked from a command prompt,
+/// allowing CLI output while still running as a windowless GUI subsystem binary.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+pub fn attach_parent_console() {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn AttachConsole(dwProcessId: u32) -> i32;
+    }
+    const ATTACH_PARENT_PROCESS: u32 = 0xFFFF_FFFF;
+    // SAFETY: AttachConsole attaches the current process to its parent console session.
+    unsafe {
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+/// No-op on non-Windows platforms.
+#[cfg(not(target_os = "windows"))]
+pub fn attach_parent_console() {}
 
 #[cfg(test)]
 mod tests {
