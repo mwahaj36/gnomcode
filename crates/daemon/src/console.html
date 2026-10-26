@@ -590,8 +590,30 @@
         </a>
       </div>
 
+      <!-- Paired Account Status Card -->
+      <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div style="font-weight: 600; font-size: 13px; color: var(--green); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green);"></span>
+              <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
+            </div>
+            <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
+              Desktop daemon is actively paired with cloud roaming and syncing private snapshots.
+            </p>
+          </div>
+          <button
+            onclick="unpairSession()"
+            class="btn-pill"
+            style="border-color: var(--red); color: var(--red); font-size: 11px; padding: 6px 14px; cursor: pointer;"
+          >
+            Unpair / Disconnect
+          </button>
+        </div>
+      </div>
+
       <!-- Quick Account Pairing / Token Paste Card -->
-      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
+      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
         <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
         <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
           Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to instantly pair this desktop cockpit.
@@ -743,6 +765,8 @@
         loadSettingsData();
       } else if (tabName === 'pro') {
         loadProData();
+      } else if (tabName === 'auth') {
+        checkAuthSession();
       }
     }
 
@@ -1099,9 +1123,15 @@
           }
 
           return `<tr>
-            <td style="font-weight: 500;">${s.project_name}</td>
+            <td>
+              <div style="font-weight: 600; color: var(--text);">${s.project_name}</div>
+              ${s.title ? `<div style="font-size: 11px; color: var(--text-muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${s.title.replace(/"/g, '&quot;')}">${s.title}</div>` : ''}
+            </td>
             <td>${s.agent}</td>
-            <td>${s.surface}</td>
+            <td>
+              <div style="text-transform: capitalize;">${(s.surface || '').replace('_', ' ')}</div>
+              <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${s.device_name || 'local'}</div>
+            </td>
             <td>${s.model}</td>
             <td>
               <span style="font-weight: 600;">${formatTokens(tokCount)}</span>
@@ -1187,6 +1217,42 @@
       }
     }
 
+    async function checkAuthSession() {
+      try {
+        const res = await fetch('/api/v1/auth/session', { headers }).then(r => r.json());
+        const pairedCard = document.getElementById('auth-paired-card');
+        const unpairedCard = document.getElementById('auth-unpaired-card');
+        const emailEl = document.getElementById('auth-paired-email');
+        if (res && res.paired) {
+          if (pairedCard) pairedCard.style.display = 'block';
+          if (unpairedCard) unpairedCard.style.display = 'none';
+          if (emailEl) emailEl.textContent = res.email || 'Connected Account';
+        } else {
+          if (pairedCard) pairedCard.style.display = 'none';
+          if (unpairedCard) unpairedCard.style.display = 'block';
+        }
+      } catch (err) {
+        console.error('Failed to check auth session', err);
+      }
+    }
+
+    async function unpairSession() {
+      if (!confirm('Unpair desktop daemon from cloud sync and disconnect account?')) return;
+      try {
+        const res = await fetch('/api/v1/auth/session', {
+          method: 'DELETE',
+          headers
+        });
+        if (res.ok) {
+          checkAuthSession();
+        } else {
+          alert('Failed to disconnect account session.');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
     async function loadQuota() {
       try {
         const res = await fetch('/api/v1/quota', { headers }).then(r => r.json());
@@ -1196,6 +1262,7 @@
         if (authLink) {
           authLink.href = `https://fleethud.vercel.app/auth?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
         }
+        checkAuthSession();
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastQuotaJson) return;
