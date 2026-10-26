@@ -2,6 +2,9 @@
 //!
 //! See `docs/SPEC.md` §3.6–§3.9 for the data model and invariants.
 
+pub mod pricing;
+pub mod redact;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
