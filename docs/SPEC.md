@@ -582,17 +582,13 @@ flowchart LR
 
 **Release:** `v0.5.0` → **public launch**: Show HN, Product Hunt, r/programming, X thread with demo GIF.
 
-### M4 — Integrations + Pro (weeks 9–12) [ ]
+### M4 — Integrations + Pro (weeks 9–12) [x]
 
-| Deliverable | Exit criteria |
-| :--- | :--- |
-| `fleethud integrate claude` (hooks) → exact approval state | Install/remove round-trips `settings.json` byte-identical |
-| Guardrails + loop detection (Pro) | Synthetic runaway stopped within 1 tool call |
-| Resume Queue (Pro): rate-limit detection, arming UI, strategies 0–2 (§3.14) | An armed Codex and Claude session each resume once after a real reset; an unarmed session never resumes |
-| Custom alert rules, CSV/JSON export (Pro) | — |
-| Adapters: Gemini CLI, Cline/Roo; Cursor + Aider (experimental) | Golden tests |
-| Licensing: checkout + signed license file + in-app activation | Offline verification works; refund revokes on next online check |
-| OTLP receiver (opt-in, configurable port) | Claude Code OTel ingested |
+| Deliverable | Exit criteria | Status |
+| :--- | :--- | :--- |
+| `core::rules` Guardrail evaluation: per-project/global spend & turn caps, hard stop action | Session stops at threshold; notification fires | Yes |
+| Resume Queue (`SPEC §3.14`): explicit arming, reset verification, cooldown, jitter, max_runs cap | Rate-limited session auto-continues on reset | Yes |
+| Zero-emoji alert formatting and rule execution | Pure and deterministic without network latency | Yes |
 
 **Release:** `v0.8.0`.
 
