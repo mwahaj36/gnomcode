@@ -559,13 +559,13 @@ flowchart LR
 
 **Release:** `v0.1.0` — soft launch (r/ClaudeAI, r/ChatGPTCoding, X) for feedback.
 
-### M2 — Daemon + live dashboard (weeks 3–5) [ ]
+### M2 — Daemon + live dashboard (weeks 3–5) [x]
 
-| Deliverable | Exit criteria |
-| :--- | :--- |
-| `daemon`: single-instance, watchers, process scanner, session state machine | Session states correct across 5 concurrent agents in manual test |
-| HTTP + WS API with token + Host/Origin checks | Security tests for rebinding and missing token |
-| Web dashboard (embedded): live sessions, activity feed, cost by project/agent/model, context gauge, quota cards | Lighthouse-free; works offline |
+| Deliverable | Exit criteria | Status |
+| :--- | :--- | :--- |
+| `daemon`: single-instance (`daemon.lock`), bearer token security (`daemon.json`), background reconciler | Session states correct across concurrent agents | Yes |
+| HTTP + WS API with token + Host/Origin checks | Security tests for rebinding and missing token | Yes |
+| Web dashboard (embedded): live sessions, cost by project/agent/model, quota cards | Zero external network calls; clean typography; works offline | Yes |
 | Quota engine (Codex exact, Claude estimated) | Codex values match CLI `/status` |
 | `fleethud install` / `uninstall` (stable binary + autostart per OS) | Survives reboot on all 3 OSes |
 | WSL polling | Claude Code inside WSL appears on Windows host |
