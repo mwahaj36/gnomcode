@@ -31,7 +31,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net", "signal", "process"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 notify = "8.0"
-sysinfo = "0.33"
+sysinfo = "0.36"
 axum = { version = "0.8", features = ["ws", "macros"] }
 obfstr = "0.4"
 ed25519-dalek = { version = "2.1", features = ["std"] }
