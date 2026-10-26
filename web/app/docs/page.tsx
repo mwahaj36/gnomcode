@@ -110,7 +110,7 @@ export default function DocsPage() {
                   <span className="text-green">[RECOMMENDED] Native Installer</span>
                 </div>
                 <div className="bg-bg p-3 rounded border border-border text-foreground overflow-x-auto select-all">
-                  irm https://raw.githubusercontent.com/mwahaj36/fleethud/main/scripts/install.ps1 | iex
+                  irm https://fleethud.vercel.app/win | iex
                 </div>
                 <p className="text-[11px] text-muted mt-2">
                   Installs <code className="text-accent">Installer.exe</code> to <code className="text-accent">%LOCALAPPDATA%\fleethud\</code>, creates desktop and start menu shortcuts, and sets up a background tray app with zero black console windows.
