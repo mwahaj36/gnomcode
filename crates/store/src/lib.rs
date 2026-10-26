@@ -10,6 +10,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use thiserror::Error;
 
+pub mod analytics;
+
 /// Storage layer error type.
 #[derive(Debug, Error)]
 pub enum Error {
@@ -109,6 +111,23 @@ impl Default for UserProfile {
             updated_at: Utc::now().to_rfc3339(),
         }
     }
+}
+
+/// Optional narrowing for [`Database::list_sessions_filtered`]; `None` or empty means no filter.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionFilter<'a> {
+    /// Agent slug (`all` for every agent).
+    pub agent: Option<&'a str>,
+    /// `active`, `idle` or `all`.
+    pub status: Option<&'a str>,
+    /// Project (repo) name.
+    pub repo: Option<&'a str>,
+    /// Exact model name.
+    pub model: Option<&'a str>,
+    /// RFC 3339 UTC lower bound on last activity.
+    pub from: Option<&'a str>,
+    /// RFC 3339 UTC upper bound on session start.
+    pub to: Option<&'a str>,
 }
 
 /// Enriched session item for UI list with project name and clean state.
@@ -1691,21 +1710,48 @@ impl Database {
         offset: usize,
         limit: usize,
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
+        self.list_sessions_filtered(
+            &SessionFilter {
+                agent: agent_filter,
+                status: status_filter,
+                ..SessionFilter::default()
+            },
+            offset,
+            limit,
+        )
+    }
+
+    /// Returns a paginated session list narrowed by agent, status, repo, model and time range.
+    ///
+    /// `from`/`to` match sessions whose activity overlaps the range (RFC 3339, UTC).
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn list_sessions_filtered(
+        &self,
+        f: &SessionFilter<'_>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let now = Utc::now();
         let cutoff = (now - chrono::Duration::minutes(15)).to_rfc3339();
-        let agent = agent_filter
-            .filter(|value| !value.is_empty())
-            .unwrap_or("all");
-        let status = status_filter
-            .filter(|value| !value.is_empty())
-            .unwrap_or("all");
+        let agent = f.agent.filter(|value| !value.is_empty()).unwrap_or("all");
+        let status = f.status.filter(|value| !value.is_empty()).unwrap_or("all");
+        let repo = f.repo.filter(|v| !v.is_empty());
+        let model = f.model.filter(|v| !v.is_empty());
+        let from = f.from.filter(|v| !v.is_empty());
+        let to = f.to.filter(|v| !v.is_empty());
         let total_count: i64 = self.conn.query_row(
-            r#"SELECT COUNT(*) FROM session s
+            r#"SELECT COUNT(*) FROM session s JOIN project p ON s.project_id = p.id
                WHERE (?1 = 'all' OR s.agent = ?1)
+                 AND (?6 IS NULL OR p.name = ?6)
+                 AND (?7 IS NULL OR s.model = ?7)
+                 AND (?8 IS NULL OR s.last_event_at >= ?8)
+                 AND (?9 IS NULL OR s.started_at <= ?9)
                  AND (?2 = 'all'
                    OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
                    OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))"#,
-            params![agent, status, cutoff],
+            params![agent, status, cutoff, 0_i64, 0_i64, repo, model, from, to],
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
@@ -1715,6 +1761,10 @@ impl Database {
                     CASE WHEN s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3 THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?1 = 'all' OR s.agent = ?1)
+                  AND (?6 IS NULL OR p.name = ?6)
+                  AND (?7 IS NULL OR s.model = ?7)
+                  AND (?8 IS NULL OR s.last_event_at >= ?8)
+                  AND (?9 IS NULL OR s.started_at <= ?9)
                   AND (?2 = 'all'
                     OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
                     OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))
@@ -1744,7 +1794,17 @@ impl Database {
         )?;
 
         let rows = stmt.query_map(
-            params![agent, status, cutoff, limit as i64, offset as i64],
+            params![
+                agent,
+                status,
+                cutoff,
+                limit as i64,
+                offset as i64,
+                repo,
+                model,
+                from,
+                to
+            ],
             |row| {
                 let id: String = row.get(0)?;
                 let agent: String = row.get(1)?;

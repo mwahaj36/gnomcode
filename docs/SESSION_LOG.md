@@ -386,3 +386,27 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 ### 4. Deferred
 - Raster icon exports (`.ico`, `.icns`, PNG sets, OG image) need a build script; next PR.
 - Legacy Tailwind color keys stay until pages are redesigned (they would otherwise break existing pages).
+
+
+## Phase 2: Usage, projects, and filter endpoints
+
+### 1. Goals
+- Implement backend analytics, time-bucketed usage series, per-repo rollups, and KPI summary endpoints in Rust.
+- Keep 100% of aggregation and trust level propagation in `crates/store` and `crates/daemon` (invariant 8).
+- Extend session queries and live snapshots with multi-field filtering (`repo`, `model`, `from`, `to`) and real-time attention alerts.
+
+### 2. Outcomes
+- `crates/store/src/analytics.rs`: Implemented `usage_totals`, `usage_series`, `project_rollups`, and `usage_summary` with SQL aggregation and trust level calculation. Added 4 unit tests covering grouping, filtering, date range normalization, and KPI previous-period deltas.
+- `crates/store/src/lib.rs`: Added `SessionFilter` and updated session pagination query to filter by repo, model, and time range.
+- `crates/daemon/src/api.rs`: Wired routes:
+  - `GET /spawnt.svg`: Serves brand vector icon directly.
+  - `GET /api/v1/projects`: Returns per-repo usage rollups with trust levels.
+  - `GET /api/v1/usage/daily` and `/usage/series`: Returns time-bucketed (hourly, daily, weekly) token and cost series.
+  - `GET /api/v1/usage/summary`: Returns current KPI metrics and previous-period deltas.
+  - `GET /api/v1/sessions` and `GET /api/v1/live`: Added multi-field filters (`repo`, `model`, `from`, `to`) and added the `attention` alert array.
+- `docs/SPEC.md`: Updated Section 3.11 with the full endpoint inventory.
+
+### 3. Verification & Quality Gate
+- `cargo fmt --all`: Clean.
+- `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
+- `cargo test --workspace`: All tests pass with 0 failures across all crates.

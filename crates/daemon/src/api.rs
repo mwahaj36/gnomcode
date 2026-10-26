@@ -39,6 +39,14 @@ pub struct SessionQueryParams {
     pub agent: Option<String>,
     /// Status filter (`active`, `idle`, or `all`).
     pub status: Option<String>,
+    /// Project (repo) name filter.
+    pub repo: Option<String>,
+    /// Exact model name filter.
+    pub model: Option<String>,
+    /// RFC 3339 UTC lower bound.
+    pub from: Option<String>,
+    /// RFC 3339 UTC upper bound.
+    pub to: Option<String>,
 }
 
 /// Query parameters for reports.
@@ -50,8 +58,77 @@ pub struct ReportQueryParams {
     pub from: Option<String>,
     /// Custom ISO end timestamp.
     pub to: Option<String>,
+    /// Agent filter.
+    pub agent: Option<String>,
+    /// Model filter.
+    pub model: Option<String>,
+    /// Project (repo) filter.
+    pub repo: Option<String>,
     /// Output format (`json` or `csv`).
     pub format: Option<String>,
+}
+
+/// Query parameters for project rollups.
+#[derive(Debug, Deserialize, Default)]
+pub struct ProjectsQueryParams {
+    /// Range filter (`today`, `7d`, `30d`, `all`, `custom`).
+    pub range: Option<String>,
+    /// Custom ISO start timestamp.
+    pub from: Option<String>,
+    /// Custom ISO end timestamp.
+    pub to: Option<String>,
+    /// Agent filter.
+    pub agent: Option<String>,
+    /// Model filter.
+    pub model: Option<String>,
+    /// Project (repo) filter.
+    pub repo: Option<String>,
+    /// Filter to exact cost basis only.
+    pub exact_only: Option<bool>,
+}
+
+/// Query parameters for time-bucketed usage series.
+#[derive(Debug, Deserialize, Default)]
+pub struct UsageSeriesQueryParams {
+    /// Range filter (`today`, `7d`, `30d`, `all`, `custom`).
+    pub range: Option<String>,
+    /// Custom ISO start timestamp.
+    pub from: Option<String>,
+    /// Custom ISO end timestamp.
+    pub to: Option<String>,
+    /// Grouping dimension (`agent`, `model`, `project`, or empty for total).
+    pub group: Option<String>,
+    /// Bucket interval (`hour`, `day`, `week`).
+    pub interval: Option<String>,
+    /// Timezone offset in minutes from UTC.
+    pub tz_offset_minutes: Option<i32>,
+    /// Agent filter.
+    pub agent: Option<String>,
+    /// Model filter.
+    pub model: Option<String>,
+    /// Project (repo) filter.
+    pub repo: Option<String>,
+    /// Filter to exact cost basis only.
+    pub exact_only: Option<bool>,
+}
+
+/// Query parameters for usage summary KPIs.
+#[derive(Debug, Deserialize, Default)]
+pub struct UsageSummaryQueryParams {
+    /// Range filter (`today`, `7d`, `30d`, `all`, `custom`).
+    pub range: Option<String>,
+    /// Custom ISO start timestamp.
+    pub from: Option<String>,
+    /// Custom ISO end timestamp.
+    pub to: Option<String>,
+    /// Agent filter.
+    pub agent: Option<String>,
+    /// Model filter.
+    pub model: Option<String>,
+    /// Project (repo) filter.
+    pub repo: Option<String>,
+    /// Filter to exact cost basis only.
+    pub exact_only: Option<bool>,
 }
 
 /// Daemon health endpoint response.
@@ -66,6 +143,7 @@ pub struct HealthResponse {
 const CONSOLE_HTML: &str = include_str!("console.html");
 const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
 const FLEETHUD_SVG: &str = include_str!("../../../web/public/fleethud.svg");
+const SPAWNT_SVG: &str = include_str!("../../../brand/spawnt-mark.svg");
 
 /// Builds the axum router for FleetHUD local API and embedded console.
 pub fn build_router(state: AppState) -> Router {
@@ -73,11 +151,16 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(console_handler))
         .route("/console", get(console_handler))
         .route("/favicon.ico", get(favicon_handler))
+        .route("/spawnt.svg", get(spawnt_svg_handler))
         .route("/fleethud.svg", get(svg_icon_handler))
         .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
+        .route("/api/v1/projects", get(projects_handler))
+        .route("/api/v1/usage/daily", get(usage_series_handler))
+        .route("/api/v1/usage/series", get(usage_series_handler))
+        .route("/api/v1/usage/summary", get(usage_summary_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/quota", get(quota_handler))
         .route(
@@ -566,6 +649,10 @@ async fn svg_icon_handler() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/svg+xml")], FLEETHUD_SVG)
 }
 
+async fn spawnt_svg_handler() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/svg+xml")], SPAWNT_SVG)
+}
+
 async fn auth_callback_handler() -> impl IntoResponse {
     Redirect::to("/")
 }
@@ -635,6 +722,148 @@ async fn health_handler(
     }))
 }
 
+fn parse_filter(
+    range: Option<&str>,
+    from: Option<String>,
+    to: Option<String>,
+    agent: Option<String>,
+    model: Option<String>,
+    repo: Option<String>,
+    exact_only: Option<bool>,
+) -> fleethud_store::analytics::UsageFilter {
+    let now = chrono::Utc::now();
+    let mut calculated_from = from;
+    let calculated_to = to;
+    if calculated_from.is_none() {
+        if let Some(r) = range {
+            match r {
+                "today" | "24h" => {
+                    let sod = now
+                        .date_naive()
+                        .and_hms_opt(0, 0, 0)
+                        .map(|dt| dt.and_utc())
+                        .unwrap_or(now);
+                    calculated_from = Some(sod.to_rfc3339());
+                }
+                "7d" => {
+                    calculated_from = Some((now - chrono::Duration::days(7)).to_rfc3339());
+                }
+                "30d" => {
+                    calculated_from = Some((now - chrono::Duration::days(30)).to_rfc3339());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let agents = agent
+        .filter(|a| !a.is_empty() && a != "all")
+        .map(|a| {
+            a.split(',')
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let models = model
+        .filter(|m| !m.is_empty())
+        .map(|m| {
+            m.split(',')
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let projects = repo
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            p.split(',')
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    fleethud_store::analytics::UsageFilter {
+        from: calculated_from,
+        to: calculated_to,
+        agents,
+        models,
+        projects,
+        exact_only: exact_only.unwrap_or(false),
+    }
+}
+
+async fn projects_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<ProjectsQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let filter = parse_filter(
+        params.range.as_deref(),
+        params.from,
+        params.to,
+        params.agent,
+        params.model,
+        params.repo,
+        params.exact_only,
+    );
+    let db = state.db.lock().await;
+    let rollups = db
+        .project_rollups(&filter)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((cors_headers(), Json(json!({ "projects": rollups }))))
+}
+
+async fn usage_series_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<UsageSeriesQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let filter = parse_filter(
+        params.range.as_deref(),
+        params.from,
+        params.to,
+        params.agent,
+        params.model,
+        params.repo,
+        params.exact_only,
+    );
+    let group = fleethud_store::analytics::GroupBy::parse(params.group.as_deref().unwrap_or(""));
+    let interval =
+        fleethud_store::analytics::Interval::parse(params.interval.as_deref().unwrap_or(""));
+    let tz = params.tz_offset_minutes.unwrap_or(0);
+    let db = state.db.lock().await;
+    let series = db
+        .usage_series(&filter, group, interval, tz)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((cors_headers(), Json(series)))
+}
+
+async fn usage_summary_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<UsageSummaryQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let filter = parse_filter(
+        params.range.as_deref(),
+        params.from,
+        params.to,
+        params.agent,
+        params.model,
+        params.repo,
+        params.exact_only,
+    );
+    let db = state.db.lock().await;
+    let summary = db
+        .usage_summary(&filter)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((cors_headers(), Json(summary)))
+}
+
 async fn list_sessions_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -647,9 +876,15 @@ async fn list_sessions_handler(
 
     let db = state.db.lock().await;
     let (mut sessions, total_count) = db
-        .list_sessions_paginated(
-            params.agent.as_deref(),
-            params.status.as_deref(),
+        .list_sessions_filtered(
+            &fleethud_store::SessionFilter {
+                agent: params.agent.as_deref(),
+                status: params.status.as_deref(),
+                repo: params.repo.as_deref(),
+                model: params.model.as_deref(),
+                from: params.from.as_deref(),
+                to: params.to.as_deref(),
+            },
             offset,
             limit,
         )
@@ -1130,6 +1365,8 @@ struct LiveQueryParams {
     to: Option<String>,
     agent: Option<String>,
     status: Option<String>,
+    repo: Option<String>,
+    model: Option<String>,
     page: Option<usize>,
     limit: Option<usize>,
 }
@@ -1156,9 +1393,15 @@ async fn live_snapshot_handler(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (mut sessions, total_count) = db
-        .list_sessions_paginated(
-            params.agent.as_deref(),
-            params.status.as_deref(),
+        .list_sessions_filtered(
+            &fleethud_store::SessionFilter {
+                agent: params.agent.as_deref(),
+                status: params.status.as_deref(),
+                repo: params.repo.as_deref(),
+                model: params.model.as_deref(),
+                from: params.from.as_deref(),
+                to: params.to.as_deref(),
+            },
             offset,
             limit,
         )
@@ -1178,6 +1421,30 @@ async fn live_snapshot_handler(
     let quota = db
         .get_latest_quota_snapshots()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut attention = Vec::new();
+    for s in &sessions {
+        if s.state == "awaiting_approval" {
+            attention.push(json!({
+                "type": "waiting_approval",
+                "session_id": s.id,
+                "agent": s.agent,
+                "project": s.project_name,
+                "title": s.title,
+            }));
+        }
+    }
+    for q in &quota {
+        if q.used_pct >= 80.0 {
+            attention.push(json!({
+                "type": "quota_warning",
+                "provider": q.provider,
+                "limit_id": q.limit_id,
+                "used_pct": q.used_pct,
+                "resets_at": q.resets_at,
+            }));
+        }
+    }
 
     let custom_pricing = db
         .get_custom_model_pricings()
@@ -1297,6 +1564,7 @@ async fn live_snapshot_handler(
             "total_pages": total_pages.max(1),
             "active_count": active_count,
             "custom_pricing": custom_pricing,
+            "attention": attention,
         })),
     ))
 }
@@ -1341,6 +1609,9 @@ mod tests {
             "/api/v1/live",
             "/api/v1/auth/session",
             "/api/v1/supabase-config",
+            "/api/v1/projects",
+            "/api/v1/usage/daily",
+            "/api/v1/usage/summary",
         ] {
             let request = Request::builder()
                 .uri(path)
@@ -1390,5 +1661,32 @@ mod tests {
 
         let res = app.oneshot(req).await.expect("response");
         assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn new_analytics_endpoints_return_data() {
+        let db = Database::open_in_memory().expect("in-memory db");
+        let state = AppState {
+            db: Arc::new(Mutex::new(db)),
+            bearer_token: "secret-test-token".to_owned(),
+        };
+        let app = build_router(state);
+
+        for path in [
+            "/api/v1/projects",
+            "/api/v1/usage/daily?group=agent&interval=day",
+            "/api/v1/usage/summary?range=7d",
+            "/spawnt.svg",
+        ] {
+            let req = Request::builder()
+                .uri(path)
+                .header("Host", "127.0.0.1:41738")
+                .header("Authorization", "Bearer secret-test-token")
+                .body(Body::empty())
+                .expect("request");
+
+            let res = app.clone().oneshot(req).await.expect("response");
+            assert_eq!(res.status(), StatusCode::OK, "path failed: {path}");
+        }
     }
 }

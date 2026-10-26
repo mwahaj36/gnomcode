@@ -330,7 +330,27 @@ Every quota record and UI meter is keyed by `(provider, limit_id, window)`:
 - Bind **127.0.0.1 only**. Random bearer token in `daemon.json` (0600 / user-only ACL).
 - Validate `Host` and `Origin` on every request (DNS-rebinding defense).
 - IPC: `~/.fleethud/ipc.sock` (Unix), `\\.\pipe\fleethud-<user>` (Windows).
-- Endpoints (v1): `GET /v1/sessions?active=1`, `GET /v1/usage?group=project|agent|model&from&to`, `GET /v1/quota`, `WS /v1/stream`, `POST /v1/sessions/:id/focus`, `GET|POST /v1/rules`, `GET /v1/health`.
+- Endpoints (v1):
+  - `GET /health` — health check and timestamp
+  - `GET /spawnt.svg`, `GET /fleethud.svg` — brand vector icon
+  - `GET /api/v1/sessions?page&limit&agent&status&repo&model&from&to` — paginated sessions with rich multi-field filters
+  - `POST /api/v1/sessions/:id/focus` — window focus / bring-to-front
+  - `GET /api/v1/projects?range&from&to&agent&model&repo&exact_only` — per-repo usage rollups
+  - `GET /api/v1/usage/daily` (or `/usage/series`) `?range&from&to&group=agent|model|project&interval=hour|day|week&tz_offset_minutes&exact_only` — time-bucketed usage series
+  - `GET /api/v1/usage/summary?range&from&to&exact_only` — KPI summary with previous-period deltas
+  - `GET /api/v1/report?range&from&to&format` — report breakdown by provider and plan ROI
+  - `GET /api/v1/quota` — latest per-provider quota snapshots
+  - `GET /api/v1/live` — live streaming/polling snapshot including sessions, quota, roi, and attention list
+  - `GET|POST /api/v1/user` — user profile settings (plans, goals)
+  - `GET|POST|DELETE /api/v1/pricing/custom` — custom model pricing overrides
+  - `GET /api/v1/pricing/models` — list available pricing models
+  - `POST /api/v1/pricing/refresh` — refresh pricing catalog
+  - `GET|POST /api/v1/rules`, `DELETE /api/v1/rules/:id` — guardrail rules
+  - `GET /api/v1/alerts` — guardrail violation alerts
+  - `GET /api/v1/export?range&format=json|csv` — export usage data
+  - `GET /api/v1/resume-queue`, `POST /api/v1/resume-queue/arm`, `POST /api/v1/resume-queue/disarm`
+  - `GET|POST /api/v1/pro/relay`, `POST /api/v1/pro/relay/execute`, `POST /api/v1/pro/relay/dismiss`
+  - `GET /api/v1/guardrails/check?session_id` — query active hard stops
 
 ### 3.12 Cross-platform matrix
 
