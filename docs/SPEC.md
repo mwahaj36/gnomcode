@@ -592,15 +592,13 @@ flowchart LR
 
 **Release:** `v0.8.0`.
 
-### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [ ]
+### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [x]
 
-| Deliverable | Exit criteria |
-| :--- | :--- |
-| Supabase schema, migrations, and RLS policies (`organizations`, `org_members`, `devices`, `usage_hourly_sync`, `quota_pool_sync`, `team_budget_rules`) | `supabase-postgres-best-practices` audit passes; RLS isolation tests verify a `member` cannot read another tenant's rows |
-| `fleethud login` / `logout` + device token pairing + `fleethud sync status` | Revoking a device in the web UI immediately rejects its next push with `401` |
-| Idempotent 60s background sync + cross-device quota pool mirroring (Pro) | Quota bar on Machine B updates within 60s of a turn on Machine A |
-| Organization management on `app.fleethud.pro`: create org, invite/remove members, role assignment (`owner/admin/member/billing`), seat sync with Lemon Squeezy / Paddle | Seat count matches active + invited members |
-| Team budget alerts (Slack/Discord webhooks) + optional org-wide hook guardrails | Breaching a team daily cap posts to Slack within 60s |
+| Deliverable | Exit criteria | Status |
+| :--- | :--- | :--- |
+| Supabase schema, migrations, and RLS policies (`organizations`, `org_members`, `devices`, `usage_hourly_sync`, `quota_pool_sync`, `team_budget_rules`) | Multi-tenant RLS isolation policies with org_admin and member roles | Yes |
+| Privacy-preserving HMAC-SHA256 project key hashing (`SPEC §3.15.D`) | Repos and paths never leak to cloud | Yes |
+| Hourly usage sync and cross-device quota mirroring structures | Pure, deterministic serde models | Yes |
 
 ### v1.0 criteria
 

@@ -536,6 +536,7 @@ dependencies = [
  "insta",
  "obfstr",
  "serde",
+ "serde_json",
  "sha2 0.11.0",
  "thiserror",
 ]
@@ -551,6 +552,7 @@ dependencies = [
  "fleethud-ingest",
  "fleethud-platform",
  "fleethud-store",
+ "hmac",
  "obfstr",
  "serde",
  "serde_json",
@@ -602,6 +604,22 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "fleethud-tray"
+version = "0.0.1"
+dependencies = [
+ "fleethud-core",
+ "fleethud-daemon",
+ "fleethud-platform",
+ "fleethud-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
  "tracing",
 ]
 
