@@ -228,6 +228,8 @@ pub struct Session {
     pub project_id: String,
     /// Parent session ID when this session is a spawned subagent / sidechain.
     pub parent_session_id: Option<String>,
+    /// Most recently active model in this session, if known.
+    pub model: Option<String>,
     /// Human-readable session title or first task label, if known.
     pub title: Option<String>,
     /// Current state in the session state machine.
