@@ -340,6 +340,12 @@
 <body>
   <header>
     <div class="header-left">
+      <div style="width: 28px; height: 28px; background: #ffffff; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; padding: 3px; margin-right: 6px;">
+        <svg viewBox="0 0 1024 1024" style="width: 100%; height: 100%;">
+          <polygon points="512,128 896,512 512,896 128,512" fill="#0f172a" />
+          <polygon points="512,280 744,512 512,744 280,512" fill="#38bdf8" />
+        </svg>
+      </div>
       <h1>FleetHUD</h1>
       <div class="nav-tabs">
         <button class="tab-btn active" id="tab-btn-console" onclick="switchTab('console')">Console</button>
@@ -360,10 +366,10 @@
     <div class="timeline-bar">
       <div class="timeline-label" id="timeline-label">Showing: All Time</div>
       <div class="timeline-buttons">
-        <button class="btn-pill" onclick="setTimeline('today')">Today</button>
-        <button class="btn-pill" onclick="setTimeline('7d')">Last 7 Days</button>
-        <button class="btn-pill" onclick="setTimeline('30d')">Last 30 Days</button>
-        <button class="btn-pill active" onclick="setTimeline('all')">All Time</button>
+        <button class="btn-pill" onclick="setTimeline('today', this)">Today</button>
+        <button class="btn-pill" onclick="setTimeline('7d', this)">Last 7 Days</button>
+        <button class="btn-pill" onclick="setTimeline('30d', this)">Last 30 Days</button>
+        <button class="btn-pill active" onclick="setTimeline('all', this)">All Time</button>
       </div>
     </div>
 
@@ -402,9 +408,9 @@
       </div>
     </div>
 
-    <!-- Spend by Provider (Click to Expand Model Breakdown) -->
-    <div class="section-title" style="margin-bottom: 12px;">Spend by Provider (Click to View Models)</div>
-    <div class="provider-grid" id="providers-container">
+    <!-- Spend by Agent (Click to View Models) -->
+    <div class="section-title" style="margin-bottom: 12px;">Spend by Agent (Click to View Models)</div>
+    <div class="provider-grid" id="providers-container" style="align-items: start;">
       <!-- Injected dynamically -->
     </div>
 
@@ -459,12 +465,14 @@
             <th>Agent</th>
             <th>Surface</th>
             <th>Model</th>
+            <th>Tokens</th>
+            <th>Cost</th>
             <th>Status</th>
             <th>Last Active</th>
           </tr>
         </thead>
         <tbody id="sessions-table">
-          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
+          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
         </tbody>
       </table>
       <div class="pagination">
@@ -618,32 +626,51 @@
       return n.toString();
     }
 
+    const openModels = new Set();
+    let lastReportJson = '';
+    let lastSessionsJson = '';
+    let lastQuotaJson = '';
+
     function toggleModelList(prov) {
+      if (openModels.has(prov)) {
+        openModels.delete(prov);
+      } else {
+        openModels.add(prov);
+      }
       const el = document.getElementById(`models-${prov}`);
       if (el) el.classList.toggle('open');
     }
 
-    function setTimeline(range) {
+    function setTimeline(range, btn) {
       currentTimeline = range;
       document.querySelectorAll('.timeline-buttons .btn-pill').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
+      if (btn) {
+        btn.classList.add('active');
+      } else {
+        const found = Array.from(document.querySelectorAll('.timeline-buttons .btn-pill')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(range));
+        if (found) found.classList.add('active');
+      }
+      lastReportJson = '';
       loadReport();
     }
 
     function onFilterChange() {
       currentPage = 1;
+      lastSessionsJson = '';
       loadSessions();
     }
 
     function prevPage() {
       if (currentPage > 1) {
         currentPage--;
+        lastSessionsJson = '';
         loadSessions();
       }
     }
 
     function nextPage() {
       currentPage++;
+      lastSessionsJson = '';
       loadSessions();
     }
 
@@ -652,12 +679,16 @@
         const res = await fetch(`/api/v1/report?range=${currentTimeline}`, { headers }).then(r => r.json());
         if (!res || !res.timeline) return;
 
+        const jsonStr = JSON.stringify(res);
+        if (jsonStr === lastReportJson) return;
+        lastReportJson = jsonStr;
+
         const tl = res.timeline;
         document.getElementById('total-spend').textContent = `$${tl.total_cost_usd.toFixed(2)}`;
         document.getElementById('total-savings').textContent = `$${tl.total_cache_savings_usd.toFixed(2)}`;
 
         const totalInput = tl.total_input_tokens + tl.total_cache_read_tokens;
-        const savingsPct = totalInput > 0 ? ((tl.total_cache_read_tokens / totalInput) * 100).toFixed(0) : 0;
+        const savingsPct = totalInput > 0 ? ((tl.total_cache_read_tokens / totalInput) * 100).toFixed(1) : 0;
         document.getElementById('savings-pct').textContent = `${savingsPct}% cached (${formatTokens(tl.total_cache_read_tokens)} tokens)`;
 
         // Date range header
@@ -670,28 +701,31 @@
         document.getElementById('timeline-label').textContent = dateStr;
 
         // ROI display
-        if (res.combined_roi && res.combined_roi.plan_usd > 0) {
+        if (res.combined_roi && res.combined_roi.spend_usd > 0) {
           document.getElementById('roi-summary').textContent = `Plan Value: ${res.combined_roi.multiplier.toFixed(1)}x ROI ($${res.combined_roi.net_savings_usd.toFixed(2)} net)`;
         } else {
           document.getElementById('roi-summary').textContent = 'Plan Value: Configured in Settings';
         }
 
         // Render ROI cards
+        const activeRoi = (res.roi_by_provider || []).filter(r => r.spend_usd > 0);
         const roiContainer = document.getElementById('roi-cards-container');
-        roiContainer.innerHTML = res.roi_by_provider.map(r => `
+        roiContainer.innerHTML = activeRoi.map(r => `
           <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px; font-family: var(--font-mono);">
             <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${r.provider}</div>
             <div style="font-size: 18px; font-weight: 600; margin: 4px 0;">${r.multiplier.toFixed(1)}x Return</div>
             <div style="font-size: 11px; color: ${r.net_savings_usd >= 0 ? 'var(--green)' : 'var(--red)'};">
               ${r.net_savings_usd >= 0 ? '+' : ''}$${r.net_savings_usd.toFixed(2)} vs API
             </div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Paid: $${r.plan_usd.toFixed(0)}/mo | Value: $${r.spend_usd.toFixed(2)}</div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Paid: $${r.plan_usd.toFixed(2)}/${r.period_label || 'period'} | Value: $${r.spend_usd.toFixed(2)}</div>
           </div>
-        `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Configure your plans in Settings tab to see live ROI multipliers.</div>';
+        `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No active subscription usage for this timeframe.</div>';
 
         // Render Provider Breakdown cards
         const provContainer = document.getElementById('providers-container');
-        provContainer.innerHTML = tl.providers.map(p => `
+        provContainer.innerHTML = (tl.providers || []).map(p => {
+          const isOpen = openModels.has(p.provider) ? 'open' : '';
+          return `
           <div class="provider-card" onclick="toggleModelList('${p.provider}')">
             <div class="provider-header">
               <span class="provider-name">${p.provider}</span>
@@ -700,7 +734,7 @@
             <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
               ${p.models.length} model(s) • $${p.total_cache_savings_usd.toFixed(2)} saved via caching
             </div>
-            <div class="model-list" id="models-${p.provider}">
+            <div class="model-list ${isOpen}" id="models-${p.provider}">
               ${p.models.map(m => `
                 <div class="model-item">
                   <span>${m.model}</span>
@@ -709,7 +743,7 @@
               `).join('')}
             </div>
           </div>
-        `).join('');
+        `}).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No agent spending recorded for this timeframe.</div>';
       } catch (e) {
         console.error('Failed to load report', e);
       }
@@ -722,6 +756,10 @@
         const res = await fetch(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers }).then(r => r.json());
         if (!res) return;
 
+        const jsonStr = JSON.stringify(res);
+        if (jsonStr === lastSessionsJson) return;
+        lastSessionsJson = jsonStr;
+
         document.getElementById('active-count').textContent = res.active_count || 0;
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
         document.getElementById('prev-btn').disabled = res.page <= 1;
@@ -729,17 +767,23 @@
 
         const table = document.getElementById('sessions-table');
         if (!res.sessions || res.sessions.length === 0) {
-          table.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No sessions match the selected filter.</td></tr>';
+          table.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No sessions match the selected filter.</td></tr>';
           return;
         }
 
         table.innerHTML = res.sessions.map(s => {
           const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
+          const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0);
           return `<tr>
             <td style="font-weight: 500;">${s.project_name}</td>
             <td>${s.agent}</td>
             <td>${s.surface}</td>
             <td>${s.model}</td>
+            <td>
+              <span style="font-weight: 600;">${formatTokens(tokCount)}</span>
+              <div style="font-size: 10px; color: var(--text-muted);">${formatTokens(s.input_tokens || 0)} in • ${formatTokens(s.output_tokens || 0)} out</div>
+            </td>
+            <td style="font-weight: 600;">$${(s.total_cost_usd || 0).toFixed(2)}</td>
             <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
             <td>${formatRelativeTime(s.last_event_at)}</td>
           </tr>`;
@@ -752,10 +796,16 @@
     async function loadQuota() {
       try {
         const res = await fetch('/api/v1/quota', { headers }).then(r => r.json());
-        const table = document.getElementById('quota-table');
-        document.getElementById('quota-count').textContent = (res && res.length) ? res.length : 0;
+        if (!res) return;
 
-        if (!res || res.length === 0) {
+        const jsonStr = JSON.stringify(res);
+        if (jsonStr === lastQuotaJson) return;
+        lastQuotaJson = jsonStr;
+
+        const table = document.getElementById('quota-table');
+        document.getElementById('quota-count').textContent = res.length || 0;
+
+        if (res.length === 0) {
           table.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No local quota pools detected.</td></tr>';
           return;
         }
@@ -767,7 +817,7 @@
             <td>${q.window}</td>
             <td style="font-weight: 600; color: ${q.used_pct > 80 ? 'var(--red)' : 'var(--green)'};">${q.used_pct.toFixed(1)}%</td>
             <td>${q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : 'N/A'}</td>
-            <td><span class="badge" style="font-size: 10px;">EXACT</span></td>
+            <td><span class="badge" style="font-size: 10px;">${q.basis === 'estimated' ? 'EST' : 'EXACT'}</span></td>
           </tr>
         `).join('');
       } catch (e) {

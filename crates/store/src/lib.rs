@@ -115,6 +115,12 @@ pub struct SessionListItem {
     pub started_at: String,
     /// Last event timestamp.
     pub last_event_at: String,
+    /// Total input tokens consumed.
+    pub input_tokens: u64,
+    /// Total output tokens generated.
+    pub output_tokens: u64,
+    /// Total API-equivalent cost USD.
+    pub total_cost_usd: f64,
 }
 
 /// Breakdown for a single model under a provider.
@@ -866,20 +872,63 @@ impl Database {
                     early_7d,
                 ))
             }) {
+                use std::collections::BTreeMap;
+                struct AggQuota {
+                    tok_5h: u64,
+                    tok_7d: u64,
+                    early_5h: Option<String>,
+                    early_7d: Option<String>,
+                }
+                let mut agg_map: BTreeMap<(String, String), AggQuota> = BTreeMap::new();
+
                 for mr in model_rows.flatten() {
                     let (agent, raw_model, tok_5h, tok_7d, early_5h, early_7d) = mr;
-                    let model_clean = if raw_model.contains("MODEL_PLACEHOLDER") {
-                        "Gemini 3.8 Flash (Default)".to_owned()
+                    let lower = raw_model.to_lowercase();
+                    let limit_slug = if lower.contains("flash") {
+                        "gemini-3.8-flash".to_owned()
+                    } else if lower.contains("argon") {
+                        "gemini-4-argon".to_owned()
+                    } else if lower.contains("opus") {
+                        if lower.contains("5.5") {
+                            "claude-opus-5.5".to_owned()
+                        } else {
+                            "claude-opus-5".to_owned()
+                        }
+                    } else if lower.contains("sonnet") {
+                        "claude-sonnet-4".to_owned()
                     } else {
-                        raw_model
+                        let base = if let Some(idx) = raw_model.find('(') {
+                            raw_model[..idx].trim()
+                        } else {
+                            raw_model.trim()
+                        };
+                        base.to_lowercase()
+                            .replace([' ', '/', '_'], "-")
+                            .trim_matches('-')
+                            .to_owned()
                     };
 
-                    let limit_slug = model_clean
-                        .to_lowercase()
-                        .replace([' ', '(', ')'], "-")
-                        .trim_matches('-')
-                        .to_owned();
+                    let entry = agg_map.entry((agent, limit_slug)).or_insert_with(|| AggQuota {
+                        tok_5h: 0,
+                        tok_7d: 0,
+                        early_5h: None,
+                        early_7d: None,
+                    });
+                    entry.tok_5h += tok_5h;
+                    entry.tok_7d += tok_7d;
+                    if let Some(e) = early_5h {
+                        if entry.early_5h.as_ref().is_none_or(|cur| &e < cur) {
+                            entry.early_5h = Some(e);
+                        }
+                    }
+                    if let Some(e) = early_7d {
+                        if entry.early_7d.as_ref().is_none_or(|cur| &e < cur) {
+                            entry.early_7d = Some(e);
+                        }
+                    }
+                }
 
+                for ((agent, limit_slug), agg) in agg_map {
                     let (cap_5h, cap_7d) = if limit_slug.contains("claude-opus") {
                         (1_500_000.0_f64, 15_000_000.0_f64)
                     } else if limit_slug.contains("argon") {
@@ -898,8 +947,8 @@ impl Database {
                             && q.limit_id == limit_slug
                             && q.window == QuotaWindow::FiveHour
                     }) {
-                        let used_5h_pct = ((tok_5h as f64 / cap_5h) * 100.0).clamp(0.0, 100.0);
-                        let resets_at_5h = early_5h.and_then(|s| {
+                        let used_5h_pct = ((agg.tok_5h as f64 / cap_5h) * 100.0).clamp(0.0, 100.0);
+                        let resets_at_5h = agg.early_5h.and_then(|s| {
                             DateTime::parse_from_rfc3339(&s)
                                 .map(|dt| dt.with_timezone(&Utc) + chrono::Duration::hours(5))
                                 .ok()
@@ -922,8 +971,8 @@ impl Database {
                             && q.limit_id == limit_slug
                             && q.window == QuotaWindow::Weekly
                     }) {
-                        let used_7d_pct = ((tok_7d as f64 / cap_7d) * 100.0).clamp(0.0, 100.0);
-                        let resets_at_7d = early_7d.and_then(|s| {
+                        let used_7d_pct = ((agg.tok_7d as f64 / cap_7d) * 100.0).clamp(0.0, 100.0);
+                        let resets_at_7d = agg.early_7d.and_then(|s| {
                             DateTime::parse_from_rfc3339(&s)
                                 .map(|dt| dt.with_timezone(&Utc) + chrono::Duration::days(7))
                                 .ok()
@@ -1127,9 +1176,7 @@ impl Database {
         }
 
         if let Some(price) = anthropic_usd {
-            if (profile.claude_plan_usd - 0.0).abs() < f64::EPSILON
-                || ((profile.claude_plan_usd - 20.0).abs() < f64::EPSILON && price > 20.0)
-            {
+            if (profile.claude_plan_usd - 0.0).abs() < f64::EPSILON {
                 profile.claude_plan_usd = price;
                 changed = true;
             }
@@ -1162,9 +1209,15 @@ impl Database {
         let now = Utc::now();
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT s.id, s.agent, s.surface, p.name, s.model, s.state, s.started_at, s.last_event_at
+            SELECT
+                s.id, s.agent, s.surface, p.name, s.model, s.state, s.started_at, s.last_event_at,
+                COALESCE(SUM(u.input_tokens), 0),
+                COALESCE(SUM(u.output_tokens), 0),
+                COALESCE(SUM(u.cost_usd), 0.0)
             FROM session s
             JOIN project p ON s.project_id = p.id
+            LEFT JOIN usage_record u ON s.id = u.session_id
+            GROUP BY s.id
             ORDER BY s.last_event_at DESC
             "#,
         )?;
@@ -1178,6 +1231,9 @@ impl Database {
             let state_str: String = row.get(5)?;
             let started_at: String = row.get(6)?;
             let last_event_at_str: String = row.get(7)?;
+            let input_tokens: i64 = row.get(8)?;
+            let output_tokens: i64 = row.get(9)?;
+            let total_cost_usd: f64 = row.get(10)?;
 
             let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
                 .map(|dt| dt.with_timezone(&Utc))
@@ -1215,6 +1271,9 @@ impl Database {
                 is_active,
                 started_at,
                 last_event_at: last_event_at_str,
+                input_tokens: input_tokens.max(0) as u64,
+                output_tokens: output_tokens.max(0) as u64,
+                total_cost_usd,
             })
         })?;
 
@@ -1412,11 +1471,11 @@ impl Database {
         }
 
         use std::collections::BTreeMap;
-        let mut provider_models: BTreeMap<&'static str, BTreeMap<String, ModelReport>> =
+        let mut agent_models: BTreeMap<&'static str, BTreeMap<String, ModelReport>> =
             BTreeMap::new();
         for item in raw_items {
-            let provider = fleethud_core::pricing::classify_provider(&item.agent, &item.model);
-            let models_map = provider_models.entry(provider).or_default();
+            let agent_label = fleethud_core::pricing::format_agent_display(&item.agent);
+            let models_map = agent_models.entry(agent_label).or_default();
             let entry = models_map
                 .entry(item.model.clone())
                 .or_insert_with(|| ModelReport {
@@ -1438,27 +1497,27 @@ impl Database {
         }
 
         let mut providers = Vec::new();
-        for target in ["Anthropic", "OpenAI", "Google", "Other"] {
-            if let Some(models_map) = provider_models.remove(target) {
-                let mut models: Vec<ModelReport> = models_map.into_values().collect();
-                models.sort_by(|a, b| {
-                    b.cost_usd
-                        .partial_cmp(&a.cost_usd)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-                let mut prov_cost = 0.0;
-                let mut prov_savings = 0.0;
-                for m in &models {
-                    prov_cost += m.cost_usd;
-                    prov_savings += m.cache_savings_usd;
-                }
+        for (agent_label, models_map) in agent_models {
+            let mut models: Vec<ModelReport> = models_map.into_values().collect();
+            models.sort_by(|a, b| {
+                b.cost_usd
+                    .partial_cmp(&a.cost_usd)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let mut prov_cost = 0.0;
+            let mut prov_savings = 0.0;
+            for m in &models {
+                prov_cost += m.cost_usd;
+                prov_savings += m.cache_savings_usd;
+            }
+            if prov_cost > 0.0 || !models.is_empty() {
                 let pct = if total_spend > 0.0 {
                     (prov_cost / total_spend) * 100.0
                 } else {
                     0.0
                 };
                 providers.push(ProviderReport {
-                    provider: target.to_owned(),
+                    provider: agent_label.to_owned(),
                     total_cost_usd: prov_cost,
                     total_cache_savings_usd: prov_savings,
                     pct_of_spend: pct,
