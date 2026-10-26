@@ -2,6 +2,7 @@
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
 pub mod api;
+pub mod sync;
 
 use chrono::Utc;
 use fleethud_ingest::ingest_all;
