@@ -7,10 +7,15 @@ if (!(Test-Path $InstallDir)) {
 }
 
 $ExeDest = "$InstallDir\fleethud.exe"
-$SourceExe = "$PSScriptRoot\..\target\release\fleethud.exe"
+$CandidateSources = @(
+    "$PSScriptRoot\..\fleethud.exe",
+    "$PSScriptRoot\fleethud.exe",
+    "$PSScriptRoot\..\target\release\fleethud.exe"
+)
+$FoundExe = $CandidateSources | Where-Object { Test-Path $_ } | Select-Object -First 1
 
-if (Test-Path $SourceExe) {
-    Copy-Item -Path $SourceExe -Destination $ExeDest -Force
+if ($FoundExe) {
+    Copy-Item -Path $FoundExe -Destination $ExeDest -Force
     Write-Output "Installed binary to $ExeDest"
 } else {
     Write-Output "Fetching release binary..."
@@ -25,9 +30,14 @@ if (Test-Path $SourceExe) {
 
 # Copy launcher scripts
 foreach ($script in @("tray.ps1", "run-tray.vbs", "open-dashboard.vbs")) {
-    $src = "$PSScriptRoot\$script"
-    if (Test-Path $src) {
-        Copy-Item -Path $src -Destination "$InstallDir\$script" -Force
+    $srcCandidates = @(
+        "$PSScriptRoot\$script",
+        "$PSScriptRoot\scripts\$script",
+        "$PSScriptRoot\..\scripts\$script"
+    )
+    $foundScript = $srcCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($foundScript) {
+        Copy-Item -Path $foundScript -Destination "$InstallDir\$script" -Force
     }
 }
 

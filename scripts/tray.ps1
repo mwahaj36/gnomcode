@@ -1,35 +1,35 @@
-# FleetHUD Windows System Tray Service — https://fleethud.pro
+# FleetHUD Windows System Tray Service — https://fleethud.vercel.app
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $Port = 41738
 $DaemonInfoPath = "$env:USERPROFILE\.fleethud\daemon.json"
 
-function Get-DashboardUrl {
+function Get-ConsoleUrl {
     if (Test-Path $DaemonInfoPath) {
         try {
             $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
-            return "http://127.0.0.1:$($info.port)/?token=$($info.token)"
+            return "https://fleethud.vercel.app/console?token=$($info.token)&port=$($info.port)"
         } catch {}
     }
-    return "http://127.0.0.1:$Port/"
+    return "https://fleethud.vercel.app/console"
 }
 
-function Open-Dashboard {
-    $url = Get-DashboardUrl
+function Open-Console {
+    $url = Get-ConsoleUrl
     Start-Process $url
 }
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
 $notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
-$notifyIcon.Text = "FleetHUD Mission Control"
+$notifyIcon.Text = "FleetHUD Mission Control Console"
 $notifyIcon.Visible = $true
 
 $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
 
-$openItem = $contextMenu.Items.Add("Open Mission Control")
+$openItem = $contextMenu.Items.Add("Open Console")
 $openItem.Font = New-Object System.Drawing.Font($openItem.Font, [System.Drawing.FontStyle]::Bold)
-$openItem.Add_Click({ Open-Dashboard })
+$openItem.Add_Click({ Open-Console })
 
 $sessionsItem = $contextMenu.Items.Add("Active Sessions: 0")
 $sessionsItem.Enabled = $false
@@ -44,11 +44,11 @@ $exitItem.Add_Click({
 })
 
 $notifyIcon.ContextMenuStrip = $contextMenu
-$notifyIcon.Add_DoubleClick({ Open-Dashboard })
+$notifyIcon.Add_DoubleClick({ Open-Console })
 $notifyIcon.Add_Click({
     param($sender, $e)
     if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
-        Open-Dashboard
+        Open-Console
     }
 })
 
@@ -58,19 +58,15 @@ $timer.Interval = 3000
 $timer.Add_Tick({
     try {
         if (Test-Path $DaemonInfoPath) {
-            $info = Get-Content $DaemonInfoPath -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
-            if ($info -and $info.port -and $info.token) {
-                $uri = "http://127.0.0.1:$($info.port)/api/v1/sessions?limit=50"
-                $headers = @{ "Authorization" = "Bearer $($info.token)" }
-                $res = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 2 -ErrorAction SilentlyContinue
-                if ($res -and $res.sessions) {
-                    $active = ($res.sessions | Where-Object { $_.is_active -eq $true }).Count
-                    $sessionsItem.Text = "Active Sessions: $active"
-                    if ($active -gt 0) {
-                        $notifyIcon.Text = "FleetHUD: [RUN] $active active session(s)"
-                    } else {
-                        $notifyIcon.Text = "FleetHUD: [IDLE] Ready"
-                    }
+            $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
+            $res = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?page=1&limit=1" -TimeoutSec 1 -ErrorAction SilentlyContinue
+            if ($res) {
+                $count = $res.active_count
+                $sessionsItem.Text = "Active Sessions: $count"
+                if ($count -gt 0) {
+                    $notifyIcon.Text = "FleetHUD — $count Active Agents Running"
+                } else {
+                    $notifyIcon.Text = "FleetHUD — Fleet Idle"
                 }
             }
         }
