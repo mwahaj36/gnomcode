@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daytona Design System Reproduction — Floating Island Scroll & Green Theme</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070708;
+      --card-bg: #0d0d0f;
+      --card-hover: #091a11;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-bright: rgba(255, 255, 255, 0.18);
+      --border-green: rgba(46, 204, 113, 0.40);
+      --text-primary: #ffffff;
+      --text-secondary: #8e8e93;
+      --text-muted: #55555c;
+      --accent-green: #2ecc71;
+      --accent-green-bright: #4ade80;
+      --accent-green-hover: #27ae60;
+      --accent-green-glow: rgba(46, 204, 113, 0.25);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'Geist Mono', 'IBM Plex Mono', monospace;
+      --spring: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      line-height: 1.5;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Daytona's Authentic 68x68 Dot-Matrix Background Texture */
+    .bg-dot-texture {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1800px;
+      pointer-events: none;
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="68" height="68" fill="none"><g fill="%23252525"><circle cx="34" cy="2" r="1.5"/><circle cx="68" cy="2" r="1.5"/><circle cx="34" cy="34" r="1.5"/><circle cx="34" cy="68" r="1.5"/><circle cx="68" cy="34" r="1.5"/><circle cx="68" cy="68" r="1.5"/><circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="34" r="1.5"/><circle cx="2" cy="68" r="1.5"/></g></svg>');
+      background-size: 68px 68px;
+      mask-image: radial-gradient(ellipse 75% 65% at 50% 20%, #000 20%, transparent 85%);
+      -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 20%, #000 20%, transparent 85%);
+      opacity: 0.85;
+      z-index: 0;
+    }
+
+    /* Subtle Green Ambient Glow */
+    .ambient-glow {
+      position: absolute;
+      top: -120px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1000px;
+      height: 550px;
+      background: radial-gradient(circle, rgba(46, 204, 113, 0.08) 0%, rgba(46, 204, 113, 0.02) 45%, transparent 75%);
+      pointer-events: none;
+      filter: blur(80px);
+      z-index: 0;
+    }
+
+    /* ---------------- 1. BUTTERY-SMOOTH FLOATING ISLAND NAVBAR ---------------- */
+    .nav-shell {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      padding: 0 0;
+      pointer-events: none;
+      transition: padding 0.32s var(--spring);
+    }
+
+    /* Scrolled down: Smooth padding injection detaches the island */
+    .nav-shell.scrolled {
+      padding: 12px 1.25rem 0;
+    }
+
+    .nav-island {
+      pointer-events: auto;
+      width: 100%;
+      max-width: 100%;
+      height: 60px;
+      background: rgba(7, 7, 8, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      /* Keep 1px border on all 4 sides with transparent colors initially to prevent border-width reflow pops */
+      border-width: 1px;
+      border-style: solid;
+      border-color: transparent transparent var(--border) transparent;
+      border-radius: 0px;
+      box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+      will-change: max-width, border-radius, border-color, box-shadow, background-color;
+      transition: max-width 0.32s var(--spring),
+                  border-radius 0.32s var(--spring),
+                  border-color 0.32s var(--spring),
+                  box-shadow 0.32s var(--spring),
+                  background-color 0.32s var(--spring);
+    }
+
+    /* Detached Floating Island state */
+    .nav-shell.scrolled .nav-island {
+      max-width: 1240px;
+      border-radius: 6px; /* Technical rectangular island, strictly no pills */
+      border-color: var(--border-bright);
+      background: rgba(10, 10, 12, 0.94);
+      box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.85), 
+                  0 0 25px rgba(46, 204, 113, 0.06);
+    }
+
+    .nav-wrap {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-separator {
+      color: var(--text-muted);
+      font-weight: 300;
+      font-size: 1.1rem;
+    }
+
+    .nav-menu {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      list-style: none;
+    }
+
+    .nav-menu a {
+      font-family: var(--font-sans);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .nav-menu a:hover {
+      color: var(--accent-green-bright);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn-signin {
+      color: var(--accent-green-bright);
+      background: rgba(46, 204, 113, 0.10);
+      border: 1px solid rgba(46, 204, 113, 0.28);
+      border-radius: 4px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn-signin:hover {
+      background: rgba(46, 204, 113, 0.22);
+      border-color: rgba(46, 204, 113, 0.55);
+      color: #fff;
+    }
+
+    .btn-contact {
+      color: #fff;
+      background: #141416;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn-contact:hover {
+      background: #1c1c20;
+      border-color: var(--border-bright);
+    }
+
+    /* ---------------- 2. 2-COLUMN HERO SECTION ---------------- */
+    .hero-container {
+      position: relative;
+      z-index: 1;
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 7rem 1.5rem 4rem; /* Top padding accommodates fixed nav */
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 3.5rem;
+      align-items: center;
+    }
+
+    .hero-title {
+      font-size: clamp(2.8rem, 5vw, 4.2rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.035em;
+      color: #ffffff;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero-desc {
+      font-size: 1.15rem;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      max-width: 480px;
+      margin-bottom: 2.25rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-start-free {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--accent-green);
+      color: #05140b;
+      font-size: 0.95rem;
+      font-weight: 700;
+      padding: 0.75rem 1.4rem;
+      border-radius: 4px;
+      text-decoration: none;
+      box-shadow: 0 4px 18px var(--accent-green-glow);
+      transition: background-color 0.15s ease, transform 0.15s var(--spring);
+    }
+
+    .btn-start-free:hover {
+      background-color: var(--accent-green-bright);
+      transform: translateY(-1px);
+    }
+
+    .btn-start-free:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .btn-view-docs {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: #0f0f11;
+      border: 1px solid var(--border);
+      color: #ffffff;
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.75rem 1.3rem;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn-view-docs:hover {
+      background: #18181c;
+      border-color: var(--border-bright);
+      color: var(--accent-green-bright);
+    }
+
+    /* Right Column: Code Widget */
+    .code-widget {
+      background: #0b0b0d;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+
+    .languages-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: #08080a;
+      overflow-x: auto;
+    }
+
+    .lang-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.35rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .lang-tab.active {
+      background: #ffffff;
+      color: #000000;
+      font-weight: 600;
+    }
+
+    .lang-tab:not(.active):hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .command-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.25rem;
+      background: #0f0f12;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: #e5e7eb;
+    }
+
+    .btn-copy-icon {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    .btn-copy-icon:hover {
+      color: var(--accent-green-bright);
+      background: rgba(46, 204, 113, 0.1);
+    }
+
+    .code-editor-area {
+      position: relative;
+      padding: 1.25rem;
+      background: #09090b;
+      min-height: 220px;
+    }
+
+    .code-top-copy {
+      position: absolute;
+      top: 1rem;
+      right: 1.25rem;
+    }
+
+    pre.code-block {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.65;
+      color: #d1d5db;
+    }
+
+    .tok-kw { color: #f43f5e; }
+    .tok-mod { color: var(--accent-green-bright); }
+    .tok-fn { color: #818cf8; }
+    .tok-str { color: #34d399; }
+    .tok-com { color: #6b7280; font-style: italic; }
+
+    /* ---------------- 3. COMPANY LOGO GRID (GREEN HOVER POPS) ---------------- */
+    .company-section {
+      position: relative;
+      z-index: 1;
+      max-width: 1320px;
+      margin: 2rem auto 5rem;
+      padding: 0 1.5rem;
+    }
+
+    .company-header {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      padding: 0.75rem 1.25rem;
+      background: #09090b;
+      letter-spacing: -0.01em;
+    }
+
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border-top: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .logo-cell {
+      position: relative;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      height: 94px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0.85rem;
+      background: #070709;
+      transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+
+    .logo-cell:hover {
+      background: #091a11 !important;
+      border-color: var(--border-green);
+      box-shadow: inset 0 0 20px rgba(46, 204, 113, 0.08);
+      z-index: 2;
+    }
+
+    .logo-text {
+      font-family: var(--font-sans);
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #d4d4d8;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: color 0.15s ease;
+    }
+
+    .logo-cell:hover .logo-text {
+      color: #ffffff;
+    }
+
+    /* Clean, non-overflowing technical badge */
+    .cell-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 6px;
+      background: #141416;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 7px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      line-height: 1.25;
+      color: var(--text-secondary);
+      pointer-events: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .logo-cell:hover .cell-badge {
+      border-color: var(--accent-green-bright);
+      background: #0d2117;
+      color: var(--accent-green-bright);
+    }
+
+    /* ---------------- 4. ENGINEERED STATUS BAR ---------------- */
+    .features-section {
+      position: relative;
+      z-index: 1;
+      max-width: 1320px;
+      margin: 0 auto 6rem;
+      padding: 0 1.5rem;
+    }
+
+    .daytona-feature-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: #0e0e11;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.45rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #f3f4f6;
+      text-decoration: none;
+      margin-bottom: 2.25rem;
+      transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s var(--spring);
+    }
+
+    .daytona-feature-bar:hover {
+      border-color: var(--accent-green-bright);
+      background: #091a11;
+      transform: translateY(-1px);
+    }
+
+    .status-dot-green {
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      background: var(--accent-green-bright);
+      box-shadow: 0 0 8px var(--accent-green-bright);
+      animation: pulse-dot 2.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+
+    .status-chevron {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .daytona-feature-bar:hover .status-chevron {
+      color: var(--accent-green-bright);
+    }
+
+    .features-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .feature-col {
+      padding: 1.75rem 1.5rem 2rem 0;
+      border-right: 1px solid var(--border);
+      transition: background-color 0.2s ease;
+    }
+
+    .feature-col:hover {
+      background: rgba(46, 204, 113, 0.02);
+    }
+
+    .feature-col:last-child {
+      border-right: none;
+      padding-right: 0;
+    }
+
+    .feature-col-title {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #ffffff;
+      margin-bottom: 0.75rem;
+    }
+
+    .feature-col-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* ---------------- 5. COMPUTER USE & 3-OS TILES ---------------- */
+    .computer-use-section {
+      position: relative;
+      z-index: 1;
+      max-width: 1320px;
+      margin: 0 auto 7rem;
+      padding: 0 1.5rem;
+    }
+
+    .section-mono-title {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 2rem;
+    }
+
+    .computer-canvas {
+      background: #09090b;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+    }
+
+    .canvas-mockup-body {
+      position: relative;
+      height: 380px;
+      background: #060608;
+      display: flex;
+      padding: 2rem;
+      gap: 1.5rem;
+      background-image: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    .desktop-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      text-align: center;
+      width: 50px;
+    }
+
+    .desktop-icon-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      cursor: pointer;
+    }
+
+    .desktop-icon-item svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .desktop-icon-item:hover {
+      color: var(--accent-green-bright);
+    }
+
+    .mock-window {
+      background: #111114;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.7);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .mock-window-header {
+      height: 28px;
+      background: #16161a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0.75rem;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+
+    .mac-dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .mac-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .agent-cursor {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      pointer-events: none;
+      z-index: 10;
+      transition: transform 0.3s ease;
+    }
+
+    .cursor-pointer {
+      width: 14px;
+      height: 14px;
+    }
+
+    .cursor-tag {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 2px 5px;
+      border-radius: 3px;
+      color: #000;
+    }
+
+    .cursor-green .cursor-tag { background: var(--accent-green-bright); }
+
+    /* OS Grid with authentic vector logos */
+    .os-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border);
+    }
+
+    .os-card {
+      padding: 2rem 1.5rem;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: background-color 0.2s ease;
+    }
+
+    .os-card:hover {
+      background: #091a11;
+    }
+
+    .os-card:last-child {
+      border-right: none;
+    }
+
+    .os-card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 1rem;
+    }
+
+    .os-icon-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      background: #141416;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      flex-shrink: 0;
+      transition: border-color 0.2s ease;
+    }
+
+    .os-card:hover .os-icon-box {
+      border-color: var(--accent-green-bright);
+    }
+
+    .os-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.015em;
+    }
+
+    .os-desc {
+      font-size: 0.85rem;
+      line-height: 1.55;
+      color: var(--text-secondary);
+      margin-bottom: 1.75rem;
+    }
+
+    .os-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--accent-green-bright);
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: gap 0.15s ease, color 0.15s ease;
+    }
+
+    .os-link:hover {
+      gap: 0.55rem;
+      color: #ffffff;
+    }
+
+    /* ---------------- 6. CTA BANNER & FAQS ---------------- */
+    .cta-faq-section {
+      position: relative;
+      z-index: 1;
+      max-width: 1320px;
+      margin: 0 auto 7rem;
+      padding: 0 1.5rem;
+    }
+
+    .top-cta-banner {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 1.5rem;
+      margin-bottom: 5rem;
+    }
+
+    .cta-side-links {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #09090b;
+    }
+
+    .side-link-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.35rem 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: #e5e7eb;
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .side-link-item:last-child {
+      border-bottom: none;
+    }
+
+    .side-link-item:hover {
+      background-color: #091a11;
+      color: var(--accent-green-bright);
+    }
+
+    .big-cta-card {
+      background: #0e0e11;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2.5rem 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-decoration: none;
+      color: #fff;
+      transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s var(--spring);
+    }
+
+    .big-cta-card:hover {
+      border-color: var(--accent-green-bright);
+      background-color: #091a11;
+      transform: translateY(-2px);
+    }
+
+    .big-cta-text {
+      font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .big-cta-arrow {
+      font-size: 2.2rem;
+      line-height: 1;
+      transition: transform 0.2s var(--spring);
+    }
+
+    .big-cta-card:hover .big-cta-arrow {
+      color: var(--accent-green-bright);
+      transform: translateX(6px);
+    }
+
+    /* FAQ Layout */
+    .faq-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 3.5rem;
+    }
+
+    .faq-left h2 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+
+    .faq-left p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .faq-accordion {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .faq-item {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .faq-question-btn {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      padding: 1.15rem 0;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: #e5e7eb;
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+
+    .faq-question-btn:hover {
+      color: var(--accent-green-bright);
+    }
+
+    .faq-plus-box {
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .faq-answer {
+      display: none;
+      padding: 0 0 1.25rem 2.25rem;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .faq-item.open .faq-answer {
+      display: block;
+    }
+
+    .faq-item.open .faq-plus-box {
+      border-color: var(--accent-green-bright);
+      color: var(--accent-green-bright);
+    }
+
+    /* ---------------- 7. FOOTER ---------------- */
+    footer.daytona-footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      background: #050506;
+      padding: 4.5rem 1.5rem 3rem;
+    }
+
+    .footer-container {
+      max-width: 1320px;
+      margin: 0 auto;
+    }
+
+    .footer-top-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 3.5rem;
+      margin-bottom: 4rem;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: #fff;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+
+    .footer-right-content {
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+    }
+
+    .startup-program-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    .startup-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge-new {
+      background: rgba(46, 204, 113, 0.15);
+      border: 1px solid rgba(46, 204, 113, 0.35);
+      color: var(--accent-green-bright);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .startup-learn-more {
+      color: #e5e7eb;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: color 0.15s ease;
+    }
+
+    .startup-learn-more:hover {
+      color: var(--accent-green-bright);
+    }
+
+    .footer-cols {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+    }
+
+    .footer-col-title {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+    }
+
+    .footer-links-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .footer-links-list a {
+      color: #d1d5db;
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .footer-links-list a:hover {
+      color: var(--accent-green-bright);
+    }
+
+    .popular-topics-section {
+      border-top: 1px solid var(--border);
+      padding-top: 2rem;
+      margin-bottom: 3.5rem;
+    }
+
+    .popular-topics-title {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+    }
+
+    .popular-topics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.65rem 3rem;
+    }
+
+    .popular-topics-grid a {
+      color: #9ca3af;
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .popular-topics-grid a:hover {
+      color: #ffffff;
+    }
+
+    .footer-bottom-row {
+      border-top: 1px solid var(--border);
+      padding-top: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+
+    .compliance-badges {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .compliance-stamp {
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-align: center;
+      line-height: 1.1;
+    }
+
+    .legal-copy {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .legal-copy a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .legal-copy a:hover {
+      color: #ffffff;
+    }
+
+    @media (max-width: 1024px) {
+      .hero-container {
+        grid-template-columns: 1fr;
+      }
+      .logo-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .features-row, .os-grid, .top-cta-banner, .faq-layout, .footer-top-grid {
+        grid-template-columns: 1fr;
+      }
+      .feature-col, .os-card {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Authentic Daytona 68x68 Dot-Matrix Background Texture & Green Ambient Glow -->
+  <div class="bg-dot-texture"></div>
+  <div class="ambient-glow"></div>
+
+  <!-- 1. Top Sticky/Floating Island Navbar -->
+  <div class="nav-shell" id="navShell">
+    <header class="nav-island" id="mainNavbar">
+      <div class="nav-wrap">
+        <div class="nav-left">
+          <a href="#" class="brand-logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+            <span>Daytona</span>
+          </a>
+          <span class="nav-separator">/</span>
+          <ul class="nav-menu">
+            <li><a href="#docs">Docs</a></li>
+            <li><a href="#customers">Customers</a></li>
+            <li><a href="#pricing">Pricing</a></li>
+            <li><a href="#startups">Startups</a></li>
+            <li><a href="#blog">Blog</a></li>
+          </ul>
+        </div>
+
+        <div class="nav-right">
+          <a href="#signin" class="btn-signin">Sign in</a>
+          <a href="#contact" class="btn-contact">Contact us</a>
+        </div>
+      </div>
+    </header>
+  </div>
+
+  <!-- 2. 2-Column Hero Section -->
+  <main class="hero-container">
+    <div class="hero-copy">
+      <h1 class="hero-title">Run AI Code.</h1>
+      <p class="hero-desc">
+        Secure and Elastic Infrastructure for Running Your AI-Generated Code.
+      </p>
+      <div class="hero-actions">
+        <a href="#start" class="btn-start-free">Start for Free</a>
+        <a href="#docs" class="btn-view-docs">
+          <span>View Docs</span>
+          <span style="font-size: 1.1rem; line-height: 1;">&rarr;</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="code-widget">
+      <div class="languages-bar" id="langBar">
+        <button class="lang-tab active" data-lang="python">
+          <span>Python</span>
+        </button>
+        <button class="lang-tab" data-lang="typescript">
+          <span style="font-size: 0.65rem; font-weight: 700; color: #4ade80;">TS</span>
+          <span>TypeScript</span>
+        </button>
+        <button class="lang-tab" data-lang="ruby">
+          <span>Ruby</span>
+        </button>
+        <button class="lang-tab" data-lang="go">
+          <span style="font-size: 0.65rem; font-weight: 700; color: #4ade80;">GO</span>
+          <span>Go</span>
+        </button>
+        <button class="lang-tab" data-lang="java">
+          <span>Java</span>
+        </button>
+      </div>
+
+      <div class="command-strip">
+        <span id="cmdText">pip install daytona</span>
+        <button class="btn-copy-icon" id="cmdCopyBtn" title="Copy Command">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="1" ry="1"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="code-editor-area">
+        <button class="btn-copy-icon code-top-copy" id="codeCopyBtn" title="Copy Code">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="1" ry="1"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+        <pre class="code-block" id="codeArea"></pre>
+      </div>
+    </div>
+  </main>
+
+  <!-- 3. Company Logo Grid with Dynamic Green Hover Highlight -->
+  <section class="company-section">
+    <div class="company-header">
+      Agents at these companies use Daytona
+    </div>
+    <div class="logo-grid">
+      <div class="logo-cell"><span class="logo-text">Meta</span></div>
+      <div class="logo-cell"><span class="logo-text">cohere</span></div>
+      <div class="logo-cell">
+        <span class="logo-text">sambanova</span>
+        <span class="cell-badge">Case Study</span>
+      </div>
+      <div class="logo-cell">
+        <span class="logo-text">WRITER</span>
+        <span class="cell-badge">Case Study</span>
+      </div>
+      <div class="logo-cell"><span class="logo-text">LONG LAKE</span></div>
+
+      <div class="logo-cell"><span class="logo-text">TURING</span></div>
+      <div class="logo-cell"><span class="logo-text">BESPOKE LABS</span></div>
+      <div class="logo-cell"><span class="logo-text">Rillet</span></div>
+      <div class="logo-cell">
+        <span class="logo-text">martian</span>
+        <span class="cell-badge">Case Study</span>
+      </div>
+      <div class="logo-cell">
+        <span class="logo-text">clay</span>
+        <span class="cell-badge">Quote</span>
+      </div>
+
+      <div class="logo-cell">
+        <span class="logo-text">Handshake</span>
+        <span class="cell-badge">Case Study</span>
+      </div>
+      <div class="logo-cell"><span class="logo-text">POSTMAN</span></div>
+      <div class="logo-cell">
+        <span class="logo-text">bolt.new</span>
+      </div>
+      <div class="logo-cell"><span class="logo-text">Trajectory</span></div>
+      <div class="logo-cell">
+        <span class="logo-text">mintlify</span>
+        <span class="cell-badge">Case Study</span>
+      </div>
+
+      <div class="logo-cell">
+        <span class="logo-text">AfterQuery</span>
+        <span class="cell-badge">Case Study</span>
+      </div>
+      <div class="logo-cell">
+        <span class="logo-text">n8n</span>
+        <span class="cell-badge">Quote</span>
+      </div>
+      <div class="logo-cell"><span class="logo-text">Snorkel</span></div>
+      <div class="logo-cell">
+        <span class="logo-text">surge</span>
+        <span class="cell-badge">Quote</span>
+      </div>
+      <div class="logo-cell"><span class="logo-text">prosus</span></div>
+    </div>
+  </section>
+
+  <!-- 4. Engineered Status Bar & 3-Col Features (No Pills) -->
+  <section class="features-section">
+    <a href="#status" class="daytona-feature-bar">
+      <span class="status-dot-green"></span>
+      <span>Fast, Scalable, Stateful Infrastructure for AI Agents</span>
+      <span class="status-chevron">&gt;</span>
+    </a>
+
+    <div class="features-row">
+      <div class="feature-col">
+        <h3 class="feature-col-title">Lightning-Fast Infrastructure<br>for AI Development</h3>
+        <p class="feature-col-desc">Instant sub-second sandbox boots with pre-baked snapshots and continuous session persistence.</p>
+      </div>
+      <div class="feature-col">
+        <h3 class="feature-col-title">Separated &amp; Isolated Runtime<br>Protection</h3>
+        <p class="feature-col-desc">Strict kernel-level gVisor isolation prevents escape, leakage, and cross-session contamination.</p>
+      </div>
+      <div class="feature-col">
+        <h3 class="feature-col-title">Massive Parallelization<br>for Concurrent AI Workflows</h3>
+        <p class="feature-col-desc">Scale to thousands of simultaneous agent sandboxes without hitting resource exhaustion or throttling.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Computer Use Section with Authentic Vector Logos (Ubuntu, Apple, Windows) -->
+  <section class="computer-use-section">
+    <h2 class="section-mono-title">Computer Use</h2>
+
+    <div class="computer-canvas">
+      <div class="canvas-mockup-body">
+        <div class="desktop-sidebar">
+          <div class="desktop-icon-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="1"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            <span>Computer</span>
+          </div>
+          <div class="desktop-icon-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>Daytona</span>
+          </div>
+          <div class="desktop-icon-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            <span>Terminal</span>
+          </div>
+        </div>
+
+        <div class="mock-window" style="width: 320px; height: 260px;">
+          <div class="mock-window-header">
+            <div class="mac-dots">
+              <div class="mac-dot" style="background:#ff5f56;"></div>
+              <div class="mac-dot" style="background:#ffbd2e;"></div>
+              <div class="mac-dot" style="background:#27c93f;"></div>
+            </div>
+            <span>terminal</span>
+            <span></span>
+          </div>
+          <div style="padding: 1rem; font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-green-bright);">
+            <p><span style="color:#a1a1aa;">user@user-mac: ~</span> daytona</p>
+            <p><span style="color:#a1a1aa;">user@user-mac: ~</span> new ComputerUse(sandb...</p>
+          </div>
+        </div>
+
+        <div class="mock-window" style="flex: 1; height: 260px;">
+          <div class="mock-window-header">
+            <div class="mac-dots">
+              <div class="mac-dot"></div>
+              <div class="mac-dot"></div>
+              <div class="mac-dot"></div>
+            </div>
+            <span>acme.co</span>
+            <span></span>
+          </div>
+          <div style="padding: 1rem; background: #0c0c0e; height: 100%;">
+            <div style="height: 12px; width: 60%; background: #1f1f23; border-radius: 2px; margin-bottom: 8px;"></div>
+            <div style="height: 12px; width: 40%; background: #19191d; border-radius: 2px;"></div>
+          </div>
+        </div>
+
+        <div class="agent-cursor cursor-green" style="top: 140px; left: 240px;">
+          <svg class="cursor-pointer" viewBox="0 0 24 24" fill="#4ade80"><path d="M3 3l7 18 3-7 7-3L3 3z"/></svg>
+          <span class="cursor-tag">AGENT_19HT50</span>
+        </div>
+
+        <div class="agent-cursor cursor-green" style="top: 90px; right: 180px;">
+          <svg class="cursor-pointer" viewBox="0 0 24 24" fill="#4ade80"><path d="M3 3l7 18 3-7 7-3L3 3z"/></svg>
+          <span class="cursor-tag">AGENT_21H41C</span>
+        </div>
+      </div>
+
+      <!-- 3-OS Selector with Authentic Logos & Green Links -->
+      <div class="os-grid">
+        <!-- Linux (Ubuntu) -->
+        <div class="os-card">
+          <div>
+            <div class="os-card-header">
+              <div class="os-icon-box">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2.2a7.79 7.79 0 0 1 5.48 2.25l-2.02 2.02A4.95 4.95 0 0 0 12 6.95c-2.77 0-5.02 2.25-5.02 5.05 0 1.25.46 2.39 1.22 3.28l-2.02 2.02A7.77 7.77 0 0 1 4.2 12c0-4.31 3.49-7.8 7.8-7.8zm6.5 4.2a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8zM6.9 14.8a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8zm10.5 1.5a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8z"/>
+                </svg>
+              </div>
+              <h4 class="os-title">Linux (Ubuntu)</h4>
+            </div>
+            <p class="os-desc">Linux desktop with full root access. Ready for automation, development, and testing with complete programmatic control.</p>
+          </div>
+          <a href="#linux" class="os-link"><span>Get Started</span><span>&rarr;</span></a>
+        </div>
+
+        <!-- MacOS -->
+        <div class="os-card">
+          <div>
+            <div class="os-card-header">
+              <div class="os-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.38c.62-.75 1.04-1.8 0.93-2.85-.9.04-1.99.6-2.63 1.35-.56.65-.99 1.7-0.88 2.72 1 .08 2.03-.51 2.58-1.22z"/>
+                </svg>
+              </div>
+              <h4 class="os-title">MacOS</h4>
+            </div>
+            <p class="os-desc">macOS desktop for iOS development and testing. Code-controlled macOS instances perfect for mobile app automation and development.</p>
+          </div>
+          <a href="#macos" class="os-link"><span>Get Started</span><span>&rarr;</span></a>
+        </div>
+
+        <!-- Windows -->
+        <div class="os-card">
+          <div>
+            <div class="os-card-header">
+              <div class="os-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/>
+                </svg>
+              </div>
+              <h4 class="os-title">Windows</h4>
+            </div>
+            <p class="os-desc">Full Windows desktop with programmatic control. Perfect for Windows-specific automation, testing, and development workflows.</p>
+          </div>
+          <a href="#windows" class="os-link"><span>Get Started</span><span>&rarr;</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. CTA Banner & FAQs -->
+  <section class="cta-faq-section">
+    <div class="top-cta-banner">
+      <div class="cta-side-links">
+        <a href="#team" class="side-link-item">
+          <span>Talk to Our Team</span>
+          <span>&rarr;</span>
+        </a>
+        <a href="#slack" class="side-link-item">
+          <span>Join Community Slack</span>
+          <span>&rarr;</span>
+        </a>
+      </div>
+
+      <a href="#signup" class="big-cta-card">
+        <span class="big-cta-text">Run AI Code on Daytona</span>
+        <span class="big-cta-arrow">&rarr;</span>
+      </a>
+    </div>
+
+    <div class="faq-layout">
+      <div class="faq-left">
+        <h2>FAQs</h2>
+        <p>Extra questions about the how and the why? Reach out on our community channel and we'll happily expand.</p>
+      </div>
+
+      <div class="faq-accordion" id="faqAccordion">
+        <div class="faq-item">
+          <button class="faq-question-btn">
+            <span class="faq-plus-box">+</span>
+            <span>What is Daytona and how does it enable AI?</span>
+          </button>
+          <div class="faq-answer">
+            Daytona provides fast, stateful, and secure sandbox execution infrastructure tailored specifically for autonomous coding agents, LLMs, and evaluation harnesses.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question-btn">
+            <span class="faq-plus-box">+</span>
+            <span>How does Daytona ensure the safe execution of AI-generated code?</span>
+          </button>
+          <div class="faq-answer">
+            Every sandbox operates within strict kernel-level boundaries using gVisor/KVM virtualization, isolated network namespaces, and automatic secret redaction.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question-btn">
+            <span class="faq-plus-box">+</span>
+            <span>What are AI Sandboxes and how do they enhance agentic AI workflows?</span>
+          </button>
+          <div class="faq-answer">
+            They provide long-running, stateful compute environments where agents can install packages, run tests, debug compile errors, and verify changes without touching host systems.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question-btn">
+            <span class="faq-plus-box">+</span>
+            <span>How can I integrate Daytona into my existing development stack?</span>
+          </button>
+          <div class="faq-answer">
+            Use native SDKs for Python, TypeScript, Ruby, Go, and Java, or call the programmatic REST and WebSocket APIs directly from your orchestrator.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question-btn">
+            <span class="faq-plus-box">+</span>
+            <span>What security measures does Daytona implement for AI development?</span>
+          </button>
+          <div class="faq-answer">
+            SOC 2 Type II certified, GDPR compliant, HIPAA ready, with end-to-end encrypted sessions and zero persistence after sandbox deletion.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question-btn">
+            <span class="faq-plus-box">+</span>
+            <span>Can I Run My Own Instance of Daytona?</span>
+          </button>
+          <div class="faq-answer">
+            Yes, Daytona offers both a self-hosted open-source core and enterprise private cloud deployments on AWS, GCP, and Azure.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Footer -->
+  <footer class="daytona-footer">
+    <div class="footer-container">
+      <div class="footer-top-grid">
+        <a href="#" class="footer-brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span>Daytona</span>
+        </a>
+
+        <div class="footer-right-content">
+          <div class="startup-program-banner">
+            <div class="startup-badge">
+              <span class="badge-new">NEW</span>
+              <span>Startup Program</span>
+            </div>
+            <a href="#startup-program" class="startup-learn-more">
+              <span>Learn More</span>
+              <span>&rarr;</span>
+            </a>
+          </div>
+
+          <div class="footer-cols">
+            <div>
+              <div class="footer-col-title">COMPANY</div>
+              <ul class="footer-links-list">
+                <li><a href="#about">About</a></li>
+                <li><a href="#careers">Careers</a></li>
+                <li><a href="#brand">Brand</a></li>
+                <li><a href="#press">Press</a></li>
+                <li><a href="#partner">Partner</a></li>
+                <li><a href="#events">Events</a></li>
+                <li><a href="#pacers">Pacers Program</a></li>
+                <li><a href="#startups">Startup Program</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <div class="footer-col-title">SUPPORT</div>
+              <ul class="footer-links-list">
+                <li><a href="#docs">Documentation</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li><a href="#blog">Blog</a></li>
+                <li><a href="#definitions">Definitions</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#status">System Status</a></li>
+                <li><a href="#changelog">Changelog</a></li>
+                <li><a href="#trust">Trust Center</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <div class="footer-col-title">FOLLOW DAYTONA</div>
+              <ul class="footer-links-list">
+                <li><a href="#github">Github</a></li>
+                <li><a href="#slack">Slack</a></li>
+                <li><a href="#twitter">Twitter</a></li>
+                <li><a href="#youtube">Youtube</a></li>
+                <li><a href="#linkedin">Linkedin</a></li>
+                <li><a href="#rss">RSS</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="popular-topics-section">
+        <div class="popular-topics-title">POPULAR TOPICS</div>
+        <div class="popular-topics-grid">
+          <div>
+            <p><a href="#topic1">AI Agents SDK</a></p>
+            <p><a href="#topic2">AI Stack Map</a></p>
+            <p><a href="#topic3">AI Infrastructure</a></p>
+            <p><a href="#topic4">Train GPT Model</a></p>
+            <p><a href="#topic5">LLM Code Isolation</a></p>
+          </div>
+          <div>
+            <p><a href="#topic6">Run AI Code</a></p>
+            <p><a href="#topic7">Secure AI Code</a></p>
+            <p><a href="#topic8">AI-Ready Workspaces</a></p>
+            <p><a href="#topic9">AI Sandbox</a></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom-row">
+        <div class="compliance-badges">
+          <div class="compliance-stamp">
+            <span>SOC 2</span>
+            <span>TYPE 2</span>
+          </div>
+          <div class="compliance-stamp">
+            <span>GDPR</span>
+          </div>
+          <div class="compliance-stamp">
+            <span>HIPAA</span>
+          </div>
+        </div>
+
+        <div class="legal-copy">
+          <span>&copy; 2026 DAYTONA PLATFORMS INC.</span>
+          <span>/</span>
+          <a href="#privacy">Privacy Policy</a>
+          <a href="#terms">Terms of Service</a>
+          <a href="#sla">SLA</a>
+          <a href="#dpa">DPA</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // 1. Fluid On-Scroll Floating Island Navbar (Zero-Clank with Hysteresis & rAF)
+    const navShell = document.getElementById('navShell');
+    let ticking = false;
+    let isScrolled = false;
+
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY;
+          // Smooth hysteresis threshold: 45px going down, 15px going up
+          if (scrollY > 45 && !isScrolled) {
+            navShell.classList.add('scrolled');
+            isScrolled = true;
+          } else if (scrollY < 15 && isScrolled) {
+            navShell.classList.remove('scrolled');
+            isScrolled = false;
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }, { passive: true });
+
+    // 2. Language Switcher
+    const snippets = {
+      python: {
+        cmd: 'pip install daytona',
+        code: `<span class="tok-kw">from</span> <span class="tok-mod">daytona</span> <span class="tok-kw">import</span> <span class="tok-mod">Daytona</span>
+
+<span class="tok-mod">daytona</span> = <span class="tok-fn">Daytona</span>()
+<span class="tok-mod">sandbox</span> = <span class="tok-mod">daytona</span>.<span class="tok-fn">create</span>()
+<span class="tok-mod">response</span> = <span class="tok-mod">sandbox</span>.<span class="tok-mod">process</span>.<span class="tok-fn">exec</span>(<span class="tok-str">"echo 'Hello, World!'"</span>)
+<span class="tok-fn">print</span>(<span class="tok-mod">response</span>.<span class="tok-mod">result</span>)
+<span class="tok-mod">sandbox</span>.<span class="tok-fn">delete</span>()`
+      },
+      typescript: {
+        cmd: 'npm i @daytona/sdk',
+        code: `<span class="tok-kw">import</span> { <span class="tok-mod">Daytona</span> } <span class="tok-kw">from</span> <span class="tok-str">"@daytona/sdk"</span>;
+
+<span class="tok-kw">const</span> <span class="tok-mod">daytona</span> = <span class="tok-kw">new</span> <span class="tok-fn">Daytona</span>();
+<span class="tok-kw">const</span> <span class="tok-mod">sandbox</span> = <span class="tok-kw">await</span> <span class="tok-mod">daytona</span>.<span class="tok-fn">create</span>();
+<span class="tok-kw">const</span> <span class="tok-mod">response</span> = <span class="tok-kw">await</span> <span class="tok-mod">sandbox</span>.<span class="tok-mod">process</span>.<span class="tok-fn">exec</span>(<span class="tok-str">"echo 'Hello, World!'"</span>);
+<span class="tok-fn">console</span>.<span class="tok-fn">log</span>(<span class="tok-mod">response</span>.<span class="tok-mod">result</span>);
+<span class="tok-kw">await</span> <span class="tok-mod">sandbox</span>.<span class="tok-fn">delete</span>();`
+      },
+      ruby: {
+        cmd: 'gem install daytona',
+        code: `<span class="tok-kw">require</span> <span class="tok-str">"daytona"</span>
+
+<span class="tok-mod">daytona</span> = <span class="tok-mod">Daytona</span>::<span class="tok-mod">Client</span>.<span class="tok-fn">new</span>
+<span class="tok-mod">sandbox</span> = <span class="tok-mod">daytona</span>.<span class="tok-fn">create</span>
+<span class="tok-mod">res</span> = <span class="tok-mod">sandbox</span>.<span class="tok-fn">exec</span>(<span class="tok-str">"echo 'Hello, World!'"</span>)
+<span class="tok-fn">puts</span> <span class="tok-mod">res</span>.<span class="tok-mod">result</span>
+<span class="tok-mod">sandbox</span>.<span class="tok-fn">delete</span>`
+      },
+      go: {
+        cmd: 'go get github.com/daytonaio/daytona',
+        code: `<span class="tok-kw">package</span> <span class="tok-mod">main</span>
+
+<span class="tok-kw">import</span> (
+    <span class="tok-str">"context"</span>
+    <span class="tok-str">"fmt"</span>
+    <span class="tok-str">"github.com/daytonaio/daytona"</span>
+)
+
+<span class="tok-kw">func</span> <span class="tok-fn">main</span>() {
+    <span class="tok-mod">client</span> := <span class="tok-mod">daytona</span>.<span class="tok-fn">NewClient</span>()
+    <span class="tok-mod">sandbox</span>, _ := <span class="tok-mod">client</span>.<span class="tok-fn">Create</span>(<span class="tok-mod">context</span>.<span class="tok-fn">Background</span>())
+    <span class="tok-mod">res</span>, _ := <span class="tok-mod">sandbox</span>.<span class="tok-fn">Exec</span>(<span class="tok-str">"echo 'Hello, World!'"</span>)
+    <span class="tok-mod">fmt</span>.<span class="tok-fn">Println</span>(<span class="tok-mod">res</span>.<span class="tok-mod">Result</span>)
+}`
+      },
+      java: {
+        cmd: 'implementation "io.daytona:daytona-sdk:1.0"',
+        code: `<span class="tok-kw">import</span> <span class="tok-mod">io.daytona.Daytona</span>;
+
+<span class="tok-kw">public class</span> <span class="tok-mod">Main</span> {
+    <span class="tok-kw">public static void</span> <span class="tok-fn">main</span>(<span class="tok-mod">String</span>[] <span class="tok-mod">args</span>) {
+        <span class="tok-mod">Daytona</span> <span class="tok-mod">daytona</span> = <span class="tok-kw">new</span> <span class="tok-fn">Daytona</span>();
+        <span class="tok-kw">var</span> <span class="tok-mod">sandbox</span> = <span class="tok-mod">daytona</span>.<span class="tok-fn">create</span>();
+        <span class="tok-kw">var</span> <span class="tok-mod">res</span> = <span class="tok-mod">sandbox</span>.<span class="tok-fn">exec</span>(<span class="tok-str">"echo 'Hello, World!'"</span>);
+        <span class="tok-mod">System</span>.<span class="tok-mod">out</span>.<span class="tok-fn">println</span>(<span class="tok-mod">res</span>.<span class="tok-fn">getResult</span>());
+    }
+}`
+      }
+    };
+
+    const tabs = document.querySelectorAll('.lang-tab');
+    const cmdText = document.getElementById('cmdText');
+    const codeArea = document.getElementById('codeArea');
+
+    function setLanguage(lang) {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.lang === lang));
+      const data = snippets[lang];
+      cmdText.textContent = data.cmd;
+      codeArea.innerHTML = data.code;
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => setLanguage(tab.dataset.lang));
+    });
+
+    setLanguage('python');
+
+    document.getElementById('cmdCopyBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(cmdText.textContent);
+    });
+
+    document.getElementById('codeCopyBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(codeArea.innerText);
+    });
+
+    const faqItems = document.querySelectorAll('.faq-item');
+    faqItems.forEach(item => {
+      const btn = item.querySelector('.faq-question-btn');
+      btn.addEventListener('click', () => {
+        const isOpen = item.classList.contains('open');
+        faqItems.forEach(i => {
+          i.classList.remove('open');
+          i.querySelector('.faq-plus-box').textContent = '+';
+        });
+        if (!isOpen) {
+          item.classList.add('open');
+          item.querySelector('.faq-plus-box').textContent = '−';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

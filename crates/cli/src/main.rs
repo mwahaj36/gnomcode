@@ -5,7 +5,7 @@
 //! - `fleethud report`: usage & cost breakdown by project/agent/model + quota pools + Plan Value ROI.
 //! - `fleethud doctor`: environment diagnostics, detected agent roots, and network requirements.
 
-#![allow(clippy::print_stdout)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -76,6 +76,35 @@ enum Commands {
     },
     /// Install FleetHUD to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
     Install,
+    /// Add or remove the optional Claude Code guardrail hook.
+    Integrate {
+        /// Agent to integrate (currently `claude`).
+        agent: String,
+        /// Remove FleetHUD's hook without changing other hooks.
+        #[arg(long)]
+        remove: bool,
+    },
+    /// Manage FleetHUD offline Pro / Team license.
+    License {
+        #[command(subcommand)]
+        action: LicenseCommands,
+    },
+    /// Internal fail-open hook callback.
+    #[command(hide = true)]
+    Hook,
+}
+
+#[derive(Subcommand, Debug)]
+enum LicenseCommands {
+    /// Show current local license tier and status.
+    Status,
+    /// Activate an Ed25519-signed license key from a file or JSON string.
+    Activate {
+        /// File path or raw JSON string of the license key.
+        key: String,
+    },
+    /// Remove the active license and revert to Free tier.
+    Remove,
 }
 
 #[tokio::main]
@@ -107,7 +136,227 @@ async fn main() -> Result<()> {
         Commands::Console { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Dashboard { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Install => cmd_install(&db_path),
+        Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
+        Commands::License { action } => cmd_license(action),
+        Commands::Hook => cmd_hook(),
     }
+}
+
+fn cmd_license(action: LicenseCommands) -> Result<()> {
+    match action {
+        LicenseCommands::Status => {
+            let key_path = fleethud_home().join("license.key");
+            if !key_path.exists() {
+                println!("Tier: Free (freeware, forever)");
+                println!("Pro features (guardrails, Resume Queue, CSV export) are locked.");
+                println!(
+                    "Run `fleethud license activate <path>` or visit the Console to activate Pro."
+                );
+                return Ok(());
+            }
+            let bytes = std::fs::read(&key_path)?;
+            let license: fleethud_core::license::LicenseFile = serde_json::from_slice(&bytes)?;
+            match fleethud_core::license::verify_license(
+                &license,
+                fleethud_core::license::FLEETHUD_LICENSE_PUBKEY_HEX,
+            ) {
+                Ok(tier) => {
+                    println!(
+                        "Tier: {}",
+                        match tier {
+                            fleethud_core::license::Tier::Pro => "Pro ($19 perpetual)",
+                            fleethud_core::license::Tier::Team => "Team",
+                            fleethud_core::license::Tier::Free => "Free",
+                        }
+                    );
+                    println!("Licensee: {}", license.payload.licensee);
+                    println!("Issued At: {}", license.payload.issued_at);
+                    if let Some(ref exp) = license.payload.expires_at {
+                        println!("Expires: {}", exp);
+                    } else {
+                        println!("Status: Active (perpetual)");
+                    }
+                }
+                Err(err) => {
+                    println!("Tier: Free (invalid or expired license file: {err})");
+                }
+            }
+            Ok(())
+        }
+        LicenseCommands::Activate { key } => {
+            let content = if std::path::Path::new(&key).is_file() {
+                std::fs::read_to_string(&key)?
+            } else {
+                key
+            };
+            let license: fleethud_core::license::LicenseFile =
+                serde_json::from_str(content.trim()).context("invalid license JSON format")?;
+            let tier = fleethud_core::license::verify_license(
+                &license,
+                fleethud_core::license::FLEETHUD_LICENSE_PUBKEY_HEX,
+            )
+            .context("license cryptographic verification failed")?;
+            anyhow::ensure!(
+                matches!(
+                    tier,
+                    fleethud_core::license::Tier::Pro | fleethud_core::license::Tier::Team
+                ),
+                "License is for Free tier; Pro or Team required."
+            );
+            std::fs::create_dir_all(fleethud_home())?;
+            std::fs::write(
+                fleethud_home().join("license.key"),
+                serde_json::to_vec_pretty(&license)?,
+            )?;
+            println!(
+                "License successfully activated for {} ({:?})!",
+                license.payload.licensee, tier
+            );
+            Ok(())
+        }
+        LicenseCommands::Remove => {
+            let key_path = fleethud_home().join("license.key");
+            if key_path.exists() {
+                std::fs::remove_file(key_path)?;
+            }
+            println!("License removed. Reverted to Free tier.");
+            Ok(())
+        }
+    }
+}
+
+fn cmd_hook() -> Result<()> {
+    use std::io::Read as _;
+    let mut input = String::new();
+    if std::io::stdin()
+        .take(1024 * 1024)
+        .read_to_string(&mut input)
+        .is_err()
+    {
+        return Ok(());
+    }
+    let Some(id) = serde_json::from_str::<serde_json::Value>(&input)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("session_id")
+                .and_then(|id| id.as_str())
+                .map(str::to_owned)
+        })
+    else {
+        return Ok(());
+    };
+
+    let session_key = format!("claude-code:{id}");
+
+    // Invariant 3: Fail open. Check whether daemon is alive and blocked-sessions.json is fresh (< 30s)
+    let block_file = fleethud_home().join("blocked-sessions.json");
+    let is_stale = match std::fs::metadata(&block_file) {
+        Ok(meta) => match meta.modified() {
+            Ok(mtime) => match std::time::SystemTime::now().duration_since(mtime) {
+                Ok(elapsed) => elapsed > std::time::Duration::from_secs(30),
+                Err(_) => false,
+            },
+            Err(_) => true,
+        },
+        Err(_) => true,
+    };
+
+    // If file is stale or absent, fail open immediately
+    if is_stale {
+        return Ok(());
+    }
+
+    let Ok(raw) = std::fs::read(&block_file) else {
+        return Ok(());
+    };
+    let Ok(blocked) = serde_json::from_slice::<Vec<String>>(&raw) else {
+        return Ok(());
+    };
+    if blocked.iter().any(|session| session == &session_key) {
+        eprintln!(
+            "FleetHUD guardrail: session threshold reached. Remove or raise the rule to continue."
+        );
+        std::process::exit(2);
+    }
+    Ok(())
+}
+
+fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
+    anyhow::ensure!(agent == "claude", "only Claude Code hooks are supported");
+    let config_dir = std::env::var("CLAUDE_CONFIG_DIR")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map_or_else(
+            || fleethud_platform::user_home_dir().join(".claude"),
+            PathBuf::from,
+        );
+    std::fs::create_dir_all(&config_dir)?;
+    let path = config_dir.join("settings.json");
+    let mut settings: serde_json::Value = if path.exists() {
+        serde_json::from_slice(&std::fs::read(&path)?)
+            .context("Claude settings contain invalid JSON")?
+    } else {
+        serde_json::json!({})
+    };
+    anyhow::ensure!(
+        settings.is_object(),
+        "Claude settings must be a JSON object"
+    );
+    let exe = std::env::current_exe()?.to_string_lossy().into_owned();
+    let entries = settings.pointer_mut("/hooks/PreToolUse");
+    if let Some(entries) = entries {
+        let hooks = entries
+            .as_array_mut()
+            .context("Claude PreToolUse hooks must be an array")?;
+        hooks.retain(|entry| {
+            !entry
+                .get("hooks")
+                .and_then(|h| h.as_array())
+                .is_some_and(|handlers| {
+                    handlers.iter().any(|handler| {
+                        let cmd = handler
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let is_fleethud = cmd == exe
+                            || cmd.ends_with("fleethud")
+                            || cmd.ends_with("fleethud.exe");
+                        is_fleethud && handler.get("args") == Some(&serde_json::json!(["hook"]))
+                    })
+                })
+        });
+    }
+    if !remove {
+        let entry = serde_json::json!({"hooks": [{"type": "command", "command": exe, "args": ["hook"], "timeout": 1, "onFailure": "continue"}]});
+        if settings.get("hooks").is_none() {
+            settings["hooks"] = serde_json::json!({});
+        }
+        if settings["hooks"].get("PreToolUse").is_none() {
+            settings["hooks"]["PreToolUse"] = serde_json::json!([]);
+        }
+        settings["hooks"]["PreToolUse"]
+            .as_array_mut()
+            .context("Claude PreToolUse hooks must be an array")?
+            .push(entry);
+
+        let license_path = fleethud_home().join("license.key");
+        if !license_path.exists() {
+            println!(
+                "FleetHUD: Guardrails require an active Pro or Team license to enforce limits."
+            );
+            println!("Run `fleethud license activate <key>` or activate via the Console.");
+        }
+    }
+    if path.exists() {
+        std::fs::copy(&path, config_dir.join("settings.json.fleethud.bak"))?;
+    }
+    std::fs::write(&path, serde_json::to_vec_pretty(&settings)?)?;
+    println!(
+        "Claude Code guardrail hook {}.",
+        if remove { "removed" } else { "installed" }
+    );
+    Ok(())
 }
 
 fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
@@ -314,6 +563,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         fleethud_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
+    let _cloud_sync_handle = fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db());
 
     let state = fleethud_daemon::api::AppState {
         db: orchestrator.db(),
@@ -404,10 +654,15 @@ fn open_browser(url: &str) {
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
 
+#[cfg(target_os = "windows")]
 const FLEETHUD_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
+#[cfg(target_os = "windows")]
 const TRAY_PS1: &str = include_str!("../../../scripts/tray.ps1");
+#[cfg(target_os = "windows")]
 const RUN_TRAY_VBS: &str = include_str!("../../../scripts/run-tray.vbs");
+#[cfg(target_os = "windows")]
 const OPEN_CONSOLE_VBS: &str = include_str!("../../../scripts/open-console.vbs");
+#[cfg(target_os = "windows")]
 const OPEN_DASH_VBS: &str = include_str!("../../../scripts/open-dashboard.vbs");
 
 fn cmd_install(db_path: &std::path::Path) -> Result<()> {

@@ -144,79 +144,7 @@ export default function ConsolePage() {
 
   // Live 2-second fetch loop
   const fetchLiveMetrics = useCallback(async () => {
-    let daemonLive = false;
-
-    // 1. Try local daemon loopback first
-    try {
-      const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-      const daemonPort = params?.get("port") || "41738";
-      const bearerToken = params?.get("token") || "";
-      const headers: Record<string, string> = bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {};
-
-      const res = await fetch(
-        `http://127.0.0.1:${daemonPort}/api/v1/live?range=${timeline}&agent=${agentFilter}&status=${statusFilter}&page=${page}&limit=10`,
-        { headers }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setReport(data.timeline);
-        setSessions(data.sessions || []);
-        setQuota(data.quota || []);
-        setRoiByProvider(data.roi_by_provider || []);
-        setCombinedRoi(data.combined_roi || null);
-        setUserProfile(data.user_profile || null);
-        setActiveCount(data.active_count || 0);
-        setTotalCount(data.total_count || 0);
-        setTotalPages(data.total_pages || 1);
-        setConnectedSource(`Local Daemon [127.0.0.1:${daemonPort}] (2s)`);
-        daemonLive = true;
-
-        // 1a. Adopt daemon paired session if available
-        if (data.paired_session && !user) {
-          try {
-            await supabase.auth.setSession(data.paired_session);
-          } catch {}
-        }
-
-        // 1b. If authenticated, persist session to local daemon and push snapshot to Supabase
-        if (user) {
-          if (!data.paired_session) {
-            try {
-              const { data: sData } = await supabase.auth.getSession();
-              if (sData?.session) {
-                await fetch(`http://127.0.0.1:${daemonPort}/api/v1/auth/session`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(sData.session),
-                });
-              }
-            } catch {}
-          }
-
-          try {
-            await supabase.from("fleethud_sync_state").upsert({
-              user_id: user.id,
-              email: user.email,
-              display_name: data.user_profile?.display_name || "Developer",
-              openai_plan_usd: data.user_profile?.openai_plan_usd || 20.0,
-              claude_plan_usd: data.user_profile?.claude_plan_usd || 20.0,
-              google_plan_usd: data.user_profile?.google_plan_usd || 20.0,
-              other_plan_usd: data.user_profile?.other_plan_usd || 0.0,
-              custom_pricing: data.custom_pricing || [],
-              live_snapshot: data,
-              updated_at: new Date().toISOString(),
-            });
-          } catch {
-            // Silently ignore sync write failures when offline or RLS restricted
-          }
-        }
-      }
-    } catch {
-      // Local daemon offline or cross-origin
-    }
-
-    // 2. Fall back to cloud snapshot in Supabase if user is signed in
-    if (!daemonLive && user) {
+    if (user) {
       try {
         const { data, error } = await supabase
           .from("fleethud_sync_state")
@@ -226,30 +154,35 @@ export default function ConsolePage() {
 
         if (!error && data && data.live_snapshot) {
           const snap = data.live_snapshot;
-          setReport(snap.timeline || null);
-          setSessions(snap.sessions || []);
+          setReport(snap.timelines?.[timeline] || snap.timeline || null);
+          const filtered = (snap.sessions || []).filter((session: SessionItem) =>
+            (agentFilter === "all" || session.agent === agentFilter) &&
+            (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
+          );
+          setSessions(filtered.slice((page - 1) * 10, page * 10));
           setQuota(snap.quota || []);
           setRoiByProvider(snap.roi_by_provider || []);
           setCombinedRoi(snap.combined_roi || null);
-          setUserProfile(data);
+          setUserProfile(snap.user_profile || null);
           setActiveCount(snap.active_count || 0);
-          setTotalCount(snap.total_count || 0);
-          setTotalPages(snap.total_pages || 1);
-          setConnectedSource("Cloud Mirror");
+          setTotalCount(filtered.length);
+          setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
+          const ageMs = Date.now() - Date.parse(data.updated_at);
+          setConnectedSource(ageMs < 120000 ? "Remote daemon (updated within 2 min)" : `Remote data stale (last update ${new Date(data.updated_at).toLocaleString()})`);
         } else {
-          setConnectedSource("Cloud Offline (No local daemon)");
+          setConnectedSource("No paired desktop data yet");
         }
       } catch {
         setConnectedSource("Offline");
       }
-    } else if (!daemonLive && !user) {
-      setConnectedSource("Offline (No local daemon)");
+    } else {
+      setConnectedSource("Sign in to monitor your desktop remotely");
     }
   }, [user, timeline, agentFilter, statusFilter, page]);
 
   useEffect(() => {
     fetchLiveMetrics();
-    const timer = setInterval(fetchLiveMetrics, 2000);
+    const timer = setInterval(fetchLiveMetrics, 15000);
     return () => clearInterval(timer);
   }, [fetchLiveMetrics]);
 
@@ -354,11 +287,11 @@ export default function ConsolePage() {
         </div>
       )}
 
-      {/* Cloud Mirror Notice when local daemon is not running */}
-      {!connectedSource.includes("Local") && (
+      {/* Pairing help when no desktop has uploaded a snapshot */}
+      {!report && (
         <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[NOTICE]</span> Local FleetHUD app not detected on this machine. {report && report.total_cost_usd > 0 ? "Showing your last recorded cloud telemetry." : "Run FleetHUD Desktop to stream live metrics."}
+            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. The desktop daemon uploads a private snapshot every minute while running.
           </div>
           <a
             href="/downloads"
@@ -405,13 +338,13 @@ export default function ConsolePage() {
       {/* Header Controls */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-white p-1 flex items-center justify-center shadow-sm">
+          <div className="w-9 h-9 rounded-xl bg-[#0d1117] p-1 flex items-center justify-center shadow-sm">
             <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="text-xl font-bold text-foreground">Mission Control Console</div>
             <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${connectedSource.includes("Local") ? "bg-green animate-pulse" : connectedSource.includes("Cloud") ? "bg-accent" : "bg-red"}`}></span>
+              <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
               <span>Status: {connectedSource}</span>
             </div>
           </div>

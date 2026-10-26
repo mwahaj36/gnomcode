@@ -10,7 +10,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use fleethud_core::{
-    ActivityEvent, AgentId, Project, Session, SessionState, Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::redact_summary,
 };
@@ -100,6 +100,9 @@ impl SourceAdapter for AntigravityAdapter {
                     if let Some(new_model) = parse_model_selection_change(content) {
                         self.active_model = Some(new_model.clone());
                         sess.model = Some(new_model);
+                        if content.trim().ends_with("</USER_SETTINGS_CHANGE>") {
+                            sess.state = SessionState::Idle;
+                        }
                     }
                     if let Some(ws) = extract_workspace_from_text(content) {
                         let proj = Project::from_origin(None, &ws, None);
@@ -141,11 +144,20 @@ impl SourceAdapter for AntigravityAdapter {
                         let detail = extract_tool_detail(call.get("args"));
                         let summary = redact_summary(name, &detail);
                         let kind = classify_tool_kind(name);
-                        sess.state = SessionState::Tool;
+                        let is_ask = name == "ask_question" || name.contains("approval");
+                        sess.state = if is_ask {
+                            SessionState::AwaitingApproval
+                        } else {
+                            SessionState::Tool
+                        };
                         batch.activity_events.push(ActivityEvent {
                             session_id: session_id.clone(),
                             timestamp: ts,
-                            kind,
+                            kind: if is_ask {
+                                ActivityKind::ApprovalWait
+                            } else {
+                                kind
+                            },
                             tool_name: Some(name.to_owned()),
                             summary_redacted: Some(summary),
                             duration_ms: None,
@@ -211,6 +223,11 @@ impl SourceAdapter for AntigravityAdapter {
                         });
                     }
                 }
+            } else if step_type == "GENERIC"
+                || (obj.get("status").and_then(Value::as_str) == Some("DONE")
+                    && step_type != "USER_INPUT")
+            {
+                sess.state = SessionState::Idle;
             }
         }
 

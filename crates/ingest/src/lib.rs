@@ -4,9 +4,12 @@
 use chrono::Utc;
 use fleethud_adapters::{
     FileCtx, SourceAdapter,
+    aider::AiderAdapter,
     antigravity::{AntigravityAdapter, extract_conversation_id},
     claude::ClaudeAdapter,
+    cline::ClineAdapter,
     codex::{CodexAdapter, codex_session_id_from_path},
+    cursor::CursorAdapter,
     gemini::GeminiAdapter,
 };
 use fleethud_core::{AgentId, Session};
@@ -17,6 +20,7 @@ use fleethud_platform::{
 use fleethud_store::{Database, SourceCheckpoint};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 use thiserror::Error;
 
 /// Ingestion engine error type.
@@ -90,8 +94,23 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
                     .is_some_and(|n| n == "transcript.jsonl")
         }
         AgentId::GeminiCli => ext.eq_ignore_ascii_case("json"),
-        AgentId::Cline | AgentId::Cursor | AgentId::Aider => false,
+        AgentId::Cline => {
+            ext.eq_ignore_ascii_case("json")
+                && path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|n| n == "ui_messages.json")
+        }
+        AgentId::Cursor => ext.eq_ignore_ascii_case("json") || ext.eq_ignore_ascii_case("jsonl"),
+        AgentId::Aider => ext.eq_ignore_ascii_case("jsonl") || ext.eq_ignore_ascii_case("json"),
     }
+}
+
+fn complete_jsonl_prefix_len(bytes: &[u8]) -> usize {
+    bytes
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |i| i + 1)
 }
 
 /// Ingests all available agent logs across discovered roots in one synchronous pass.
@@ -115,11 +134,32 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             }
         };
         let start_offset = checkpoint.as_ref().map_or(0, |c| c.last_read_offset);
+        let is_rewritten = matches!(
+            file.agent,
+            AgentId::GeminiCli | AgentId::Cline | AgentId::Cursor
+        );
 
-        let Ok(read_result) = read_from_offset(&file.path, start_offset) else {
+        let file_fingerprint = if is_rewritten {
+            fs::metadata(&file.path).ok().and_then(|meta| {
+                let modified = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
+                Some(format!("{}:{}", meta.len(), modified.as_nanos()))
+            })
+        } else {
+            None
+        };
+        if file_fingerprint.as_ref().is_some_and(|fingerprint| {
+            checkpoint
+                .as_ref()
+                .is_some_and(|cp| &cp.fingerprint == fingerprint)
+        }) {
+            continue;
+        }
+
+        let read_offset = if is_rewritten { 0 } else { start_offset };
+        let Ok(read_result) = read_from_offset(&file.path, read_offset) else {
             continue;
         };
-        if read_result.bytes.is_empty() && start_offset == read_result.file_size {
+        if read_result.bytes.is_empty() && read_offset == read_result.file_size {
             continue;
         }
 
@@ -156,18 +196,32 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             AgentId::Codex => Box::new(CodexAdapter::new()),
             AgentId::Antigravity => Box::new(AntigravityAdapter::new()),
             AgentId::GeminiCli => Box::new(GeminiAdapter::new()),
-            AgentId::Cline | AgentId::Cursor | AgentId::Aider => continue,
+            AgentId::Cline => Box::new(ClineAdapter::new()),
+            AgentId::Cursor => Box::new(CursorAdapter::new()),
+            AgentId::Aider => Box::new(AiderAdapter::new()),
         };
 
-        let batch = adapter.parse(&ctx, &read_result.bytes);
+        let parsed_len = if is_rewritten {
+            read_result.bytes.len()
+        } else {
+            complete_jsonl_prefix_len(&read_result.bytes)
+        };
+        if parsed_len == 0 {
+            continue;
+        }
+        let batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
+        if is_rewritten && batch.parse_errors > 0 && batch.usage_records.is_empty() {
+            continue;
+        }
         total_records_ingested += batch.usage_records.len() as u64;
 
-        let new_offset = read_result.effective_start_offset + read_result.bytes.len() as u64;
+        let new_offset = read_result.effective_start_offset + parsed_len as u64;
         let new_checkpoint = SourceCheckpoint {
             file_path: path_str.clone(),
             last_read_offset: new_offset,
             file_size: read_result.file_size,
-            fingerprint: format!("{}:{}", read_result.file_size, new_offset),
+            fingerprint: file_fingerprint
+                .unwrap_or_else(|| format!("{}:{}", read_result.file_size, new_offset)),
             last_ingested_at: Utc::now(),
         };
 
@@ -194,7 +248,7 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::scan_log_files;
+    use super::{complete_jsonl_prefix_len, scan_log_files};
     use fleethud_core::AgentId;
     use fleethud_platform::AgentRoot;
     use std::fs;
@@ -208,15 +262,32 @@ mod tests {
         fs::write(claude_dir.join("session-1.jsonl"), b"{}").expect("write claude");
         fs::write(claude_dir.join("ignore.txt"), b"").expect("write ignore");
 
-        let roots = [AgentRoot {
-            agent: AgentId::ClaudeCode,
-            path: claude_dir,
-            exists: true,
-        }];
+        let roots = [
+            AgentRoot {
+                agent: AgentId::ClaudeCode,
+                path: claude_dir,
+                exists: true,
+            },
+            AgentRoot {
+                agent: AgentId::Cline,
+                path: dir.path().join("cline"),
+                exists: true,
+            },
+        ];
+        let cline_dir = dir.path().join("cline");
+        fs::create_dir_all(&cline_dir).expect("create cline dir");
+        fs::write(cline_dir.join("ui_messages.json"), b"[]").expect("write cline");
 
         let files = scan_log_files(&roots);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].agent, AgentId::ClaudeCode);
-        assert!(files[0].path.ends_with("session-1.jsonl"));
+        assert_eq!(files.len(), 2);
+        assert!(files.iter().any(|f| f.agent == AgentId::ClaudeCode));
+        assert!(files.iter().any(|f| f.agent == AgentId::Cline));
+    }
+
+    #[test]
+    fn checkpoint_waits_for_complete_jsonl_line() {
+        assert_eq!(complete_jsonl_prefix_len(b"{\"a\":1}\n{\"b\":"), 8);
+        assert_eq!(complete_jsonl_prefix_len(b"{\"b\":2}\r\n"), 9);
+        assert_eq!(complete_jsonl_prefix_len(b"{\"a\":"), 0);
     }
 }

@@ -124,7 +124,7 @@ export default function MarketingFooter() {
 
         <div className="pt-8 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-5 h-5 rounded bg-white p-0.5 flex items-center justify-center">
+            <div className="w-5 h-5 rounded bg-[#0d1117] p-0.5 flex items-center justify-center">
               <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
             </div>
             <span className="font-bold text-foreground">FleetHUD</span>

@@ -103,6 +103,14 @@ pub fn verify_license(license: &LicenseFile, pubkey_hex: &str) -> Result<Tier, L
         .verify(&canonical_bytes, &signature)
         .map_err(|_| LicenseError::InvalidSignature)?;
 
+    if let Some(expires_at) = &license.payload.expires_at {
+        let expiration = chrono::DateTime::parse_from_rfc3339(expires_at)
+            .map_err(|e| LicenseError::Malformed(e.to_string()))?;
+        if expiration <= chrono::Utc::now() {
+            return Err(LicenseError::Expired);
+        }
+    }
+
     Ok(license.payload.tier)
 }
 
@@ -119,7 +127,7 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{LicenseFile, LicensePayload, Tier, verify_license};
+    use super::{LicenseError, LicenseFile, LicensePayload, Tier, verify_license};
     use ed25519_dalek::{Signer as _, SigningKey};
 
     #[test]
@@ -157,5 +165,20 @@ mod tests {
         let mut tampered = license.clone();
         tampered.payload.licensee = "hacker@example.com".to_owned();
         assert!(verify_license(&tampered, &pubkey_hex).is_err());
+
+        let mut expired = license;
+        expired.payload.expires_at = Some("2020-01-01T00:00:00Z".to_owned());
+        let expired_bytes =
+            serde_json::to_vec(&expired.payload).expect("serialize expired payload");
+        expired.signature_hex = signing_key
+            .sign(&expired_bytes)
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert!(matches!(
+            verify_license(&expired, &pubkey_hex),
+            Err(LicenseError::Expired)
+        ));
     }
 }

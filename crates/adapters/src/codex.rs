@@ -177,6 +177,14 @@ impl SourceAdapter for CodexAdapter {
                 });
                 sess.last_event_at = ts;
                 sess.state = SessionState::Thinking;
+                if line_type == "event_msg"
+                    && matches!(
+                        payload.get("type").and_then(Value::as_str),
+                        Some("task_complete" | "turn_aborted" | "token_count")
+                    )
+                {
+                    sess.state = SessionState::Idle;
+                }
 
                 let turn_model = payload.get("model").and_then(Value::as_str).or_else(|| {
                     payload
