@@ -17,6 +17,8 @@ fleethud-ingest = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
 hmac = { workspace = true }
+getrandom = { workspace = true }
+reqwest = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 tokio = { workspace = true }

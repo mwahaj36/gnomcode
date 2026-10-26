@@ -2,6 +2,7 @@
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
 pub mod api;
+pub mod pro;
 pub mod sync;
 
 use chrono::Utc;
@@ -9,7 +10,6 @@ use fleethud_ingest::ingest_all;
 use fleethud_platform::fleethud_home;
 use fleethud_store::Database;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -91,7 +91,7 @@ impl DaemonLock {
             Err(_) => return Err(Error::AlreadyRunning),
         };
 
-        let token = generate_bearer_token();
+        let token = generate_bearer_token()?;
         let info = DaemonInfo {
             pid: std::process::id(),
             port,
@@ -100,7 +100,18 @@ impl DaemonLock {
         };
 
         let json_bytes = serde_json::to_vec_pretty(&info).map_err(std::io::Error::other)?;
-        fs::write(&info_path, json_bytes)?;
+        let mut info_file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&info_path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            info_file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        }
+        use std::io::Write as _;
+        info_file.write_all(&json_bytes)?;
 
         Ok((
             Self {
@@ -120,23 +131,21 @@ impl Drop for DaemonLock {
     }
 }
 
-fn generate_bearer_token() -> String {
-    let mut hasher = Sha256::new();
-    let now = Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    hasher.update(now.to_le_bytes());
-    hasher.update(std::process::id().to_le_bytes());
-    let res = hasher.finalize();
+fn generate_bearer_token() -> Result<String, Error> {
+    let mut res = [0u8; 32];
+    getrandom::fill(&mut res).map_err(std::io::Error::other)?;
     let mut hex = String::with_capacity(64);
     for b in res {
         use std::fmt::Write as _;
         let _ = write!(hex, "{b:02x}");
     }
-    hex
+    Ok(hex)
 }
 
 /// Orchestrator managing background polling and event ingestion.
 pub struct DaemonOrchestrator {
     db: Arc<Mutex<Database>>,
+    db_path: PathBuf,
     poll_interval: Duration,
 }
 
@@ -149,21 +158,45 @@ impl DaemonOrchestrator {
         let db = Database::open(db_path)?;
         Ok(Self {
             db: Arc::new(Mutex::new(db)),
+            db_path: db_path.to_path_buf(),
             poll_interval,
         })
     }
 
     /// Spawns a background task running periodic log reconciliation every `poll_interval`.
     pub fn spawn_reconciler(&self) -> JoinHandle<()> {
-        let db = Arc::clone(&self.db);
+        let db_path = self.db_path.clone();
         let interval = self.poll_interval;
 
         tokio::spawn(async move {
+            let Ok(Ok(mut ingest_db)) =
+                tokio::task::spawn_blocking(move || Database::open(&db_path)).await
+            else {
+                tracing::error!("ingestion database could not start");
+                return;
+            };
             let mut ticker = tokio::time::interval(interval);
             loop {
                 ticker.tick().await;
-                let mut db_guard = db.lock().await;
-                let _ = ingest_all(&mut db_guard);
+                let Ok((db, result)) = tokio::task::spawn_blocking(move || {
+                    let result = ingest_all(&mut ingest_db);
+                    if let Err(error) = pro::run_guardrails(&ingest_db) {
+                        tracing::warn!("guardrail evaluation failed: {error}");
+                    }
+                    if let Err(error) = pro::run_resume_queue(&ingest_db) {
+                        tracing::warn!("resume queue evaluation failed: {error}");
+                    }
+                    (ingest_db, result)
+                })
+                .await
+                else {
+                    tracing::error!("ingestion worker stopped");
+                    return;
+                };
+                ingest_db = db;
+                if let Err(error) = result {
+                    tracing::warn!("ingestion pass failed: {error}");
+                }
             }
         })
     }
@@ -183,7 +216,7 @@ mod tests {
 
     #[test]
     fn bearer_token_format_is_valid_hex() {
-        let token = super::generate_bearer_token();
+        let token = super::generate_bearer_token().expect("random token");
         assert_eq!(token.len(), 64);
         assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
     }

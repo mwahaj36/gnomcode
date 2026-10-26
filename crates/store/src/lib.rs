@@ -1,6 +1,7 @@
 //! SQLite storage schema, migrations, queries, and rollups (`SPEC §3.6`, `§4.3`).
 
 use chrono::{DateTime, Utc};
+use fleethud_core::rules::{GuardrailRule, ResumeQueueEntry};
 use fleethud_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
     SessionState, Surface, TrustLevel, UsageRecord,
@@ -18,6 +19,22 @@ pub enum Error {
     /// Schema migration failure.
     #[error("migration error: {0}")]
     Migration(String),
+    /// Invalid stored rule or queue payload.
+    #[error("invalid stored JSON: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+/// A guardrail breach recorded once per rule and session.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RuleAlert {
+    /// Session that crossed the threshold.
+    pub session_id: String,
+    /// Rule that fired.
+    pub rule_id: String,
+    /// `warn` or `hard_stop`.
+    pub action: String,
+    /// UTC timestamp.
+    pub created_at: String,
 }
 
 /// Checked checkpoint for a source log file on disk.
@@ -415,6 +432,213 @@ impl Database {
             let _ = self.reconcile_antigravity_projects();
         }
 
+        self.conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS rule (
+                id TEXT PRIMARY KEY,
+                payload TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS alert (
+                session_id TEXT NOT NULL,
+                rule_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (session_id, rule_id)
+            );
+            CREATE TABLE IF NOT EXISTS resume_queue (
+                session_id TEXT PRIMARY KEY,
+                agent TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                resume_prompt TEXT NOT NULL,
+                max_runs INTEGER NOT NULL,
+                runs_completed INTEGER NOT NULL,
+                eligible_after TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            "#,
+        )?;
+
+        Ok(())
+    }
+
+    /// Returns configured local guardrail rules.
+    ///
+    /// # Errors
+    /// Returns [`Error`] for invalid stored JSON or SQLite errors.
+    pub fn list_rules(&self) -> Result<Vec<GuardrailRule>, Error> {
+        let mut stmt = self.conn.prepare("SELECT payload FROM rule ORDER BY id")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
+    }
+
+    /// Inserts or updates one guardrail rule.
+    ///
+    /// # Errors
+    /// Returns [`Error`] for serialization or SQLite errors.
+    pub fn save_rule(&self, rule: &GuardrailRule) -> Result<(), Error> {
+        let payload = serde_json::to_string(rule)?;
+        self.conn.execute(
+            "INSERT INTO rule (id, payload) VALUES (?1, ?2) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+            params![rule.id, payload],
+        )?;
+        Ok(())
+    }
+
+    /// Deletes a guardrail rule by ID.
+    ///
+    /// # Errors
+    /// Returns [`Error`] for SQLite errors.
+    pub fn delete_rule(&self, id: &str) -> Result<(), Error> {
+        self.conn
+            .execute("DELETE FROM rule WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM alert WHERE rule_id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Returns one session's accumulated cost and turn count.
+    ///
+    /// # Errors
+    /// Returns [`Error`] for SQLite errors.
+    pub fn session_guardrail_totals(&self, id: &str) -> Result<(f64, u64), Error> {
+        let (cost, turns): (f64, i64) = self.conn.query_row(
+            "SELECT COALESCE(SUM(cost_usd), 0.0), COUNT(*) FROM usage_record WHERE session_id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok((cost, turns.max(0) as u64))
+    }
+
+    /// Records an alert once for a rule and session; returns whether it was new.
+    ///
+    /// # Errors
+    /// Returns [`Error`] for SQLite errors.
+    pub fn insert_alert_once(
+        &self,
+        session_id: &str,
+        rule_id: &str,
+        action: &str,
+    ) -> Result<bool, Error> {
+        let inserted = self.conn.execute(
+            "INSERT OR IGNORE INTO alert (session_id, rule_id, action, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![session_id, rule_id, action, Utc::now().to_rfc3339()],
+        )?;
+        Ok(inserted > 0)
+    }
+
+    /// Returns recent guardrail alerts.
+    ///
+    /// # Errors
+    /// Returns [`Error`] for SQLite errors.
+    pub fn list_alerts(&self, limit: usize) -> Result<Vec<RuleAlert>, Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, rule_id, action, created_at FROM alert ORDER BY created_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok(RuleAlert {
+                session_id: row.get(0)?,
+                rule_id: row.get(1)?,
+                action: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+    }
+
+    /// Arms a session in the Resume Queue.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn arm_resume_queue(&self, entry: &ResumeQueueEntry) -> Result<(), Error> {
+        self.conn.execute(
+            r#"
+            INSERT INTO resume_queue (session_id, agent, cwd, resume_prompt, max_runs, runs_completed, eligible_after, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(session_id) DO UPDATE SET
+                agent = excluded.agent,
+                cwd = excluded.cwd,
+                resume_prompt = excluded.resume_prompt,
+                max_runs = excluded.max_runs,
+                runs_completed = excluded.runs_completed,
+                eligible_after = excluded.eligible_after
+            "#,
+            params![
+                entry.session_id,
+                entry.agent.as_str(),
+                entry.cwd,
+                entry.resume_prompt,
+                entry.max_runs,
+                entry.runs_completed,
+                entry.eligible_after.to_rfc3339(),
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Disarms a session from the Resume Queue.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn disarm_resume_queue(&self, session_id: &str) -> Result<(), Error> {
+        self.conn.execute(
+            "DELETE FROM resume_queue WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        Ok(())
+    }
+
+    /// Lists all currently armed sessions in the Resume Queue.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn list_resume_queue(&self) -> Result<Vec<ResumeQueueEntry>, Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, agent, cwd, resume_prompt, max_runs, runs_completed, eligible_after FROM resume_queue ORDER BY eligible_after ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let session_id: String = row.get(0)?;
+            let agent_str: String = row.get(1)?;
+            let cwd: String = row.get(2)?;
+            let resume_prompt: String = row.get(3)?;
+            let max_runs: u32 = row.get(4)?;
+            let runs_completed: u32 = row.get(5)?;
+            let eligible_str: String = row.get(6)?;
+            let eligible_after = DateTime::parse_from_rfc3339(&eligible_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+            let agent = match agent_str.as_str() {
+                "claude-code" => AgentId::ClaudeCode,
+                "codex" => AgentId::Codex,
+                "antigravity" => AgentId::Antigravity,
+                "gemini-cli" => AgentId::GeminiCli,
+                "cline" => AgentId::Cline,
+                "cursor" => AgentId::Cursor,
+                "aider" => AgentId::Aider,
+                _ => AgentId::ClaudeCode,
+            };
+            Ok(ResumeQueueEntry {
+                session_id,
+                agent,
+                cwd,
+                resume_prompt,
+                max_runs,
+                runs_completed,
+                eligible_after,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+    }
+
+    /// Updates the runs completed count for an armed session.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn update_resume_runs(&self, session_id: &str, runs_completed: u32) -> Result<(), Error> {
+        self.conn.execute(
+            "UPDATE resume_queue SET runs_completed = ?1 WHERE session_id = ?2",
+            params![runs_completed, session_id],
+        )?;
         Ok(())
     }
 
@@ -748,14 +972,14 @@ impl Database {
                 u.model,
                 SUM(u.input_tokens) AS in_tok,
                 SUM(u.cache_read_tokens) AS read_tok,
-                SUM(u.output_tokens + u.reasoning_tokens) AS out_tok,
+                SUM(u.output_tokens) AS out_tok,
                 SUM(u.cost_usd) AS total_cost,
                 SUM(u.cache_savings_usd) AS total_savings,
                 COUNT(u.dedup_key) AS turns
             FROM usage_record u
             JOIN session s ON u.session_id = s.id
             JOIN project p ON s.project_id = p.id
-            GROUP BY p.name, s.agent, u.model
+            GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
             "#,
         )?;
@@ -1236,108 +1460,110 @@ impl Database {
         limit: usize,
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let now = Utc::now();
+        let cutoff = (now - chrono::Duration::minutes(15)).to_rfc3339();
+        let agent = agent_filter
+            .filter(|value| !value.is_empty())
+            .unwrap_or("all");
+        let status = status_filter
+            .filter(|value| !value.is_empty())
+            .unwrap_or("all");
+        let total_count: i64 = self.conn.query_row(
+            r#"SELECT COUNT(*) FROM session s
+               WHERE (?1 = 'all' OR s.agent = ?1)
+                 AND (?2 = 'all'
+                   OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
+                   OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))"#,
+            params![agent, status, cutoff],
+            |row| row.get(0),
+        )?;
         let mut stmt = self.conn.prepare(
             r#"
+            WITH page AS (
+                SELECT s.*, p.name AS project_name,
+                    CASE WHEN s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3 THEN 1 ELSE 0 END AS active_rank
+                FROM session s JOIN project p ON s.project_id = p.id
+                WHERE (?1 = 'all' OR s.agent = ?1)
+                  AND (?2 = 'all'
+                    OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
+                    OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))
+                ORDER BY active_rank DESC, s.last_event_at DESC
+                LIMIT ?4 OFFSET ?5
+            )
             SELECT
-                s.id, s.agent, s.surface, p.name, s.model, s.state, s.started_at, s.last_event_at,
+                s.id, s.agent, s.surface, s.project_name, s.model, s.state, s.started_at, s.last_event_at,
                 COALESCE(SUM(u.input_tokens), 0),
                 COALESCE(SUM(u.output_tokens), 0),
                 COALESCE(SUM(u.cost_usd), 0.0)
-            FROM session s
-            JOIN project p ON s.project_id = p.id
+            FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
-            ORDER BY s.last_event_at DESC
+            ORDER BY s.active_rank DESC, s.last_event_at DESC
             "#,
         )?;
 
-        let rows = stmt.query_map([], |row| {
-            let id: String = row.get(0)?;
-            let agent: String = row.get(1)?;
-            let surface: String = row.get(2)?;
-            let project_name: String = row.get(3)?;
-            let raw_model: Option<String> = row.get(4)?;
-            let state_str: String = row.get(5)?;
-            let started_at: String = row.get(6)?;
-            let last_event_at_str: String = row.get(7)?;
-            let input_tokens: i64 = row.get(8)?;
-            let output_tokens: i64 = row.get(9)?;
-            let total_cost_usd: f64 = row.get(10)?;
+        let rows = stmt.query_map(
+            params![agent, status, cutoff, limit as i64, offset as i64],
+            |row| {
+                let id: String = row.get(0)?;
+                let agent: String = row.get(1)?;
+                let surface: String = row.get(2)?;
+                let project_name: String = row.get(3)?;
+                let raw_model: Option<String> = row.get(4)?;
+                let state_str: String = row.get(5)?;
+                let started_at: String = row.get(6)?;
+                let last_event_at_str: String = row.get(7)?;
+                let input_tokens: i64 = row.get(8)?;
+                let output_tokens: i64 = row.get(9)?;
+                let total_cost_usd: f64 = row.get(10)?;
 
-            let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or(now);
+                let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or(now);
 
-            let diff_mins = (now - last_event_at).num_minutes();
-            let is_recent = diff_mins <= 15;
+                let diff_mins = (now - last_event_at).num_minutes();
+                let is_recent = diff_mins <= 15;
 
-            let (state, is_active) = if is_recent && state_str != "ended" {
-                let effective = if state_str == "idle" {
-                    "thinking".to_owned()
-                } else {
+                let is_active = is_recent
+                    && matches!(
+                        state_str.as_str(),
+                        "thinking" | "tool" | "awaiting_approval"
+                    );
+                let state = if is_active {
                     state_str
+                } else {
+                    "idle".to_owned()
                 };
-                (effective, true)
-            } else {
-                ("idle".to_owned(), false)
-            };
 
-            let model = match raw_model {
-                Some(ref m) if m.contains("MODEL_PLACEHOLDER") => {
-                    "Gemini 3.8 Flash (Default)".to_owned()
-                }
-                Some(m) if !m.trim().is_empty() => m,
-                _ => "Unspecified".to_owned(),
-            };
+                let model = match raw_model {
+                    Some(ref m) if m.contains("MODEL_PLACEHOLDER") => {
+                        "Gemini 3.8 Flash (Default)".to_owned()
+                    }
+                    Some(m) if !m.trim().is_empty() => m,
+                    _ => "Unspecified".to_owned(),
+                };
 
-            Ok(SessionListItem {
-                id,
-                agent,
-                surface,
-                project_name,
-                model,
-                state,
-                is_active,
-                started_at,
-                last_event_at: last_event_at_str,
-                input_tokens: input_tokens.max(0) as u64,
-                output_tokens: output_tokens.max(0) as u64,
-                total_cost_usd,
-            })
-        })?;
+                Ok(SessionListItem {
+                    id,
+                    agent,
+                    surface,
+                    project_name,
+                    model,
+                    state,
+                    is_active,
+                    started_at,
+                    last_event_at: last_event_at_str,
+                    input_tokens: input_tokens.max(0) as u64,
+                    output_tokens: output_tokens.max(0) as u64,
+                    total_cost_usd,
+                })
+            },
+        )?;
 
         let mut filtered = Vec::new();
         for r in rows {
-            let item = r?;
-            if let Some(af) = agent_filter {
-                if !af.is_empty() && af != "all" && item.agent != af {
-                    continue;
-                }
-            }
-            if let Some(sf) = status_filter {
-                if sf == "active" && !item.is_active {
-                    continue;
-                }
-                if sf == "idle" && item.is_active {
-                    continue;
-                }
-            }
-            filtered.push(item);
+            filtered.push(r?);
         }
-
-        filtered.sort_by(|a, b| {
-            let ts_a = DateTime::parse_from_rfc3339(&a.last_event_at)
-                .map(|dt| dt.timestamp_millis())
-                .unwrap_or(0);
-            let ts_b = DateTime::parse_from_rfc3339(&b.last_event_at)
-                .map(|dt| dt.timestamp_millis())
-                .unwrap_or(0);
-            b.is_active.cmp(&a.is_active).then_with(|| ts_b.cmp(&ts_a))
-        });
-
-        let total_count = filtered.len();
-        let paginated = filtered.into_iter().skip(offset).take(limit).collect();
-        Ok((paginated, total_count))
+        Ok((filtered, total_count.max(0) as usize))
     }
 
     /// Generates timeline-filtered report grouped by provider (Anthropic, OpenAI, Google)
@@ -1383,7 +1609,7 @@ impl Database {
                 u.model,
                 SUM(u.input_tokens) AS in_tok,
                 SUM(u.cache_read_tokens) AS read_tok,
-                SUM(u.output_tokens + u.reasoning_tokens) AS out_tok,
+                SUM(u.output_tokens) AS out_tok,
                 SUM(u.cost_usd) AS total_cost,
                 SUM(u.cache_savings_usd) AS total_savings,
                 COUNT(u.dedup_key) AS turns,
@@ -1394,7 +1620,7 @@ impl Database {
             JOIN project p ON s.project_id = p.id
             WHERE (?1 IS NULL OR u.timestamp >= ?1)
               AND (?2 IS NULL OR u.timestamp <= ?2)
-            GROUP BY p.name, s.agent, u.model
+            GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
             "#,
         )?;
@@ -1647,10 +1873,64 @@ impl Database {
 mod tests {
     use super::{Database, SourceCheckpoint};
     use chrono::Utc;
+    use fleethud_core::rules::{GuardrailRule, RuleAction};
     use fleethud_core::{
         ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
         SessionState, Surface, TrustLevel, UsageRecord,
     };
+
+    #[test]
+    fn guardrail_rules_and_alerts_persist_without_duplicates() {
+        let db = Database::open_in_memory().expect("in-memory db");
+        let rule = GuardrailRule {
+            id: "cost-cap".to_owned(),
+            project_id: None,
+            agent: None,
+            max_spend_usd: Some(5.0),
+            max_turns: None,
+            action: RuleAction::HardStop,
+        };
+        db.save_rule(&rule).expect("save rule");
+        assert_eq!(db.list_rules().expect("list rules"), vec![rule]);
+        assert!(
+            db.insert_alert_once("claude-code:s1", "cost-cap", "hard_stop")
+                .expect("first alert")
+        );
+        assert!(
+            !db.insert_alert_once("claude-code:s1", "cost-cap", "hard_stop")
+                .expect("duplicate alert")
+        );
+        assert_eq!(db.list_alerts(10).expect("list alerts").len(), 1);
+        db.delete_rule("cost-cap").expect("delete rule");
+        assert!(db.list_rules().expect("list rules").is_empty());
+        assert!(db.list_alerts(10).expect("list alerts").is_empty());
+    }
+
+    #[test]
+    fn resume_queue_persists_arms_and_disarms() {
+        use fleethud_core::rules::ResumeQueueEntry;
+        let db = Database::open_in_memory().expect("in-memory db");
+        let entry = ResumeQueueEntry {
+            session_id: "claude-code:session-1".to_owned(),
+            agent: AgentId::ClaudeCode,
+            cwd: "/workspace/my-app".to_owned(),
+            resume_prompt: "continue".to_owned(),
+            max_runs: 1,
+            runs_completed: 0,
+            eligible_after: Utc::now(),
+        };
+        db.arm_resume_queue(&entry).expect("arm queue");
+        let list = db.list_resume_queue().expect("list queue");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].session_id, "claude-code:session-1");
+        db.update_resume_runs("claude-code:session-1", 1)
+            .expect("update runs");
+        let list2 = db.list_resume_queue().expect("list queue 2");
+        assert_eq!(list2[0].runs_completed, 1);
+        db.disarm_resume_queue("claude-code:session-1")
+            .expect("disarm");
+        assert!(db.list_resume_queue().expect("empty queue").is_empty());
+    }
 
     #[test]
     fn commit_batch_persists_and_queries_idempotently() {
@@ -1721,17 +2001,45 @@ mod tests {
             .expect("first commit");
 
         // Re-committing with identical usage dedup_key must be idempotent (no duplicate key error)
-        db.commit_batch(&[], &[], &[u], &[], &[], &cp)
+        db.commit_batch(&[], &[], std::slice::from_ref(&u), &[], &[], &cp)
             .expect("idempotent second commit");
 
         let active = db.list_active_sessions(10).expect("list active");
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].id, "claude-code:s1");
 
+        let (recent, active_count) = db
+            .list_sessions_paginated(None, Some("active"), 0, 10)
+            .expect("list recent sessions");
+        assert_eq!(active_count, 0);
+        assert!(recent.is_empty());
+
         let report = db.generate_usage_report().expect("report");
         assert_eq!(report.len(), 1);
         assert_eq!(report[0].turn_count, 1);
         assert_eq!(report[0].input_tokens, 1000);
+
+        let other_project = Project::from_origin(
+            Some("https://github.com/other/fleethud"),
+            "/workspace/other/fleethud",
+            None,
+        );
+        let mut other_session = db.list_active_sessions(1).expect("session").remove(0);
+        other_session.id = "claude-code:s2".to_owned();
+        other_session.project_id = other_project.id.clone();
+        let mut other_usage = u.clone();
+        other_usage.dedup_key = "msg2:req2".to_owned();
+        other_usage.session_id = other_session.id.clone();
+        db.commit_batch(
+            &[other_project],
+            &[other_session],
+            &[other_usage],
+            &[],
+            &[],
+            &cp,
+        )
+        .expect("second project");
+        assert_eq!(db.generate_usage_report().expect("report").len(), 2);
 
         let latest_quota = db.get_latest_quota_snapshots().expect("latest quota");
         assert!(!latest_quota.is_empty());

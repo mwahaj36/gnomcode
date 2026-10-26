@@ -1,4 +1,22 @@
 # FleetHUD Windows System Tray Service — https://fleethud.vercel.app
+$trayMutex = New-Object System.Threading.Mutex($false, "Local\FleetHUDTray")
+try {
+    $ownsTray = $trayMutex.WaitOne(0)
+} catch [System.Threading.AbandonedMutexException] {
+    $ownsTray = $true
+}
+if (-not $ownsTray) {
+    $trayMutex.Dispose()
+    return
+}
+
+# Older tray scripts predate the mutex and can survive an upgrade.
+try {
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
+        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*FleetHUD*tray.ps1*' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+} catch {}
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -17,6 +35,7 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
 }
 "@
 
@@ -79,6 +98,7 @@ function Open-Console {
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
 $baseIcon = $null
+$badgeIcon = $null
 if (Test-Path $IconPath) {
     try {
         $baseIcon = New-Object System.Drawing.Icon($IconPath, 32, 32)
@@ -96,6 +116,7 @@ function Update-TrayIconBadge([int]$count) {
     try {
         if ($count -eq 0 -and $baseIcon) {
             $notifyIcon.Icon = $baseIcon
+            if ($badgeIcon) { $badgeIcon.Dispose(); $script:badgeIcon = $null }
             return
         }
 
@@ -130,13 +151,21 @@ function Update-TrayIconBadge([int]$count) {
         }
 
         $hIcon = $bmp.GetHicon()
-        $notifyIcon.Icon = [System.Drawing.Icon]::FromHandle($hIcon)
+        $newIcon = ([System.Drawing.Icon]::FromHandle($hIcon)).Clone()
+        [Win32]::DestroyIcon($hIcon) | Out-Null
+        $notifyIcon.Icon = $newIcon
+        if ($badgeIcon) { $badgeIcon.Dispose() }
+        $script:badgeIcon = $newIcon
         $g.Dispose()
         $bmp.Dispose()
     } catch {}
 }
 
 $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$contextMenu.ShowImageMargin = $false
+$contextMenu.BackColor = [System.Drawing.Color]::FromArgb(13, 17, 23)
+$contextMenu.ForeColor = [System.Drawing.Color]::White
+$contextMenu.Font = New-Object System.Drawing.Font("Segoe UI", 9.0)
 
 # 1. Open Console
 $openItem = $contextMenu.Items.Add("Open Mission Control")
@@ -150,6 +179,7 @@ $contextMenu.Items.Add("-") | Out-Null
 $sessionsHeader = $contextMenu.Items.Add("Active Sessions (0)")
 $sessionsHeader.Enabled = $false
 $sessionsHeader.Font = New-Object System.Drawing.Font("Segoe UI", 8.0, [System.Drawing.FontStyle]::Bold)
+$sessionsHeader.ForeColor = [System.Drawing.Color]::FromArgb(158, 170, 184)
 
 # Placeholder item when idle
 $idleSessionItem = $contextMenu.Items.Add("  Fleet Idle (no active agents)")
@@ -167,8 +197,9 @@ for ($i = 0; $i -lt 5; $i++) {
 $contextMenu.Items.Add("-") | Out-Null
 
 # Metrics
-$spendItem = $contextMenu.Items.Add("Spend Today: `$0.00")
+$spendItem = $contextMenu.Items.Add("API-equivalent today: `$0.00")
 $spendItem.Enabled = $false
+$spendItem.ForeColor = [System.Drawing.Color]::FromArgb(158, 170, 184)
 
 # Copy local bearer token
 $copyTokenItem = $contextMenu.Items.Add("Copy Local Bearer Token")
@@ -206,10 +237,21 @@ $exitItem.Add_Click({
         } catch {}
     }
     [System.Windows.Forms.Application]::Exit()
-    Exit
 })
 
 $notifyIcon.ContextMenuStrip = $contextMenu
+$contextMenu.Items | ForEach-Object { $_.BackColor = $contextMenu.BackColor }
+foreach ($item in $sessionMenuItems) {
+    $item.Add_Click({
+        param($itemSender, $itemArgs)
+        try {
+            $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
+            $sid = [uri]::EscapeDataString([string]$itemSender.Tag)
+            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($info.port)/api/v1/sessions/$sid/focus" -Headers @{ "Authorization" = "Bearer $($info.token)" } -ErrorAction Stop | Out-Null
+        } catch {}
+        Open-Console
+    })
+}
 $notifyIcon.Add_DoubleClick({ Open-Console })
 $notifyIcon.Add_Click({
     param($sender, $e)
@@ -230,12 +272,12 @@ $timer.Add_Tick({
         $headers = @{ "Authorization" = "Bearer $($info.token)" }
 
         # Query live metrics & active sessions
-        $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&page=1&limit=5" -Headers $headers -TimeoutSec 1 -ErrorAction SilentlyContinue
+        $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&status=active&page=1&limit=5" -Headers $headers -TimeoutSec 1 -ErrorAction SilentlyContinue
         if (-not $live) { return }
 
         $count = $live.active_count
         $spend = if ($live.timeline -and $live.timeline.total_cost_usd) { [double]$live.timeline.total_cost_usd } else { 0.0 }
-        $spendItem.Text = "Spend Today: `$$($spend.ToString('0.00'))"
+        $spendItem.Text = "API-equivalent today: `$$($spend.ToString('0.00'))"
         $sessionsHeader.Text = "Active Sessions ($count)"
 
         Update-TrayIconBadge $count
@@ -246,9 +288,8 @@ $timer.Add_Tick({
             $notifyIcon.Text = "FleetHUD: [IDLE] Ready | `$$($spend.ToString('0.00'))"
         }
 
-        # Query top 5 active sessions
-        $sessRes = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/sessions?status=active&limit=5" -Headers $headers -TimeoutSec 1 -ErrorAction SilentlyContinue
-        $activeList = if ($sessRes -and $sessRes.sessions) { $sessRes.sessions } else { @() }
+        # The live response already includes the first five sessions, active first.
+        $activeList = @($live.sessions | Where-Object { $_.is_active })
 
         if ($activeList.Count -eq 0) {
             $idleSessionItem.Visible = $true
@@ -263,24 +304,11 @@ $timer.Add_Tick({
                     $badge = if ($s.state -eq "awaiting_approval") { "[WAIT]" } else { "[RUN]" }
                     $proj = if ($s.project_name -and $s.project_name -ne "unknown") { $s.project_name } else { "fleet" }
                     $stateText = $s.state
-                    $menuText = "  $badge $proj · $($s.agent) ($stateText)"
+                    $menuText = "  $badge $proj | $($s.agent) ($stateText)"
 
                     $sessionMenuItems[$i].Text = $menuText
                     $sessionMenuItems[$i].Visible = $true
-                    $targetSid = $s.id
-                    $portNum = $info.port
-                    $bearer = $info.token
-
-                    # Clear existing click handlers and add focus trigger
-                    $sessionMenuItems[$i].Tag = $targetSid
-                    $sessionMenuItems[$i].Add_Click({
-                        param($itemSender, $itemArgs)
-                        try {
-                            $sid = $itemSender.Tag
-                            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$portNum/api/v1/sessions/$sid/focus" -Headers @{ "Authorization" = "Bearer $bearer" } -ErrorAction SilentlyContinue | Out-Null
-                        } catch {}
-                        Open-Console
-                    })
+                    $sessionMenuItems[$i].Tag = $s.id
 
                     # Trigger approval notification once
                     if ($s.state -eq "awaiting_approval" -and -not $lastNotifiedApprovals.ContainsKey($s.id)) {
@@ -297,3 +325,8 @@ $timer.Add_Tick({
 $timer.Start()
 
 [System.Windows.Forms.Application]::Run()
+$notifyIcon.Dispose()
+if ($badgeIcon) { $badgeIcon.Dispose() }
+if ($baseIcon) { $baseIcon.Dispose() }
+$trayMutex.ReleaseMutex()
+$trayMutex.Dispose()

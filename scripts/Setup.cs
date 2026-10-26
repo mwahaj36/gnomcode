@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
@@ -113,19 +114,19 @@ public class SetupForm : Form
         // Draw Squircle Logo (at 36, 32, size 42x42)
         int x = 36, y = 34, size = 42;
         using (GraphicsPath path = RoundedRect(new Rectangle(x, y, size, size), 10)) {
-            using (Brush b = new SolidBrush(Color.White)) {
+            using (Brush b = new SolidBrush(Color.FromArgb(13, 17, 23))) {
                 g.FillPath(b, path);
             }
         }
 
-        // Draw exact geometric glyph scaled into 42x42
+        // Draw the original geometric glyph scaled into 42x42.
         float s = (float)size / 2048.0f;
         PointF[] poly = new PointF[] {
             new PointF(x + 290.67f * s, y + 1756.53f * s),
             new PointF(x + 290.67f * s, y + 291.47f * s),
             new PointF(x + 1755.73f * s, y + 291.47f * s)
         };
-        using (Brush bGlyph = new SolidBrush(Color.FromArgb(13, 17, 23))) {
+        using (Brush bGlyph = new SolidBrush(Color.White)) {
             g.FillPolygon(bGlyph, poly);
             g.FillRectangle(bGlyph, x + 799.39f * s, y + 789.88f * s, 957.95f * s, 957.95f * s);
         }
@@ -175,6 +176,24 @@ public class SetupForm : Form
     private void ExtractEmbeddedFiles()
     {
         try {
+            foreach (Process process in Process.GetProcessesByName("fleethud")) {
+                try {
+                    if (String.Equals(process.MainModule.FileName, exeDest, StringComparison.OrdinalIgnoreCase)) {
+                        process.Kill();
+                        process.WaitForExit(3000);
+                    }
+                } catch {}
+                process.Dispose();
+            }
+            using (Process cleanup = Process.Start(new ProcessStartInfo {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*FleetHUD*tray.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            })) {
+                if (cleanup != null) cleanup.WaitForExit(5000);
+            }
             Assembly asm = Assembly.GetExecutingAssembly();
             foreach (string resName in asm.GetManifestResourceNames()) {
                 string fileName = resName;
@@ -187,7 +206,11 @@ public class SetupForm : Form
                     s.CopyTo(fs);
                 }
             }
-        } catch {}
+        } catch (Exception ex) {
+            timer.Stop();
+            lblStatus.Text = "Installation failed";
+            MessageBox.Show(ex.Message, "FleetHUD Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void CreateShortcuts()
