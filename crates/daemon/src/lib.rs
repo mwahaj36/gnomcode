@@ -180,6 +180,7 @@ impl DaemonOrchestrator {
                 ticker.tick().await;
                 let Ok((db, result)) = tokio::task::spawn_blocking(move || {
                     let result = ingest_all(&mut ingest_db);
+                    let _ = ingest_db.reconcile_antigravity_projects();
                     if let Err(error) = pro::run_guardrails(&ingest_db) {
                         tracing::warn!("guardrail evaluation failed: {error}");
                     }

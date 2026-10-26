@@ -61,6 +61,14 @@ pub fn user_home_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
+/// Resolves the current machine's hostname, or returns "local" if unknown.
+#[must_use]
+pub fn hostname() -> String {
+    env::var("COMPUTERNAME")
+        .or_else(|_| env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "local".to_owned())
+}
+
 /// Returns the candidate log root directories for supported agents, respecting
 /// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`, `AIDER_ANALYTICS_LOG`).
 #[must_use]
