@@ -123,6 +123,16 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/resume-queue/disarm",
             post(resume_queue_disarm_handler),
         )
+        .route("/api/v1/pro/relay", get(relay_get_handler))
+        .route("/api/v1/pro/relay/config", post(relay_config_post_handler))
+        .route(
+            "/api/v1/pro/relay/execute",
+            post(relay_execute_post_handler),
+        )
+        .route(
+            "/api/v1/pro/relay/dismiss",
+            post(relay_dismiss_post_handler),
+        )
         .route("/api/v1/guardrails/check", get(guardrail_check_handler))
         .with_state(state)
 }
@@ -388,6 +398,111 @@ async fn resume_queue_disarm_handler(
     db.disarm_resume_queue(&payload.session_id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "success": true })))
+}
+
+async fn relay_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let config = db
+        .get_context_relay_config()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let relays = db
+        .list_context_relays()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({
+        "is_pro": crate::pro::has_pro_license(),
+        "config": config,
+        "relays": relays,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RelayConfigUpdateRequest {
+    pub(crate) policy: Option<String>,
+    pub(crate) strategy: Option<String>,
+    pub(crate) threshold_pct: Option<u32>,
+}
+
+async fn relay_config_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RelayConfigUpdateRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    let mut config = db
+        .get_context_relay_config()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if let Some(p) = payload.policy {
+        if matches!(p.as_str(), "ask_first" | "auto" | "disabled") {
+            config.policy = p;
+        }
+    }
+    if let Some(s) = payload.strategy {
+        if matches!(s.as_str(), "same_agent" | "failover") {
+            config.strategy = s;
+        }
+    }
+    if let Some(t) = payload.threshold_pct {
+        if (50..=100).contains(&t) {
+            config.threshold_pct = t;
+        }
+    }
+    db.save_context_relay_config(&config)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "success": true, "config": config })))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RelayActionRequest {
+    pub(crate) id: String,
+}
+
+async fn relay_execute_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RelayActionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    let relays = db
+        .list_context_relays()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(entry) = relays.into_iter().find(|r| r.id == payload.id) else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    crate::pro::execute_relay_handoff(&entry).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    db.update_context_relay_status(&entry.id, "executed")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(
+        json!({ "success": true, "id": entry.id, "status": "executed" }),
+    ))
+}
+
+async fn relay_dismiss_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RelayActionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    db.update_context_relay_status(&payload.id, "dismissed")
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        json!({ "success": true, "id": payload.id, "status": "dismissed" }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]

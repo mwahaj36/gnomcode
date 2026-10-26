@@ -64,6 +64,7 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 | **Guardrails** (budget / loop auto-stop via hooks) | — | Yes | Yes |
 | **Custom alert rules** (spend, context bloat, idle-awaiting) | — | Yes | Yes |
 | **Resume Queue** (auto-continue rate-limited agents at quota reset, §3.14) | — | Yes | Yes |
+| **Context Relay Engine** (zero-token saturation handoff, `.fleethud/HANDOFF.md`, §3.14.1) | — | Yes | Yes |
 | **Advanced analytics & CSV/JSON export** | — | Yes | Yes |
 | **Personal multi-machine sync** | — | Yes | Yes |
 | Team dashboard, Slack/Discord alerts, team caps | — | — | Yes |
@@ -380,6 +381,29 @@ When an agent stops because it hit its rate limit, FleetHUD can continue it auto
 - Stagger the queue: resume sessions one at a time in the user's `order`, so they don't all burn the fresh window at once. Stop the queue when quota burn passes a user threshold.
 - `max_runs` (default 1) stops resume loops. Every resume is recorded as an `activity_event` (`kind = auto_resume`).
 - If the session's process is still alive and the agent supports native auto-continue, never inject keystrokes or start a second process for the same session.
+
+### 3.14.1 Pro Labs: Context Relay Engine — zero-token handoff & saturation reserve (Pro)
+
+When an AI coding agent approaches context window saturation (>=90%), token costs escalate rapidly, latency increases, and reasoning quality degrades ("lost in the middle"). Because proprietary vendors (Anthropic, Google, OpenAI) maintain closed GUI databases and do not provide cross-agent handoffs, FleetHUD provides autonomous context rotation:
+
+1. **Safety Reserve Threshold (Default: 90%):**
+   - Reserves 15,000–20,000 tokens of context buffer so the active agent has headroom to finalize pending file changes and write a clean workspace checkpoint before hitting hard failure or 429 rate limits.
+2. **Zero-Knowledge Repository Checkpoint (`.fleethud/HANDOFF.md`):**
+   - Generates a local markdown checkpoint in the repository workspace (`.fleethud/HANDOFF.md`).
+   - Contains source agent, target agent, project, saturation percentage, timestamp, and step-by-step continuity instructions.
+   - Preserves Invariant 1: No prompts, tokens, or PII are stored in FleetHUD databases.
+3. **Rotated Session Launch:**
+   - Spawns the clean destination agent session in the repository directory with **0 context tokens**.
+   - Rotated sessions run in the user's terminal/IDE terminal pane without permission escalation.
+   - Users can revisit or focus the window with 1 click from FleetHUD Console (`[Focus Window]`) or CLI (`claude --resume` / `codex resume`).
+4. **Execution Policies & Strategy Routing:**
+   - `ask_first` (Default): Records pending handoff event; prompts the user via desktop balloon and console button with 1-click `[Handoff & Rotate]`.
+   - `auto`: Autonomous rotation when threshold is crossed.
+   - `disabled`: Manual operation only.
+   - Strategy: `same_agent` (homogeneous rotation) or `failover` (cross-vendor failover when one provider quota is exhausted).
+5. **Remote & Mobile Web Console Execution:**
+   - When away from the primary workstation, users can trigger `[Handoff & Rotate]` from the Web Console (desktop or mobile).
+   - If outside local loopback, the command is transmitted via Supabase (`fleethud_sync_state`) and executed by the desktop daemon on the workstation.
 
 ### 3.15 Cloud Sync, Multi-Device & Organizations (Supabase)
 
