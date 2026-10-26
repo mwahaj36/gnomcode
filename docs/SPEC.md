@@ -55,18 +55,18 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 
 | | **Free (freeware, forever)** | **Pro — \$19 one-time** | **Teams — \$12/seat/mo (later)** |
 | :--- | :--- | :--- | :--- |
-| CLI reports, daemon, local web dashboard | ✅ | ✅ | ✅ |
-| Tray / menubar app (all 3 OSes) | ✅ | ✅ | ✅ |
-| Live session state, activity feed | ✅ | ✅ | ✅ |
-| Quota tracking & reset notifications | ✅ | ✅ | ✅ |
-| Approval-needed notifications | ✅ | ✅ | ✅ |
-| Bring-to-front window switcher | ✅ | ✅ | ✅ |
-| **Guardrails** (budget / loop auto-stop via hooks) | — | ✅ | ✅ |
-| **Custom alert rules** (spend, context bloat, idle-awaiting) | — | ✅ | ✅ |
-| **Resume Queue** (auto-continue rate-limited agents at quota reset, §3.14) | — | ✅ | ✅ |
-| **Advanced analytics & CSV/JSON export** | — | ✅ | ✅ |
-| **Personal multi-machine sync** | — | ✅ | ✅ |
-| Team dashboard, Slack/Discord alerts, team caps | — | — | ✅ |
+| CLI reports, daemon, local web dashboard | Yes | Yes | Yes |
+| Tray / menubar app (all 3 OSes) | Yes | Yes | Yes |
+| Live session state, activity feed | Yes | Yes | Yes |
+| Quota tracking & reset notifications | Yes | Yes | Yes |
+| Approval-needed notifications | Yes | Yes | Yes |
+| Bring-to-front window switcher | Yes | Yes | Yes |
+| **Guardrails** (budget / loop auto-stop via hooks) | — | Yes | Yes |
+| **Custom alert rules** (spend, context bloat, idle-awaiting) | — | Yes | Yes |
+| **Resume Queue** (auto-continue rate-limited agents at quota reset, §3.14) | — | Yes | Yes |
+| **Advanced analytics & CSV/JSON export** | — | Yes | Yes |
+| **Personal multi-machine sync** | — | Yes | Yes |
+| Team dashboard, Slack/Discord alerts, team caps | — | — | Yes |
 
 **Licensing model:** FleetHUD is **closed source**. The source repo is private, and only compiled binaries are distributed, under an End User License Agreement (EULA). One binary covers every tier: Pro features are compiled in and unlocked by an offline **Ed25519-signed license file** (see §6.6).
 
@@ -102,13 +102,13 @@ Verified against real files on 2026-10-26 unless marked *(verify)*.
 
 | Agent | Tier | Source | Tokens | Model | Quota | Live state |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Claude Code** (CLI + IDE) | A | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | exact (incl. 5m/1h cache-write split) | ✅ | estimated (opt-in: API) | heuristic → exact with hooks |
-| **Codex CLI** | A | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`) | exact (`last_token_usage`) | ✅ | **exact** (`rate_limits` 5h + weekly) | heuristic |
-| **Antigravity** (app / IDE / CLI) | A | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | exact per `PLANNER_RESPONSE` | ✅ extracted from `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps | per-model pool (`limit_id` per model family: Claude, Gemini, Fable, etc.) | heuristic |
+| **Claude Code** (CLI + IDE) | A | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | exact (incl. 5m/1h cache-write split) | Yes | estimated (opt-in: API) | heuristic → exact with hooks |
+| **Codex CLI** | A | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`) | exact (`last_token_usage`) | Yes | **exact** (`rate_limits` 5h + weekly) | heuristic |
+| **Antigravity** (app / IDE / CLI) | A | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | exact per `PLANNER_RESPONSE` | Yes extracted from `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps | per-model pool (`limit_id` per model family: Claude, Gemini, Fable, etc.) | heuristic |
 | **Gemini CLI** | B | `~/.gemini/tmp/<hash>/chats/` *(verify)* | *(verify)* | *(verify)* | unknown | heuristic |
-| **Cline / Roo Code** | B | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | exact (`api_req_started`) | ✅ | n/a (API) | heuristic |
-| **Cursor** | C (experimental, opt-in) | `Cursor/User/globalStorage/state.vscdb` + undocumented usage API | partial | partial | api (fragile) | ❌ |
-| **Aider** | C (opt-in) | `--analytics-log <file>` | exact | ✅ | n/a | ❌ |
+| **Cline / Roo Code** | B | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | exact (`api_req_started`) | Yes | n/a (API) | heuristic |
+| **Cursor** | C (experimental, opt-in) | `Cursor/User/globalStorage/state.vscdb` + undocumented usage API | partial | partial | api (fragile) | No |
+| **Aider** | C (opt-in) | `--analytics-log <file>` | exact | Yes | n/a | No |
 
 **Tier A** = must work at launch. **Tier B** = ships in M4. **Tier C** = experimental, off by default, labeled as such in the UI.
 
@@ -492,7 +492,7 @@ Full rules live in [`AGENTS.md`](../AGENTS.md). Key gates:
 
 ## 5. Roadmap
 
-Status legend: ⬜ not started · 🟨 in progress · ✅ done. Estimates assume one developer part-time with AI agents.
+Status legend: [ ] not started · [~] in progress · Yes done. Estimates assume one developer part-time with AI agents.
 
 ```mermaid
 flowchart LR
@@ -504,16 +504,16 @@ flowchart LR
     M4 --> M5["M5 Teams (post-traction)"]
 ```
 
-### M0 — Foundation (week 0–1) 🟨
+### M0 — Foundation (week 0–1) [~]
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
-| Repo scaffold: Cargo workspace, crates, lints, `rust-toolchain.toml`, `deny.toml` | `cargo check --workspace` passes | ✅ (scaffolded, pending first CI run) |
-| `AGENTS.md`, workspace skills, ADRs, this SPEC | Present and linked from README | ✅ |
-| CI on Windows/macOS/Linux (fmt, clippy, test, deny) | Green on `main` | ⬜ |
-| Fixture corpus: anonymized Claude Code, Codex, Antigravity samples | ≥ 3 files per agent incl. resumed session + subagent | ⬜ |
+| Repo scaffold: Cargo workspace, crates, lints, `rust-toolchain.toml`, `deny.toml` | `cargo check --workspace` passes | Yes (scaffolded, pending first CI run) |
+| `AGENTS.md`, workspace skills, ADRs, this SPEC | Present and linked from README | Yes |
+| CI on Windows/macOS/Linux (fmt, clippy, test, deny) | Green on `main` | [ ] |
+| Fixture corpus: anonymized Claude Code, Codex, Antigravity samples | ≥ 3 files per agent incl. resumed session + subagent | [ ] |
 
-### M1 — Core engine + CLI (weeks 1–3) ⬜
+### M1 — Core engine + CLI (weeks 1–3) [ ]
 
 | Deliverable | Exit criteria |
 | :--- | :--- |
@@ -527,7 +527,7 @@ flowchart LR
 
 **Release:** `v0.1.0` — soft launch (r/ClaudeAI, r/ChatGPTCoding, X) for feedback.
 
-### M2 — Daemon + live dashboard (weeks 3–5) ⬜
+### M2 — Daemon + live dashboard (weeks 3–5) [ ]
 
 | Deliverable | Exit criteria |
 | :--- | :--- |
@@ -540,7 +540,7 @@ flowchart LR
 
 **Release:** `v0.2.0`.
 
-### M3 — Tray app on all OSes (weeks 5–8) ⬜
+### M3 — Tray app on all OSes (weeks 5–8) [ ]
 
 | Deliverable | Exit criteria |
 | :--- | :--- |
@@ -553,7 +553,7 @@ flowchart LR
 
 **Release:** `v0.5.0` → **public launch**: Show HN, Product Hunt, r/programming, X thread with demo GIF.
 
-### M4 — Integrations + Pro (weeks 9–12) ⬜
+### M4 — Integrations + Pro (weeks 9–12) [ ]
 
 | Deliverable | Exit criteria |
 | :--- | :--- |
@@ -567,7 +567,7 @@ flowchart LR
 
 **Release:** `v0.8.0`.
 
-### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) ⬜
+### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [ ]
 
 | Deliverable | Exit criteria |
 | :--- | :--- |

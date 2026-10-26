@@ -1,4 +1,4 @@
-# 🛸 FleetHUD (`fleethud.pro`)
+# FleetHUD (`fleethud.pro`)
 
 > **Live Mission Control for AI Coding Agents**  
 > Track live agent state, per-model quota pools, and ground-truth token cost across Claude Code, Codex, Google Antigravity, Gemini CLI, Cline/Roo, and Cursor on Windows, macOS, and Linux. Zero config. 100% local.
@@ -7,14 +7,14 @@
 
 ---
 
-## 📖 Single Source of Truth
+## Single Source of Truth
 
 - **[`docs/SPEC.md`](./docs/SPEC.md)** — Product specification, system architecture, per-model quota engine, Resume Queue, roadmap, deliverables, and deployment plan.
 - **[`AGENTS.md`](./AGENTS.md)** — Engineering rules, Rust standards, non-negotiable invariants, and testing requirements.
 - **[`docs/adr/`](./docs/adr/)** — Architecture Decision Records.
 - **[`.agents/skills/`](./.agents/skills/)** — Project runbooks (`rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`).
 
-## 🛠 Development
+## Development
 
 ```sh
 cargo fmt --all

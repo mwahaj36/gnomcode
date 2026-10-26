@@ -20,6 +20,7 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 6. **Every number declares its trust level** (`exact | estimated | api | unknown`). Never present an estimate as exact.
 7. **Never escalate agent permissions.** Auto-resume and guardrails must never pass `--dangerously-skip-permissions`, `--yolo` or similar flags.
 8. **Protect the closed-source binary (SPEC §6.8).** Keep 100% of business logic (parsing, pricing, quota math, rules, licensing) in Rust, never in TypeScript. Wrap sensitive string literals (SQL, adapter path patterns, license checks) with `obfstr!`. Never enable sourcemaps or Tauri `devtools` in release builds, and never use `.exe` packers (UPX/VMProtect).
+9. **No emojis anywhere.** Never use emojis in CLI output, UI components, tray labels, notifications, documentation, commit messages, or comments. Use clean typography, geometric SVG icons, or plain-text badges (`[WAIT]`, `[RUN]`, `EXACT`, `EST`).
 
 ## 3. Repo map
 
