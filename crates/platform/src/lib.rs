@@ -473,6 +473,61 @@ pub fn focus_project_in_editor(root_path: &str) -> bool {
     true
 }
 
+/// Spawns a fresh agent session in an interactive terminal window across platforms (`SPEC §3.14.1`).
+/// For CLI agents (`claude-code`, `codex`, `gemini-cli`), launches an interactive terminal pane in `cwd`.
+/// For IDE agents (`antigravity`, `cursor`, `cline`), focuses the workspace project in the editor.
+#[must_use]
+pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
+    let clean_agent = match agent {
+        "claude" | "claude-code" => "claude",
+        "codex" => "codex",
+        "gemini" | "gemini-cli" => "gemini",
+        "antigravity" | "cursor" | "cline" | "aider" => {
+            return focus_project_in_editor(cwd);
+        }
+        _ => return false,
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let escaped_cwd = cwd.replace('\"', "\\\"");
+        let cmd_line = format!("cd /d \"{escaped_cwd}\" && {clean_agent}");
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", "start", "FleetHUD Relay", "cmd.exe", "/k", &cmd_line])
+            .spawn();
+        true
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "tell application \"Terminal\" to do script \"cd \\\"{}\\\" && {}\"",
+            cwd.replace('\"', "\\\""),
+            clean_agent
+        );
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn();
+        true
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let script = format!(
+            "cd \"{}\" && {}; exec bash",
+            cwd.replace('\"', "\\\""),
+            clean_agent
+        );
+        let _ = std::process::Command::new("x-terminal-emulator")
+            .args(["-e", "bash", "-c", &script])
+            .spawn();
+        true
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (cwd, clean_agent);
+        false
+    }
+}
+
 /// Dispatches a native desktop notification across Windows, macOS, and Linux (`SPEC §3.10`).
 #[must_use]
 pub fn send_desktop_notification(title: &str, body: &str) -> bool {
