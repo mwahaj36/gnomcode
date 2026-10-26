@@ -13,6 +13,7 @@ fleethud-core = { workspace = true }
 fleethud-adapters = { workspace = true }
 fleethud-store = { workspace = true }
 fleethud-platform = { workspace = true }
+chrono = { workspace = true }
 notify = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
