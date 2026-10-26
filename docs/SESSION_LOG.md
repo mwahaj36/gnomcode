@@ -42,4 +42,20 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - **Commit `fc60078`:** Removed all emojis across repo and GitHub metadata; added Invariant 9 to `AGENTS.md`.
 - **Commit `5d66efe`:** Updated `docs/SPEC.md` with all user decisions on metrics, retention, backfill, accounts, and settings.
 - **Commit `f7e077a`:** Added `docs/SESSION_LOG.md`, updated `AGENTS.md` with PR-only workflow, and set `.github/workflows/ci.yml` to manual `workflow_dispatch`.
-- **Commit 5 (M0 completion):** Fixed BOM handling in `anonymize-fixture.mjs`, generated anonymized fixtures for Claude Code (`v2.1`), Codex (`v0.162`), and Antigravity (`v2.0`), added `golden_fixtures_are_valid_json_lines_and_scrubbed_of_pii` test in `crates/adapters`, and marked M0 complete in `docs/SPEC.md`.
+- **Commit 5 (`91fa5de`, PR #7 — M0 completion):** Fixed BOM handling in `anonymize-fixture.mjs`, generated anonymized fixtures for Claude Code (`v2.1`), Codex (`v0.162`), and Antigravity (`v2.0`), added `golden_fixtures_are_valid_json_lines_and_scrubbed_of_pii` test in `crates/adapters`, and marked M0 complete in `docs/SPEC.md`.
+- **Commits `5f636fc` & `c5ea80c` (PRs #5, #1, #8 — Dependabot resolution):** Merged `actions/checkout` v7, `sha2` 0.11, `rusqlite` 0.40.2, `sysinfo` 0.36.1, and `hmac` 0.13.0; closed superseded Dependabot PRs and ignored `dtolnay/rust-toolchain` since `rust-toolchain.toml` governs toolchain selection.
+
+---
+
+## 2026-10-26 — Session 2: M1 Core Domain, Redaction, Pricing, Adapters, Store, Ingest & CLI
+
+### 1. Goals
+- Deliver M1 ("Proof of Value — Read-Only CLI") via small, atomic PRs with strict TDD (`Red -> Green -> Refactor`) and local `check.ps1` verification on every PR:
+  1. **M1 PR 1 (`feat/m1-core-domain`):** Core domain types (`TrustLevel`, `AgentId`, `Surface`, `SessionState`, `Project`, `Session`, `UsageRecord`, `ActivityKind`, `ActivityEvent`, `QuotaWindow`, `QuotaSnapshot`, `SubscriptionPlan`, `UserSettings`) and canonical Git remote / folder path normalization.
+  2. **M1 PR 2 (`feat/m1-core-redact-pricing`):** Secret redaction engine (`core::redact`) and model pricing/ROI engine (`core::pricing`).
+  3. **M1 PR 3 (`feat/m1-adapters`):** Pure, infallible log adapters for Claude Code, OpenAI Codex (CLI + Desktop App), Google Antigravity, and Gemini CLI tested against golden fixtures.
+  4. **M1 PR 4 (`feat/m1-store-ingest`):** SQLite WAL schema v1 (`crates/store`), cross-platform path discovery & Windows shared-mode reader (`crates/platform`), and incremental checkpoint tailer (`crates/ingest`).
+  5. **M1 PR 5 (`feat/m1-cli`):** `fleethud status`, `fleethud report`, and `fleethud doctor` CLI subcommands (`crates/cli`).
+
+### 2. Outcomes & Verification (In Progress)
+- **M1 PR 1 (`feat/m1-core-domain`):** Implemented `crates/core/src/lib.rs` with 6 unit tests covering `TrustLevel`, Git SSH/HTTPS remote URL normalization (`Project::from_origin`), folder path fallback, session ID composition, context window fill percentage (`u32::try_from` lossless conversion), and `UserSettings::default()`. All 5 quality gates passed (`check.ps1`).
