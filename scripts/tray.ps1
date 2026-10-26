@@ -135,6 +135,10 @@ function Update-TrayIconBadge([int]$count) {
     try {
         if ($count -eq 0 -and $baseIcon) {
             $notifyIcon.Icon = $baseIcon
+            if ($script:activeHIcon) {
+                [Win32]::DestroyIcon($script:activeHIcon) | Out-Null
+                $script:activeHIcon = $null
+            }
             if ($badgeIcon) { $badgeIcon.Dispose(); $script:badgeIcon = $null }
             return
         }
@@ -182,9 +186,12 @@ function Update-TrayIconBadge([int]$count) {
         }
 
         $hIcon = $bmp.GetHicon()
-        $newIcon = ([System.Drawing.Icon]::FromHandle($hIcon)).Clone()
-        [Win32]::DestroyIcon($hIcon) | Out-Null
+        $newIcon = [System.Drawing.Icon]::FromHandle($hIcon)
         $notifyIcon.Icon = $newIcon
+        if ($script:activeHIcon) {
+            [Win32]::DestroyIcon($script:activeHIcon) | Out-Null
+        }
+        $script:activeHIcon = $hIcon
         if ($badgeIcon) { $badgeIcon.Dispose() }
         $script:badgeIcon = $newIcon
         $g.Dispose()
@@ -256,16 +263,88 @@ $exitItem.Add_Click({
     [System.Windows.Forms.Application]::Exit()
 })
 
+function Focus-AgentApp([string]$agent, [string]$projectName) {
+    try {
+        $wshell = New-Object -ComObject Wscript.Shell
+        
+        # 1. Target window titles
+        $titles = @()
+        if ($projectName -and $projectName -ne "unknown" -and $projectName -ne "fleet") {
+            $titles += $projectName
+        }
+        switch -Regex ($agent) {
+            "antigravity" {
+                $titles += @("Antigravity", "Google Antigravity")
+            }
+            "cursor" {
+                $titles += @("Cursor")
+            }
+            "cline|roo" {
+                $titles += @("Visual Studio Code", "Code")
+            }
+            "claude|codex|gemini" {
+                $titles += @("Terminal", "PowerShell", "Command Prompt", "Windows Terminal", "cmd", "pwsh")
+            }
+            default {
+                if ($agent) { $titles += $agent }
+            }
+        }
+
+        foreach ($title in $titles) {
+            if ($wshell.AppActivate($title)) {
+                return $true
+            }
+        }
+
+        # 2. Target process names
+        $pNames = switch -Regex ($agent) {
+            "antigravity" { @("Antigravity") }
+            "cursor"      { @("Cursor") }
+            "cline|roo"   { @("Code") }
+            "claude|codex|gemini" { @("WindowsTerminal", "cmd", "powershell", "pwsh") }
+            default       { @() }
+        }
+
+        foreach ($pName in $pNames) {
+            $procs = Get-Process -Name $pName -ErrorAction SilentlyContinue
+            foreach ($p in $procs) {
+                if ($wshell.AppActivate($p.Id)) {
+                    return $true
+                }
+            }
+        }
+    } catch {}
+    return $false
+}
+
 $notifyIcon.ContextMenuStrip = $contextMenu
 foreach ($item in $sessionMenuItems) {
     $item.Add_Click({
         param($itemSender, $itemArgs)
-        try {
-            $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
-            $sid = [uri]::EscapeDataString([string]$itemSender.Tag)
-            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($info.port)/api/v1/sessions/$sid/focus" -Headers @{ "Authorization" = "Bearer $($info.token)" } -ErrorAction Stop | Out-Null
-        } catch {}
-        Open-Console
+        $tag = $itemSender.Tag
+        $sid = ""
+        $agent = ""
+        $proj = ""
+        if ($tag -is [hashtable]) {
+            $sid = [string]$tag.Id
+            $agent = [string]$tag.Agent
+            $proj = [string]$tag.Project
+        } elseif ($tag -is [string]) {
+            $sid = $tag
+        }
+
+        if ($sid) {
+            try {
+                $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
+                $escSid = [uri]::EscapeDataString($sid)
+                Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($info.port)/api/v1/sessions/$escSid/focus" -Headers @{ "Authorization" = "Bearer $($info.token)" } -TimeoutSec 1 -ErrorAction SilentlyContinue | Out-Null
+            } catch {}
+        }
+
+        $focused = Focus-AgentApp $agent $proj
+        if (-not $focused) {
+            Open-Console
+        }
     })
 }
 $notifyIcon.Add_DoubleClick({ Open-Console })
@@ -324,7 +403,7 @@ $timer.Add_Tick({
 
                     $sessionMenuItems[$i].Text = $menuText
                     $sessionMenuItems[$i].Visible = $true
-                    $sessionMenuItems[$i].Tag = $s.id
+                    $sessionMenuItems[$i].Tag = @{ Id = $s.id; Agent = $s.agent; Project = $proj }
 
                     # Trigger approval notification once
                     if ($s.state -eq "awaiting_approval" -and -not $lastNotifiedApprovals.ContainsKey($s.id)) {

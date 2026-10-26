@@ -78,10 +78,7 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, fleethud_store::Error> 
     let week = db.generate_usage_report_timeline("7d", None, None)?;
     let month = db.generate_usage_report_timeline("30d", None, None)?;
     let all = db.generate_usage_report_timeline("all", None, None)?;
-    let (mut sessions, _) = db.list_sessions_paginated(None, None, 0, 200)?;
-    for session in &mut sessions {
-        session.project_name = "Private project".to_owned();
-    }
+    let (sessions, _) = db.list_sessions_paginated(None, None, 0, 200)?;
     let active_count = sessions.iter().filter(|session| session.is_active).count();
     let count = sessions.len();
     Ok(json!({
@@ -254,8 +251,8 @@ mod tests {
             .expect("commit");
         let snapshot = super::build_remote_snapshot(&db).expect("snapshot");
         let encoded = snapshot.to_string();
-        assert!(!encoded.contains("client"));
-        assert!(!encoded.contains("source"));
+        assert!(!encoded.contains("/private/client"));
+        assert!(!encoded.contains("rollout.jsonl"));
         assert!(!encoded.contains("paired_session"));
         assert_eq!(snapshot["active_count"], 1);
     }

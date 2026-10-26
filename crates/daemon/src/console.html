@@ -473,13 +473,14 @@
             <th>Surface</th>
             <th>Model</th>
             <th>Tokens</th>
+            <th>Context</th>
             <th>Cost</th>
             <th>Status</th>
             <th>Last Active</th>
           </tr>
         </thead>
         <tbody id="sessions-table">
-          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
+          <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
         </tbody>
       </table>
       <div class="pagination">
@@ -1076,7 +1077,27 @@
 
         table.innerHTML = res.sessions.map(s => {
           const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
-          const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0);
+          const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
+          const cacheBadge = (s.cache_read_tokens && s.cache_read_tokens > 0)
+            ? `<div style="font-size: 10px; color: var(--green); font-weight: 500;">+ ${formatTokens(s.cache_read_tokens)} cache</div>`
+            : '';
+
+          let contextHtml = '-';
+          if (s.context_window) {
+            const ctxTok = s.context_tokens || 0;
+            const pct = Math.min(100, Math.round((ctxTok / s.context_window) * 100));
+            const barColor = pct > 85 ? 'var(--red)' : (pct > 60 ? '#f59e0b' : 'var(--accent)');
+            contextHtml = `<div>
+              <span style="font-weight: 600;">${formatTokens(ctxTok)}</span>
+              <span style="font-size: 10px; color: var(--text-muted);">/ ${formatTokens(s.context_window)} (${pct}%)</span>
+              <div style="background: rgba(255,255,255,0.08); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 3px; width: 80px;">
+                <div style="background: ${barColor}; height: 100%; width: ${pct}%;"></div>
+              </div>
+            </div>`;
+          } else if (s.context_tokens) {
+            contextHtml = `<span style="font-weight: 500;">${formatTokens(s.context_tokens)}</span>`;
+          }
+
           return `<tr>
             <td style="font-weight: 500;">${s.project_name}</td>
             <td>${s.agent}</td>
@@ -1085,7 +1106,9 @@
             <td>
               <span style="font-weight: 600;">${formatTokens(tokCount)}</span>
               <div style="font-size: 10px; color: var(--text-muted);">${formatTokens(s.input_tokens || 0)} in • ${formatTokens(s.output_tokens || 0)} out</div>
+              ${cacheBadge}
             </td>
+            <td>${contextHtml}</td>
             <td style="font-weight: 600;">$${(s.total_cost_usd || 0).toFixed(2)}</td>
             <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
             <td>${formatRelativeTime(s.last_event_at)}</td>

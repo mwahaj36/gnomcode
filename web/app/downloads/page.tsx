@@ -16,7 +16,7 @@ export default function DownloadsPage() {
       <div className="flex justify-between items-center pb-6 border-b border-border mb-10 flex-wrap gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-green/15 border border-green/30 text-green font-mono text-xs mb-2">
-            <span>Production Release &bull; v1.1.1</span>
+            <span>Production Release &bull; v1.1.2</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
             Download FleetHUD
@@ -55,7 +55,7 @@ export default function DownloadsPage() {
             </a>
             <div className="flex justify-between items-center text-[11px] text-muted mb-2 px-1">
               <span>Standalone Installer (3.7 MB)</span>
-              <a href="/downloads/FleetHUD-v1.1.1-windows-x64.zip" download className="text-accent hover:underline">
+              <a href="/downloads/FleetHUD-v1.1.2-windows-x64.zip" download className="text-accent hover:underline">
                 Zip (.zip)
               </a>
             </div>

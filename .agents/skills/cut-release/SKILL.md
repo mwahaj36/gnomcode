@@ -1,43 +1,90 @@
 ---
 name: cut-release
 description: >-
-  End-to-end release procedure for FleetHUD: version bump, changelog generation,
-  EULA and third-party license notice bundling (cargo-about), tagging in the
-  private source repo, and verifying binary publication to fleethud-releases,
-  npm, Homebrew, Scoop, winget, and AUR.
+  End-to-end automated release procedure for FleetHUD: lockstep version bumping across
+  all crates, web app, npm shims, installers, and download portals, followed by binary
+  compilation, packaging, and tagging.
 ---
 
 # Cut a FleetHUD Release
 
-Follow this runbook when cutting any `vX.Y.Z` release (`docs/SPEC.md` §6).
+Follow this runbook when cutting any release (`docs/SPEC.md` §6).
 
-## Preconditions
+## Automated Version Synchronization
 
-1. Working tree is on `main` and clean (`git status`).
-2. Run the [`rust-quality-gate`](../rust-quality-gate/SKILL.md) skill and confirm all checks pass.
-3. Confirm `docs/SPEC.md` §5 roadmap statuses reflect what is shipping in this release.
+FleetHUD maintains synchronized versions across 8 files in the repository. Instead of manual editing, run the automated version bumper:
 
-## Steps
+```sh
+# Explicit version:
+node .agents/skills/cut-release/scripts/bump-version.mjs 1.1.2
 
-1. **Bump version in lockstep:**
-   - Update `[workspace.package] version` in `Cargo.toml`.
-   - Update `"version"` in `npm/fleethud/package.json` (and per-platform packages once added in M1).
-   - Update `apps/tray/src-tauri/tauri.conf.json` (from M3 onward).
+# Or automatic semver increments:
+node .agents/skills/cut-release/scripts/bump-version.mjs patch
+node .agents/skills/cut-release/scripts/bump-version.mjs minor
+node .agents/skills/cut-release/scripts/bump-version.mjs major
+```
 
-2. **Generate third-party notices & changelog:**
-   - Generate `THIRD_PARTY_NOTICES.html` with `cargo about generate about.hbs > dist/THIRD_PARTY_NOTICES.html` and verify zero copyleft licenses (`GPL`/`LGPL`/`AGPL`).
-   - Update `CHANGELOG.md` from Conventional Commits (`git-cliff -o CHANGELOG.md`).
+### Files Synchronized Automatically:
+| File | What Gets Updated |
+| :--- | :--- |
+| `Cargo.toml` | `[workspace.package] version = "X.Y.Z"` |
+| `scripts/Setup.cs` | `AssemblyVersion("X.Y.Z.0")`, `AssemblyFileVersion`, GUI badge `vX.Y.Z`, Windows Add/Remove Programs `DisplayVersion` |
+| `web/package.json` | `"version": "X.Y.Z"` |
+| `npm/package.json` | `"version": "X.Y.Z"` |
+| `npm/fleethud/package.json` | `"version": "X.Y.Z"` |
+| `scripts/install.ps1` | `FleetHUD-vX.Y.Z-windows-$Arch.zip` download URL and installation completion banner |
+| `web/public/downloads/install.ps1` | Direct mirror of `scripts/install.ps1` |
+| `web/app/downloads/page.tsx` | UI badge `Production Release • vX.Y.Z` and zip download href |
+| `apps/tray/src-tauri/tauri.conf.json` | `"version": "X.Y.Z"` (when present) |
 
-3. **Commit and tag in the private repo (`mwahaj36/fleethud`):**
+---
+
+## Automated Packaging Pipeline (Windows)
+
+To compile release binaries, build the standalone installer with uninstaller, package the release zip, and verify the web build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .agents/skills/cut-release/scripts/package-release.ps1
+```
+
+Or via npm:
+```sh
+npm run --prefix web release-pack
+```
+
+This runs:
+1. `cargo.exe build -p fleethud --release` (native 64-bit binary).
+2. Copies `target/release/fleethud.exe` -> `web/public/downloads/fleethud.exe`.
+3. `csc.exe` compiles `scripts/Setup.cs` -> `web/public/downloads/FleetHUD-Setup.exe` with embedded payload, 0.65x icon, and Windows Add or Remove Programs registration.
+4. `Compress-Archive` generates `web/public/downloads/FleetHUD-vX.Y.Z-windows-x64.zip`.
+5. `npm run build --prefix web` rebuilds Next.js static assets with the updated download routes.
+
+---
+
+## Release Checklist
+
+1. **Preconditions**:
+   - Clean working tree (`git status`).
+   - Run the [`rust-quality-gate`](../rust-quality-gate/SKILL.md) skill (`cargo test --workspace`, `cargo fmt --check`).
+
+2. **Bump & Package**:
+   ```sh
+   node .agents/skills/cut-release/scripts/bump-version.mjs <new-version>
+   powershell -ExecutionPolicy Bypass -File .agents/skills/cut-release/scripts/package-release.ps1
+   ```
+
+3. **Changelog & Notices**:
+   - Update `CHANGELOG.md` with Conventional Commits.
+   - Bundle third-party notices (`cargo about generate about.hbs > dist/THIRD_PARTY_NOTICES.html`).
+
+4. **Commit & Tag**:
    ```sh
    git commit -am "chore(release): vX.Y.Z"
    git tag -a vX.Y.Z -m "FleetHUD vX.Y.Z"
    git push origin main --follow-tags
    ```
 
-4. **Verify automated release pipeline (`docs/SPEC.md` §6.2):**
-   - Confirm GitHub Actions builds all 7 CLI targets + Tauri tray bundles (M3+), signs binaries, bundles `EULA.txt` + `THIRD_PARTY_NOTICES.html`, and publishes to:
-     - `mwahaj36/fleethud-releases` (binaries + `latest.json` + `SHA256SUMS`, zero source code)
-     - npm (`fleethud` + `@fleethud/cli-*`)
-     - `mwahaj36/homebrew-tap`, `mwahaj36/scoop-bucket`, `microsoft/winget-pkgs`, AUR `fleethud-bin`
-   - Smoke-test `npx fleethud@X.Y.Z --version` after publish.
+5. **Post-Release Verification**:
+   - Smoke-test installer: `web/public/downloads/FleetHUD-Setup.exe`.
+   - Verify Windows Settings -> "Installed apps" displays `FleetHUD Mission Control vX.Y.Z`.
+   - Test `FleetHUD-Uninstall.exe` cleanly purges services, registry entries, and shortcuts.
