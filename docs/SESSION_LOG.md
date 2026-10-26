@@ -140,7 +140,49 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 
 ---
 
-## 2026-10-26 — Session 5: Agent Categorization, Session Token Attribution, Quick Pairing & System Tray Polish
+## 2026-10-27 — Session 6: Complete spawnt Redesign (Phases 1-6), Daytona Design Language & Parity
+
+### 1. Goals
+- Redesign and rebrand FleetHUD into `spawnt` (always lowercase) based on the Daytona design language adapted to custom color palette.
+- Implement 100% pixel parity between browser web console and native tray app window via embedded `console.html`.
+- Divide console views into structured sections with auto-hiding 56px/240px nav rail (`MONITOR`, `ANALYZE`, `CONTROL`, `SYSTEM`).
+- Add backend analytics endpoints (`/api/v1/projects`, `/api/v1/usage/daily`, `/api/v1/usage/summary`, `/spawnt.svg`) and multi-field session filtering (`repo`, `model`, `from`, `to`).
+- Update marketing site (`/`, `/pricing`, `/downloads`, `/docs`, `/auth`, `/settings`) with Daytona hairline cells, agent marquee with `#FF2544` hover, and SPEC 1.5 pricing tiers ($0 Free, $15 Pro, $35 Team).
+- Update desktop tray and native Windows installer (`Setup.cs`, `tray.ps1`, `install.ps1`, `install.sh`) to `spawnt` branding.
+- Enforce strict Definition of Done: zero "mission control"/"cockpit", no emojis, no pills (only 4px/6px radii), trust badges on all metrics, light/dark AA contrast, and zero test/lint warnings.
+
+### 2. Outcomes & Key Changes
+- **Phase 1: Tokens, Logo & Design Doc (`e9f5dcb`):**
+  - Created `web/app/tokens.css` with core palette (`#FF2544` primary, `#BECBD8` secondary, `#252E99` tertiary, `#F6F7F8` light, `#0C1119` dark), 4px/6px radii, and motion tokens.
+  - Verified WCAG AA contrast via `scripts/check-contrast.mjs`.
+  - Added spawnt vector marks in `brand/` and adaptive `web/app/icon.svg`.
+  - Rewrote `DESIGN.md` and added `web/lib/brand.ts`.
+- **Phase 2: Backend Analytics, Projects & Filter Endpoints (`6f8d95b`):**
+  - Added `usage_totals`, `usage_series`, `project_rollups`, and `usage_summary` SQL aggregations in `crates/store/src/analytics.rs`.
+  - Added `SessionFilter` to `crates/store`.
+  - Wired REST endpoints in `crates/daemon/src/api.rs`.
+- **Phase 3: Console Redesigned Shell & Pages (`51776e8`):**
+  - Rebuilt `crates/daemon/src/console.html` with Daytona layout, auto-hiding sidebar rail, hairline KPI strips, interactive SVG weekly token usage stacked bar chart, and slide-out session drawer.
+  - Injected bearer token on serve for zero-auth webview opening.
+- **Phase 4: Marketing Site Redesign & Copy (`3b6eaeb`):**
+  - Built floating island navbar with hysteresis physics in `MarketingNavbar.tsx`.
+  - Redesigned `/` with agent marquee (hover to `#FF2544`), 4-feature grid, and pricing teaser.
+  - Redesigned `/pricing`, `/downloads`, `/docs`, `/auth`, `/settings`. Added `docs/COPY.md`.
+- **Phase 5: Native App (Tray / Parity) (`6895aa5`):**
+  - Rebuilt `scripts/tray.ps1` with Daytona dark theme palette and spawnt icon.
+  - Configured `open_browser` in `crates/cli` to target `--window-name=spawnt`.
+- **Phase 6: Installers & Packaging (`4a80363`):**
+  - Updated `scripts/Setup.cs` with custom logo rendering in GDI+, `#FF2544` accents, and install dir `spawnt`.
+  - Updated `install.ps1`, `install.sh`, and added `Install-spawnt.bat`.
+  - Added `SPAWNT_HOME` with fallback to `FLEETHUD_HOME` in `crates/platform`.
+
+### 3. Verification & Quality Gate
+- `cargo fmt --all --check`: Passed cleanly.
+- `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
+- `cargo test --workspace`: 54/54 tests passed across all 7 workspace crates.
+- `npm run build --prefix web`: 14/14 static pages compiled without errors.
+- Grep checks verified: zero "mission control", zero "cockpit", zero emojis, zero unauthorized Daytona strings or green hex codes.
+
 
 ### 1. Goals
 - Categorize spend and turns strictly by **Agent Platform** (`Google Antigravity`, `OpenAI Codex`, `Claude Code`) rather than upstream model providers. Keep all models executed inside Antigravity under Google Antigravity.

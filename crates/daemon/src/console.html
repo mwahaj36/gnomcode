@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/spawnt.svg">
   <link rel="alternate icon" href="/favicon.ico">
   <style>
-    /* ---------------- 1. SPAWNT TOKENS (DAYTONA SPEC) ---------------- */
+    /* ---------------- 1. SPAWNT TOKENS ---------------- */
     :root {
       --primary: #ff2544;
       --secondary: #becbd8;
@@ -575,14 +575,14 @@
       overflow-x: auto;
     }
 
-    table.daytona-table {
+    table.spawnt-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 12px;
       text-align: left;
     }
 
-    table.daytona-table th {
+    table.spawnt-table th {
       padding: 10px 16px;
       border-bottom: 1px solid var(--border);
       font-family: var(--font-mono);
@@ -594,14 +594,14 @@
       background: var(--surface-2);
     }
 
-    table.daytona-table td {
+    table.spawnt-table td {
       padding: 12px 16px;
       border-bottom: 1px solid var(--border);
       color: var(--text);
       font-variant-numeric: tabular-nums;
     }
 
-    table.daytona-table tr:hover td {
+    table.spawnt-table tr:hover td {
       background: var(--card-hover);
       cursor: pointer;
     }
@@ -1033,7 +1033,7 @@
               <a href="#/sessions" class="btn-action">All Sessions &rarr;</a>
             </div>
             <div class="data-table-wrap">
-              <table class="daytona-table">
+              <table class="spawnt-table">
                 <thead>
                   <tr>
                     <th>Status</th>
@@ -1058,7 +1058,7 @@
               <a href="#/projects" class="btn-action">All Repos &rarr;</a>
             </div>
             <div class="data-table-wrap">
-              <table class="daytona-table">
+              <table class="spawnt-table">
                 <thead>
                   <tr>
                     <th>Repository</th>
@@ -1093,7 +1093,7 @@
           </div>
 
           <div class="data-table-wrap">
-            <table class="daytona-table">
+            <table class="spawnt-table">
               <thead>
                 <tr>
                   <th>Status</th>
@@ -1149,7 +1149,7 @@
             <span class="card-title">Breakdown Ledger</span>
           </div>
           <div class="data-table-wrap">
-            <table class="daytona-table">
+            <table class="spawnt-table">
               <thead>
                 <tr>
                   <th>Group Series</th>
@@ -1191,7 +1191,7 @@
             <span class="card-title">Repository Attribution</span>
           </div>
           <div class="data-table-wrap">
-            <table class="daytona-table">
+            <table class="spawnt-table">
               <thead>
                 <tr>
                   <th>Repository Name</th>
@@ -1222,7 +1222,7 @@
               When an agent halts due to a 5-hour quota reset, spawnt automatically arms and continues execution once the quota replenishment window clears.
             </p>
             <div class="data-table-wrap">
-              <table class="daytona-table">
+              <table class="spawnt-table">
                 <thead>
                   <tr>
                     <th>Session ID</th>

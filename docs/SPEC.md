@@ -823,6 +823,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0001](./adr/0001-rust-core.md) | Rust for core, CLI, daemon and hooks | Accepted |
 | [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
+| [0004](./adr/0004-rename-to-spawnt.md) | Redesign and rename to spawnt, adoption of Daytona design language and custom palette | Accepted |
 
 ## 10. Open questions
 
