@@ -3,12 +3,16 @@
 
 use chrono::Utc;
 use fleethud_adapters::{
-    FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
-    codex::CodexAdapter, gemini::GeminiAdapter,
+    FileCtx, SourceAdapter,
+    antigravity::{AntigravityAdapter, extract_conversation_id},
+    claude::ClaudeAdapter,
+    codex::{CodexAdapter, codex_session_id_from_path},
+    gemini::GeminiAdapter,
 };
-use fleethud_core::AgentId;
+use fleethud_core::{AgentId, Session};
 use fleethud_platform::{
-    AgentRoot, discover_agent_roots, read_antigravity_fallback_model, read_from_offset,
+    AgentRoot, detect_local_subscriptions, discover_agent_roots, read_antigravity_fallback_model,
+    read_from_offset,
 };
 use fleethud_store::{Database, SourceCheckpoint};
 use std::fs;
@@ -103,17 +107,40 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 
     for file in discovered {
         let path_str = file.path.to_string_lossy().into_owned();
-        let checkpoint = db.get_checkpoint(&path_str)?;
+        let checkpoint = match db.get_checkpoint(&path_str) {
+            Ok(cp) => cp,
+            Err(e) => {
+                tracing::warn!("skipping checkpoint lookup for {path_str}: {e}");
+                continue;
+            }
+        };
         let start_offset = checkpoint.as_ref().map_or(0, |c| c.last_read_offset);
 
-        let read_result = read_from_offset(&file.path, start_offset)?;
+        let Ok(read_result) = read_from_offset(&file.path, start_offset) else {
+            continue;
+        };
         if read_result.bytes.is_empty() && start_offset == read_result.file_size {
             continue;
         }
 
+        let fallback_model = match file.agent {
+            AgentId::Codex => {
+                let sid =
+                    Session::compose_id(AgentId::Codex, codex_session_id_from_path(&path_str));
+                db.get_session_model(&sid)
+            }
+            AgentId::Antigravity => {
+                let sid =
+                    Session::compose_id(AgentId::Antigravity, extract_conversation_id(&path_str));
+                db.get_session_model(&sid)
+                    .or_else(|| agy_fallback_model.clone())
+            }
+            _ => None,
+        };
+
         let ctx = FileCtx {
             source_path: path_str.clone(),
-            fallback_model: agy_fallback_model.clone(),
+            fallback_model,
             fallback_cwd: None,
         };
 
@@ -130,22 +157,30 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 
         let new_offset = read_result.effective_start_offset + read_result.bytes.len() as u64;
         let new_checkpoint = SourceCheckpoint {
-            file_path: path_str,
+            file_path: path_str.clone(),
             last_read_offset: new_offset,
             file_size: read_result.file_size,
             fingerprint: format!("{}:{}", read_result.file_size, new_offset),
             last_ingested_at: Utc::now(),
         };
 
-        db.commit_batch(
+        if let Err(e) = db.commit_batch(
             &batch.projects,
             &batch.sessions,
             &batch.usage_records,
             &batch.activity_events,
             &batch.quota_snapshots,
             &new_checkpoint,
-        )?;
+        ) {
+            tracing::warn!("failed to commit batch for {path_str}: {e}");
+        }
     }
+
+    let detected_subs = detect_local_subscriptions();
+    let _ = db.auto_populate_subscriptions(
+        detected_subs.anthropic.map(|(p, _)| p),
+        detected_subs.google.map(|(p, _)| p),
+    );
 
     Ok(total_records_ingested)
 }
