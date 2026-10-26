@@ -473,6 +473,51 @@ pub fn focus_project_in_editor(root_path: &str) -> bool {
     true
 }
 
+/// Dispatches a native desktop notification across Windows, macOS, and Linux (`SPEC §3.10`).
+#[must_use]
+pub fn send_desktop_notification(title: &str, body: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let escaped_title = title.replace('\'', "''");
+        let escaped_body = body.replace('\'', "''");
+        let script = format!(
+            "[reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null; \
+             $n = New-Object System.Windows.Forms.NotifyIcon; \
+             $n.Icon = [System.Drawing.SystemIcons]::Information; \
+             $n.Visible = $true; \
+             $n.ShowBalloonTip(5000, '{escaped_title}', '{escaped_body}', [System.Windows.Forms.ToolTipIcon]::Info)"
+        );
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .spawn();
+        true
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "display notification \"{}\" with title \"{}\"",
+            body.replace('\"', "\\\""),
+            title.replace('\"', "\\\"")
+        );
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn();
+        true
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("notify-send")
+            .args([title, body])
+            .spawn();
+        true
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (title, body);
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{open_shared_read, read_from_offset};

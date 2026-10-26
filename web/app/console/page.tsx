@@ -233,6 +233,64 @@ export default function ConsolePage() {
     }
   };
 
+  const handleRemoteRelay = async (session: SessionItem) => {
+    // 1. Try local daemon endpoint if running on this device
+    try {
+      const res = await fetch("http://127.0.0.1:41738/api/v1/pro/relay/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: `relay-${session.id}` }),
+      });
+      if (res.ok) {
+        alert("Context Relay handoff executed locally! Clean session starting with 0 tokens.");
+        fetchLiveMetrics();
+        return;
+      }
+    } catch {}
+
+    // 2. If remote (away from laptop), communicate via Supabase sync state to local daemon
+    if (!user) {
+      alert("Sign in to execute remote relay handoff to your desktop daemon.");
+      return;
+    }
+
+    try {
+      const { data: syncRow } = await supabase
+        .from("fleethud_sync_state")
+        .select("live_snapshot")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const existingSnap = (syncRow?.live_snapshot as any) || {};
+      const pendingCmds = existingSnap.relay_commands || [];
+      const updatedSnap = {
+        ...existingSnap,
+        relay_commands: [
+          ...pendingCmds,
+          {
+            id: `relay-${session.id}`,
+            action: "execute",
+            session_id: session.id,
+            requested_at: new Date().toISOString(),
+          },
+        ],
+      };
+
+      const { error } = await supabase
+        .from("fleethud_sync_state")
+        .update({
+          live_snapshot: updatedSnap,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      alert("Handoff command transmitted to your desktop daemon! Rotation in progress.");
+    } catch (err: any) {
+      alert("Failed to transmit handoff command: " + err.message);
+    }
+  };
+
   const activeAgents = (report?.providers || []).filter(
     (p) => (p.total_cost_usd > 0) || (p.models && p.models.some((m) => (m.input_tokens ?? 0) > 0 || (m.cost_usd ?? 0) > 0))
   );
@@ -602,6 +660,26 @@ export default function ConsolePage() {
           </div>
         </div>
 
+        {sessions.some((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+          <div className="mb-3 px-3 py-2 bg-red/10 border border-red/30 rounded text-xs text-red flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold">[PRO LABS]</span>
+              <span>Context saturation reserve active (&gt;=90%). Sessions are eligible for zero-token handoff via <code className="font-mono text-[11px] bg-red/20 px-1 py-0.5 rounded">.fleethud/HANDOFF.md</code>.</span>
+            </div>
+            {sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+              <button
+                onClick={() => {
+                  const target = sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
+                  if (target) handleRemoteRelay(target);
+                }}
+                className="px-2.5 py-1 bg-red text-white text-[11px] font-semibold rounded hover:opacity-90 transition-opacity"
+              >
+                Handoff & Rotate Saturated Session
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead className="text-[11px] text-muted border-b border-border uppercase">
@@ -667,6 +745,15 @@ export default function ConsolePage() {
                           <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
                             <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
                           </div>
+                          {fillPct >= 90 ? (
+                            <button
+                              onClick={() => handleRemoteRelay(s)}
+                              className="mt-1 text-[10px] font-semibold text-accent hover:underline block"
+                              title="Handoff to clean session with 0 context tokens via .fleethud/HANDOFF.md"
+                            >
+                              [Handoff & Rotate]
+                            </button>
+                          ) : null}
                         </div>
                       ) : ctxTokens > 0 ? (
                         <span className="text-foreground font-semibold">{formatTokens(ctxTokens)}</span>

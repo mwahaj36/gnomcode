@@ -250,6 +250,140 @@ pub fn run_resume_queue(db: &Database) -> Result<(), Box<dyn std::error::Error +
     Ok(())
 }
 
+/// Context Relay Engine (SPEC §3.14 / Pro Labs).
+/// Scans active sessions for context window saturation >= threshold,
+/// records pending relay events or auto-executes handoff based on policy.
+pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if !has_pro_license() {
+        return Ok(());
+    }
+
+    let config = db.get_context_relay_config()?;
+    if config.policy == "disabled" {
+        return Ok(());
+    }
+
+    let (active_sessions, _) = db.list_sessions_paginated(None, Some("active"), 0, 50)?;
+    let existing_relays = db.list_context_relays()?;
+
+    for s in active_sessions {
+        let Some(win) = s.context_window else {
+            continue;
+        };
+        if win == 0 {
+            continue;
+        };
+        let fill_pct = ((s.context_tokens as f64 / win as f64) * 100.0).round() as u32;
+
+        if fill_pct >= config.threshold_pct {
+            // Check if already recorded/pending for this session
+            if existing_relays
+                .iter()
+                .any(|r| r.session_id == s.id && (r.status == "pending" || r.status == "executed"))
+            {
+                continue;
+            }
+
+            // Determine target agent based on strategy
+            let target_agent = if config.strategy == "failover" {
+                if s.agent == "claude-code" {
+                    "codex".to_owned()
+                } else {
+                    "claude-code".to_owned()
+                }
+            } else {
+                s.agent.clone()
+            };
+
+            let relay_id = format!("relay-{}", s.id);
+            let cwd = db.find_antigravity_workspace(&s.id).unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_owned())
+            });
+
+            let entry = fleethud_store::ContextRelayEntry {
+                id: relay_id,
+                session_id: s.id.clone(),
+                source_agent: s.agent.clone(),
+                target_agent: target_agent.clone(),
+                project_name: s.project_name.clone(),
+                cwd,
+                fill_pct,
+                status: if config.policy == "auto" {
+                    "executed".to_owned()
+                } else {
+                    "pending".to_owned()
+                },
+                created_at: chrono::Utc::now().to_rfc3339(),
+                executed_at: if config.policy == "auto" {
+                    Some(chrono::Utc::now().to_rfc3339())
+                } else {
+                    None
+                },
+            };
+
+            db.record_context_relay(&entry)?;
+
+            // Dispatch desktop notification across platforms
+            let title = format!("[RELAY] Context Reserve: {}", s.agent);
+            let body = format!(
+                "Session in {} reached {}% context. Relay checkpoint prepared for {}.",
+                s.project_name, fill_pct, target_agent
+            );
+            let _ = fleethud_platform::send_desktop_notification(&title, &body);
+
+            if config.policy == "auto" {
+                let _ = execute_relay_handoff(&entry);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Executes a Context Relay handoff:
+/// 1. Writes zero-knowledge .fleethud/HANDOFF.md checkpoint in project directory.
+/// 2. Spawns target fresh agent session in current working directory without permission escalation.
+pub fn execute_relay_handoff(
+    entry: &fleethud_store::ContextRelayEntry,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let repo_dir = std::path::Path::new(&entry.cwd);
+    let fleethud_dir = repo_dir.join(".fleethud");
+    let _ = std::fs::create_dir_all(&fleethud_dir);
+
+    let handoff_path = fleethud_dir.join("HANDOFF.md");
+    let content = format!(
+        "# FleetHUD Context Relay Checkpoint\n\n\
+        - **Source Agent:** {}\n\
+        - **Target Agent:** {}\n\
+        - **Project:** {}\n\
+        - **Saturation:** {}% context consumed (Safety reserve active)\n\
+        - **Timestamp:** {}\n\n\
+        ## Continuity Instructions for Fresh Session\n\
+        This workspace was handed off by FleetHUD Context Relay because the previous session reached the context saturation limit.\n\
+        1. Inspect modified workspace files and recent git status (`git status`).\n\
+        2. Verify existing test suites (`cargo test` / `npm test`).\n\
+        3. Continue the task from this clean context window without repeating saturated tokens.\n",
+        entry.source_agent,
+        entry.target_agent,
+        entry.project_name,
+        entry.fill_pct,
+        entry.created_at,
+    );
+    std::fs::write(&handoff_path, content)?;
+
+    // Spawn the fresh target agent session in background without permission escalation
+    let _ = match entry.target_agent.as_str() {
+        "claude-code" => Command::new("claude").current_dir(&entry.cwd).spawn(),
+        "codex" => Command::new("codex").current_dir(&entry.cwd).spawn(),
+        "gemini-cli" => Command::new("gemini").current_dir(&entry.cwd).spawn(),
+        _ => return Ok(()),
+    };
+
+    Ok(())
+}
+
 /// Checks whether a session is currently blocked by a guardrail rule.
 /// Used for 50ms loopback IPC query.
 pub fn is_session_blocked(session_id: &str) -> bool {
