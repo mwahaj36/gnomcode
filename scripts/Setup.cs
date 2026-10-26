@@ -13,8 +13,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("FleetHUD Mission Control Setup")]
 [assembly: AssemblyProduct("FleetHUD")]
 [assembly: AssemblyCompany("FleetHUD")]
-[assembly: AssemblyVersion("1.1.2.0")]
-[assembly: AssemblyFileVersion("1.1.2.0")]
+[assembly: AssemblyVersion("1.1.3.0")]
+[assembly: AssemblyFileVersion("1.1.3.0")]
 
 public class SetupForm : Form
 {
@@ -87,7 +87,7 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v1.1.2  ·  64-bit Native";
+        lblVer.Text = "v1.1.3  ·  64-bit Native";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
         lblVer.ForeColor = Color.FromArgb(110, 118, 129);
         lblVer.Location = new Point(36, 225);
@@ -191,7 +191,7 @@ public class SetupForm : Form
             }
             using (Process cleanup = Process.Start(new ProcessStartInfo {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*') -or ($_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -235,7 +235,7 @@ public class SetupForm : Form
                     string uninstallExe = Path.Combine(installDir, "FleetHUD-Uninstall.exe");
                     string ico = Path.Combine(installDir, "fleethud.ico");
                     key.SetValue("DisplayName", "FleetHUD Mission Control");
-                    key.SetValue("DisplayVersion", "1.1.2");
+                    key.SetValue("DisplayVersion", "1.1.3");
                     key.SetValue("Publisher", "FleetHUD");
                     key.SetValue("DisplayIcon", ico + ",0");
                     key.SetValue("InstallLocation", installDir);
@@ -481,7 +481,7 @@ public class UninstallForm : Form
             }
             using (Process cleanup = Process.Start(new ProcessStartInfo {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*') -or ($_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden

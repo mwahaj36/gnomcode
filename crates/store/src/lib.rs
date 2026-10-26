@@ -147,6 +147,12 @@ pub struct SessionListItem {
     pub context_window: Option<u64>,
     /// Total API-equivalent cost USD.
     pub total_cost_usd: f64,
+    /// Session topic or title if known.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Originating device name (e.g. hostname or "local").
+    #[serde(default)]
+    pub device_name: Option<String>,
 }
 
 /// Breakdown for a single model under a provider.
@@ -1139,7 +1145,7 @@ impl Database {
             FROM session s
             LEFT JOIN project p ON s.project_id = p.id
             WHERE s.agent = 'antigravity'
-              AND (p.name = 'unknown' OR p.name IS NULL)
+              AND (p.name = 'unknown' OR p.name IS NULL OR s.title IS NULL OR s.title = '')
             "#,
         )?;
 
@@ -1211,6 +1217,12 @@ impl Database {
                         let _ = self.conn.execute(
                             "UPDATE session SET project_id = ?1, title = COALESCE(title, ?2) WHERE id = ?3",
                             params![proj_id, title, sid],
+                        );
+                        updated += 1;
+                    } else if title.is_some() {
+                        let _ = self.conn.execute(
+                            "UPDATE session SET title = COALESCE(title, ?1) WHERE id = ?2",
+                            params![title, sid],
                         );
                         updated += 1;
                     }
@@ -1505,7 +1517,8 @@ impl Database {
                 COALESCE(SUM(u.cost_usd), 0.0),
                 COALESCE(SUM(u.cache_read_tokens), 0),
                 COALESCE(MAX(u.context_tokens), 0),
-                MAX(u.context_window)
+                MAX(u.context_window),
+                s.title
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -1530,6 +1543,7 @@ impl Database {
                 let cache_read_tokens: i64 = row.get(11)?;
                 let context_tokens: i64 = row.get(12)?;
                 let context_window: Option<i64> = row.get(13)?;
+                let title: Option<String> = row.get(14)?;
 
                 let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
@@ -1573,6 +1587,8 @@ impl Database {
                     context_tokens: context_tokens.max(0) as u64,
                     context_window: context_window.map(|w| w.max(0) as u64),
                     total_cost_usd,
+                    title,
+                    device_name: None,
                 })
             },
         )?;
@@ -2031,6 +2047,12 @@ mod tests {
             .expect("list recent sessions");
         assert_eq!(active_count, 0);
         assert!(recent.is_empty());
+
+        let (all_recent, total_recent) = db
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("list all sessions paginated");
+        assert_eq!(total_recent, 1);
+        assert_eq!(all_recent[0].title.as_deref(), Some("Implement M1"));
 
         let report = db.generate_usage_report().expect("report");
         assert_eq!(report.len(), 1);
