@@ -27,16 +27,35 @@ pub struct AgentRoot {
     pub exists: bool,
 }
 
-/// Resolves the FleetHUD data directory (`$FLEETHUD_HOME` or `~/.fleethud`).
+/// Resolves the spawnt data directory (`$SPAWNT_HOME`, `$FLEETHUD_HOME`, or `~/.spawnt`).
 #[must_use]
 pub fn fleethud_home() -> PathBuf {
+    if let Ok(custom) = env::var("SPAWNT_HOME") {
+        let trimmed = custom.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
     if let Ok(custom) = env::var("FLEETHUD_HOME") {
         let trimmed = custom.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
         }
     }
-    user_home_dir().join(".fleethud")
+    let home = user_home_dir();
+    let spawnt_dir = home.join(".spawnt");
+    let fleethud_dir = home.join(".fleethud");
+    if spawnt_dir.exists() || !fleethud_dir.exists() {
+        spawnt_dir
+    } else {
+        fleethud_dir
+    }
+}
+
+/// Alias for [`fleethud_home`].
+#[must_use]
+pub fn spawnt_home() -> PathBuf {
+    fleethud_home()
 }
 
 /// Resolves the default SQLite database path (`~/.fleethud/state.db`).
