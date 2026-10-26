@@ -1,82 +1,30 @@
-# FleetHUD Windows Installer — https://fleethud.vercel.app
+# FleetHUD Windows updater: use the same native installer as the download page.
 $ErrorActionPreference = "Stop"
-
-$InstallDir = "$env:LOCALAPPDATA\FleetHUD"
-if (!(Test-Path $InstallDir)) {
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+$Version = "1.3.0"
+$BaseUrl = "https://fleethud.vercel.app/downloads"
+if (-not [Environment]::Is64BitOperatingSystem) {
+    throw "FleetHUD requires 64-bit Windows. The existing installation was not changed."
 }
-
-$ExeDest = "$InstallDir\fleethud.exe"
-$CandidateSources = @(
-    "$PSScriptRoot\..\fleethud.exe",
-    "$PSScriptRoot\fleethud.exe",
-    "$PSScriptRoot\..\target\release\fleethud.exe"
-)
-$FoundExe = $CandidateSources | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if ($FoundExe) {
-    Copy-Item -Path $FoundExe -Destination $ExeDest -Force
-    Write-Output "Installed binary to $ExeDest"
-} else {
-    Write-Output "Fetching release binary from https://fleethud.vercel.app..."
-    $Arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
-    $ZipDest = "$env:TEMP\fleethud.zip"
-    $Url = "https://fleethud.vercel.app/downloads/FleetHUD-v1.2.1-windows-$Arch.zip"
-    Invoke-WebRequest -Uri $Url -OutFile $ZipDest
-    Expand-Archive -Path $ZipDest -DestinationPath $InstallDir -Force
-    Remove-Item $ZipDest -Force
+$Asset = "FleetHUD-v1.3.0-windows-x64.zip"
+$Stage = Join-Path ([IO.Path]::GetTempPath()) ("fleethud-update-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $Stage | Out-Null
+try {
+    $Archive = Join-Path $Stage $Asset
+    Invoke-WebRequest -Uri "$BaseUrl/$Asset" -OutFile $Archive -UseBasicParsing
+    $Manifest = (Invoke-WebRequest -Uri "$BaseUrl/SHA256SUMS-v$Version.txt" -UseBasicParsing).Content
+    $Entry = @($Manifest -split "`n" | Where-Object { $_.Trim() -match ("^[a-fA-F0-9]{64}\s+" + [regex]::Escape($Asset) + "$") })
+    if ($Entry.Count -ne 1) { throw "Missing or ambiguous release checksum." }
+    $Expected = ($Entry[0].Trim() -split '\s+')[0]
+    $Actual = (Get-FileHash -Path $Archive -Algorithm SHA256).Hash
+    if ($Actual -ine $Expected) { throw "Release checksum verification failed. Existing install preserved." }
+    Expand-Archive -Path $Archive -DestinationPath $Stage -Force
+    $Setup = Join-Path $Stage "FleetHUD-Setup.exe"
+    if (-not (Test-Path $Setup)) { throw "Release archive has no native installer." }
+    $SetupVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Setup).FileVersion
+    if ($SetupVersion -ne "$Version.0") { throw "Installer version does not match the requested release." }
+    Write-Output "Starting verified FleetHUD v$Version installer. Your account and recorded sessions are preserved."
+    $Process = Start-Process -FilePath $Setup -Wait -PassThru
+    if ($Process.ExitCode -ne 0) { throw "FleetHUD installer exited with code $($Process.ExitCode)." }
+} finally {
+    Remove-Item -Path $Stage -Recurse -Force -ErrorAction SilentlyContinue
 }
-
-# Copy launcher scripts
-foreach ($script in @("tray.ps1", "run-tray.vbs", "open-console.vbs", "open-dashboard.vbs")) {
-    $srcCandidates = @(
-        "$PSScriptRoot\$script",
-        "$PSScriptRoot\scripts\$script",
-        "$PSScriptRoot\..\scripts\$script"
-    )
-    $foundScript = $srcCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($foundScript) {
-        Copy-Item -Path $foundScript -Destination "$InstallDir\$script" -Force
-    }
-}
-
-# 1. Add to User PATH
-$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($UserPath -notlike "*$InstallDir*") {
-    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
-    Write-Output "Added $InstallDir to user PATH."
-}
-
-# 2. Create Desktop Shortcut
-$WScriptShell = New-Object -ComObject WScript.Shell
-foreach ($lnkPath in @("$env:USERPROFILE\Desktop\FleetHUD Console.lnk", "$env:USERPROFILE\Desktop\FleetHUD.lnk")) {
-    $DesktopShortcut = $WScriptShell.CreateShortcut($lnkPath)
-    $DesktopShortcut.TargetPath = "wscript.exe"
-    $DesktopShortcut.Arguments = "`"$InstallDir\open-console.vbs`""
-    $DesktopShortcut.IconLocation = "$InstallDir\fleethud.exe,0"
-    $DesktopShortcut.Description = "FleetHUD Mission Control Console"
-    $DesktopShortcut.WorkingDirectory = $InstallDir
-    $DesktopShortcut.Save()
-}
-Write-Output "Created Desktop Shortcut: $env:USERPROFILE\Desktop\FleetHUD Console.lnk"
-
-# 3. Create Start Menu Shortcut
-$StartMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
-$StartShortcut = $WScriptShell.CreateShortcut("$StartMenuDir\FleetHUD Console.lnk")
-$StartShortcut.TargetPath = "wscript.exe"
-$StartShortcut.Arguments = "`"$InstallDir\open-console.vbs`""
-$StartShortcut.IconLocation = "$InstallDir\fleethud.exe,0"
-$StartShortcut.Description = "FleetHUD Mission Control Console"
-$StartShortcut.WorkingDirectory = $InstallDir
-$StartShortcut.Save()
-
-# 4. Configure Windows Startup Registry
-$RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-Set-ItemProperty -Path $RunKey -Name "FleetHUD" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
-Write-Output "Configured autostart in Windows Registry ($RunKey)."
-
-# 5. Launch Tray & Console
-Start-Process "wscript.exe" -ArgumentList "`"$InstallDir\run-tray.vbs`""
-Start-Process "wscript.exe" -ArgumentList "`"$InstallDir\open-console.vbs`""
-
-Write-Output "FleetHUD v1.2.1 installation complete. Mission Control running in system tray."

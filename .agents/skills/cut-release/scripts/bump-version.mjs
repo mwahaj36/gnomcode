@@ -137,7 +137,8 @@ const installPs1Path = "scripts/install.ps1";
 let installPs1 = read(installPs1Path);
 if (installPs1) {
   installPs1 = installPs1
-    .replace(/FleetHUD-v[0-9.]+-windows-\$Arch\.zip/g, `FleetHUD-v${newVersion}-windows-$Arch.zip`)
+    .replace(/(\$Version\s*=\s*")[^"]+(";?)/, `$1${newVersion}$2`)
+    .replace(/FleetHUD-v[0-9.]+-windows-(?:\$Arch|x64)\.zip/g, `FleetHUD-v${newVersion}-windows-x64.zip`)
     .replace(/FleetHUD v[0-9.]+ installation complete/g, `FleetHUD v${newVersion} installation complete`);
   write(installPs1Path, installPs1);
   results.push({ file: installPs1Path, detail: `Archive URL & Banner -> v${newVersion}` });
@@ -145,6 +146,26 @@ if (installPs1) {
   // Mirror to web/public/downloads/install.ps1
   write("web/public/downloads/install.ps1", installPs1);
   results.push({ file: "web/public/downloads/install.ps1", detail: `Synced from scripts/install.ps1` });
+}
+
+// Unix installer version and public mirror.
+let unixInstaller = read("scripts/install.sh");
+if (unixInstaller) {
+  unixInstaller = unixInstaller.replace(/VERSION="[^"]+"/, `VERSION="${newVersion}"`);
+  write("scripts/install.sh", unixInstaller);
+  write("web/public/downloads/install.sh", unixInstaller);
+  results.push({ file: "scripts/install.sh + public mirror", detail: `Verified archive version -> v${newVersion}` });
+}
+
+// Keep the public landing badge and npm lock root metadata synchronized.
+let landing = read("web/app/page.tsx");
+if (landing) write("web/app/page.tsx", landing.replace(/FleetHUD v[0-9.]+ Production Release/g, `FleetHUD v${newVersion} Production Release`));
+let lockText = read("web/package-lock.json");
+if (lockText) {
+  const lock = JSON.parse(lockText);
+  lock.version = newVersion;
+  if (lock.packages?.[""]) lock.packages[""].version = newVersion;
+  write("web/package-lock.json", JSON.stringify(lock, null, 2) + "\n");
 }
 
 // 7. web/app/downloads/page.tsx

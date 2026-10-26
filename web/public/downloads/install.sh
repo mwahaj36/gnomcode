@@ -1,25 +1,54 @@
 #!/usr/bin/env bash
-# FleetHUD Unix installer (Linux & macOS) — https://fleethud.pro
+# FleetHUD Unix installer. Download and verify before replacing an existing install.
 set -euo pipefail
 
-REPO="mwahaj36/fleethud"
-INSTALL_DIR="${HOME}/.local/bin"
-
-mkdir -p "${INSTALL_DIR}"
-
+VERSION="1.3.0"
+BASE_URL="https://fleethud.vercel.app/downloads"
+INSTALL_DIR="${FLEETHUD_INSTALL_DIR:-${HOME}/.local/bin}"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
-
-case "${ARCH}" in
+case "${OS}" in linux|darwin) ;; *) echo "Unsupported operating system: ${OS}" >&2; exit 1 ;; esac
+case "$(uname -m)" in
   x86_64) ARCH_TAG="x86_64" ;;
   arm64|aarch64) ARCH_TAG="aarch64" ;;
-  *) echo "Unsupported architecture: ${ARCH}"; exit 1 ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
 
-echo "Downloading FleetHUD for ${OS}-${ARCH_TAG}..."
-DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/fleethud-${OS}-${ARCH_TAG}.tar.gz"
-
-curl -sSL "${DOWNLOAD_URL}" -o /tmp/fleethud.tar.gz 2>/dev/null || true
-
-echo "FleetHUD installed to ${INSTALL_DIR}/fleethud."
-echo "Ensure ${INSTALL_DIR} is in your PATH."
+command -v curl >/dev/null || { echo 'curl is required.' >&2; exit 1; }
+if command -v sha256sum >/dev/null; then
+  HASH_TOOL=sha256sum
+elif command -v shasum >/dev/null; then
+  HASH_TOOL=shasum
+else
+  echo 'A SHA-256 tool (sha256sum or shasum) is required.' >&2; exit 1
+fi
+stage="$(mktemp -d)"
+replacement=""
+trap 'rm -rf "${stage}"; if [ -n "${replacement}" ]; then rm -f "${replacement}"; fi' EXIT
+asset="fleethud-v${VERSION}-${OS}-${ARCH_TAG}.tar.gz"
+if ! curl --fail --show-error --silent --location "${BASE_URL}/${asset}" -o "${stage}/${asset}"; then
+  echo "No downloadable FleetHUD ${VERSION} package for ${OS}-${ARCH_TAG}. Your existing install was preserved." >&2
+  exit 1
+fi
+curl --fail --show-error --silent --location "${BASE_URL}/SHA256SUMS-v${VERSION}.txt" -o "${stage}/SHA256SUMS"
+expected="$(awk -v asset="${asset}" '$2 == asset { print $1 }' "${stage}/SHA256SUMS")"
+[ "${#expected}" -eq 64 ] || { echo 'Missing or invalid package checksum.' >&2; exit 1; }
+if [ "${HASH_TOOL}" = sha256sum ]; then
+  actual="$(sha256sum "${stage}/${asset}" | awk '{ print $1 }')"
+else
+  actual="$(shasum -a 256 "${stage}/${asset}" | awk '{ print $1 }')"
+fi
+[ "${actual}" = "${expected}" ] || { echo 'Package checksum verification failed.' >&2; exit 1; }
+mkdir "${stage}/unpacked"
+tar -xzf "${stage}/${asset}" -C "${stage}/unpacked" fleethud LICENSE THIRD_PARTY_NOTICES.html
+chmod 755 "${stage}/unpacked/fleethud"
+[ "$("${stage}/unpacked/fleethud" --version)" = "fleethud ${VERSION}" ] || {
+  echo 'The downloaded binary cannot run on this system or has the wrong version. Existing install preserved.' >&2; exit 1;
+}
+mkdir -p "${INSTALL_DIR}" "${INSTALL_DIR}/fleethud-licenses"
+cp "${stage}/unpacked/LICENSE" "${stage}/unpacked/THIRD_PARTY_NOTICES.html" "${INSTALL_DIR}/fleethud-licenses/"
+replacement="$(mktemp "${INSTALL_DIR}/.fleethud-update.XXXXXX")"
+install -m 755 "${stage}/unpacked/fleethud" "${replacement}"
+mv -f "${replacement}" "${INSTALL_DIR}/fleethud"
+replacement=""
+printf 'FleetHUD %s installed to %s/fleethud.\n' "${VERSION}" "${INSTALL_DIR}"
+printf 'User data and account pairing were preserved. Ensure %s is in PATH.\n' "${INSTALL_DIR}"
