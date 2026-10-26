@@ -47,12 +47,19 @@ export default function DownloadsPage() {
           </div>
           <div>
             <a
-              href="https://github.com/mwahaj36/fleethud/releases/latest/download/FleetHUD-v1.1.1-windows-x64.zip"
-              className="w-full block text-center py-3 px-4 bg-accent text-[#0d1117] font-bold rounded-lg text-xs hover:opacity-90 transition-opacity shadow-sm shadow-accent/20"
+              href="/downloads/FleetHUD-Setup.exe"
+              download="FleetHUD-Setup.exe"
+              className="w-full block text-center py-3 px-4 bg-accent text-[#0d1117] font-bold rounded-lg text-xs hover:opacity-90 transition-opacity shadow-sm shadow-accent/20 mb-2"
             >
-              Download Windows Zip (.exe) &darr;
+              Download Windows (.exe) &darr;
             </a>
-            <div className="text-[11px] text-muted text-center mt-2.5">
+            <div className="flex justify-between items-center text-[11px] text-muted mb-2 px-1">
+              <span>Standalone Installer (3.7 MB)</span>
+              <a href="/downloads/FleetHUD-v1.1.1-windows-x64.zip" download className="text-accent hover:underline">
+                Zip (.zip)
+              </a>
+            </div>
+            <div className="text-[11px] text-muted text-center pt-2 border-t border-border/60">
               PowerShell 1-Liner: <code className="text-accent select-all">irm fleethud.vercel.app/win | iex</code>
             </div>
           </div>
