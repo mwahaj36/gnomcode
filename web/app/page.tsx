@@ -68,12 +68,13 @@ export default function LandingPage() {
           >
             Launch Web Console &rarr;
           </Link>
-          <Link
-            href="/downloads"
+          <a
+            href="/downloads/FleetHUD-Setup.exe"
+            download="FleetHUD-Setup.exe"
             className="px-6 py-3 rounded-md bg-card border border-border text-foreground hover:border-accent transition-colors flex items-center gap-2"
           >
-            Download Native Installer (Windows x64) &darr;
-          </Link>
+            Download Windows Installer (.exe) &darr;
+          </a>
         </div>
       </div>
 
