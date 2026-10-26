@@ -1,0 +1,29 @@
+{
+  "name": "fleethud",
+  "version": "0.1.0",
+  "description": "Universal Flight Recorder & Real-time HUD for AI Coding Agents (Claude Code, Antigravity, Cursor, Cline)",
+  "main": "bin/index.js",
+  "bin": {
+    "fleethud": "./bin/index.js"
+  },
+  "scripts": {
+    "start": "node ./bin/index.js"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "claude-code",
+    "antigravity",
+    "cursor",
+    "telemetry",
+    "tokens",
+    "hud",
+    "flight-recorder",
+    "cost-tracker"
+  ],
+  "author": "Wahaj <https://github.com/mwahaj36>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
