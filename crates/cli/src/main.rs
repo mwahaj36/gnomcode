@@ -89,6 +89,24 @@ enum Commands {
         #[command(subcommand)]
         action: LicenseCommands,
     },
+    /// Register a cloud session and send presence heartbeats (no inferred usage).
+    CloudSession {
+        /// Provider; omitted only when Codex cloud metadata is available.
+        #[arg(long, value_parser = ["codex", "claude-code", "cursor", "antigravity", "gemini-cli", "cline", "aider"])]
+        agent: Option<String>,
+        /// Opaque provider session ID. Required except for detected Codex cloud threads.
+        #[arg(long)]
+        session_id: Option<String>,
+        /// Existing Supabase session JSON file; defaults to FleetHUD home/session.json.
+        #[arg(long)]
+        pairing_file: Option<PathBuf>,
+        /// Append-only metadata JSONL with per-invocation usage deltas (see docs/CLOUD_SESSIONS.md).
+        #[arg(long)]
+        usage_file: Option<PathBuf>,
+        /// Register and attempt one sync, then exit.
+        #[arg(long)]
+        once: bool,
+    },
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
@@ -139,6 +157,13 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
+        Commands::CloudSession {
+            agent,
+            session_id,
+            pairing_file,
+            usage_file,
+            once,
+        } => cmd_cloud_session(db_path, agent, session_id, pairing_file, usage_file, once).await,
     }
 }
 
@@ -768,4 +793,95 @@ Add-Type -AssemblyName System.Windows.Forms
     }
 
     Ok(())
+}
+
+async fn cmd_cloud_session(
+    db_path: PathBuf,
+    agent: Option<String>,
+    session_id: Option<String>,
+    pairing_file: Option<PathBuf>,
+    usage_file: Option<PathBuf>,
+    once: bool,
+) -> Result<()> {
+    use fleethud_core::AgentId;
+    let detected = fleethud_platform::codex_cloud_session_id();
+    let agent_name = agent.as_deref().unwrap_or("codex");
+    let agent_id = match agent_name {
+        "codex" => AgentId::Codex,
+        "claude-code" => AgentId::ClaudeCode,
+        "cursor" => AgentId::Cursor,
+        "antigravity" => AgentId::Antigravity,
+        "gemini-cli" => AgentId::GeminiCli,
+        "cline" => AgentId::Cline,
+        "aider" => AgentId::Aider,
+        _ => anyhow::bail!("unsupported agent"),
+    };
+    let native_id = session_id
+        .or_else(|| {
+            if agent_id == AgentId::Codex {
+                detected
+            } else {
+                None
+            }
+        })
+        .context(
+            "No cloud session detected. Supply --agent and --session-id from the provider runtime.",
+        )?;
+    anyhow::ensure!(
+        fleethud_daemon::cloud::valid_session_id(&native_id),
+        "Session ID must contain 1-200 ASCII letters, digits, dots, underscores or hyphens"
+    );
+    let pairing_file = pairing_file.unwrap_or_else(|| fleethud_home().join("session.json"));
+    let client = fleethud_daemon::cloud::client().context("failed to initialize cloud client")?;
+    println!(
+        "Cloud collector: {agent_name}. Activity is unknown; usage and cost require measured events."
+    );
+    if !pairing_file.exists() {
+        println!("Local registration only: pair a FleetHUD account to publish to the web console.");
+    }
+    loop {
+        let path = db_path.clone();
+        let id = native_id.clone();
+        let usage_path = usage_file.clone();
+        let (session, import_failed) = tokio::task::spawn_blocking(move || {
+            let mut db = Database::open(&path)?;
+            // Existing adapters supply measured usage when native logs are available.
+            // A bad or missing log must not block collector presence.
+            if usage_path.is_none() { let _ = ingest_all(&mut db); }
+            fleethud_daemon::cloud::heartbeat(&mut db, agent_id, &id)?;
+            let mut import_failed = false;
+            if let Some(path) = usage_path {
+                if fleethud_daemon::cloud::ingest_usage_file(&mut db, agent_id, &id, &path).is_err() {
+                    import_failed = true;
+                    eprintln!("Usage import failed; check the metadata JSONL format. Agent execution is unaffected.");
+                }
+            }
+            fleethud_daemon::cloud::heartbeat(&mut db, agent_id, &id).map(|session| (session, import_failed))
+        })
+        .await
+        .context("heartbeat task failed")?
+        .context("failed to save heartbeat")?;
+        if once && import_failed {
+            anyhow::bail!(
+                "Presence saved locally; usage import failed. No usage batch was committed."
+            );
+        }
+        match fleethud_daemon::cloud::publish(&client, &pairing_file, &session).await {
+            Ok(true) => println!("Cloud presence synchronized."),
+            Ok(false) => println!("Cloud sync is unpaired; data remains local."),
+            Err(_) if once => anyhow::bail!(
+                "Presence saved locally; cloud sync failed. Check pairing, network and the cloud-session migration."
+            ),
+            Err(_) => {
+                eprintln!("Cloud sync unavailable; retrying in 30 seconds. Presence remains local.")
+            }
+        }
+        if once {
+            return Ok(());
+        }
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => { result.context("shutdown signal failed")?; return Ok(()); }
+            () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
+        }
+    }
 }

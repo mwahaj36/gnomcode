@@ -121,54 +121,13 @@ async fn push_snapshot(
     db: &Arc<Mutex<Database>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let session_path = fleethud_platform::fleethud_home().join("session.json");
-    let Ok(raw) = tokio::fs::read_to_string(&session_path).await else {
-        return Ok(());
-    };
-    let mut session: Value = serde_json::from_str(&raw)?;
-    let Some(user_id) = session
-        .pointer("/user/id")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
+    let Some(CloudAuth {
+        user_id,
+        access_token,
+        base_url,
+        public_key,
+    }) = read_cloud_auth(client, &session_path).await?
     else {
-        return Ok(());
-    };
-    let (base_url, public_key) = cloud_config();
-    let expires_at = session
-        .get("expires_at")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-    if expires_at <= chrono::Utc::now().timestamp() + 120 {
-        let Some(refresh_token) = session.get("refresh_token").and_then(Value::as_str) else {
-            return Ok(());
-        };
-        let refresh_url = format!("{base_url}/auth/v1/token?grant_type=refresh_token");
-        let refreshed: Value = client
-            .post(refresh_url)
-            .header("apikey", &public_key)
-            .json(&json!({ "refresh_token": refresh_token }))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        if refreshed
-            .get("access_token")
-            .and_then(Value::as_str)
-            .is_none()
-        {
-            return Ok(());
-        }
-        session = refreshed;
-        if session.get("expires_at").is_none() {
-            let expires_in = session
-                .get("expires_in")
-                .and_then(Value::as_i64)
-                .unwrap_or(3600);
-            session["expires_at"] = json!(chrono::Utc::now().timestamp() + expires_in);
-        }
-        tokio::fs::write(&session_path, serde_json::to_vec(&session)?).await?;
-    }
-    let Some(access_token) = session.get("access_token").and_then(Value::as_str) else {
         return Ok(());
     };
 
@@ -178,7 +137,7 @@ async fn push_snapshot(
     if let Ok(resp) = client
         .get(&check_url)
         .header("apikey", &public_key)
-        .bearer_auth(access_token)
+        .bearer_auth(&access_token)
         .send()
         .await
     {
@@ -253,7 +212,7 @@ async fn push_snapshot(
             "{base_url}/rest/v1/fleethud_sync_state?on_conflict=user_id"
         ))
         .header("apikey", &public_key)
-        .bearer_auth(access_token)
+        .bearer_auth(&access_token)
         .header("Prefer", "resolution=merge-duplicates,return=minimal")
         .json(&json!({
             "user_id": user_id,
@@ -264,6 +223,81 @@ async fn push_snapshot(
         .await?
         .error_for_status()?;
     Ok(())
+}
+
+pub(crate) struct CloudAuth {
+    pub user_id: String,
+    pub access_token: String,
+    pub base_url: String,
+    pub public_key: String,
+}
+
+pub(crate) async fn read_cloud_auth(
+    client: &reqwest::Client,
+    session_path: &std::path::Path,
+) -> Result<Option<CloudAuth>, Box<dyn std::error::Error + Send + Sync>> {
+    let raw = match tokio::fs::read_to_string(session_path).await {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let mut session: Value = serde_json::from_str(&raw)?;
+    let Some(user_id) = session
+        .pointer("/user/id")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+    else {
+        return Ok(None);
+    };
+    let (base_url, public_key) = cloud_config();
+    let expires_at = session
+        .get("expires_at")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if expires_at <= chrono::Utc::now().timestamp() + 120 {
+        let Some(refresh_token) = session.get("refresh_token").and_then(Value::as_str) else {
+            return Ok(None);
+        };
+        let refresh_url = format!("{base_url}/auth/v1/token?grant_type=refresh_token");
+        let refreshed: Value = client
+            .post(refresh_url)
+            .header("apikey", &public_key)
+            .json(&json!({ "refresh_token": refresh_token }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        if refreshed
+            .get("access_token")
+            .and_then(Value::as_str)
+            .is_none()
+        {
+            return Ok(None);
+        }
+        session = refreshed;
+        if session.get("expires_at").is_none() {
+            let expires_in = session
+                .get("expires_in")
+                .and_then(Value::as_i64)
+                .unwrap_or(3600);
+            session["expires_at"] = json!(chrono::Utc::now().timestamp() + expires_in);
+        }
+        tokio::fs::write(session_path, serde_json::to_vec(&session)?).await?;
+    }
+    let Some(access_token) = session
+        .get("access_token")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(CloudAuth {
+        user_id,
+        access_token,
+        base_url,
+        public_key,
+    }))
 }
 
 fn cloud_config() -> (String, String) {
