@@ -221,6 +221,15 @@ pub struct Database {
     conn: Connection,
 }
 
+/// Target process or repository path for session window focus (`SPEC §3.13`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionFocusTarget {
+    /// Agent OS process ID, if tracked.
+    pub pid: Option<u32>,
+    /// Associated repository root path, if known.
+    pub repo_root: Option<String>,
+}
+
 impl Database {
     /// Opens or creates the SQLite database at `path` and runs schema migrations.
     /// Configures WAL mode, normal synchronous, and 5-second busy timeout (`SPEC §4.3`).
@@ -382,6 +391,28 @@ impl Database {
                 INSERT INTO schema_migrations (version, applied_at) VALUES (5, datetime('now'));
                 "#,
             )?;
+        }
+
+        let has_v6: bool = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM schema_migrations WHERE version = 6",
+                [],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+
+        if !has_v6 {
+            self.conn.execute_batch(
+                r#"
+                UPDATE usage_record SET model = 'Gemini 3.8 Flash (Default)' WHERE model LIKE '%PLACEHOLDER%';
+                UPDATE session SET model = 'Gemini 3.8 Flash (Default)' WHERE model LIKE '%PLACEHOLDER%';
+                DELETE FROM quota_snapshot WHERE limit_id LIKE '%placeholder%';
+                INSERT INTO schema_migrations (version, applied_at) VALUES (6, datetime('now'));
+                "#,
+            )?;
+            let _ = self.reconcile_antigravity_projects();
         }
 
         Ok(())
@@ -837,162 +868,160 @@ impl Database {
             out.push(r?);
         }
 
-        // Rolling 5-hour and 7-day quota pools for Antigravity & Claude Code models
-        let cutoff_5h = (Utc::now() - chrono::Duration::hours(5)).to_rfc3339();
-        let cutoff_7d = (Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+        out.retain(|q| !q.limit_id.to_lowercase().contains("placeholder"));
+        Ok(out)
+    }
 
-        if let Ok(mut stmt_roll) = self.conn.prepare(
-            r#"
-            SELECT s.agent, u.model,
-                   SUM(CASE WHEN u.timestamp >= ?1 THEN u.input_tokens + u.output_tokens ELSE 0 END) AS tok_5h,
-                   SUM(CASE WHEN u.timestamp >= ?2 THEN u.input_tokens + u.output_tokens ELSE 0 END) AS tok_7d,
-                   MIN(CASE WHEN u.timestamp >= ?1 THEN u.timestamp ELSE NULL END) AS earliest_5h,
-                   MIN(CASE WHEN u.timestamp >= ?2 THEN u.timestamp ELSE NULL END) AS earliest_7d
-            FROM usage_record u
-            JOIN session s ON u.session_id = s.id
-            WHERE u.timestamp >= ?2
-              AND s.agent IN ('antigravity', 'claude-code')
-            GROUP BY s.agent, u.model
-            ORDER BY tok_5h DESC
-            "#,
+    /// Reconciles Antigravity session projects by querying the local Antigravity
+    /// metadata SQLite database (`~/.gemini/antigravity/conversation_summaries.db`).
+    ///
+    /// # Errors
+    /// Returns [`Error`] if querying or updating the local SQLite store fails.
+    pub fn reconcile_antigravity_projects(&mut self) -> Result<usize, Error> {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+        let agy_db_path = home
+            .join(".gemini")
+            .join("antigravity")
+            .join("conversation_summaries.db");
+
+        if !agy_db_path.exists() {
+            return Ok(0);
+        }
+
+        let agy_conn = match rusqlite::Connection::open_with_flags(
+            &agy_db_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
         ) {
-            if let Ok(model_rows) = stmt_roll.query_map(params![cutoff_5h, cutoff_7d], |r| {
-                let agent: String = r.get(0)?;
-                let model: String = r.get(1)?;
-                let tok_5h: i64 = r.get(2)?;
-                let tok_7d: i64 = r.get(3)?;
-                let early_5h: Option<String> = r.get(4)?;
-                let early_7d: Option<String> = r.get(5)?;
-                Ok((
-                    agent,
-                    model,
-                    tok_5h.max(0) as u64,
-                    tok_7d.max(0) as u64,
-                    early_5h,
-                    early_7d,
-                ))
-            }) {
-                use std::collections::BTreeMap;
-                struct AggQuota {
-                    tok_5h: u64,
-                    tok_7d: u64,
-                    early_5h: Option<String>,
-                    early_7d: Option<String>,
-                }
-                let mut agg_map: BTreeMap<(String, String), AggQuota> = BTreeMap::new();
+            Ok(c) => c,
+            Err(_) => return Ok(0),
+        };
 
-                for mr in model_rows.flatten() {
-                    let (agent, raw_model, tok_5h, tok_7d, early_5h, early_7d) = mr;
-                    let lower = raw_model.to_lowercase();
-                    let limit_slug = if lower.contains("flash") {
-                        "gemini-3.8-flash".to_owned()
-                    } else if lower.contains("argon") {
-                        "gemini-4-argon".to_owned()
-                    } else if lower.contains("opus") {
-                        if lower.contains("5.5") {
-                            "claude-opus-5.5".to_owned()
-                        } else {
-                            "claude-opus-5".to_owned()
-                        }
-                    } else if lower.contains("sonnet") {
-                        "claude-sonnet-4".to_owned()
-                    } else {
-                        let base = if let Some(idx) = raw_model.find('(') {
-                            raw_model[..idx].trim()
-                        } else {
-                            raw_model.trim()
-                        };
-                        base.to_lowercase()
-                            .replace([' ', '/', '_'], "-")
-                            .trim_matches('-')
-                            .to_owned()
-                    };
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT s.id, s.project_id
+            FROM session s
+            LEFT JOIN project p ON s.project_id = p.id
+            WHERE s.agent = 'antigravity'
+              AND (p.name = 'unknown' OR p.name IS NULL)
+            "#,
+        )?;
 
-                    let entry = agg_map.entry((agent, limit_slug)).or_insert_with(|| AggQuota {
-                        tok_5h: 0,
-                        tok_7d: 0,
-                        early_5h: None,
-                        early_7d: None,
-                    });
-                    entry.tok_5h += tok_5h;
-                    entry.tok_7d += tok_7d;
-                    if let Some(e) = early_5h {
-                        if entry.early_5h.as_ref().is_none_or(|cur| &e < cur) {
-                            entry.early_5h = Some(e);
+        let sessions: Vec<(String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(Result::ok)
+            .collect();
+
+        let mut updated = 0;
+        let mut agy_stmt = match agy_conn.prepare(
+            "SELECT title, workspace_uris FROM conversation_summaries WHERE conversation_id = ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Ok(0),
+        };
+
+        for (sid, _curr_pid) in sessions {
+            let conv_id = sid.strip_prefix("antigravity:").unwrap_or(&sid);
+            if let Ok(mut rows) = agy_stmt.query(params![conv_id]) {
+                if let Ok(Some(row)) = rows.next() {
+                    let title: Option<String> =
+                        row.get(0).ok().filter(|s: &String| !s.trim().is_empty());
+                    let uris_json: Option<String> = row.get(1).ok();
+                    let mut detected_ws = None;
+                    if let Some(raw_uris) = uris_json {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw_uris) {
+                            if let Some(arr) = val.as_array() {
+                                if let Some(first) = arr.first().and_then(|v| v.as_str()) {
+                                    let unquoted = first.replace("%3A", ":").replace("%3a", ":");
+                                    let clean = unquoted
+                                        .strip_prefix("file:///")
+                                        .or_else(|| unquoted.strip_prefix("file://"))
+                                        .unwrap_or(&unquoted);
+                                    detected_ws = Some(clean.to_owned());
+                                }
+                            }
                         }
                     }
-                    if let Some(e) = early_7d {
-                        if entry.early_7d.as_ref().is_none_or(|cur| &e < cur) {
-                            entry.early_7d = Some(e);
-                        }
-                    }
-                }
 
-                for ((agent, limit_slug), agg) in agg_map {
-                    let (cap_5h, cap_7d) = if limit_slug.contains("claude-opus") {
-                        (1_500_000.0_f64, 15_000_000.0_f64)
-                    } else if limit_slug.contains("argon") {
-                        (5_000_000.0_f64, 50_000_000.0_f64)
-                    } else if limit_slug.contains("flash") {
-                        (10_000_000.0_f64, 100_000_000.0_f64)
-                    } else {
-                        (3_000_000.0_f64, 30_000_000.0_f64)
-                    };
+                    if let Some(ws) = detected_ws {
+                        let project = fleethud_core::Project::from_origin(None, &ws, None);
+                        let _ = self.conn.execute(
+                            r#"
+                            INSERT INTO project (id, canonical_key, repo_root, name, git_branch)
+                            VALUES (?1, ?2, ?3, ?4, ?5)
+                            ON CONFLICT(canonical_key) DO UPDATE SET
+                                name = excluded.name,
+                                repo_root = excluded.repo_root,
+                                git_branch = coalesce(excluded.git_branch, project.git_branch)
+                            "#,
+                            params![
+                                project.id,
+                                project.canonical_key,
+                                project.repo_root,
+                                project.name,
+                                project.git_branch
+                            ],
+                        );
 
-                    let now = Utc::now();
+                        let proj_id: String = self
+                            .conn
+                            .query_row(
+                                "SELECT id FROM project WHERE canonical_key = ?1",
+                                params![project.canonical_key],
+                                |r| r.get(0),
+                            )
+                            .unwrap_or(project.id);
 
-                    // 5-hour window
-                    if !out.iter().any(|q| {
-                        q.provider == agent
-                            && q.limit_id == limit_slug
-                            && q.window == QuotaWindow::FiveHour
-                    }) {
-                        let used_5h_pct = ((agg.tok_5h as f64 / cap_5h) * 100.0).clamp(0.0, 100.0);
-                        let resets_at_5h = agg.early_5h.and_then(|s| {
-                            DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.with_timezone(&Utc) + chrono::Duration::hours(5))
-                                .ok()
-                        });
-                        out.push(QuotaSnapshot {
-                            provider: agent.clone(),
-                            limit_id: limit_slug.clone(),
-                            window: QuotaWindow::FiveHour,
-                            used_pct: used_5h_pct,
-                            resets_at: resets_at_5h,
-                            plan: Some("standard".to_owned()),
-                            basis: TrustLevel::Estimated,
-                            observed_at: now,
-                        });
-                    }
-
-                    // Weekly window
-                    if !out.iter().any(|q| {
-                        q.provider == agent
-                            && q.limit_id == limit_slug
-                            && q.window == QuotaWindow::Weekly
-                    }) {
-                        let used_7d_pct = ((agg.tok_7d as f64 / cap_7d) * 100.0).clamp(0.0, 100.0);
-                        let resets_at_7d = agg.early_7d.and_then(|s| {
-                            DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.with_timezone(&Utc) + chrono::Duration::days(7))
-                                .ok()
-                        });
-                        out.push(QuotaSnapshot {
-                            provider: agent,
-                            limit_id: limit_slug,
-                            window: QuotaWindow::Weekly,
-                            used_pct: used_7d_pct,
-                            resets_at: resets_at_7d,
-                            plan: Some("standard".to_owned()),
-                            basis: TrustLevel::Estimated,
-                            observed_at: now,
-                        });
+                        let _ = self.conn.execute(
+                            "UPDATE session SET project_id = ?1, title = COALESCE(title, ?2) WHERE id = ?3",
+                            params![proj_id, title, sid],
+                        );
+                        updated += 1;
                     }
                 }
             }
         }
 
-        Ok(out)
+        Ok(updated)
+    }
+
+    /// Queries the workspace path for a specific Antigravity conversation from
+    /// `~/.gemini/antigravity/conversation_summaries.db`.
+    #[must_use]
+    pub fn find_antigravity_workspace(&self, conv_id: &str) -> Option<String> {
+        let home = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+        let agy_db = home
+            .join(".gemini")
+            .join("antigravity")
+            .join("conversation_summaries.db");
+        if !agy_db.exists() {
+            return None;
+        }
+        let conn = rusqlite::Connection::open_with_flags(
+            &agy_db,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+        )
+        .ok()?;
+
+        let mut stmt = conn
+            .prepare("SELECT workspace_uris FROM conversation_summaries WHERE conversation_id = ?1")
+            .ok()?;
+        let uris: String = stmt.query_row(params![conv_id], |r| r.get(0)).ok()?;
+        let val: serde_json::Value = serde_json::from_str(&uris).ok()?;
+        let first = val.as_array()?.first()?.as_str()?;
+        let unquoted = first.replace("%3A", ":").replace("%3a", ":");
+        let clean = unquoted
+            .strip_prefix("file:///")
+            .or_else(|| unquoted.strip_prefix("file://"))
+            .unwrap_or(&unquoted);
+        Some(clean.to_owned())
     }
 
     /// Queries the local user profile and preferences.
@@ -1541,6 +1570,36 @@ impl Database {
             providers,
             items_count,
         })
+    }
+
+    /// Returns the session PID and project root path for focus dispatch (`SPEC §3.13`).
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn get_session_focus_target(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<SessionFocusTarget>, Error> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT s.pid, p.repo_root
+            FROM session s
+            LEFT JOIN project p ON s.project_id = p.id
+            WHERE s.id = ?1
+            LIMIT 1
+            "#,
+        )?;
+        let row = stmt
+            .query_row(params![session_id], |r| {
+                let pid: Option<i64> = r.get(0)?;
+                let repo_root: Option<String> = r.get(1)?;
+                Ok(SessionFocusTarget {
+                    pid: pid.map(|p| p as u32),
+                    repo_root,
+                })
+            })
+            .optional()?;
+        Ok(row)
     }
 
     /// Queries SQLite storage metrics and file size.
