@@ -50,9 +50,25 @@ enum Commands {
         #[arg(long)]
         network: bool,
     },
+    /// Start the FleetHUD background daemon and local web dashboard.
+    Daemon {
+        /// Port to bind the local HTTP server to.
+        #[arg(long, default_value_t = 41738)]
+        port: u16,
+        /// Open the web dashboard in the default browser.
+        #[arg(long)]
+        open: bool,
+    },
+    /// Convenience shortcut: start the daemon and open the web dashboard in your browser.
+    Dashboard {
+        /// Port to bind the local HTTP server to.
+        #[arg(long, default_value_t = 41738)]
+        port: u16,
+    },
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     let db_path = cli.db.unwrap_or_else(default_db_path);
 
@@ -60,6 +76,8 @@ fn main() -> Result<()> {
         Commands::Status { limit } => cmd_status(&db_path, limit),
         Commands::Report { plan_usd } => cmd_report(&db_path, plan_usd),
         Commands::Doctor { network } => cmd_doctor(&db_path, network),
+        Commands::Daemon { port, open } => cmd_daemon(&db_path, port, open).await,
+        Commands::Dashboard { port } => cmd_daemon(&db_path, port, true).await,
     }
 }
 
@@ -236,4 +254,54 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     let mut out: String = s.chars().take(keep).collect();
     out.push_str("...");
     out
+}
+
+async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<()> {
+    let (lock, info) = fleethud_daemon::DaemonLock::acquire(port)
+        .context("failed to acquire daemon single-instance lock (is another daemon running?)")?;
+
+    let orchestrator =
+        fleethud_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
+            .context("failed to initialize daemon orchestrator")?;
+    let _reconciler_handle = orchestrator.spawn_reconciler();
+
+    let state = fleethud_daemon::api::AppState {
+        db: orchestrator.db(),
+        bearer_token: info.token.clone(),
+    };
+
+    let router = fleethud_daemon::api::build_router(state);
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .context(format!("failed to bind loopback TCP listener on {addr}"))?;
+
+    let dashboard_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
+    println!("=== FLEETHUD DAEMON STARTED ===");
+    println!("Status: Running");
+    println!("Loopback Port: {port}");
+    println!("PID: {}", info.pid);
+    println!("Web Dashboard: {dashboard_url}");
+    println!("Press Ctrl+C to terminate the daemon.");
+
+    if open {
+        #[cfg(target_os = "windows")]
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", &dashboard_url])
+            .spawn();
+        #[cfg(target_os = "macos")]
+        let _ = std::process::Command::new("open")
+            .arg(&dashboard_url)
+            .spawn();
+        #[cfg(target_os = "linux")]
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&dashboard_url)
+            .spawn();
+    }
+
+    axum::serve(listener, router)
+        .await
+        .context("daemon HTTP server terminated unexpectedly")?;
+    drop(lock);
+    Ok(())
 }
