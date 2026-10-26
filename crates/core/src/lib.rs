@@ -2,6 +2,7 @@
 //!
 //! See `docs/SPEC.md` §3.6–§3.9 for the data model and invariants.
 
+pub mod license;
 pub mod pricing;
 pub mod redact;
 pub mod rules;
