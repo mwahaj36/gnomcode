@@ -492,7 +492,7 @@ async fn list_sessions_handler(
     let offset = (page - 1) * limit;
 
     let db = state.db.lock().await;
-    let (sessions, total_count) = db
+    let (mut sessions, total_count) = db
         .list_sessions_paginated(
             params.agent.as_deref(),
             params.status.as_deref(),
@@ -500,6 +500,13 @@ async fn list_sessions_handler(
             limit,
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let host = fleethud_platform::hostname();
+    for s in &mut sessions {
+        if s.device_name.is_none() {
+            s.device_name = Some(host.clone());
+        }
+    }
 
     let (_, active_count) = db
         .list_sessions_paginated(None, Some("active"), 0, 1)
@@ -818,7 +825,9 @@ async fn pricing_refresh_handler(
         for (model_name, info) in obj {
             let in_cost = info.get("input_cost_per_token").and_then(|v| v.as_f64());
             let out_cost = info.get("output_cost_per_token").and_then(|v| v.as_f64());
-            let cache_cost = info.get("cache_read_input_token_cost").and_then(|v| v.as_f64());
+            let cache_cost = info
+                .get("cache_read_input_token_cost")
+                .and_then(|v| v.as_f64());
 
             if let (Some(ic), Some(oc)) = (in_cost, out_cost) {
                 // Convert per-token to per-1M-tokens
@@ -893,7 +902,23 @@ async fn auth_session_get_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
-    Ok((cors_headers(), Json(json!({ "paired": path.exists() }))))
+    let paired = path.exists();
+    let email = if paired {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+            .and_then(|v| {
+                v.pointer("/user/email")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned)
+            })
+    } else {
+        None
+    };
+    Ok((
+        cors_headers(),
+        Json(json!({ "paired": paired, "email": email })),
+    ))
 }
 
 async fn auth_session_post_handler(
@@ -976,7 +1001,7 @@ async fn live_snapshot_handler(
         .get_user_profile()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (sessions, total_count) = db
+    let (mut sessions, total_count) = db
         .list_sessions_paginated(
             params.agent.as_deref(),
             params.status.as_deref(),
@@ -984,6 +1009,13 @@ async fn live_snapshot_handler(
             limit,
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let host = fleethud_platform::hostname();
+    for s in &mut sessions {
+        if s.device_name.is_none() {
+            s.device_name = Some(host.clone());
+        }
+    }
 
     let (_, active_count) = db
         .list_sessions_paginated(None, Some("active"), 0, 1)

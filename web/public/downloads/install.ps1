@@ -21,7 +21,7 @@ if ($FoundExe) {
     Write-Output "Fetching release binary from https://fleethud.vercel.app..."
     $Arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
     $ZipDest = "$env:TEMP\fleethud.zip"
-    $Url = "https://fleethud.vercel.app/downloads/FleetHUD-v1.1.2-windows-$Arch.zip"
+    $Url = "https://fleethud.vercel.app/downloads/FleetHUD-v1.1.3-windows-$Arch.zip"
     Invoke-WebRequest -Uri $Url -OutFile $ZipDest
     Expand-Archive -Path $ZipDest -DestinationPath $InstallDir -Force
     Remove-Item $ZipDest -Force
@@ -79,4 +79,4 @@ Write-Output "Configured autostart in Windows Registry ($RunKey)."
 Start-Process "wscript.exe" -ArgumentList "`"$InstallDir\run-tray.vbs`""
 Start-Process "wscript.exe" -ArgumentList "`"$InstallDir\open-console.vbs`""
 
-Write-Output "FleetHUD v1.1.2 installation complete. Mission Control running in system tray."
+Write-Output "FleetHUD v1.1.3 installation complete. Mission Control running in system tray."
