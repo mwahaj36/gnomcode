@@ -11,3 +11,13 @@ export const PRIVACY_LINE =
 
 export const SITE_URL = "https://fleethud.vercel.app";
 export const DOWNLOAD_BASE = `${SITE_URL}/downloads`;
+
+export const BRAND = {
+  name: BRAND_NAME,
+  tagline: TAGLINE,
+  subline: SUBLINE,
+  privacyInvariant: PRIVACY_LINE,
+  version: "1.2.1",
+  siteUrl: SITE_URL,
+  downloadBase: DOWNLOAD_BASE,
+};

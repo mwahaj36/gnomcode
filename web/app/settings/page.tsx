@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
+import { BRAND } from "@/lib/brand";
 
 interface CustomModelPricing {
   model_pattern: string;
@@ -47,7 +48,7 @@ export default function SettingsPage() {
     if (error) {
       setPasswordMessage(`Error: ${error.message}`);
     } else {
-      setPasswordMessage("Password updated successfully!");
+      setPasswordMessage("Password updated successfully.");
       setNewPassword("");
     }
   };
@@ -81,7 +82,7 @@ export default function SettingsPage() {
         return;
       }
     } catch {
-      setLocalDaemonStatus("Offline / Not on this machine");
+      setLocalDaemonStatus("Offline / Loopback unreached");
     }
 
     // 2. Fall back to Supabase
@@ -140,7 +141,7 @@ export default function SettingsPage() {
     }
 
     setSaving(false);
-    setStatusMessage("Settings and subscription plans saved successfully!");
+    setStatusMessage("Settings and subscription tiers saved successfully.");
   };
 
   const addPricing = async () => {
@@ -200,70 +201,75 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 font-mono">
+    <div className="max-w-4xl mx-auto px-6 py-12 font-mono text-xs">
       <div className="flex justify-between items-center mb-8 border-b border-border pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">
-            FleetHUD Settings & Configuration
+          <div className="text-[11px] text-muted uppercase tracking-wider mb-1 font-bold">
+            SYSTEM // CONFIGURATION
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground font-mono">
+            Settings & Preferences
           </h1>
           <p className="text-xs text-muted mt-1 font-sans">
-            Manage your subscription tiers, custom model rate overrides, and sync connection.
+            Manage your subscription benchmarks, custom token rates, and sync preferences.
           </p>
         </div>
         <Link
           href="/console"
-          className="px-3 py-1.5 bg-bg border border-border rounded text-xs hover:border-accent"
+          className="h-8 px-3 bg-surface-elevated border border-border rounded-[4px] text-xs hover:border-primary text-foreground flex items-center gap-1"
         >
           &larr; Return to Console
         </Link>
       </div>
 
       {statusMessage && (
-        <div className="mb-6 text-xs bg-green/15 text-green border border-green/30 rounded p-3">
+        <div className="mb-6 text-xs bg-surface-elevated text-foreground border border-border rounded-[4px] p-3">
           {statusMessage}
         </div>
       )}
 
       {/* Account & Sync Status */}
-      <div className="bg-card border border-border rounded-xl p-6 mb-8">
+      <div className="bg-surface border border-border rounded-[6px] p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-sm font-bold uppercase text-foreground">Account & Sync Connectivity</h2>
+          <div className="font-bold text-foreground uppercase tracking-wider text-xs">
+            01 // ACCOUNT & CLOUD SYNC
+          </div>
           {user ? (
             <button
               onClick={handleSignOut}
-              className="text-xs text-red hover:underline"
+              className="text-xs text-primary hover:underline font-bold"
             >
-              Sign Out
+              [SIGN OUT]
             </button>
           ) : (
             <Link
               href="/auth"
-              className="px-2.5 py-1 bg-accent text-[#0d1117] rounded text-xs font-semibold hover:opacity-90"
+              className="px-3 py-1 bg-primary text-white rounded-[4px] text-xs font-bold hover:brightness-110"
             >
               Connect Cloud Account &rarr;
             </Link>
           )}
         </div>
-        <div className="space-y-3 text-xs">
-          <div className="flex justify-between items-center py-1.5 border-b border-border/40">
+        <div className="space-y-3">
+          <div className="flex justify-between items-center py-2 border-b border-border">
             <span className="text-muted">Cloud User Account</span>
-            <span className="font-semibold text-foreground">{user ? user.email : "Local Anonymous (Unlinked)"}</span>
+            <span className="font-bold text-foreground">{user ? user.email : "Local Anonymous (Unlinked)"}</span>
           </div>
-          <div className="flex justify-between items-center py-1.5 border-b border-border/40">
+          <div className="flex justify-between items-center py-2 border-b border-border">
             <span className="text-muted">Local Daemon Engine</span>
-            <span className="font-semibold text-accent">{localDaemonStatus}</span>
+            <span className="font-bold text-primary">{localDaemonStatus}</span>
           </div>
-          <div className="flex justify-between items-center py-1.5">
+          <div className="flex justify-between items-center py-2">
             <span className="text-muted">Telemetry & Privacy</span>
-            <span className="text-green font-semibold">100% Private &bull; Zero Content Stored</span>
+            <span className="text-foreground font-bold">[100% PRIVATE &bull; ZERO CONTENT STORED]</span>
           </div>
         </div>
 
         {user && (
-          <div className="mt-6 pt-5 border-t border-border/60">
-            <h3 className="text-xs font-semibold uppercase text-muted mb-3">Update Account Password</h3>
+          <div className="mt-6 pt-5 border-t border-border">
+            <div className="text-xs font-bold uppercase text-muted mb-3">UPDATE PASSWORD //</div>
             {passwordMessage && (
-              <div className="mb-3 text-xs p-2.5 rounded bg-bg border border-border text-foreground">
+              <div className="mb-3 text-xs p-2.5 rounded-[4px] bg-surface-elevated border border-border text-foreground">
                 {passwordMessage}
               </div>
             )}
@@ -273,12 +279,12 @@ export default function SettingsPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="New password (min 6 chars)"
-                className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
+                className="flex-1 bg-surface-elevated border border-border rounded-[4px] px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
               />
               <button
                 type="submit"
                 disabled={passwordUpdating}
-                className="px-4 py-1.5 bg-accent text-bg text-xs font-semibold rounded hover:opacity-90 disabled:opacity-50"
+                className="px-4 py-2 bg-surface-elevated border border-border text-foreground hover:border-primary font-bold rounded-[4px] text-xs disabled:opacity-50"
               >
                 {passwordUpdating ? "Updating..." : "Update Password"}
               </button>
@@ -288,156 +294,143 @@ export default function SettingsPage() {
       </div>
 
       {/* Monthly Subscription Plans */}
-      <div className="bg-card border border-border rounded-xl p-6 mb-8">
+      <div className="bg-surface border border-border rounded-[6px] p-6 mb-8">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-sm font-bold uppercase text-foreground">Monthly Subscription Plans ($/mo)</h2>
-          <span className="text-[11px] text-muted">Used for ROI multiplier calculations</span>
+          <div className="font-bold text-foreground uppercase tracking-wider text-xs">
+            02 // SUBSCRIPTION BENCHMARKS ($/MO)
+          </div>
+          <span className="text-[11px] text-muted">Used for ROI calculations</span>
         </div>
-        <form onSubmit={savePlans} className="space-y-4 text-xs">
+        <form onSubmit={savePlans} className="space-y-4">
           <div>
-            <label className="block text-muted mb-1">Developer Display Name</label>
+            <label className="block text-muted mb-1">DEVELOPER DISPLAY NAME // </label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+              className="w-full bg-surface-elevated border border-border rounded-[4px] px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-muted mb-1">OpenAI Plan ($/mo)</label>
+              <label className="block text-muted mb-1">CLAUDE PLAN ($/MO)</label>
               <input
                 type="number"
-                step="1"
-                value={openaiPlan}
-                onChange={(e) => setOpenaiPlan(Number(e.target.value))}
-                className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
-              />
-              <span className="text-[10px] text-muted mt-1 block">Plus: $20 &bull; Pro: $200</span>
-            </div>
-
-            <div>
-              <label className="block text-muted mb-1">Claude Plan ($/mo)</label>
-              <input
-                type="number"
-                step="1"
                 value={claudePlan}
                 onChange={(e) => setClaudePlan(Number(e.target.value))}
-                className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+                className="w-full bg-surface-elevated border border-border rounded-[4px] px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
               />
-              <span className="text-[10px] text-muted mt-1 block">Pro: $20 &bull; Max 5x: $100</span>
             </div>
-
             <div>
-              <label className="block text-muted mb-1">Google AI Plan ($/mo)</label>
+              <label className="block text-muted mb-1">OPENAI PLAN ($/MO)</label>
               <input
                 type="number"
-                step="1"
+                value={openaiPlan}
+                onChange={(e) => setOpenaiPlan(Number(e.target.value))}
+                className="w-full bg-surface-elevated border border-border rounded-[4px] px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-muted mb-1">GOOGLE PLAN ($/MO)</label>
+              <input
+                type="number"
                 value={googlePlan}
                 onChange={(e) => setGooglePlan(Number(e.target.value))}
-                className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+                className="w-full bg-surface-elevated border border-border rounded-[4px] px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
               />
-              <span className="text-[10px] text-muted mt-1 block">Pro: $20 &bull; Free: $0</span>
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2 bg-accent text-bg font-semibold rounded text-xs hover:opacity-90 transition-opacity"
-            >
-              {saving ? "Saving..." : "Save Subscription Preferences"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-5 py-2 bg-primary text-white font-bold rounded-[4px] text-xs hover:brightness-110 transition-all disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Benchmark Plans"}
+          </button>
         </form>
       </div>
 
-      {/* Custom Model Pricing Overrides */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-sm font-bold uppercase text-foreground mb-2">Custom Model Pricing Overrides</h2>
-        <p className="text-xs text-muted mb-5 font-sans">
-          Override default catalog token rates with custom negotiated pricing or enterprise discount tiers.
-        </p>
+      {/* Custom Model Rates */}
+      <div className="bg-surface border border-border rounded-[6px] p-6 mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <div className="font-bold text-foreground uppercase tracking-wider text-xs">
+            03 // CUSTOM MODEL PRICING OVERRIDES
+          </div>
+          <span className="text-[11px] text-muted">Per 1M tokens</span>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mb-4 text-xs">
+        {customPricing.length > 0 ? (
+          <div className="overflow-x-auto mb-6 border border-border rounded-[4px]">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-surface-elevated text-muted border-b border-border">
+                <tr>
+                  <th className="py-2 px-3">PATTERN //</th>
+                  <th className="py-2 px-3">INPUT / 1M</th>
+                  <th className="py-2 px-3">OUTPUT / 1M</th>
+                  <th className="py-2 px-3">CACHE READ</th>
+                  <th className="py-2 px-3 text-right">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {customPricing.map((cp) => (
+                  <tr key={cp.model_pattern}>
+                    <td className="py-2 px-3 font-bold text-foreground">{cp.model_pattern}</td>
+                    <td className="py-2 px-3 text-muted">\${cp.input_per_mtok_usd.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-muted">\${cp.output_per_mtok_usd.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-muted">\${cp.cache_read_per_mtok_usd.toFixed(2)}</td>
+                    <td className="py-2 px-3 text-right">
+                      <button
+                        onClick={() => deletePricing(cp.model_pattern)}
+                        className="text-primary hover:underline text-[10px]"
+                      >
+                        [REMOVE]
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-muted text-xs font-sans mb-4">
+            No custom overrides configured. Standard LiteLLM/Official pricing catalog is in effect.
+          </p>
+        )}
+
+        {/* Add custom rate form */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <input
             type="text"
-            placeholder="Pattern (e.g. gpt-4o)"
+            placeholder="Model pattern (e.g. gpt-4o-custom)"
             value={newPattern}
             onChange={(e) => setNewPattern(e.target.value)}
-            className="sm:col-span-2 bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="bg-surface-elevated border border-border rounded-[4px] px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
           />
           <input
             type="number"
             step="0.01"
-            placeholder="Input $/M"
+            placeholder="Input / 1M USD"
             value={newInput}
             onChange={(e) => setNewInput(e.target.value)}
-            className="bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="bg-surface-elevated border border-border rounded-[4px] px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
           />
           <input
             type="number"
             step="0.01"
-            placeholder="Output $/M"
+            placeholder="Output / 1M USD"
             value={newOutput}
             onChange={(e) => setNewOutput(e.target.value)}
-            className="bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="bg-surface-elevated border border-border rounded-[4px] px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
           />
-          <input
-            type="number"
-            step="0.01"
-            placeholder="Cache $/M"
-            value={newCache}
-            onChange={(e) => setNewCache(e.target.value)}
-            className="bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
-          />
-        </div>
-        <button
-          onClick={addPricing}
-          className="px-4 py-1.5 bg-green text-bg font-semibold rounded text-xs hover:opacity-90 mb-5"
-        >
-          Add / Update Price Override
-        </button>
-
-        <div className="border border-border rounded-lg overflow-hidden text-xs">
-          <table className="w-full text-left">
-            <thead className="bg-bg text-[11px] text-muted border-b border-border uppercase">
-              <tr>
-                <th className="p-3">Model Pattern</th>
-                <th className="p-3">Input $/M</th>
-                <th className="p-3">Output $/M</th>
-                <th className="p-3">Cache Read $/M</th>
-                <th className="p-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {customPricing.map((p) => (
-                <tr key={p.model_pattern} className="hover:bg-bg/40">
-                  <td className="p-3 font-semibold text-foreground">{p.model_pattern}</td>
-                  <td className="p-3">${(p.input_per_mtok_usd ?? 0).toFixed(2)}</td>
-                  <td className="p-3">${(p.output_per_mtok_usd ?? 0).toFixed(2)}</td>
-                  <td className="p-3">${(p.cache_read_per_mtok_usd ?? 0).toFixed(2)}</td>
-                  <td className="p-3 text-right">
-                    <button
-                      onClick={() => deletePricing(p.model_pattern)}
-                      className="text-red hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {customPricing.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-4 text-center text-muted">
-                    No custom pricing overrides configured. Default provider rates apply.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <button
+            type="button"
+            onClick={addPricing}
+            className="px-4 py-1.5 bg-surface-elevated border border-border text-foreground hover:border-primary font-bold rounded-[4px] text-xs"
+          >
+            Add Override
+          </button>
         </div>
       </div>
     </div>
