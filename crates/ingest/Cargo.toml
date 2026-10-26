@@ -1,0 +1,25 @@
+[package]
+name = "fleethud-ingest"
+description = "File watching, reconciliation, tailing and checkpointing of agent logs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+fleethud-core = { workspace = true }
+fleethud-adapters = { workspace = true }
+fleethud-store = { workspace = true }
+fleethud-platform = { workspace = true }
+notify = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

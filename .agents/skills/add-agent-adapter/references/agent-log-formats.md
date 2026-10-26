@@ -1,0 +1,33 @@
+# Verified Agent Log Formats
+
+Reference notes collected from live inspection on 2026-10-26.
+
+## 1. Claude Code (`claude-code`)
+- **Paths:** `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`, `~/.config/claude/projects/`, or `$CLAUDE_CONFIG_DIR/projects/`.
+- **Format:** Append-only JSONL.
+- **Usage fields:** `message.usage.{input_tokens, cache_creation_input_tokens, cache_read_input_tokens, output_tokens}`, plus `cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}`.
+- **Metadata:** `message.model`, `message.id`, `requestId`, `sessionId`, `cwd`, `gitBranch`, `version`, `entrypoint` (`cli` | `claude-vscode`), `isSidechain` (boolean, true for subagents).
+- **Dedup key:** `format!("{}:{}", message.id, request_id)` — mandatory because Claude writes an assistant entry per content block and copies prior history on `--resume`.
+
+## 2. OpenAI Codex CLI (`codex`)
+- **Paths:** `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (defaults to `~/.codex`).
+- **Format:** Append-only JSONL with monotonic `ordinal`.
+- **Usage fields:** `type == "event_msg"` and `payload.type == "token_count"`.
+  - Use `payload.info.last_token_usage.{input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens, reasoning_output_tokens, total_tokens}` for per-turn deltas (`total_token_usage` is cumulative).
+  - Context window: `payload.info.model_context_window`.
+- **Per-model quota pools (`rate_limits`):**
+  - `payload.rate_limits.limit_id` (e.g. `"codex"`, `"premium"`), `plan_type` (e.g. `"plus"`).
+  - `primary`: `{ used_percent, window_minutes: 300, resets_at: <unix_sec> }`.
+  - `secondary`: `{ used_percent, window_minutes: 10080, resets_at: <unix_sec> }`.
+  - `rate_limit_reached_type`: non-null when rate-limited.
+- **Dedup key:** `format!("{}:{}", session_id, ordinal)`.
+
+## 3. Google Antigravity (`antigravity`)
+- **Paths:** `~/.gemini/antigravity/brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl` (and `transcript_full.jsonl`).
+- **Format:** Append-only JSONL with `step_index`.
+- **Usage fields:** Steps with `type == "PLANNER_RESPONSE"` carry `input_tokens`, `cache_read_tokens`, `output_tokens`, `created_at`, `status`.
+- **Model & quota pool extraction:**
+  - `USER_INPUT` steps contain `<USER_SETTINGS_CHANGE>` blocks when the user switches models: `The user changed setting \`Model Selection\` from <old> to <new>.` (e.g. `Claude Opus 5.5 (Medium)`, `Gemini 4 Argon (Medium)`).
+  - Fallback for sessions without a change event: `~/.gemini/antigravity/antigravity_state.pbtxt` (`last_selected_agent_model`).
+  - Each model family maps to an independent `limit_id` pool (`claude`, `gemini`, `fable`, etc.).
+- **Dedup key:** `format!("{}:{}", conversation_id, step_index)`.

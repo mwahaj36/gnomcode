@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.ico binary
+*.icns binary
+*.db binary
+# Fixtures are byte-exact test inputs (some intentionally contain CRLF).
+fixtures/** -text

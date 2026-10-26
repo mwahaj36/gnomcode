@@ -1,0 +1,27 @@
+name: Agent Adapter Request
+description: Request support or per-model quota tracking for an AI coding agent
+title: "[Adapter]: "
+labels: ["enhancement", "adapter"]
+body:
+  - type: input
+    id: agent_name
+    attributes:
+      label: Agent / Tool Name
+      placeholder: e.g. Windsurf Cascade, Amp, OpenCode
+    validations:
+      required: true
+  - type: textarea
+    id: log_location
+    attributes:
+      label: Local Log / Storage Path (Windows, macOS, Linux)
+      description: Where does this agent store its local session transcripts or usage data?
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Anonymized Sample Line
+      description: Run `node .agents/skills/add-agent-adapter/scripts/anonymize-fixture.mjs` on a sample file and paste 1-2 lines showing token/model/quota fields.
+      render: json
+    validations:
+      required: false

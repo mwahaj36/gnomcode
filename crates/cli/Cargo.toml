@@ -1,0 +1,26 @@
+[package]
+name = "fleethud"
+description = "Live mission control for AI coding agents: the fleethud CLI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fleethud"
+path = "src/main.rs"
+
+[dependencies]
+fleethud-core = { workspace = true }
+fleethud-daemon = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+obfstr = { workspace = true }
+
+[lints]
+workspace = true

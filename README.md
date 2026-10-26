@@ -1,19 +1,24 @@
 # 🛸 FleetHUD (`fleethud.pro`)
 
-> **Universal Flight Recorder & Real-Time HUD for AI Coding Agents**  
-> Tracks Claude Code, Google Antigravity, Cursor, and Cline with zero configuration.
+> **Live Mission Control for AI Coding Agents**  
+> Track live agent state, per-model quota pools, and ground-truth token cost across Claude Code, Codex, Google Antigravity, Gemini CLI, Cline/Roo, and Cursor on Windows, macOS, and Linux. Zero config. 100% local.
 
 [![npm version](https://img.shields.io/npm/v/fleethud.svg)](https://www.npmjs.com/package/fleethud)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## ⚡ Quick Start
+## 📖 Single Source of Truth
 
-```bash
-npx fleethud
+- **[`docs/SPEC.md`](./docs/SPEC.md)** — Product specification, system architecture, per-model quota engine, Resume Queue, roadmap, deliverables, and deployment plan.
+- **[`AGENTS.md`](./AGENTS.md)** — Engineering rules, Rust standards, non-negotiable invariants, and testing requirements.
+- **[`docs/adr/`](./docs/adr/)** — Architecture Decision Records.
+- **[`.agents/skills/`](./.agents/skills/)** — Project runbooks (`rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`).
+
+## 🛠 Development
+
+```sh
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo deny check
 ```
-
-## 📖 Product Specification
-
-See [PRODUCT.md](./PRODUCT.md) for full architecture, data schemas, supported surfaces, and the monetization roadmap.

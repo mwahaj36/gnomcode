@@ -1,0 +1,51 @@
+name: Bug Report
+description: Report a bug, parsing error, or platform issue in FleetHUD
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue! **Never paste raw agent log lines containing personal prompts, code, or API keys.**
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows 11 / 10
+        - Windows + WSL2
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (X11)
+        - Linux (Wayland - GNOME / KDE / Sway / Hyprland)
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Affected Agent Surface
+      options:
+        - Claude Code (CLI / VS Code)
+        - OpenAI Codex CLI
+        - Google Antigravity
+        - Gemini CLI
+        - Cline / Roo Code
+        - Cursor
+        - General / Tray / Daemon
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Clear description of the bug and how to reproduce it.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `fleethud doctor`
+      render: shell
+      placeholder: Paste the output of `fleethud doctor` here...
+    validations:
+      required: false

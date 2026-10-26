@@ -1,0 +1,25 @@
+[package]
+name = "fleethud-adapters"
+description = "Per-agent log parsers that turn raw bytes into normalized events. Pure and deterministic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+fleethud-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+obfstr = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

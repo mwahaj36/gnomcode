@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly full matrix at 03:00 UTC (runs only if commits exist)
+    - cron: "0 3 * * *"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  check:
+    name: clippy + test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Private repo minute budget (SPEC §7.3): Linux + Windows on PRs, add macOS on main/schedule.
+        os: ${{ (github.event_name == 'push' || github.event_name == 'schedule') && fromJson('["ubuntu-latest","windows-latest","macos-latest"]') || fromJson('["ubuntu-latest","windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  msrv:
+    name: MSRV check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      # `+1.85` overrides rust-toolchain.toml (which pins stable).
+      - run: cargo +1.85 check --workspace
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: advisories bans sources

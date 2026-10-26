@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "skills": {
+    "ponytail": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail/SKILL.md",
+      "computedHash": "9feedbe220d039ba30720217b3fce16214817063fb54a48843d89368c86554e9"
+    },
+    "ponytail-audit": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-audit/SKILL.md",
+      "computedHash": "9375d07b902acf9072a6716d81ab129d274f3a3eab1c47b8a42c38a7a9bb84e7"
+    },
+    "ponytail-debt": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-debt/SKILL.md",
+      "computedHash": "049731dcd887d8784c829b75fed0a0a5d10ac8974ceb6e51ab2578473d57524a"
+    },
+    "ponytail-gain": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-gain/SKILL.md",
+      "computedHash": "e551bd30f9b52b155d726f98e57c68fa4aad1ce93003e57a88ba85c5e84dcb7b"
+    },
+    "ponytail-help": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-help/SKILL.md",
+      "computedHash": "6aa9cc8011b88aa011ba3dc306b249d776c8e920c7c388ac64c4c7dd9a9bdf76"
+    },
+    "ponytail-review": {
+      "source": "DietrichGebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail-review/SKILL.md",
+      "computedHash": "e090103216f0452e05672991a81078e27316a6b8d468b19e7107934606cfc122"
+    },
+    "rust-best-practices": {
+      "source": "apollographql/skills",
+      "sourceType": "github",
+      "skillPath": "skills/rust-best-practices/SKILL.md",
+      "computedHash": "5f050929b5b62c8c847b75955d7d773be9dc649d03778e6e94cd8db1101fb674"
+    },
+    "supabase-postgres-best-practices": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/supabase-postgres-best-practices/SKILL.md",
+      "computedHash": "128fac78002d916c8ca908245d398e634f540d8bcf20915b2b2359aeb18eba59"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "276fb0aadb002ab930cc2a56de89e16995a2e3e70b33587652bf0a5fb123148d"
+    },
+    "tauri-v2": {
+      "source": "nodnarbnitram/claude-code-extensions",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/tauri-v2/SKILL.md",
+      "computedHash": "7108944eec3bef17686df9ebae9c9bdbee7809744930c8734c979e3c4573eaab"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/test-driven-development/SKILL.md",
+      "computedHash": "3cfe4ebb6fa7288f668d87880d279c8e48f7a92b63415e296857060f5ce22e05"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "b529822bdac4b197b180fe12225cff86b930b65910435103c10622df7f041651"
+    }
+  }
+}

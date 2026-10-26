@@ -1,0 +1,71 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.85"
+license-file = "LICENSE"
+repository = "https://github.com/mwahaj36/fleethud"
+homepage = "https://fleethud.pro"
+authors = ["Wahaj <https://github.com/mwahaj36>"]
+publish = false
+
+[workspace.dependencies]
+# Internal crates
+fleethud-core = { path = "crates/core" }
+fleethud-adapters = { path = "crates/adapters" }
+fleethud-ingest = { path = "crates/ingest" }
+fleethud-store = { path = "crates/store" }
+fleethud-platform = { path = "crates/platform" }
+fleethud-daemon = { path = "crates/daemon" }
+# External dependencies (see AGENTS.md §5).
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net", "signal", "process"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+notify = "8.0"
+sysinfo = "0.33"
+axum = { version = "0.8", features = ["ws", "macros"] }
+obfstr = "0.4"
+ed25519-dalek = { version = "2.1", features = ["std"] }
+sha2 = "0.10"
+hmac = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+toml = "0.8"
+tempfile = "3.13"
+insta = { version = "1.40", features = ["json", "yaml"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
