@@ -2,6 +2,7 @@
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
 pub mod api;
+pub mod cloud;
 pub mod pro;
 pub mod sync;
 

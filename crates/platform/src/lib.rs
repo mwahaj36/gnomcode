@@ -518,6 +518,21 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
     }
 }
 
+/// Detects a Codex cloud thread from runtime metadata without reading credentials or logs.
+#[must_use]
+pub fn codex_cloud_session_id() -> Option<String> {
+    let cloud = ["CODEX_ENVIRONMENT_ID", "CODEX_CAAS_SESSION_ID"]
+        .iter()
+        .any(|name| env::var(name).is_ok_and(|value| !value.trim().is_empty()));
+    if !cloud {
+        return None;
+    }
+    ["CODEX_THREAD_ID", "CODEX_SESSION_ID"]
+        .iter()
+        .filter_map(|name| env::var(name).ok())
+        .find(|value| !value.trim().is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{open_shared_read, read_from_offset};

@@ -24,20 +24,10 @@ allow = [
 ]
 confidence-threshold = 0.9
 
-[[licenses.clarify]]
-name = "fleethud"
-expression = "LicenseRef-FleetHUD-Proprietary"
-license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
-# First-party workspace crates are proprietary; allow our own license ref.
-exceptions = [
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud" },
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud-core" },
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud-adapters" },
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud-store" },
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud-platform" },
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud-ingest" },
-    { allow = ["LicenseRef-FleetHUD-Proprietary"], name = "fleethud-daemon" },
-]
+# FleetHUD is proprietary and all workspace crates have publish = false.
+# Third-party dependency licenses are still checked against the allow-list above.
+[licenses.private]
+ignore = true
 
 [bans]
 multiple-versions = "warn"
