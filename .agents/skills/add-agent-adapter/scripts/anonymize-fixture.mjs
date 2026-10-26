@@ -18,6 +18,10 @@ const PRESERVE_STRING_KEYS = new Set([
   "status",
   "source",
   "model",
+  "model_provider",
+  "originator",
+  "cli_version",
+  "thread_source",
   "stop_reason",
   "service_tier",
   "speed",
@@ -31,6 +35,7 @@ const PRESERVE_STRING_KEYS = new Set([
   "created_at",
   "timestamp",
   "name",
+  "branch",
 ]);
 
 const ID_KEYS = new Set([
@@ -38,8 +43,19 @@ const ID_KEYS = new Set([
   "uuid",
   "parentUuid",
   "sessionId",
+  "session_id",
   "requestId",
   "installation_uuid",
+  "creator_user_id",
+  "creator_account_id",
+  "window_id",
+  "commit_hash",
+]);
+
+const PATH_KEYS = new Set([
+  "cwd",
+  "repoRoot",
+  "runtime_workspace_roots",
 ]);
 
 const idMap = new Map();
@@ -61,6 +77,9 @@ function scrubValue(key, val) {
     return val;
   }
   if (Array.isArray(val)) {
+    if (PATH_KEYS.has(key)) {
+      return val.map(() => "/workspace/sample-project");
+    }
     return val.map((item) => scrubValue(key, item));
   }
   if (typeof val === "object") {
@@ -72,8 +91,9 @@ function scrubValue(key, val) {
   }
   if (typeof val === "string") {
     if (ID_KEYS.has(key)) return scrubId(val);
-    if (key === "cwd" || key === "repoRoot") return "/workspace/sample-project";
-    if (key === "gitBranch") return "main";
+    if (PATH_KEYS.has(key)) return "/workspace/sample-project";
+    if (key === "gitBranch" || key === "branch") return "main";
+    if (key === "repository_url") return "https://github.com/example/sample-project";
     if (PRESERVE_STRING_KEYS.has(key)) return val;
     if (val.includes("<USER_SETTINGS_CHANGE>")) return scrubUserSettingsChange(val);
     return "[REDACTED]";
@@ -81,15 +101,12 @@ function scrubValue(key, val) {
   return val;
 }
 
-const raw = fs.readFileSync(inputPath, "utf8");
+const raw = fs.readFileSync(inputPath, "utf8").replace(/^\uFEFF/, "");
 const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
-const outLines = lines.map((line) => {
-  try {
-    const parsed = JSON.parse(line);
-    return JSON.stringify(scrubValue("", parsed));
-  } catch {
-    return line;
-  }
+const outLines = lines.map((line, idx) => {
+  const cleaned = line.replace(/^\uFEFF/, "").trim();
+  const parsed = JSON.parse(cleaned);
+  return JSON.stringify(scrubValue("", parsed));
 });
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
