@@ -153,6 +153,10 @@ pub struct SessionListItem {
     /// Originating device name (e.g. hostname or "local").
     #[serde(default)]
     pub device_name: Option<String>,
+    /// False for presence-only collectors: zero counters do not mean measured zero usage.
+    pub usage_available: bool,
+    /// Trust level of the API-equivalent cost; unknown when pricing or usage is missing.
+    pub cost_basis: TrustLevel,
 }
 
 /// Breakdown for a single model under a provider.
@@ -1073,6 +1077,18 @@ impl Database {
         }
     }
 
+    /// Marks an explicitly registered session as cloud-hosted, including sessions first seen in native logs.
+    ///
+    /// # Errors
+    /// Returns an error if SQLite cannot update the session.
+    pub fn mark_cloud_session(&self, id: &str) -> Result<(), Error> {
+        self.conn.execute(
+            obfstr::obfstr!("UPDATE session SET surface = 'cloud', model = coalesce((SELECT model FROM usage_record WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT 1), model) WHERE id = ?1"),
+            [id],
+        )?;
+        Ok(())
+    }
+
     /// Queries live and recent active agent sessions, ordered by `last_event_at DESC`.
     ///
     /// # Errors
@@ -1104,6 +1120,7 @@ impl Database {
             let surface = match surface_str.as_str() {
                 "ide" => Surface::Ide,
                 "desktop_app" => Surface::DesktopApp,
+                "cloud" => Surface::Cloud,
                 _ => Surface::Cli,
             };
             let state_str: String = row.get(7)?;
@@ -1113,6 +1130,7 @@ impl Database {
                 "awaiting_approval" => SessionState::AwaitingApproval,
                 "error" => SessionState::Error,
                 "ended" => SessionState::Ended,
+                "connected" => SessionState::Connected,
                 _ => SessionState::Idle,
             };
             let s_at_str: String = row.get(9)?;
@@ -1126,7 +1144,11 @@ impl Database {
 
             let now = Utc::now();
             let is_stale = (now - last_event_at).num_minutes() > 15;
-            let state = if is_stale
+            let state = if raw_state == SessionState::Connected
+                && (now - last_event_at).num_seconds() > 90
+            {
+                SessionState::Ended
+            } else if is_stale
                 && (raw_state == SessionState::Tool || raw_state == SessionState::Thinking)
             {
                 SessionState::Idle
@@ -1708,7 +1730,9 @@ impl Database {
                 COALESCE(SUM(u.cache_read_tokens), 0),
                 COALESCE(MAX(u.context_tokens), 0),
                 MAX(u.context_window),
-                s.title
+                s.title,
+                COUNT(u.dedup_key),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -1734,6 +1758,8 @@ impl Database {
                 let context_tokens: i64 = row.get(12)?;
                 let context_window: Option<i64> = row.get(13)?;
                 let title: Option<String> = row.get(14)?;
+                let usage_count: i64 = row.get(15)?;
+                let unknown_pricing: Option<i64> = row.get(16)?;
 
                 let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
@@ -1747,7 +1773,14 @@ impl Database {
                         state_str.as_str(),
                         "thinking" | "tool" | "awaiting_approval"
                     );
-                let state = if is_active {
+                let state = if surface == "cloud" {
+                    if (now - last_event_at).num_seconds() <= 90 {
+                        "connected"
+                    } else {
+                        "disconnected"
+                    }
+                    .to_owned()
+                } else if is_active {
                     state_str
                 } else {
                     "idle".to_owned()
@@ -1764,7 +1797,7 @@ impl Database {
                 Ok(SessionListItem {
                     id,
                     agent,
-                    surface,
+                    surface: surface.clone(),
                     project_name,
                     model,
                     state,
@@ -1779,6 +1812,12 @@ impl Database {
                     total_cost_usd,
                     title,
                     device_name: None,
+                    usage_available: surface != "cloud" || usage_count > 0,
+                    cost_basis: if usage_count == 0 || unknown_pricing.unwrap_or(0) > 0 {
+                        TrustLevel::Unknown
+                    } else {
+                        TrustLevel::Estimated
+                    },
                 })
             },
         )?;
