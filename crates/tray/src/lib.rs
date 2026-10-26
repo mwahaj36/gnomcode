@@ -3,6 +3,8 @@
 //! Provides tray menu actions, notification triggers, and window focus hooks
 //! for the FleetHUD tray icon across Windows, macOS, and Linux.
 
+pub mod focus;
+
 use fleethud_core::SessionState;
 use fleethud_store::Database;
 use std::sync::Arc;
