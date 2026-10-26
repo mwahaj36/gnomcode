@@ -47,45 +47,7 @@ pub fn notify_quota_reset(provider: &str, limit_id: &str) -> NotificationPayload
     }
 }
 
-/// Dispatches a window focus request for a process ID across OS platforms (`SPEC §3.13`).
-///
-/// Returns `true` if a focus attempt was dispatched, or `false` if unsupported.
-#[must_use]
-pub fn bring_to_front(pid: u32) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows, focus via Win32 or Windows Terminal / VS Code CLI
-        let script =
-            format!("$wshell = New-Object -ComObject Wscript.Shell; $wshell.AppActivate({pid})");
-        let _ = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
-            .spawn();
-        true
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let script = format!(
-            "tell application \"System Events\" to set frontmost of (every process whose unix id is {pid}) to true"
-        );
-        let _ = std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .spawn();
-        true
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let pid_str = pid.to_string();
-        let _ = std::process::Command::new("wmctrl")
-            .args(["-a", &pid_str])
-            .spawn();
-        true
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        let _ = pid;
-        false
-    }
-}
+pub use fleethud_platform::bring_to_front;
 
 #[cfg(test)]
 mod tests {

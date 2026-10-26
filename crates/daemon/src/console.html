@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FleetHUD — Desktop Cockpit</title>
+  <link rel="icon" type="image/svg+xml" href="/fleethud.svg">
+  <link rel="alternate icon" href="/favicon.ico">
   <style>
     :root {
       --bg: #0d1117;
@@ -340,10 +342,10 @@
 <body>
   <header>
     <div class="header-left">
-      <div style="width: 28px; height: 28px; background: #ffffff; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; padding: 3px; margin-right: 6px;">
-        <svg viewBox="0 0 1024 1024" style="width: 100%; height: 100%;">
-          <polygon points="512,128 896,512 512,896 128,512" fill="#0f172a" />
-          <polygon points="512,280 744,512 512,744 280,512" fill="#38bdf8" />
+      <div style="width: 28px; height: 28px; background: #ffffff; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; padding: 2px; margin-right: 6px;">
+        <svg viewBox="0 0 2048 2048" style="width: 100%; height: 100%;">
+          <polyline points="290.67 1756.53 290.67 291.47 1755.73 291.47" fill="#0d1117" />
+          <rect x="799.39" y="789.88" width="957.95" height="957.95" fill="#0d1117" />
         </svg>
       </div>
       <h1>FleetHUD</h1>
@@ -546,8 +548,8 @@
 
       <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 12px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Supabase Endpoint:</span>
-          <span style="color: var(--accent);">https://jjnuxngvhuvxkxrfmnqx.supabase.co</span>
+          <span style="color: var(--text-muted);">Cloud Telemetry Mirror:</span>
+          <span style="color: var(--green);">Connected & Ready</span>
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: var(--text-muted);">Sync Frequency:</span>
@@ -571,6 +573,7 @@
           <span>&rarr;</span>
         </a>
         <a
+          id="auth-signin-link"
           href="https://fleethud.vercel.app/auth"
           target="_blank"
           rel="noopener noreferrer"
@@ -579,6 +582,30 @@
         >
           <span>Sign In via GitHub / Email</span>
         </a>
+      </div>
+
+      <!-- Quick Account Pairing / Token Paste Card -->
+      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
+        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+          Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to instantly pair this desktop cockpit.
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <input
+            type="text"
+            id="auth-token-input"
+            placeholder="Paste pairing token or session JSON here..."
+            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
+          >
+          <button
+            onclick="pairTokenDirectly()"
+            class="btn-primary"
+            style="padding: 8px 16px; white-space: nowrap; font-size: 11px;"
+          >
+            Connect Account
+          </button>
+        </div>
+        <div id="auth-pair-status" style="margin-top: 10px; font-size: 11px; font-family: var(--font-mono); display: none;"></div>
       </div>
     </div>
   </main>
@@ -793,10 +820,83 @@
       }
     }
 
+    function formatResetCountdown(resetsAtIso, windowKind) {
+      if (!resetsAtIso) return "Rolling";
+      const target = new Date(resetsAtIso);
+      const now = new Date();
+      const diffMs = target.getTime() - now.getTime();
+      if (diffMs <= 0) return "Resetting now";
+
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      const remHours = diffHours % 24;
+
+      const timeStr = target.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const dateStr = target.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+      if (diffDays > 0) {
+        return `in ${diffDays}d ${remHours}h (${dateStr}, ${timeStr})`;
+      } else if (diffHours > 0) {
+        return `in ${diffHours}h ${diffMinutes}m (${timeStr})`;
+      } else {
+        return `in ${diffMinutes}m (${timeStr})`;
+      }
+    }
+
+    async function pairTokenDirectly() {
+      const input = document.getElementById('auth-token-input');
+      const status = document.getElementById('auth-pair-status');
+      if (!input || !status) return;
+      const val = input.value.trim();
+      if (!val) return;
+
+      status.style.display = 'block';
+      status.style.color = 'var(--text-muted)';
+      status.textContent = 'Verifying and saving session...';
+
+      try {
+        let sessionData = null;
+        try {
+          sessionData = JSON.parse(val);
+        } catch {
+          try {
+            sessionData = JSON.parse(atob(val));
+          } catch {
+            sessionData = { access_token: val, token_type: 'bearer' };
+          }
+        }
+
+        const res = await fetch('/api/v1/auth/session', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(sessionData)
+        });
+
+        if (res.ok) {
+          status.style.color = 'var(--green)';
+          status.textContent = 'Account successfully paired! Roaming enabled.';
+          input.value = '';
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          status.style.color = 'var(--red)';
+          status.textContent = 'Failed to save session. Check token and try again.';
+        }
+      } catch (err) {
+        status.style.color = 'var(--red)';
+        status.textContent = 'Error: ' + err.message;
+      }
+    }
+
     async function loadQuota() {
       try {
         const res = await fetch('/api/v1/quota', { headers }).then(r => r.json());
         if (!res) return;
+
+        const authLink = document.getElementById('auth-signin-link');
+        if (authLink) {
+          authLink.href = `https://fleethud.vercel.app/auth?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
+        }
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastQuotaJson) return;
@@ -816,7 +916,7 @@
             <td>${q.limit_id}</td>
             <td>${q.window}</td>
             <td style="font-weight: 600; color: ${q.used_pct > 80 ? 'var(--red)' : 'var(--green)'};">${q.used_pct.toFixed(1)}%</td>
-            <td>${q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : 'N/A'}</td>
+            <td>${formatResetCountdown(q.resets_at, q.window)}</td>
             <td><span class="badge" style="font-size: 10px;">${q.basis === 'estimated' ? 'EST' : 'EXACT'}</span></td>
           </tr>
         `).join('');
