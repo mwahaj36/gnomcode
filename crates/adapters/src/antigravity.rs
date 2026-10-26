@@ -223,11 +223,6 @@ impl SourceAdapter for AntigravityAdapter {
                         });
                     }
                 }
-            } else if step_type == "GENERIC"
-                || (obj.get("status").and_then(Value::as_str) == Some("DONE")
-                    && step_type != "USER_INPUT")
-            {
-                sess.state = SessionState::Idle;
             }
         }
 
