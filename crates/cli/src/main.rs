@@ -603,7 +603,14 @@ fn open_browser(url: &str) {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_owned());
-        let install_dir = std::path::PathBuf::from(&local_app_data).join("FleetHUD");
+        let install_dir = {
+            let spawnt_dir = std::path::PathBuf::from(&local_app_data).join("spawnt");
+            if spawnt_dir.exists() {
+                spawnt_dir
+            } else {
+                std::path::PathBuf::from(&local_app_data).join("FleetHUD")
+            }
+        };
 
         // Ensure tray background service is running
         let run_tray = install_dir.join("run-tray.vbs");
@@ -615,7 +622,7 @@ fn open_browser(url: &str) {
         }
 
         let app_arg = format!("--app={url}");
-        let profile_arg = format!("--user-data-dir={local_app_data}\\FleetHUD\\AppProfile");
+        let profile_arg = format!("--user-data-dir={local_app_data}\\spawnt\\AppProfile");
         let candidate_paths = [
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -630,7 +637,7 @@ fn open_browser(url: &str) {
                 .args([
                     &app_arg,
                     &profile_arg,
-                    "--window-name=FleetHUD",
+                    "--window-name=spawnt",
                     "--window-size=1280,850",
                     "--no-first-run",
                     "--no-default-browser-check",
