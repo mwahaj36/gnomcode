@@ -9,15 +9,23 @@ function Get-ConsoleUrl {
     if (Test-Path $DaemonInfoPath) {
         try {
             $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
-            return "https://fleethud.vercel.app/console?token=$($info.token)&port=$($info.port)"
+            return "http://127.0.0.1:$($info.port)/?token=$($info.token)"
         } catch {}
     }
-    return "https://fleethud.vercel.app/console"
+    return "http://127.0.0.1:$Port/"
 }
 
 function Open-Console {
     $url = Get-ConsoleUrl
-    Start-Process $url
+    try {
+        Start-Process "msedge.exe" -ArgumentList "--app=$url --window-size=1280,850" -ErrorAction Stop
+    } catch {
+        try {
+            Start-Process "chrome.exe" -ArgumentList "--app=$url --window-size=1280,850" -ErrorAction Stop
+        } catch {
+            Start-Process $url
+        }
+    }
 }
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
