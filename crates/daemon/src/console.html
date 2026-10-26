@@ -743,6 +743,70 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Pro Labs Context Relay Engine Section -->
+    <div class="card" style="margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="card-title" style="margin: 0;">Context Relay Engine</div>
+          <span class="badge" style="background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.4); font-size: 10px; font-weight: 700;">[PRO LABS]</span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted);">
+          Zero-token session rotation & repository handoff via <code style="font-family: var(--font-mono); background: rgba(255,255,255,0.06); padding: 2px 4px; border-radius: 3px;">.fleethud/HANDOFF.md</code>
+        </div>
+      </div>
+
+      <!-- Explainer Box (SPEC §3.14 & Transparency) -->
+      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
+        <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. FleetHUD maintains strict privacy invariants and does not hack GUI databases. Rotated sessions launch in your terminal pane with a clean context window (0 tokens), continuing your workspace task via repository checkpoints without token degradation.
+      </div>
+
+      <!-- Relay Controls Form -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+        <div>
+          <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Execution Policy</label>
+          <select id="relay-policy-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text);">
+            <option value="ask_first">Ask First (Recommended / Default)</option>
+            <option value="auto">Auto-Relay (Zero-Touch Rotation)</option>
+            <option value="disabled">Disabled (Manual Only)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Strategy</label>
+          <select id="relay-strategy-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text);">
+            <option value="same_agent">Same Agent & Model (Default)</option>
+            <option value="failover">Failover on Rate Limit (Claude to Codex)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Safety Buffer Threshold</label>
+          <select id="relay-threshold-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text);">
+            <option value="85">85% Context Fill</option>
+            <option value="90">90% Context Fill (Recommended)</option>
+            <option value="95">95% Context Fill</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Pending & Recent Relays Table -->
+      <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px;">Relay History & Pending Rotations</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Session ID</th>
+            <th>Project</th>
+            <th>Source -> Target</th>
+            <th>Context Fill</th>
+            <th>Status</th>
+            <th>Triggered</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="relay-table">
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No active context relays recorded.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </main>
 
   <script>
@@ -869,8 +933,109 @@
             `).join('');
           }
         }
+        await loadRelayData();
       } catch (e) {
         console.error(e);
+      }
+    }
+
+    async function loadRelayData() {
+      try {
+        const res = await fetch('/api/v1/pro/relay', { headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.config) {
+          const pol = document.getElementById('relay-policy-select');
+          const str = document.getElementById('relay-strategy-select');
+          const thr = document.getElementById('relay-threshold-select');
+          if (pol) pol.value = data.config.policy;
+          if (str) str.value = data.config.strategy;
+          if (thr) thr.value = data.config.threshold_pct.toString();
+        }
+        const table = document.getElementById('relay-table');
+        if (table) {
+          if (!data.relays || data.relays.length === 0) {
+            table.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No active context relays recorded.</td></tr>';
+          } else {
+            table.innerHTML = data.relays.map(r => {
+              const statusColor = r.status === 'executed' ? 'var(--green)' : (r.status === 'pending' ? 'var(--yellow)' : 'var(--text-muted)');
+              const actionBtn = r.status === 'pending'
+                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-right: 6px;" onclick="executeRelay('${r.id}')">Handoff & Rotate</button><button class="btn-pill" style="padding: 4px 8px; font-size: 11px;" onclick="dismissRelay('${r.id}')">Dismiss</button>`
+                : `<span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${r.status}</span>`;
+              return `<tr>
+                <td style="font-family: var(--font-mono); font-size: 11px;">${r.session_id}</td>
+                <td style="font-weight: 600;">${r.project_name}</td>
+                <td>${r.source_agent} &rarr; ${r.target_agent}</td>
+                <td style="font-weight: 600; color: ${r.fill_pct >= 90 ? 'var(--red)' : 'var(--yellow)'};">${r.fill_pct}%</td>
+                <td><span class="badge" style="color: ${statusColor}; border-color: ${statusColor};">[${r.status.toUpperCase()}]</span></td>
+                <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(r.created_at)}</td>
+                <td>${actionBtn}</td>
+              </tr>`;
+            }).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load relay data', err);
+      }
+    }
+
+    async function saveRelayConfig() {
+      const pol = document.getElementById('relay-policy-select').value;
+      const str = document.getElementById('relay-strategy-select').value;
+      const thr = parseInt(document.getElementById('relay-threshold-select').value, 10);
+      try {
+        const res = await fetch('/api/v1/pro/relay/config', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ policy: pol, strategy: str, threshold_pct: thr })
+        });
+        if (res.status === 402) {
+          alert('Context Relay configuration requires an active FleetHUD Pro license.');
+          return;
+        }
+        if (res.ok) {
+          loadRelayData();
+        }
+      } catch (err) {
+        alert('Failed to save config: ' + err.message);
+      }
+    }
+
+    async function executeRelay(id) {
+      if (!confirm('Rotate session now? FleetHUD will create .fleethud/HANDOFF.md and spawn a clean session.')) return;
+      try {
+        const res = await fetch('/api/v1/pro/relay/execute', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        if (res.status === 402) {
+          alert('Context Relay execution requires an active FleetHUD Pro license.');
+          return;
+        }
+        if (res.ok) {
+          alert('Context Relay handoff executed successfully! Clean session launched with 0 context tokens.');
+          loadRelayData();
+        } else {
+          alert('Failed to execute relay handoff.');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function dismissRelay(id) {
+      try {
+        const res = await fetch('/api/v1/pro/relay/dismiss', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        if (res.ok) {
+          loadRelayData();
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
       }
     }
 
