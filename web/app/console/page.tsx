@@ -20,6 +20,8 @@ interface SessionItem {
   context_tokens?: number;
   context_window?: number;
   total_cost_usd?: number;
+  title?: string;
+  device_name?: string;
 }
 
 interface QuotaItem {
@@ -621,13 +623,25 @@ export default function ConsolePage() {
                 const ctxTokens = s.context_tokens || 0;
                 const ctxWin = s.context_window || 0;
                 const fillPct = ctxWin > 0 ? Math.min(100, Math.round((ctxTokens / ctxWin) * 100)) : 0;
-                const barColor = fillPct > 85 ? "bg-red-500" : fillPct > 60 ? "bg-amber-400" : "bg-accent";
+                const barColor = fillPct > 85 ? "bg-red" : fillPct > 60 ? "bg-yellow" : "bg-accent";
 
                 return (
                   <tr key={s.id} className="hover:bg-bg/40">
-                    <td className="py-2.5 font-semibold text-foreground">{s.project_name}</td>
+                    <td className="py-2.5">
+                      <span className="font-semibold text-foreground block">{s.project_name}</span>
+                      {s.title ? (
+                        <span className="text-[11px] text-muted block truncate max-w-[200px]" title={s.title}>
+                          {s.title}
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="py-2.5 capitalize">{s.agent}</td>
-                    <td className="py-2.5 capitalize">{s.surface.replace("_", " ")}</td>
+                    <td className="py-2.5">
+                      <span className="capitalize block">{s.surface.replace("_", " ")}</span>
+                      <span className="text-[10px] text-muted block font-mono">
+                        {s.device_name || "local"}
+                      </span>
+                    </td>
                     <td className="py-2.5">{s.model}</td>
                     <td className="py-2.5">
                       <span className="font-semibold text-foreground">

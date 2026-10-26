@@ -513,7 +513,11 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         if lower.contains("5.5") || lower.contains("5-5") {
             return Some(CLAUDE_OPUS_5_5);
         }
-        if lower.contains("5.0") || lower.contains("5-0") || lower.contains("opus-5") || lower.contains("opus 5") {
+        if lower.contains("5.0")
+            || lower.contains("5-0")
+            || lower.contains("opus-5")
+            || lower.contains("opus 5")
+        {
             return Some(CLAUDE_OPUS_5);
         }
         if lower.contains("4.8") || lower.contains("4-8") {
@@ -522,7 +526,11 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         if lower.contains("4.6") || lower.contains("4-6") {
             return Some(CLAUDE_OPUS_4_6);
         }
-        if lower.contains("4.0") || lower.contains("4-0") || lower.contains("opus-4") || lower.contains("opus 4") {
+        if lower.contains("4.0")
+            || lower.contains("4-0")
+            || lower.contains("opus-4")
+            || lower.contains("opus 4")
+        {
             return Some(CLAUDE_OPUS_4);
         }
         return Some(CLAUDE_OPUS);
@@ -533,7 +541,11 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         if lower.contains("5.5") || lower.contains("5-5") {
             return Some(CLAUDE_SONNET_5_5);
         }
-        if lower.contains("5.0") || lower.contains("5-0") || lower.contains("sonnet-5") || lower.contains("sonnet 5") {
+        if lower.contains("5.0")
+            || lower.contains("5-0")
+            || lower.contains("sonnet-5")
+            || lower.contains("sonnet 5")
+        {
             return Some(CLAUDE_SONNET_5);
         }
         if lower.contains("4.8") || lower.contains("4-8") {
@@ -542,7 +554,11 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         if lower.contains("4.6") || lower.contains("4-6") {
             return Some(CLAUDE_SONNET_4_6);
         }
-        if lower.contains("4.0") || lower.contains("4-0") || lower.contains("sonnet-4") || lower.contains("sonnet 4") {
+        if lower.contains("4.0")
+            || lower.contains("4-0")
+            || lower.contains("sonnet-4")
+            || lower.contains("sonnet 4")
+        {
             return Some(CLAUDE_SONNET_4);
         }
         if lower.contains("3.7") || lower.contains("3-7") {
