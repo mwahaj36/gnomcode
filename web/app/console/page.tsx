@@ -37,7 +37,8 @@ interface ProviderModelSpend {
 interface ProviderSpend {
   provider: string;
   total_cost_usd: number;
-  cache_savings_usd: number;
+  total_cache_savings_usd?: number;
+  cache_savings_usd?: number;
   models: ProviderModelSpend[];
 }
 
@@ -50,9 +51,11 @@ interface TimelineReport {
 interface PlanRoiInfo {
   provider: string;
   plan_usd: number;
+  monthly_plan_usd?: number;
   spend_usd: number;
   multiplier: number;
   net_savings_usd: number;
+  period_label?: string;
 }
 
 interface UserProfile {
@@ -133,18 +136,22 @@ export default function ConsolePage() {
 
         // If authenticated, push local snapshot to Supabase
         if (user) {
-          await supabase.from("fleethud_sync_state").upsert({
-            user_id: user.id,
-            email: user.email,
-            display_name: data.user_profile?.display_name || "Developer",
-            openai_plan_usd: data.user_profile?.openai_plan_usd || 20.0,
-            claude_plan_usd: data.user_profile?.claude_plan_usd || 20.0,
-            google_plan_usd: data.user_profile?.google_plan_usd || 20.0,
-            other_plan_usd: data.user_profile?.other_plan_usd || 0.0,
-            custom_pricing: data.custom_pricing || [],
-            live_snapshot: data,
-            updated_at: new Date().toISOString(),
-          });
+          try {
+            await supabase.from("fleethud_sync_state").upsert({
+              user_id: user.id,
+              email: user.email,
+              display_name: data.user_profile?.display_name || "Developer",
+              openai_plan_usd: data.user_profile?.openai_plan_usd || 20.0,
+              claude_plan_usd: data.user_profile?.claude_plan_usd || 20.0,
+              google_plan_usd: data.user_profile?.google_plan_usd || 20.0,
+              other_plan_usd: data.user_profile?.other_plan_usd || 0.0,
+              custom_pricing: data.custom_pricing || [],
+              live_snapshot: data,
+              updated_at: new Date().toISOString(),
+            });
+          } catch {
+            // Silently ignore sync write failures when offline or RLS restricted
+          }
         }
       }
     } catch {
@@ -185,10 +192,11 @@ export default function ConsolePage() {
     return () => clearInterval(timer);
   }, [fetchLiveMetrics]);
 
-  const formatTokens = (num: number) => {
-    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
-    if (num >= 1_000) return (num / 1_000).toFixed(1) + "k";
-    return num.toString();
+  const formatTokens = (num: number | undefined | null) => {
+    const val = num ?? 0;
+    if (val >= 1_000_000) return (val / 1_000_000).toFixed(1) + "M";
+    if (val >= 1_000) return (val / 1_000).toFixed(1) + "k";
+    return val.toString();
   };
 
   const formatTimeAgo = (iso: string) => {
@@ -309,27 +317,27 @@ export default function ConsolePage() {
             <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
               <div className="text-[11px] text-muted uppercase">{roi.provider}</div>
               <div className="text-lg font-bold text-foreground my-1">
-                {roi.multiplier.toFixed(1)}x Return
+                {(roi.multiplier ?? 0).toFixed(1)}x Return
               </div>
-              <div className={`text-[11px] ${roi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
-                {roi.net_savings_usd >= 0 ? "+" : ""}${roi.net_savings_usd.toFixed(2)} vs API
+              <div className={`text-[11px] ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
+                {(roi.net_savings_usd ?? 0) >= 0 ? "+" : ""}${(roi.net_savings_usd ?? 0).toFixed(2)} vs API
               </div>
               <div className="text-[10px] text-muted mt-1">
-                Paid: ${roi.plan_usd.toFixed(0)}/mo | Value: ${roi.spend_usd.toFixed(2)}
+                Paid: ${(roi.plan_usd ?? 0).toFixed(2)}/{roi.period_label || "period"} | Value: ${(roi.spend_usd ?? 0).toFixed(2)}
               </div>
             </div>
           ))}
-          {combinedRoi && combinedRoi.plan_usd > 0 && (
+          {combinedRoi && (combinedRoi.plan_usd ?? 0) > 0 && (
             <div className="bg-bg border border-accent/40 rounded p-3.5">
               <div className="text-[11px] text-accent uppercase">Combined Fleet ROI</div>
               <div className="text-lg font-bold text-accent my-1">
-                {combinedRoi.multiplier.toFixed(1)}x Return
+                {(combinedRoi.multiplier ?? 0).toFixed(1)}x Return
               </div>
-              <div className={`text-[11px] ${combinedRoi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
-                {combinedRoi.net_savings_usd >= 0 ? "+" : ""}${combinedRoi.net_savings_usd.toFixed(2)} Net
+              <div className={`text-[11px] ${(combinedRoi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
+                {(combinedRoi.net_savings_usd ?? 0) >= 0 ? "+" : ""}${(combinedRoi.net_savings_usd ?? 0).toFixed(2)} Net
               </div>
               <div className="text-[10px] text-muted mt-1">
-                Total Paid: ${combinedRoi.plan_usd.toFixed(0)}/mo
+                Total Paid: ${(combinedRoi.plan_usd ?? 0).toFixed(2)}/{combinedRoi.period_label || "period"}
               </div>
             </div>
           )}
@@ -344,6 +352,7 @@ export default function ConsolePage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {report?.providers?.map((prov) => {
             const isExpanded = expandedProvider === prov.provider;
+            const savingsUsd = prov.total_cache_savings_usd ?? prov.cache_savings_usd ?? 0;
             return (
               <div
                 key={prov.provider}
@@ -355,11 +364,11 @@ export default function ConsolePage() {
                 <div className="flex justify-between items-center mb-1">
                   <div className="text-sm font-semibold">{prov.provider}</div>
                   <div className="text-sm font-bold text-foreground">
-                    ${prov.total_cost_usd.toFixed(2)}
+                    ${(prov.total_cost_usd ?? 0).toFixed(2)}
                   </div>
                 </div>
                 <div className="text-[11px] text-muted">
-                  {prov.models?.length || 0} model(s) &bull; ${prov.cache_savings_usd.toFixed(2)} cached
+                  {prov.models?.length || 0} model(s) &bull; ${savingsUsd.toFixed(2)} cached
                 </div>
 
                 {isExpanded && (
@@ -372,7 +381,7 @@ export default function ConsolePage() {
                             In: {formatTokens(m.input_tokens)} | Out: {formatTokens(m.output_tokens)}
                           </div>
                         </div>
-                        <div className="font-bold text-foreground">${m.cost_usd.toFixed(2)}</div>
+                        <div className="font-bold text-foreground">${(m.cost_usd ?? 0).toFixed(2)}</div>
                       </div>
                     ))}
                   </div>
@@ -406,10 +415,10 @@ export default function ConsolePage() {
                 <tr key={`${q.provider}-${q.limit_id}-${idx}`} className="hover:bg-bg/40">
                   <td className="py-2.5 font-semibold">{q.provider}</td>
                   <td className="py-2.5">{q.limit_id}</td>
-                  <td className="py-2.5 capitalize">{q.window.replace("_", "-")}</td>
+                  <td className="py-2.5 capitalize">{q.window ? q.window.replace("_", "-") : "rolling"}</td>
                   <td className="py-2.5">
-                    <span className={`font-bold ${q.used_pct >= 90 ? "text-red" : q.used_pct >= 60 ? "text-accent" : "text-green"}`}>
-                      {q.used_pct.toFixed(1)}%
+                    <span className={`font-bold ${(q.used_pct ?? 0) >= 90 ? "text-red" : (q.used_pct ?? 0) >= 60 ? "text-accent" : "text-green"}`}>
+                      {(q.used_pct ?? 0).toFixed(1)}%
                     </span>
                   </td>
                   <td className="py-2.5 text-muted">
@@ -417,7 +426,7 @@ export default function ConsolePage() {
                   </td>
                   <td className="py-2.5 text-right">
                     <span className="px-1.5 py-0.5 rounded bg-accent/15 text-accent text-[10px] font-bold">
-                      EXACT
+                      {q.basis ? q.basis.toUpperCase() : "EXACT"}
                     </span>
                   </td>
                 </tr>

@@ -416,9 +416,9 @@ export default function SettingsPage() {
               {customPricing.map((p) => (
                 <tr key={p.model_pattern} className="hover:bg-bg/40">
                   <td className="p-3 font-semibold text-foreground">{p.model_pattern}</td>
-                  <td className="p-3">${p.input_per_mtok_usd.toFixed(2)}</td>
-                  <td className="p-3">${p.output_per_mtok_usd.toFixed(2)}</td>
-                  <td className="p-3">${p.cache_read_per_mtok_usd.toFixed(2)}</td>
+                  <td className="p-3">${(p.input_per_mtok_usd ?? 0).toFixed(2)}</td>
+                  <td className="p-3">${(p.output_per_mtok_usd ?? 0).toFixed(2)}</td>
+                  <td className="p-3">${(p.cache_read_per_mtok_usd ?? 0).toFixed(2)}</td>
                   <td className="p-3 text-right">
                     <button
                       onClick={() => deletePricing(p.model_pattern)}

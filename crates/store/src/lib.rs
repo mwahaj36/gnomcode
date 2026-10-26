@@ -830,6 +830,119 @@ impl Database {
         for r in rows {
             out.push(r?);
         }
+
+        // Rolling 5-hour and 7-day quota pools for Antigravity & Claude Code models
+        let cutoff_5h = (Utc::now() - chrono::Duration::hours(5)).to_rfc3339();
+        let cutoff_7d = (Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+
+        if let Ok(mut stmt_roll) = self.conn.prepare(
+            r#"
+            SELECT s.agent, u.model,
+                   SUM(CASE WHEN u.timestamp >= ?1 THEN u.input_tokens + u.output_tokens ELSE 0 END) AS tok_5h,
+                   SUM(CASE WHEN u.timestamp >= ?2 THEN u.input_tokens + u.output_tokens ELSE 0 END) AS tok_7d,
+                   MIN(CASE WHEN u.timestamp >= ?1 THEN u.timestamp ELSE NULL END) AS earliest_5h,
+                   MIN(CASE WHEN u.timestamp >= ?2 THEN u.timestamp ELSE NULL END) AS earliest_7d
+            FROM usage_record u
+            JOIN session s ON u.session_id = s.id
+            WHERE u.timestamp >= ?2
+              AND s.agent IN ('antigravity', 'claude-code')
+            GROUP BY s.agent, u.model
+            ORDER BY tok_5h DESC
+            "#,
+        ) {
+            if let Ok(model_rows) = stmt_roll.query_map(params![cutoff_5h, cutoff_7d], |r| {
+                let agent: String = r.get(0)?;
+                let model: String = r.get(1)?;
+                let tok_5h: i64 = r.get(2)?;
+                let tok_7d: i64 = r.get(3)?;
+                let early_5h: Option<String> = r.get(4)?;
+                let early_7d: Option<String> = r.get(5)?;
+                Ok((
+                    agent,
+                    model,
+                    tok_5h.max(0) as u64,
+                    tok_7d.max(0) as u64,
+                    early_5h,
+                    early_7d,
+                ))
+            }) {
+                for mr in model_rows.flatten() {
+                    let (agent, raw_model, tok_5h, tok_7d, early_5h, early_7d) = mr;
+                    let model_clean = if raw_model.contains("MODEL_PLACEHOLDER") {
+                        "Gemini 3.8 Flash (Default)".to_owned()
+                    } else {
+                        raw_model
+                    };
+
+                    let limit_slug = model_clean
+                        .to_lowercase()
+                        .replace([' ', '(', ')'], "-")
+                        .trim_matches('-')
+                        .to_owned();
+
+                    let (cap_5h, cap_7d) = if limit_slug.contains("claude-opus") {
+                        (1_500_000.0_f64, 15_000_000.0_f64)
+                    } else if limit_slug.contains("argon") {
+                        (5_000_000.0_f64, 50_000_000.0_f64)
+                    } else if limit_slug.contains("flash") {
+                        (10_000_000.0_f64, 100_000_000.0_f64)
+                    } else {
+                        (3_000_000.0_f64, 30_000_000.0_f64)
+                    };
+
+                    let now = Utc::now();
+
+                    // 5-hour window
+                    if !out.iter().any(|q| {
+                        q.provider == agent
+                            && q.limit_id == limit_slug
+                            && q.window == QuotaWindow::FiveHour
+                    }) {
+                        let used_5h_pct = ((tok_5h as f64 / cap_5h) * 100.0).clamp(0.0, 100.0);
+                        let resets_at_5h = early_5h.and_then(|s| {
+                            DateTime::parse_from_rfc3339(&s)
+                                .map(|dt| dt.with_timezone(&Utc) + chrono::Duration::hours(5))
+                                .ok()
+                        });
+                        out.push(QuotaSnapshot {
+                            provider: agent.clone(),
+                            limit_id: limit_slug.clone(),
+                            window: QuotaWindow::FiveHour,
+                            used_pct: used_5h_pct,
+                            resets_at: resets_at_5h,
+                            plan: Some("standard".to_owned()),
+                            basis: TrustLevel::Estimated,
+                            observed_at: now,
+                        });
+                    }
+
+                    // Weekly window
+                    if !out.iter().any(|q| {
+                        q.provider == agent
+                            && q.limit_id == limit_slug
+                            && q.window == QuotaWindow::Weekly
+                    }) {
+                        let used_7d_pct = ((tok_7d as f64 / cap_7d) * 100.0).clamp(0.0, 100.0);
+                        let resets_at_7d = early_7d.and_then(|s| {
+                            DateTime::parse_from_rfc3339(&s)
+                                .map(|dt| dt.with_timezone(&Utc) + chrono::Duration::days(7))
+                                .ok()
+                        });
+                        out.push(QuotaSnapshot {
+                            provider: agent,
+                            limit_id: limit_slug,
+                            window: QuotaWindow::Weekly,
+                            used_pct: used_7d_pct,
+                            resets_at: resets_at_7d,
+                            plan: Some("standard".to_owned()),
+                            basis: TrustLevel::Estimated,
+                            observed_at: now,
+                        });
+                    }
+                }
+            }
+        }
+
         Ok(out)
     }
 
@@ -1299,27 +1412,40 @@ impl Database {
         }
 
         use std::collections::BTreeMap;
-        let mut provider_groups: BTreeMap<&'static str, Vec<ModelReport>> = BTreeMap::new();
+        let mut provider_models: BTreeMap<&'static str, BTreeMap<String, ModelReport>> =
+            BTreeMap::new();
         for item in raw_items {
             let provider = fleethud_core::pricing::classify_provider(&item.agent, &item.model);
-            provider_groups
-                .entry(provider)
-                .or_default()
-                .push(ModelReport {
+            let models_map = provider_models.entry(provider).or_default();
+            let entry = models_map
+                .entry(item.model.clone())
+                .or_insert_with(|| ModelReport {
                     model: item.model,
                     agent: item.agent,
-                    input_tokens: item.in_tok,
-                    cache_read_tokens: item.read_tok,
-                    output_tokens: item.out_tok,
-                    cost_usd: item.cost,
-                    cache_savings_usd: item.savings,
-                    turn_count: item.turns,
+                    input_tokens: 0,
+                    cache_read_tokens: 0,
+                    output_tokens: 0,
+                    cost_usd: 0.0,
+                    cache_savings_usd: 0.0,
+                    turn_count: 0,
                 });
+            entry.input_tokens += item.in_tok;
+            entry.cache_read_tokens += item.read_tok;
+            entry.output_tokens += item.out_tok;
+            entry.cost_usd += item.cost;
+            entry.cache_savings_usd += item.savings;
+            entry.turn_count += item.turns;
         }
 
         let mut providers = Vec::new();
         for target in ["Anthropic", "OpenAI", "Google", "Other"] {
-            if let Some(models) = provider_groups.remove(target) {
+            if let Some(models_map) = provider_models.remove(target) {
+                let mut models: Vec<ModelReport> = models_map.into_values().collect();
+                models.sort_by(|a, b| {
+                    b.cost_usd
+                        .partial_cmp(&a.cost_usd)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 let mut prov_cost = 0.0;
                 let mut prov_savings = 0.0;
                 for m in &models {
@@ -1490,8 +1616,8 @@ mod tests {
         assert_eq!(report[0].input_tokens, 1000);
 
         let latest_quota = db.get_latest_quota_snapshots().expect("latest quota");
-        assert_eq!(latest_quota.len(), 1);
-        assert_eq!(latest_quota[0].limit_id, "codex");
+        assert!(!latest_quota.is_empty());
+        assert!(latest_quota.iter().any(|q| q.limit_id == "codex"));
 
         let saved_cp = db
             .get_checkpoint("/path/to/log.jsonl")

@@ -11,6 +11,14 @@ const nextConfig = {
         source: "/download",
         destination: "/downloads/FleetHUD-Setup.exe",
       },
+      {
+        source: "/sh",
+        destination: "/downloads/install.sh",
+      },
+      {
+        source: "/install.sh",
+        destination: "/downloads/install.sh",
+      },
     ];
   },
 };
