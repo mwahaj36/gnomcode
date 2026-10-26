@@ -541,6 +541,27 @@ impl Database {
             "#,
         )?;
 
+        let has_v7: bool = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM schema_migrations WHERE version = 7",
+                [],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+
+        if !has_v7 {
+            self.conn.execute_batch(
+                r#"
+                UPDATE usage_record
+                SET context_tokens = input_tokens + cache_read_tokens
+                WHERE cache_read_tokens > 0 AND context_tokens < (input_tokens + cache_read_tokens);
+                INSERT INTO schema_migrations (version, applied_at) VALUES (7, datetime('now'));
+                "#,
+            )?;
+        }
+
         Ok(())
     }
 
@@ -1706,8 +1727,14 @@ impl Database {
                 COALESCE(SUM(u.output_tokens), 0),
                 COALESCE(SUM(u.cost_usd), 0.0),
                 COALESCE(SUM(u.cache_read_tokens), 0),
-                COALESCE(MAX(u.context_tokens), 0),
-                MAX(u.context_window),
+                COALESCE(
+                    (SELECT u2.context_tokens FROM usage_record u2 WHERE u2.session_id = s.id ORDER BY u2.rowid DESC LIMIT 1),
+                    0
+                ),
+                COALESCE(
+                    (SELECT u2.context_window FROM usage_record u2 WHERE u2.session_id = s.id ORDER BY u2.rowid DESC LIMIT 1),
+                    MAX(u.context_window)
+                ),
                 s.title
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
