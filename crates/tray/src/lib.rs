@@ -60,7 +60,10 @@ pub async fn compute_tray_status(db: &Arc<Mutex<Database>>) -> Result<TrayStatus
         match s.state {
             SessionState::Thinking | SessionState::Tool => active_count += 1,
             SessionState::AwaitingApproval => awaiting_approval_count += 1,
-            SessionState::Idle | SessionState::Error | SessionState::Ended => {}
+            SessionState::Idle
+            | SessionState::Error
+            | SessionState::Ended
+            | SessionState::Connected => {}
         }
     }
 
