@@ -373,3 +373,11 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Validation: full Rust quality gate passed (55 tests, formatting, Clippy, advisories, licenses, source checks and core purity). Embedded Postgres checks passed for migration repeatability, account isolation, metadata requirements, measured usage, server timestamps and dead-collector expiry. Next.js production build passed. A collector for the actual current Codex thread was started and verified through the authenticated local daemon API; usage remains unknown because this host exposes no rollout or token feed.
 - Cross-platform review: shared Rust implementation uses Path/PathBuf, existing environment overrides, no new unsafe/process control or platform-specific shell dependency. JSONL handles CRLF; tests use temporary directories. Manual CI now covers Linux, Windows and macOS. Native Windows/macOS execution has not run in this Linux environment.
 - Deployment remains pending: apply the v3 Supabase migration, deploy the web client and provision a paired account session securely. No account pairing/admin database credential was available here; no live account data was changed.
+
+
+## 2026-10-27 — Automatic collection and web deployment
+
+- Corrected manual startup: the daemon now starts cloud presence automatically from detected Codex metadata or explicit provider/runtime identity bindings for every supported agent. It reuses the existing paired account. Standalone collection remains available for metadata usage imports.
+- Serialized in-process account refresh between desktop sync and the automatic collector. Tests isolate the pairing path to a temporary directory and verify automatic registration without a manual collector command.
+- Updated the feature branch with current main (v1.2.1), preserving its latest-context-token fix, platform locking, license hardening and daemon improvements. Adjusted the newly enabled MSRV-compatible Clippy integer-multiple lint without changing license verification behavior.
+- Pushed the feature branch and created draft PR #38. The connected Vercel Git integration reported a successful preview deployment. Production database migration and initial account pairing remain unconfigured here.

@@ -237,10 +237,14 @@ pub(crate) struct CloudAuth {
     pub public_key: String,
 }
 
+static AUTH_REFRESH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 pub(crate) async fn read_cloud_auth(
     client: &reqwest::Client,
     session_path: &std::path::Path,
 ) -> Result<Option<CloudAuth>, Box<dyn std::error::Error + Send + Sync>> {
+    // Desktop sync and automatic cloud collection share one rotating login session.
+    let _refresh_guard = AUTH_REFRESH_LOCK.lock().await;
     let raw = match tokio::fs::read_to_string(session_path).await {
         Ok(raw) => raw,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

@@ -589,6 +589,8 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
     let _cloud_sync_handle = fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db());
+    let _cloud_presence_handle =
+        fleethud_daemon::cloud::spawn_auto_collector(db_path.to_path_buf());
 
     let state = fleethud_daemon::api::AppState {
         db: orchestrator.db(),
@@ -804,8 +806,11 @@ async fn cmd_cloud_session(
     once: bool,
 ) -> Result<()> {
     use fleethud_core::AgentId;
-    let detected = fleethud_platform::codex_cloud_session_id();
-    let agent_name = agent.as_deref().unwrap_or("codex");
+    let detected = fleethud_platform::cloud_session_identity();
+    let agent_name = agent
+        .as_deref()
+        .or_else(|| detected.as_ref().map(|(provider, _)| provider.as_str()))
+        .unwrap_or("codex");
     let agent_id = match agent_name {
         "codex" => AgentId::Codex,
         "claude-code" => AgentId::ClaudeCode,
@@ -818,11 +823,10 @@ async fn cmd_cloud_session(
     };
     let native_id = session_id
         .or_else(|| {
-            if agent_id == AgentId::Codex {
-                detected
-            } else {
-                None
-            }
+            detected
+                .as_ref()
+                .filter(|(provider, _)| *provider == agent_id)
+                .map(|(_, id)| id.clone())
         })
         .context(
             "No cloud session detected. Supply --agent and --session-id from the provider runtime.",

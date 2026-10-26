@@ -4,7 +4,26 @@ FleetHUD can register a session from inside its cloud workspace on Windows,
 macOS or Linux. This is an opt-in collector, not account-wide discovery of every
 hosted provider session. The collector never changes agent permissions.
 
-## Start a collector
+## Automatic startup
+
+Starting the FleetHUD daemon or tray backend automatically starts a cloud
+collector when runtime identity is available. Codex cloud identity is detected
+without extra flags. The daemon reuses its existing paired account; no separate
+collector command or pairing file argument is needed in an already paired environment.
+A new environment still requires one secure account link; repository ownership
+and runtime IDs are not account authorization.
+
+For other agents, the environment can bind `FLEETHUD_CLOUD_AGENT` (one of the
+provider slugs below) and `FLEETHUD_CLOUD_SESSION_ID` to its actual native session
+ID. The same automatic startup works on Windows, macOS and Linux. Do not set a
+fixed ID in a shared environment snapshot: use the current runtime's real ID.
+
+Use the standalone collector commands below only when the FleetHUD daemon is not
+running, or when you need an explicit metadata usage file. Avoid running both for
+the same session. Desktop sync and automatic collection serialize credential
+refresh inside the daemon so they do not race over its rotating login session.
+
+## Standalone collector
 
 Build the CLI with stable Rust (minimum 1.87 for the patched `ctutils` dependency): `cargo build --locked -p fleethud`.
 Use `target/debug/fleethud` on Unix or `target/debug/fleethud.exe` on Windows.
