@@ -19,6 +19,7 @@ fleethud-store = { workspace = true }
 fleethud-platform = { workspace = true }
 fleethud-ingest = { workspace = true }
 fleethud-daemon = { workspace = true }
+axum = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
