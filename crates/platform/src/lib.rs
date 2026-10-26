@@ -110,6 +110,65 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
     ]
 }
 
+/// Locally detected subscription plan prices and tier labels.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DetectedSubscriptions {
+    /// Detected Anthropic monthly plan USD and tier label (e.g. `(100.0, "Claude Max 5x")`).
+    pub anthropic: Option<(f64, String)>,
+    /// Detected Google monthly plan USD and tier label (e.g. `(20.0, "Google AI Pro")`).
+    pub google: Option<(f64, String)>,
+}
+
+/// Automatically detects local agent subscription tiers from non-secret config metadata
+/// (`~/.claude/.credentials.json` tier fields and `~/.gemini/antigravity/installation_id`).
+/// Never reads or stores tokens or credentials (`SPEC §2`).
+#[must_use]
+pub fn detect_local_subscriptions() -> DetectedSubscriptions {
+    let home = user_home_dir();
+    let claude_dir = env::var("CLAUDE_CONFIG_DIR")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map_or_else(|| home.join(".claude"), PathBuf::from);
+
+    let mut anthropic = None;
+    if let Ok(raw) = fs::read_to_string(claude_dir.join(".credentials.json")) {
+        let lower = raw.to_ascii_lowercase();
+        if lower.contains("max_20x") {
+            anthropic = Some((200.0, "Claude Max 20x".to_owned()));
+        } else if lower.contains("max_5x") {
+            anthropic = Some((100.0, "Claude Max 5x".to_owned()));
+        } else if lower.contains("\"subscriptiontype\":\"max\"")
+            || lower.contains("\"subscriptiontype\": \"max\"")
+        {
+            anthropic = Some((100.0, "Claude Max".to_owned()));
+        } else if lower.contains("\"subscriptiontype\":\"team\"")
+            || lower.contains("\"subscriptiontype\": \"team\"")
+        {
+            anthropic = Some((30.0, "Claude Team".to_owned()));
+        } else if lower.contains("\"subscriptiontype\":\"pro\"")
+            || lower.contains("\"subscriptiontype\": \"pro\"")
+        {
+            anthropic = Some((20.0, "Claude Pro".to_owned()));
+        }
+    }
+
+    let gemini_base = env::var("GEMINI_HOME")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map_or_else(|| home.join(".gemini"), PathBuf::from);
+    let google = if gemini_base
+        .join("antigravity")
+        .join("installation_id")
+        .exists()
+    {
+        Some((20.0, "Google AI Pro".to_owned()))
+    } else {
+        None
+    };
+
+    DetectedSubscriptions { anthropic, google }
+}
+
 /// Reads the fallback active model from `~/.gemini/antigravity/antigravity_state.pbtxt`
 /// (`last_selected_agent_model: "..."`) if present (`SPEC §3.5`).
 #[must_use]

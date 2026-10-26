@@ -87,7 +87,7 @@ impl SourceAdapter for AntigravityAdapter {
                 parent_session_id: None,
                 model: self.active_model.clone(),
                 title: None,
-                state: SessionState::Idle,
+                state: SessionState::Thinking,
                 pid: None,
                 started_at: ts,
                 last_event_at: ts,
@@ -95,6 +95,7 @@ impl SourceAdapter for AntigravityAdapter {
             sess.last_event_at = ts;
 
             if step_type == "USER_INPUT" {
+                sess.state = SessionState::Thinking;
                 if let Some(content) = obj.get("content").and_then(Value::as_str) {
                     if let Some(new_model) = parse_model_selection_change(content) {
                         self.active_model = Some(new_model.clone());
@@ -102,6 +103,7 @@ impl SourceAdapter for AntigravityAdapter {
                     }
                 }
             } else if step_type == "PLANNER_RESPONSE" {
+                sess.state = SessionState::Thinking;
                 let raw_model = self
                     .active_model
                     .as_deref()
@@ -215,7 +217,9 @@ pub fn parse_model_selection_change(content: &str) -> Option<String> {
     }
 }
 
-fn extract_conversation_id(path: &str) -> &str {
+/// Extracts the conversation UUID from an Antigravity `brain/<uuid>/...` path.
+#[must_use]
+pub fn extract_conversation_id(path: &str) -> &str {
     let parts: Vec<&str> = path.split(['/', '\\']).collect();
     for (i, part) in parts.iter().enumerate() {
         if *part == "brain" {
