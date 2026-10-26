@@ -498,6 +498,7 @@ name = "fleethud"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "axum",
  "clap",
  "fleethud-adapters",
  "fleethud-core",
