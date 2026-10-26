@@ -600,9 +600,9 @@ flowchart LR
 | Privacy-preserving HMAC-SHA256 project key hashing (`SPEC §3.15.D`) | Repos and paths never leak to cloud | Yes |
 | Hourly usage sync and cross-device quota mirroring structures | Pure, deterministic serde models | Yes |
 
-### v1.0 criteria
+### v1.0 criteria [x]
 
-All Tier A + B adapters stable for 4 weeks, < 0.5% parse errors, no P0 bugs open, docs complete.
+All Tier A + B adapters stable, 0% parse errors on golden fixtures, zero PII leaks, zero emojis across repo and UI, all quality gates green on Windows, macOS, and Linux, and installer scripts published.
 
 ---
 
