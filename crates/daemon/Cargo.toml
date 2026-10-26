@@ -16,6 +16,7 @@ fleethud-platform = { workspace = true }
 fleethud-ingest = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
+hmac = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 tokio = { workspace = true }
