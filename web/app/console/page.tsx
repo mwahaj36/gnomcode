@@ -72,6 +72,30 @@ interface UserProfile {
   updated_at: string;
 }
 
+function formatResetCountdown(resetsAtIso?: string | null, _windowKind?: string) {
+  if (!resetsAtIso) return "Rolling";
+  const target = new Date(resetsAtIso);
+  const now = new Date();
+  const diffMs = target.getTime() - now.getTime();
+  if (diffMs <= 0) return "Resetting now";
+
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+  const remHours = diffHours % 24;
+
+  const timeStr = target.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const dateStr = target.toLocaleDateString([], { month: "short", day: "numeric" });
+
+  if (diffDays > 0) {
+    return `in ${diffDays}d ${remHours}h (${dateStr}, ${timeStr})`;
+  } else if (diffHours > 0) {
+    return `in ${diffHours}h ${diffMinutes}m (${timeStr})`;
+  } else {
+    return `in ${diffMinutes}m (${timeStr})`;
+  }
+}
+
 export default function ConsolePage() {
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -102,6 +126,13 @@ export default function ConsolePage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthChecked(true);
+      if (session && typeof window !== "undefined") {
+        const cb = localStorage.getItem("fleethud_auth_callback");
+        if (cb) {
+          localStorage.removeItem("fleethud_auth_callback");
+          window.location.href = `${cb}?session=${encodeURIComponent(JSON.stringify(session))}`;
+        }
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -281,7 +312,7 @@ export default function ConsolePage() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 font-sans">
       {/* Top Banner if not authenticated */}
-      {!user && (
+      {!user ? (
         <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
             <span className="text-accent font-semibold">[LOCAL VIEW]</span> Want cross-device cloud sync? Pair this app with your existing browser account or sign in.
@@ -300,6 +331,26 @@ export default function ConsolePage() {
               Sign In with GitHub &rarr;
             </Link>
           </div>
+        </div>
+      ) : (
+        <div className="mb-6 p-3 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+            <span>Cloud Account: <strong className="text-foreground">{user.email}</strong></span>
+          </div>
+          <button
+            onClick={async () => {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                await navigator.clipboard.writeText(JSON.stringify(session));
+                setCopyFeedback("Pairing token copied! Paste into Desktop App -> Auth tab.");
+                setTimeout(() => setCopyFeedback(""), 4000);
+              }
+            }}
+            className="px-3 py-1 bg-accent/20 border border-accent/40 text-accent font-semibold rounded hover:bg-accent hover:text-bg transition-colors text-xs"
+          >
+            {copyFeedback || "[Copy Pairing Token for Desktop App]"}
+          </button>
         </div>
       )}
 
@@ -566,7 +617,7 @@ export default function ConsolePage() {
                     </span>
                   </td>
                   <td className="py-2.5 text-muted">
-                    {q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : "Rolling"}
+                    {formatResetCountdown(q.resets_at, q.window)}
                   </td>
                   <td className="py-2.5 text-right">
                     <span
