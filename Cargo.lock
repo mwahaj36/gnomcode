@@ -499,8 +499,12 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "fleethud-adapters",
  "fleethud-core",
  "fleethud-daemon",
+ "fleethud-ingest",
+ "fleethud-platform",
+ "fleethud-store",
  "obfstr",
  "tokio",
  "tracing",
@@ -541,6 +545,7 @@ name = "fleethud-daemon"
 version = "0.0.1"
 dependencies = [
  "axum",
+ "chrono",
  "fleethud-adapters",
  "fleethud-core",
  "fleethud-ingest",
@@ -549,8 +554,11 @@ dependencies = [
  "obfstr",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
  "thiserror",
  "tokio",
+ "tower",
  "tracing",
 ]
 
@@ -558,6 +566,7 @@ dependencies = [
 name = "fleethud-ingest"
 version = "0.0.1"
 dependencies = [
+ "chrono",
  "fleethud-adapters",
  "fleethud-core",
  "fleethud-platform",
