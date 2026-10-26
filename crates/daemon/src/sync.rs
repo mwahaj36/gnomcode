@@ -169,7 +169,12 @@ async fn push_snapshot(
                                             .unwrap_or_default();
                                         if let Some(s) = sessions.iter().find(|s| s.id == sid) {
                                             let cwd = guard
-                                                .find_antigravity_workspace(&s.id)
+                                                .get_session_focus_target(&s.id)
+                                                .ok()
+                                                .flatten()
+                                                .and_then(|t| t.repo_root)
+                                                .filter(|p| !p.trim().is_empty())
+                                                .or_else(|| guard.find_antigravity_workspace(&s.id))
                                                 .unwrap_or_else(|| {
                                                     std::env::current_dir()
                                                         .map(|p| p.to_string_lossy().to_string())

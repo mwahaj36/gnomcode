@@ -477,8 +477,47 @@ async fn relay_execute_post_handler(
     let relays = db
         .list_context_relays()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let Some(entry) = relays.into_iter().find(|r| r.id == payload.id) else {
-        return Err(StatusCode::NOT_FOUND);
+    let entry = if let Some(e) = relays
+        .into_iter()
+        .find(|r| r.id == payload.id || r.session_id == payload.id)
+    {
+        e
+    } else {
+        let (sessions, _) = db
+            .list_sessions_paginated(None, None, 0, 100)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let sid = payload.id.trim_start_matches("relay-");
+        if let Some(s) = sessions.iter().find(|s| s.id == sid || s.id == payload.id) {
+            let cwd = db
+                .get_session_focus_target(&s.id)
+                .ok()
+                .flatten()
+                .and_then(|t| t.repo_root)
+                .filter(|p| !p.trim().is_empty())
+                .or_else(|| db.find_antigravity_workspace(&s.id))
+                .unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| ".".to_owned())
+                });
+            let entry = fleethud_store::ContextRelayEntry {
+                id: format!("relay-{}", s.id),
+                session_id: s.id.clone(),
+                source_agent: s.agent.clone(),
+                target_agent: s.agent.clone(),
+                project_name: s.project_name.clone(),
+                cwd,
+                fill_pct: 92,
+                status: "pending".to_owned(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                executed_at: None,
+            };
+            db.record_context_relay(&entry)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            entry
+        } else {
+            return Err(StatusCode::NOT_FOUND);
+        }
     };
 
     crate::pro::execute_relay_handoff(&entry).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
