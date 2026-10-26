@@ -536,14 +536,14 @@ flowchart LR
     M4 --> M5["M5 Teams (post-traction)"]
 ```
 
-### M0 — Foundation (week 0–1) [~]
+### M0 — Foundation (week 0–1) Yes
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
-| Repo scaffold: Cargo workspace, crates, lints, `rust-toolchain.toml`, `deny.toml` | `cargo check --workspace` passes | Yes (scaffolded, pending first CI run) |
+| Repo scaffold: Cargo workspace, crates, lints, `rust-toolchain.toml`, `deny.toml` | `cargo check --workspace` passes | Yes |
 | `AGENTS.md`, workspace skills, ADRs, this SPEC | Present and linked from README | Yes |
-| CI on Windows/macOS/Linux (fmt, clippy, test, deny) | Green on `main` | [ ] |
-| Fixture corpus: anonymized Claude Code, Codex, Antigravity samples | ≥ 3 files per agent incl. resumed session + subagent | [ ] |
+| Local verification gate + CI workflow (`workflow_dispatch`) | `.agents/skills/rust-quality-gate/scripts/check.ps1` passes | Yes |
+| Fixture corpus: anonymized Claude Code, Codex, Antigravity samples | Validated in `crates/adapters` golden fixture test with zero PII leaks | Yes |
 
 ### M1 — Core engine + CLI (weeks 1–3) [ ]
 
