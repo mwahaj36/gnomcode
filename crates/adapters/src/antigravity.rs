@@ -101,9 +101,26 @@ impl SourceAdapter for AntigravityAdapter {
                         self.active_model = Some(new_model.clone());
                         sess.model = Some(new_model);
                     }
+                    if let Some(ws) = extract_workspace_from_text(content) {
+                        let proj = Project::from_origin(None, &ws, None);
+                        sess.project_id = proj.id.clone();
+                        if !batch.projects.iter().any(|p| p.id == proj.id) {
+                            batch.projects.push(proj);
+                        }
+                    }
                 }
             } else if step_type == "PLANNER_RESPONSE" {
-                sess.state = SessionState::Thinking;
+                let has_tools = obj
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .is_some_and(|calls| !calls.is_empty());
+
+                sess.state = if has_tools {
+                    SessionState::Tool
+                } else {
+                    SessionState::Idle
+                };
+
                 let raw_model = self
                     .active_model
                     .as_deref()
@@ -133,6 +150,21 @@ impl SourceAdapter for AntigravityAdapter {
                             summary_redacted: Some(summary),
                             duration_ms: None,
                         });
+
+                        if let Some(args) = call.get("args").and_then(Value::as_object) {
+                            for k in ["Path", "path", "file_path"] {
+                                if let Some(p_str) = args.get(k).and_then(Value::as_str) {
+                                    if let Some(root) = find_repo_root_from_path(p_str) {
+                                        let proj = Project::from_origin(None, &root, None);
+                                        sess.project_id = proj.id.clone();
+                                        if !batch.projects.iter().any(|p| p.id == proj.id) {
+                                            batch.projects.push(proj);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -231,4 +263,54 @@ pub fn extract_conversation_id(path: &str) -> &str {
         }
     }
     "unknown-conversation"
+}
+
+/// Extracts workspace directory hint from system instruction text or environment tags.
+#[must_use]
+pub fn extract_workspace_from_text(content: &str) -> Option<String> {
+    for marker in [
+        "Active Workspaces:\n- ",
+        "Active Workspaces:\r\n- ",
+        "Command Working Directory: ",
+    ] {
+        if let Some(idx) = content.find(marker) {
+            let start = idx + marker.len();
+            let line = content[start..].lines().next().unwrap_or("").trim();
+            if !line.is_empty() && (line.contains('/') || line.contains('\\')) {
+                return Some(line.to_owned());
+            }
+        }
+    }
+    None
+}
+
+/// Recursively detects the repository or workspace root for a given file path.
+#[must_use]
+pub fn find_repo_root_from_path(file_path: &str) -> Option<String> {
+    let clean = file_path.trim_matches('"').trim_matches('\'');
+    let path_obj = std::path::Path::new(clean);
+    let mut check = if path_obj.is_file() {
+        path_obj.parent()?
+    } else {
+        path_obj
+    };
+
+    loop {
+        if check.join(".git").exists()
+            || check.join("Cargo.toml").exists()
+            || check.join("package.json").exists()
+        {
+            return Some(check.to_string_lossy().into_owned());
+        }
+        match check.parent() {
+            Some(p) if p != check => check = p,
+            _ => break,
+        }
+    }
+
+    if check.exists() && check.is_dir() {
+        Some(check.to_string_lossy().into_owned())
+    } else {
+        None
+    }
 }

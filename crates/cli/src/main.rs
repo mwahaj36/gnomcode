@@ -290,8 +290,12 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         Ok(res) => res,
         Err(fleethud_daemon::Error::AlreadyRunning) => {
             if let Some(existing) = fleethud_daemon::read_daemon_info() {
-                let local_url = format!("http://127.0.0.1:{}/?token={}", existing.port, existing.token);
-                let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
+                let local_url = format!(
+                    "http://127.0.0.1:{}/?token={}",
+                    existing.port, existing.token
+                );
+                let console_url =
+                    std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
                 println!("FleetHUD is already active (PID {}).", existing.pid);
                 println!("Opened Native Mission Control Console: {console_url}");
                 if open {
@@ -346,20 +350,29 @@ fn open_browser(url: &str) {
     #[cfg(target_os = "windows")]
     {
         let app_arg = format!("--app={url}");
-        let edge_ok = std::process::Command::new("msedge")
-            .args([&app_arg, "--window-size=1280,850"])
-            .spawn()
-            .is_ok();
-        if !edge_ok {
-            let chrome_ok = std::process::Command::new("chrome")
+        let candidate_paths = [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            "msedge",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            "chrome",
+        ];
+        let mut opened = false;
+        for exe in candidate_paths {
+            if std::process::Command::new(exe)
                 .args([&app_arg, "--window-size=1280,850"])
                 .spawn()
-                .is_ok();
-            if !chrome_ok {
-                let _ = std::process::Command::new("cmd")
-                    .args(["/C", "start", url])
-                    .spawn();
+                .is_ok()
+            {
+                opened = true;
+                break;
             }
+        }
+        if !opened {
+            let _ = std::process::Command::new("cmd")
+                .args(["/C", "start", url])
+                .spawn();
         }
     }
     #[cfg(target_os = "macos")]

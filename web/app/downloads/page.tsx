@@ -78,7 +78,7 @@ export default function DownloadsPage() {
           </div>
           <div>
             <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              curl -fsSL https://raw.githubusercontent.com/mwahaj36/fleethud/main/scripts/install.sh | bash
+              curl -fsSL https://fleethud.vercel.app/sh | bash
             </div>
             <div className="text-[11px] text-muted text-center">Homebrew formula & tarball available</div>
           </div>
@@ -97,7 +97,7 @@ export default function DownloadsPage() {
           </div>
           <div>
             <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              curl -fsSL https://raw.githubusercontent.com/mwahaj36/fleethud/main/scripts/install.sh | bash
+              curl -fsSL https://fleethud.vercel.app/sh | bash
             </div>
             <div className="text-[11px] text-muted text-center">Debian .deb, RPM & AUR packages</div>
           </div>

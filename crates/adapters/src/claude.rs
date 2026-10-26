@@ -56,11 +56,11 @@ impl SourceAdapter for ClaudeAdapter {
                 continue;
             };
 
-            let ts = obj
+            let parsed_ts = obj
                 .get("timestamp")
                 .and_then(Value::as_str)
                 .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc));
+                .map(|dt| dt.with_timezone(&Utc));
 
             let raw_sid = obj
                 .get("sessionId")
@@ -89,6 +89,7 @@ impl SourceAdapter for ClaudeAdapter {
                 batch.projects.push(project.clone());
             }
 
+            let initial_ts = parsed_ts.unwrap_or_else(Utc::now);
             let sess = current_session.get_or_insert_with(|| Session {
                 id: session_id.clone(),
                 agent: AgentId::ClaudeCode,
@@ -99,11 +100,14 @@ impl SourceAdapter for ClaudeAdapter {
                 title: None,
                 state: SessionState::Idle,
                 pid: None,
-                started_at: ts,
-                last_event_at: ts,
+                started_at: initial_ts,
+                last_event_at: initial_ts,
             });
-            sess.last_event_at = ts;
+            if let Some(valid_ts) = parsed_ts {
+                sess.last_event_at = valid_ts;
+            }
             sess.surface = surface;
+            let ts = sess.last_event_at;
 
             if obj.get("type").and_then(Value::as_str) == Some("assistant") {
                 if let Some(msg) = obj.get("message").and_then(Value::as_object) {

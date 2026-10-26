@@ -205,9 +205,11 @@ async fn report_handler(
     struct PlanRoiInfo {
         provider: String,
         plan_usd: f64,
+        monthly_plan_usd: f64,
         spend_usd: f64,
         multiplier: f64,
         net_savings_usd: f64,
+        period_label: String,
     }
 
     #[derive(Serialize)]
@@ -217,6 +219,27 @@ async fn report_handler(
         roi_by_provider: Vec<PlanRoiInfo>,
         combined_roi: PlanRoiInfo,
     }
+
+    let (time_factor, period_label): (f64, &str) = match range {
+        "today" | "24h" => (1.0 / 30.0, "day"),
+        "7d" => (7.0 / 30.0, "7d"),
+        "30d" => (1.0, "mo"),
+        _ => {
+            if let (Some(early_s), Some(late_s)) = (&report.earliest_at, &report.latest_at) {
+                if let (Ok(e_dt), Ok(l_dt)) = (
+                    chrono::DateTime::parse_from_rfc3339(early_s),
+                    chrono::DateTime::parse_from_rfc3339(late_s),
+                ) {
+                    let days = (l_dt - e_dt).num_days().max(1) as f64;
+                    (days / 30.0, "period")
+                } else {
+                    (1.0, "period")
+                }
+            } else {
+                (1.0, "period")
+            }
+        }
+    };
 
     let mut roi_by_provider = Vec::new();
     let mut combined_plan = 0.0;
@@ -234,43 +257,47 @@ async fn report_handler(
     let google_spend = get_spend("Google");
 
     if user_profile.claude_plan_usd > 0.0 {
-        combined_plan += user_profile.claude_plan_usd;
-        let roi = fleethud_core::pricing::calculate_plan_roi(
-            anthropic_spend,
-            user_profile.claude_plan_usd,
-        );
+        let eff_plan = user_profile.claude_plan_usd * time_factor;
+        combined_plan += eff_plan;
+        let roi = fleethud_core::pricing::calculate_plan_roi(anthropic_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "Anthropic (Claude)".to_owned(),
-            plan_usd: user_profile.claude_plan_usd,
+            plan_usd: eff_plan,
+            monthly_plan_usd: user_profile.claude_plan_usd,
             spend_usd: anthropic_spend,
             multiplier: roi.multiplier,
             net_savings_usd: roi.net_savings_usd,
+            period_label: period_label.to_owned(),
         });
     }
 
     if user_profile.openai_plan_usd > 0.0 {
-        combined_plan += user_profile.openai_plan_usd;
-        let roi =
-            fleethud_core::pricing::calculate_plan_roi(openai_spend, user_profile.openai_plan_usd);
+        let eff_plan = user_profile.openai_plan_usd * time_factor;
+        combined_plan += eff_plan;
+        let roi = fleethud_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "OpenAI (Codex)".to_owned(),
-            plan_usd: user_profile.openai_plan_usd,
+            plan_usd: eff_plan,
+            monthly_plan_usd: user_profile.openai_plan_usd,
             spend_usd: openai_spend,
             multiplier: roi.multiplier,
             net_savings_usd: roi.net_savings_usd,
+            period_label: period_label.to_owned(),
         });
     }
 
     if user_profile.google_plan_usd > 0.0 {
-        combined_plan += user_profile.google_plan_usd;
-        let roi =
-            fleethud_core::pricing::calculate_plan_roi(google_spend, user_profile.google_plan_usd);
+        let eff_plan = user_profile.google_plan_usd * time_factor;
+        combined_plan += eff_plan;
+        let roi = fleethud_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "Google (Antigravity)".to_owned(),
-            plan_usd: user_profile.google_plan_usd,
+            plan_usd: eff_plan,
+            monthly_plan_usd: user_profile.google_plan_usd,
             spend_usd: google_spend,
             multiplier: roi.multiplier,
             net_savings_usd: roi.net_savings_usd,
+            period_label: period_label.to_owned(),
         });
     }
 
@@ -279,9 +306,13 @@ async fn report_handler(
     let combined_roi = PlanRoiInfo {
         provider: "All Plans (Combined)".to_owned(),
         plan_usd: combined_plan,
+        monthly_plan_usd: user_profile.claude_plan_usd
+            + user_profile.openai_plan_usd
+            + user_profile.google_plan_usd,
         spend_usd: report.total_cost_usd,
         multiplier: combined_roi_calc.multiplier,
         net_savings_usd: combined_roi_calc.net_savings_usd,
+        period_label: period_label.to_owned(),
     };
 
     Ok(Json(EnhancedReport {
@@ -493,48 +524,73 @@ async fn live_snapshot_handler(
             .map_or(0.0, |p| p.total_cost_usd)
     };
 
+    let (time_factor, period_label): (f64, &str) = match range {
+        "today" | "24h" => (1.0 / 30.0, "day"),
+        "7d" => (7.0 / 30.0, "7d"),
+        "30d" => (1.0, "mo"),
+        _ => {
+            if let (Some(early_s), Some(late_s)) = (&report.earliest_at, &report.latest_at) {
+                if let (Ok(e_dt), Ok(l_dt)) = (
+                    chrono::DateTime::parse_from_rfc3339(early_s),
+                    chrono::DateTime::parse_from_rfc3339(late_s),
+                ) {
+                    let days = (l_dt - e_dt).num_days().max(1) as f64;
+                    (days / 30.0, "period")
+                } else {
+                    (1.0, "period")
+                }
+            } else {
+                (1.0, "period")
+            }
+        }
+    };
+
     let anthropic_spend = get_spend("Anthropic");
     let openai_spend = get_spend("OpenAI");
     let google_spend = get_spend("Google");
 
     if user_profile.claude_plan_usd > 0.0 {
-        combined_plan += user_profile.claude_plan_usd;
-        let roi = fleethud_core::pricing::calculate_plan_roi(
-            anthropic_spend,
-            user_profile.claude_plan_usd,
-        );
+        let eff_plan = user_profile.claude_plan_usd * time_factor;
+        combined_plan += eff_plan;
+        let roi = fleethud_core::pricing::calculate_plan_roi(anthropic_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "Anthropic (Claude)",
-            "plan_usd": user_profile.claude_plan_usd,
+            "plan_usd": eff_plan,
+            "monthly_plan_usd": user_profile.claude_plan_usd,
             "spend_usd": anthropic_spend,
             "multiplier": roi.multiplier,
             "net_savings_usd": roi.net_savings_usd,
+            "period_label": period_label,
         }));
     }
 
     if user_profile.openai_plan_usd > 0.0 {
-        combined_plan += user_profile.openai_plan_usd;
-        let roi =
-            fleethud_core::pricing::calculate_plan_roi(openai_spend, user_profile.openai_plan_usd);
+        let eff_plan = user_profile.openai_plan_usd * time_factor;
+        combined_plan += eff_plan;
+        let roi = fleethud_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "OpenAI (Codex)",
-            "plan_usd": user_profile.openai_plan_usd,
+            "plan_usd": eff_plan,
+            "monthly_plan_usd": user_profile.openai_plan_usd,
             "spend_usd": openai_spend,
             "multiplier": roi.multiplier,
             "net_savings_usd": roi.net_savings_usd,
+            "period_label": period_label,
         }));
     }
 
     if user_profile.google_plan_usd > 0.0 {
-        combined_plan += user_profile.google_plan_usd;
-        let roi =
-            fleethud_core::pricing::calculate_plan_roi(google_spend, user_profile.google_plan_usd);
+        let eff_plan = user_profile.google_plan_usd * time_factor;
+        combined_plan += eff_plan;
+        let roi = fleethud_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "Google (Antigravity)",
-            "plan_usd": user_profile.google_plan_usd,
+            "plan_usd": eff_plan,
+            "monthly_plan_usd": user_profile.google_plan_usd,
             "spend_usd": google_spend,
             "multiplier": roi.multiplier,
             "net_savings_usd": roi.net_savings_usd,
+            "period_label": period_label,
         }));
     }
 
@@ -543,9 +599,13 @@ async fn live_snapshot_handler(
     let combined_roi = json!({
         "provider": "All Plans (Combined)",
         "plan_usd": combined_plan,
+        "monthly_plan_usd": user_profile.claude_plan_usd
+            + user_profile.openai_plan_usd
+            + user_profile.google_plan_usd,
         "spend_usd": report.total_cost_usd,
         "multiplier": combined_roi_calc.multiplier,
         "net_savings_usd": combined_roi_calc.net_savings_usd,
+        "period_label": period_label,
     });
 
     let total_pages = total_count.div_ceil(limit);

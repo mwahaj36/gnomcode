@@ -66,14 +66,9 @@ export default function MarketingFooter() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="https://github.com/mwahaj36/fleethud/issues"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:text-accent transition-colors"
-                >
-                  Request Adapter &rarr;
-                </a>
+                <Link href="/downloads" className="hover:text-accent transition-colors">
+                  Desktop Downloads
+                </Link>
               </li>
             </ul>
           </div>
@@ -105,14 +100,9 @@ export default function MarketingFooter() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="https://github.com/mwahaj36/fleethud"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:text-accent transition-colors"
-                >
-                  GitHub Repository
-                </a>
+                <Link href="/downloads" className="hover:text-accent transition-colors">
+                  Download v1.1.1
+                </Link>
               </li>
             </ul>
           </div>
@@ -148,14 +138,9 @@ export default function MarketingFooter() {
             <Link href="/pricing" className="hover:text-foreground transition-colors">
               Terms of Service
             </Link>
-            <a
-              href="https://github.com/mwahaj36/fleethud"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-foreground transition-colors"
-            >
-              GitHub
-            </a>
+            <Link href="/downloads" className="hover:text-foreground transition-colors">
+              Downloads
+            </Link>
           </div>
         </div>
       </div>

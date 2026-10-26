@@ -66,15 +66,13 @@ export default function DocsPage() {
               <div className="text-[10px] text-muted uppercase tracking-wider mb-2">
                 Need Help?
               </div>
-              <a
-                href="https://github.com/mwahaj36/fleethud/issues"
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                href="/downloads"
                 className="text-accent hover:underline flex items-center gap-1"
               >
-                <span>Open GitHub Issue</span>
+                <span>Download Desktop Client</span>
                 <span>&rarr;</span>
-              </a>
+              </Link>
             </div>
           </div>
         </aside>
@@ -123,7 +121,7 @@ export default function DocsPage() {
                   <span>Darwin x64 & Apple Silicon</span>
                 </div>
                 <div className="bg-bg p-3 rounded border border-border text-foreground overflow-x-auto select-all">
-                  curl -fsSL https://raw.githubusercontent.com/mwahaj36/fleethud/main/scripts/install.sh | bash
+                  curl -fsSL https://fleethud.vercel.app/sh | bash
                 </div>
               </div>
 
