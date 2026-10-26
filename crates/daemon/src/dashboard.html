@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FleetHUD — Mission Control</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .card-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .metric {
+      font-size: 24px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--text-muted);
+      font-weight: 500;
+      background: var(--card-bg);
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-running { background: var(--green); }
+    .status-idle { background: var(--text-muted); }
+    .status-waiting { background: var(--yellow); }
+    .status-error { background: var(--red); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FLEETHUD <span class="badge">MISSION CONTROL</span></h1>
+    <div id="live-indicator" style="font-family: var(--font-mono); font-size: 12px; color: var(--green);">
+      [CONNECTED] 127.0.0.1:41738
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">API-Equivalent Spend</div>
+      <div class="metric" id="total-spend">$0.00</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Prompt Cache Savings</div>
+      <div class="metric" id="total-savings" style="color: var(--green);">$0.00</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Active Fleet Sessions</div>
+      <div class="metric" id="active-count">0</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Quota Pools Monitored</div>
+      <div class="metric" id="quota-count">0</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 24px;">
+    <div class="section-title">Live & Recent Agent Sessions</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Session</th>
+          <th>Agent</th>
+          <th>Surface</th>
+          <th>Model</th>
+          <th>State</th>
+          <th>Last Active</th>
+        </tr>
+      </thead>
+      <tbody id="sessions-table">
+        <tr>
+          <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading active sessions...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Per-Model Quota Pools</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Pool ID</th>
+          <th>Window</th>
+          <th>Used %</th>
+          <th>Resets At</th>
+        </tr>
+      </thead>
+      <tbody id="quota-table">
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-muted);">Loading quota pools...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    async function loadData() {
+      try {
+        const token = new URLSearchParams(window.location.search).get('token') || '';
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        const [sessRes, repRes, quotaRes] = await Promise.all([
+          fetch('/api/v1/sessions', { headers }).then(r => r.ok ? r.json() : []),
+          fetch('/api/v1/report', { headers }).then(r => r.ok ? r.json() : { total_cost_usd: 0, total_cache_savings_usd: 0 }),
+          fetch('/api/v1/quota', { headers }).then(r => r.ok ? r.json() : [])
+        ]);
+
+        document.getElementById('total-spend').textContent = `$${repRes.total_cost_usd.toFixed(2)}`;
+        document.getElementById('total-savings').textContent = `$${repRes.total_cache_savings_usd.toFixed(2)}`;
+        document.getElementById('active-count').textContent = sessRes.length;
+        document.getElementById('quota-count').textContent = quotaRes.length;
+
+        const sTable = document.getElementById('sessions-table');
+        if (sessRes.length === 0) {
+          sTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No active sessions found.</td></tr>';
+        } else {
+          sTable.innerHTML = sessRes.map(s => {
+            const dotClass = s.state === 'tool' || s.state === 'thinking' ? 'status-running' :
+                             s.state === 'awaiting_approval' ? 'status-waiting' : 'status-idle';
+            return `<tr>
+              <td>${s.id}</td>
+              <td>${s.agent}</td>
+              <td>${s.surface}</td>
+              <td>${s.model || 'unknown'}</td>
+              <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
+              <td>${new Date(s.last_event_at).toLocaleTimeString()}</td>
+            </tr>`;
+          }).join('');
+        }
+
+        const qTable = document.getElementById('quota-table');
+        if (quotaRes.length === 0) {
+          qTable.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No quota pools reported yet.</td></tr>';
+        } else {
+          qTable.innerHTML = quotaRes.map(q => `<tr>
+            <td>${q.provider}</td>
+            <td>${q.limit_id}</td>
+            <td>${q.window}</td>
+            <td>${q.used_pct.toFixed(1)}%</td>
+            <td>${q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : 'N/A'}</td>
+          </tr>`).join('');
+        }
+      } catch (err) {
+        console.error('Failed to refresh data', err);
+      }
+    }
+
+    loadData();
+    setInterval(loadData, 2000);
+  </script>
+</body>
+</html>
