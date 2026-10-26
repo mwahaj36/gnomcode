@@ -136,6 +136,15 @@ pub struct SessionListItem {
     pub input_tokens: u64,
     /// Total output tokens generated.
     pub output_tokens: u64,
+    /// Total cached input tokens read from Prompt Cache.
+    #[serde(default)]
+    pub cache_read_tokens: u64,
+    /// Latest active context token load.
+    #[serde(default)]
+    pub context_tokens: u64,
+    /// Model context window size in tokens if known.
+    #[serde(default)]
+    pub context_window: Option<u64>,
     /// Total API-equivalent cost USD.
     pub total_cost_usd: f64,
 }
@@ -1493,7 +1502,10 @@ impl Database {
                 s.id, s.agent, s.surface, s.project_name, s.model, s.state, s.started_at, s.last_event_at,
                 COALESCE(SUM(u.input_tokens), 0),
                 COALESCE(SUM(u.output_tokens), 0),
-                COALESCE(SUM(u.cost_usd), 0.0)
+                COALESCE(SUM(u.cost_usd), 0.0),
+                COALESCE(SUM(u.cache_read_tokens), 0),
+                COALESCE(MAX(u.context_tokens), 0),
+                MAX(u.context_window)
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -1515,6 +1527,9 @@ impl Database {
                 let input_tokens: i64 = row.get(8)?;
                 let output_tokens: i64 = row.get(9)?;
                 let total_cost_usd: f64 = row.get(10)?;
+                let cache_read_tokens: i64 = row.get(11)?;
+                let context_tokens: i64 = row.get(12)?;
+                let context_window: Option<i64> = row.get(13)?;
 
                 let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
                     .map(|dt| dt.with_timezone(&Utc))
@@ -1554,6 +1569,9 @@ impl Database {
                     last_event_at: last_event_at_str,
                     input_tokens: input_tokens.max(0) as u64,
                     output_tokens: output_tokens.max(0) as u64,
+                    cache_read_tokens: cache_read_tokens.max(0) as u64,
+                    context_tokens: context_tokens.max(0) as u64,
+                    context_window: context_window.map(|w| w.max(0) as u64),
                     total_cost_usd,
                 })
             },

@@ -29,6 +29,12 @@ pub struct LicenseStatus {
 #[must_use]
 #[inline(always)]
 pub fn has_pro_license() -> bool {
+    // 1. Check if authenticated cloud account session is paired
+    if fleethud_home().join("session.json").exists() {
+        return true;
+    }
+
+    // 2. Fall back to offline signed license key
     let Ok(bytes) = fs::read(fleethud_home().join("license.key")) else {
         return false;
     };
@@ -44,51 +50,56 @@ pub fn has_pro_license() -> bool {
 /// Returns details on the local license status.
 #[must_use]
 pub fn get_license_status() -> LicenseStatus {
-    let Ok(bytes) = fs::read(fleethud_home().join("license.key")) else {
-        return LicenseStatus {
-            tier: "free".to_owned(),
-            licensed: false,
-            license_id: None,
-            customer_name: None,
-            expires_at: None,
-        };
-    };
-
-    let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) else {
-        return LicenseStatus {
-            tier: "free".to_owned(),
-            licensed: false,
-            license_id: None,
-            customer_name: None,
-            expires_at: None,
-        };
-    };
-
-    match verify_license(&license, FLEETHUD_LICENSE_PUBKEY_HEX) {
-        Ok(tier) => {
-            let (tier_str, is_lic) = match tier {
-                Tier::Pro => ("pro", true),
-                Tier::Team => ("team", true),
-                Tier::Free => ("free", false),
-            };
-            LicenseStatus {
-                tier: tier_str.to_owned(),
-                licensed: is_lic,
-                license_id: Some(format!(
-                    "lic-{}",
-                    &license.signature_hex[..12.min(license.signature_hex.len())]
-                )),
-                customer_name: Some(license.payload.licensee.clone()),
-                expires_at: license.payload.expires_at.clone(),
+    // 1. First check offline signed license key
+    if let Ok(bytes) = fs::read(fleethud_home().join("license.key")) {
+        if let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) {
+            if let Ok(tier) = verify_license(&license, FLEETHUD_LICENSE_PUBKEY_HEX) {
+                let (tier_str, is_lic) = match tier {
+                    Tier::Pro => ("pro", true),
+                    Tier::Team => ("team", true),
+                    Tier::Free => ("free", false),
+                };
+                return LicenseStatus {
+                    tier: tier_str.to_owned(),
+                    licensed: is_lic,
+                    license_id: Some(format!(
+                        "lic-{}",
+                        &license.signature_hex[..12.min(license.signature_hex.len())]
+                    )),
+                    customer_name: Some(license.payload.licensee.clone()),
+                    expires_at: license.payload.expires_at.clone(),
+                };
             }
         }
-        Err(_) => LicenseStatus {
-            tier: "free".to_owned(),
-            licensed: false,
-            license_id: None,
-            customer_name: None,
-            expires_at: None,
-        },
+    }
+
+    // 2. Check if linked via cloud account pairing token
+    if let Ok(raw) = fs::read_to_string(fleethud_home().join("session.json")) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+            let email = val
+                .pointer("/user/email")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned());
+            let uid = val
+                .pointer("/user/id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned());
+            return LicenseStatus {
+                tier: "pro".to_owned(),
+                licensed: true,
+                license_id: uid.map(|id| format!("cloud-{}", &id[..8.min(id.len())])),
+                customer_name: email.or(Some("Cloud Account (Pro)".to_owned())),
+                expires_at: None,
+            };
+        }
+    }
+
+    LicenseStatus {
+        tier: "free".to_owned(),
+        licensed: false,
+        license_id: None,
+        customer_name: None,
+        expires_at: None,
     }
 }
 
