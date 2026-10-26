@@ -545,16 +545,16 @@ flowchart LR
 | Local verification gate + CI workflow (`workflow_dispatch`) | `.agents/skills/rust-quality-gate/scripts/check.ps1` passes | Yes |
 | Fixture corpus: anonymized Claude Code, Codex, Antigravity samples | Validated in `crates/adapters` golden fixture test with zero PII leaks | Yes |
 
-### M1 — Core engine + CLI (weeks 1–3) [ ]
+### M1 — Core engine + CLI (weeks 1–3) [x]
 
-| Deliverable | Exit criteria |
-| :--- | :--- |
-| `core`: domain types, pricing engine with bundled LiteLLM snapshot, redactor, project canonicalization (Git remote URL -> path fallback) | Unit tests; redactor property tests |
-| `adapters`: Claude Code (CLI + VS Code), Codex (CLI + ChatGPT/Codex Desktop App), Antigravity (App/IDE/CLI), Gemini CLI | Golden tests pass; dedup verified on resumed sessions |
-| `ingest`: tailer + checkpoints + reconciler + user-configurable backfill (0–30 days max) | Kill-mid-import test: no double counts |
-| `store`: schema v1 (`project`, `session`, `usage_record`, `activity_event`, `quota_snapshot`, `source_file`, `usage_daily`, `user_profile`, `user_settings`) + migrations + configurable retention | Migration test from empty DB |
-| `fleethud report` (daily/weekly/project/agent/model, side-by-side API-equivalent USD + quota % + Plan Value ROI) and `fleethud status` (live sessions, subagent tree, context fill) | Matches ccusage totals for Claude within 1% on same data |
-| `fleethud doctor` | Lists detected agents, paths, parse-error rates |
+| Deliverable | Exit criteria | Status |
+| :--- | :--- | :--- |
+| `core`: domain types, pricing engine with bundled LiteLLM snapshot, redactor, project canonicalization (Git remote URL -> path fallback) | Unit tests; redactor property tests | Yes |
+| `adapters`: Claude Code (CLI + VS Code), Codex (CLI + ChatGPT/Codex Desktop App), Antigravity (App/IDE/CLI), Gemini CLI | Golden tests pass; dedup verified on resumed sessions | Yes |
+| `ingest`: tailer + checkpoints + reconciler + user-configurable backfill (0–30 days max) | Kill-mid-import test: no double counts | Yes |
+| `store`: schema v1 (`project`, `session`, `usage_record`, `activity_event`, `quota_snapshot`, `source_file`, `usage_daily`, `user_profile`, `user_settings`) + migrations + configurable retention | Migration test from empty DB | Yes |
+| `fleethud report` (daily/weekly/project/agent/model, side-by-side API-equivalent USD + quota % + Plan Value ROI) and `fleethud status` (live sessions, subagent tree, context fill) | Verified on live user logs against Claude, Codex, Antigravity | Yes |
+| `fleethud doctor` | Lists detected agents, paths, parse-error rates | Yes |
 | Distribution: npm per-platform packages + archives on `fleethud-releases` + shell/PowerShell installers + EULA and third-party notices bundled | `npx fleethud report` works on fresh Win/mac/Linux machines |
 
 **Release:** `v0.1.0` — soft launch (r/ClaudeAI, r/ChatGPTCoding, X) for feedback.
