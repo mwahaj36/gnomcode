@@ -586,21 +586,24 @@ flowchart LR
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
-| `core::rules` Guardrail evaluation: per-project/global spend & turn caps, hard stop action | Session stops at threshold; notification fires | Yes |
-| Resume Queue (`SPEC §3.14`): explicit arming, reset verification, cooldown, jitter, max_runs cap | Rate-limited session auto-continues on reset | Yes |
+| `core::rules` Guardrail evaluation: per-project/global spend & turn caps, hard stop action | Session stops at threshold; notification fires; fail-open IPC | Yes |
+| Resume Queue (`SPEC §3.14`): explicit arming, reset verification, cooldown, jitter, max_runs cap | Rate-limited session auto-continues on reset without escalating permissions | Yes |
 | Zero-emoji alert formatting and rule execution | Pure and deterministic without network latency | Yes |
+| Full adapter coverage (Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor, Aider) | Golden & unit tests pass, zero PII leaks, error-resilient | Yes |
+| Cross-agent Git remote & worktree canonicalization | Worktrees & clones share canonical project ID | Yes |
+| Pro analytics export (CSV / JSON) & offline Ed25519 license activation | Export routes, verification at entry points, console UI | Yes |
 
 **Release:** `v0.8.0`.
 
-### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [x]
+### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [in progress]
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
 | Supabase schema, migrations, and RLS policies (`organizations`, `org_members`, `devices`, `usage_hourly_sync`, `quota_pool_sync`, `team_budget_rules`) | Multi-tenant RLS isolation policies with org_admin and member roles | Yes |
 | Privacy-preserving HMAC-SHA256 project key hashing (`SPEC §3.15.D`) | Repos and paths never leak to cloud | Yes |
-| Hourly usage sync and cross-device quota mirroring structures | Pure, deterministic serde models | Yes |
+| Hourly usage sync and cross-device quota mirroring structures | Pure, deterministic serde models | Partial: paired daemon uploads a redacted snapshot; device registration and full Teams sync remain |
 
-### v1.0 criteria [x]
+### v1.0 criteria [not met]
 
 All Tier A + B adapters stable, 0% parse errors on golden fixtures, zero PII leaks, zero emojis across repo and UI, all quality gates green on Windows, macOS, and Linux, and installer scripts published.
 

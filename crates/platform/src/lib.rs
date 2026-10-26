@@ -61,8 +61,8 @@ pub fn user_home_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-/// Returns the candidate log root directories for M1 agents, respecting
-/// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`).
+/// Returns the candidate log root directories for supported agents, respecting
+/// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`, `AIDER_ANALYTICS_LOG`).
 #[must_use]
 pub fn discover_agent_roots() -> Vec<AgentRoot> {
     let home = user_home_dir();
@@ -86,7 +86,7 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
     let antigravity_root = gemini_base.join("antigravity").join("brain");
     let gemini_cli_root = gemini_base.join("tmp");
 
-    vec![
+    let mut roots = vec![
         AgentRoot {
             agent: AgentId::ClaudeCode,
             exists: claude_root.exists(),
@@ -107,7 +107,161 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             exists: gemini_cli_root.exists(),
             path: gemini_cli_root,
         },
-    ]
+    ];
+
+    // Cline / Roo Code storage across editors (Code, Code - Insiders, Cursor, Windsurf, VSCodium)
+    let appdata = app_config_dir();
+    let editors = ["Code", "Code - Insiders", "Cursor", "Windsurf", "VSCodium"];
+    let extensions = ["saoudrizwan.claude-dev", "rooveterinaryinc.roo-cline"];
+
+    for editor in editors {
+        for ext in extensions {
+            let tasks_dir = appdata
+                .join(editor)
+                .join("User")
+                .join("globalStorage")
+                .join(ext)
+                .join("tasks");
+            if tasks_dir.exists() {
+                roots.push(AgentRoot {
+                    agent: AgentId::Cline,
+                    exists: true,
+                    path: tasks_dir,
+                });
+            }
+        }
+    }
+
+    // Cursor global storage / composer sessions
+    let cursor_storage = appdata.join("Cursor").join("User").join("globalStorage");
+    let cursor_home = home.join(".cursor");
+    if cursor_storage.exists() {
+        roots.push(AgentRoot {
+            agent: AgentId::Cursor,
+            exists: true,
+            path: cursor_storage,
+        });
+    }
+    if cursor_home.exists() {
+        roots.push(AgentRoot {
+            agent: AgentId::Cursor,
+            exists: true,
+            path: cursor_home,
+        });
+    }
+
+    // Aider analytics log / history
+    if let Ok(custom_aider) = env::var("AIDER_ANALYTICS_LOG") {
+        let p = PathBuf::from(custom_aider.trim());
+        if p.exists() {
+            roots.push(AgentRoot {
+                agent: AgentId::Aider,
+                exists: true,
+                path: p,
+            });
+        }
+    }
+    let aider_home = home.join(".aider");
+    if aider_home.exists() {
+        roots.push(AgentRoot {
+            agent: AgentId::Aider,
+            exists: true,
+            path: aider_home,
+        });
+    }
+
+    roots
+}
+
+/// Resolves user application configuration / roaming directory across operating systems.
+#[must_use]
+pub fn app_config_dir() -> PathBuf {
+    if let Ok(appdata) = env::var("APPDATA") {
+        if !appdata.trim().is_empty() {
+            return PathBuf::from(appdata);
+        }
+    }
+    let home = user_home_dir();
+    #[cfg(target_os = "macos")]
+    {
+        home.join("Library").join("Application Support")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        home.join(".config")
+    }
+}
+
+/// Canonicalizes a path by resolving the git repository root and remote origin URL.
+/// Handles standard git clones as well as git worktrees (`.git` pointing to `gitdir:`).
+#[must_use]
+pub fn resolve_git_repo_and_remote(path: &Path) -> (Option<PathBuf>, Option<String>) {
+    let mut curr = if path.is_file() {
+        path.parent()
+    } else {
+        Some(path)
+    };
+
+    while let Some(dir) = curr {
+        let dot_git = dir.join(".git");
+        if dot_git.is_dir() {
+            let remote = read_git_remote_url(&dot_git.join("config"));
+            return (Some(dir.to_path_buf()), remote);
+        } else if dot_git.is_file() {
+            if let Ok(content) = fs::read_to_string(&dot_git) {
+                if let Some(gitdir_line) = content
+                    .lines()
+                    .find(|l| l.trim_start().starts_with("gitdir:"))
+                {
+                    let gitdir_str = gitdir_line.trim_start()["gitdir:".len()..].trim();
+                    let gitdir = if Path::new(gitdir_str).is_absolute() {
+                        PathBuf::from(gitdir_str)
+                    } else {
+                        dir.join(gitdir_str)
+                    };
+                    let commondir_file = gitdir.join("commondir");
+                    let main_git_dir = if let Ok(common) = fs::read_to_string(&commondir_file) {
+                        let common_trimmed = common.trim();
+                        if Path::new(common_trimmed).is_absolute() {
+                            PathBuf::from(common_trimmed)
+                        } else {
+                            gitdir.join(common_trimmed)
+                        }
+                    } else {
+                        gitdir.clone()
+                    };
+                    let canonical_git_dir = main_git_dir.canonicalize().unwrap_or(main_git_dir);
+                    let remote = read_git_remote_url(&canonical_git_dir.join("config"));
+                    let main_repo_root = canonical_git_dir
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| dir.to_path_buf());
+                    return (Some(main_repo_root), remote);
+                }
+            }
+        }
+        curr = dir.parent();
+    }
+    (None, None)
+}
+
+fn read_git_remote_url(config_path: &Path) -> Option<String> {
+    let content = fs::read_to_string(config_path).ok()?;
+    let mut in_remote_origin = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_remote_origin = trimmed.eq_ignore_ascii_case("[remote \"origin\"]");
+        } else if in_remote_origin && trimmed.starts_with("url") {
+            if let Some((_, val)) = trimmed.split_once('=') {
+                let clean = val.trim();
+                if !clean.is_empty() {
+                    return Some(clean.to_owned());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Locally detected subscription plan prices and tier labels.
@@ -342,5 +496,50 @@ mod tests {
         let chunk3 = read_from_offset(tmp.path(), 9999).expect("read after simulated truncation");
         assert_eq!(chunk3.effective_start_offset, 0);
         assert_eq!(chunk3.bytes, b"line1\nline2\n");
+    }
+
+    #[test]
+    fn git_repo_and_worktree_canonicalization_resolves_common_root_and_remote() {
+        use super::resolve_git_repo_and_remote;
+        use std::fs;
+        use tempfile::tempdir;
+
+        let dir = tempdir().expect("create temp dir");
+        let repo_root = dir.path().join("my-repo");
+        let dot_git = repo_root.join(".git");
+        fs::create_dir_all(&dot_git).expect("create .git dir");
+
+        let git_config = "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:mwahaj36/fleethud.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
+        fs::write(dot_git.join("config"), git_config).expect("write git config");
+
+        // 1. Direct repo lookup
+        let subfolder = repo_root.join("src").join("inner");
+        fs::create_dir_all(&subfolder).expect("create subfolder");
+        let (resolved_root, remote) = resolve_git_repo_and_remote(&subfolder);
+        let expected_root = repo_root.canonicalize().unwrap_or(repo_root.clone());
+        assert_eq!(resolved_root.as_deref(), Some(expected_root.as_path()));
+        assert_eq!(
+            remote.as_deref(),
+            Some("git@github.com:mwahaj36/fleethud.git")
+        );
+
+        // 2. Worktree simulation
+        let worktree_dir = dir.path().join("my-repo-worktree");
+        fs::create_dir_all(&worktree_dir).expect("create worktree dir");
+        let wt_gitdir = dot_git.join("worktrees").join("feature-branch");
+        fs::create_dir_all(&wt_gitdir).expect("create wt gitdir");
+        fs::write(wt_gitdir.join("commondir"), "../..\n").expect("write commondir");
+        fs::write(
+            worktree_dir.join(".git"),
+            format!("gitdir: {}\n", wt_gitdir.display()),
+        )
+        .expect("write .git file");
+
+        let (wt_root, wt_remote) = resolve_git_repo_and_remote(&worktree_dir);
+        assert_eq!(wt_root.as_deref(), Some(expected_root.as_path()));
+        assert_eq!(
+            wt_remote.as_deref(),
+            Some("git@github.com:mwahaj36/fleethud.git")
+        );
     }
 }

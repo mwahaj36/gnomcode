@@ -189,7 +189,7 @@ pub fn calculate_cost(model: &str, usage: &TokenBreakdown) -> CostEvaluation {
 
     let mtok = 1_000_000.0_f64;
     let in_m = u64_to_f64(usage.input_tokens) / mtok;
-    let out_m = u64_to_f64(usage.output_tokens.saturating_add(usage.reasoning_tokens)) / mtok;
+    let out_m = u64_to_f64(usage.output_tokens) / mtok;
     let read_m = u64_to_f64(usage.cache_read_tokens) / mtok;
     let w5_m = u64_to_f64(usage.cache_write_5m_tokens) / mtok;
     let w1h_m = u64_to_f64(usage.cache_write_1h_tokens) / mtok;
@@ -216,7 +216,7 @@ pub fn calculate_cost(model: &str, usage: &TokenBreakdown) -> CostEvaluation {
         cost_usd,
         cache_savings_usd,
         context_window: Some(pricing.context_window),
-        cost_basis: TrustLevel::Exact,
+        cost_basis: TrustLevel::Estimated,
         pricing_version: PRICING_VERSION,
     }
 }
@@ -306,7 +306,7 @@ mod tests {
             cache_write_1h_tokens: 0,
         };
         let res = calculate_cost("claude-opus-5-20260619", &usage);
-        assert_eq!(res.cost_basis, TrustLevel::Exact);
+        assert_eq!(res.cost_basis, TrustLevel::Estimated);
         assert_eq!(res.pricing_version, PRICING_VERSION);
         assert!(res.cost_usd > 0.0);
         // Reading 100k cached tokens at 90% discount saves 90% of input rate
@@ -336,6 +336,18 @@ mod tests {
         let res = calculate_cost("mystery-custom-llm-v9", &usage);
         assert_eq!(res.cost_basis, TrustLevel::Unknown);
         assert!((res.cost_usd - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn reasoning_subset_is_not_billed_twice() {
+        let usage = TokenBreakdown {
+            output_tokens: 1_000,
+            reasoning_tokens: 200,
+            ..TokenBreakdown::default()
+        };
+        let result = calculate_cost("claude-sonnet-5", &usage);
+        assert!((result.cost_usd - 0.015).abs() < 1e-9);
+        assert_eq!(result.cost_basis, TrustLevel::Estimated);
     }
 
     #[test]
