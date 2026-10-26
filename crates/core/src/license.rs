@@ -116,7 +116,7 @@ pub fn verify_license(license: &LicenseFile, pubkey_hex: &str) -> Result<Tier, L
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     let s = s.trim();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd hex string length".to_owned());
     }
     (0..s.len())

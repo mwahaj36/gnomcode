@@ -573,23 +573,88 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
     }
 }
 
-/// Detects a Codex cloud thread from runtime metadata without reading credentials or logs.
+/// Resolves an explicit provider identity or a detected Codex cloud thread.
+/// Explicit bindings let every supported agent share the same automatic startup path.
 #[must_use]
-pub fn codex_cloud_session_id() -> Option<String> {
+pub fn cloud_session_identity() -> Option<(AgentId, String)> {
+    cloud_session_identity_from(|name| env::var(name).ok())
+}
+
+fn cloud_session_identity_from(get: impl Fn(&str) -> Option<String>) -> Option<(AgentId, String)> {
+    if let Some(provider) = get("FLEETHUD_CLOUD_AGENT") {
+        let agent = match provider.as_str() {
+            "codex" => AgentId::Codex,
+            "claude-code" => AgentId::ClaudeCode,
+            "cursor" => AgentId::Cursor,
+            "antigravity" => AgentId::Antigravity,
+            "gemini-cli" => AgentId::GeminiCli,
+            "cline" => AgentId::Cline,
+            "aider" => AgentId::Aider,
+            _ => return None,
+        };
+        return get("FLEETHUD_CLOUD_SESSION_ID")
+            .filter(|id| !id.trim().is_empty())
+            .map(|id| (agent, id));
+    }
     let cloud = ["CODEX_ENVIRONMENT_ID", "CODEX_CAAS_SESSION_ID"]
         .iter()
-        .any(|name| env::var(name).is_ok_and(|value| !value.trim().is_empty()));
+        .any(|name| get(name).is_some_and(|v| !v.trim().is_empty()));
     if !cloud {
         return None;
     }
     ["CODEX_THREAD_ID", "CODEX_SESSION_ID"]
         .iter()
-        .filter_map(|name| env::var(name).ok())
-        .find(|value| !value.trim().is_empty())
+        .filter_map(|name| get(name))
+        .find(|id| !id.trim().is_empty())
+        .map(|id| (AgentId::Codex, id))
+}
+
+/// Detects a Codex cloud thread from runtime metadata without reading credentials or logs.
+#[must_use]
+pub fn codex_cloud_session_id() -> Option<String> {
+    cloud_session_identity()
+        .filter(|(agent, _)| *agent == AgentId::Codex)
+        .map(|(_, id)| id)
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn automatic_cloud_identity_respects_provider_and_missing_metadata() {
+        use std::collections::HashMap;
+        let mut vars = HashMap::from([
+            ("CODEX_ENVIRONMENT_ID", "environment"),
+            ("CODEX_THREAD_ID", "thread"),
+        ]);
+        let resolve = |vars: &HashMap<&str, &str>| {
+            super::cloud_session_identity_from(|name| vars.get(name).map(|v| (*v).to_owned()))
+        };
+        assert_eq!(
+            resolve(&vars),
+            Some((fleethud_core::AgentId::Codex, "thread".to_owned()))
+        );
+        vars.remove("CODEX_ENVIRONMENT_ID");
+        assert!(resolve(&vars).is_none());
+        for provider in [
+            "codex",
+            "claude-code",
+            "cursor",
+            "antigravity",
+            "gemini-cli",
+            "cline",
+            "aider",
+        ] {
+            vars.insert("FLEETHUD_CLOUD_AGENT", provider);
+            assert!(resolve(&vars).is_none());
+            vars.insert("FLEETHUD_CLOUD_SESSION_ID", "provider-thread");
+            assert_eq!(
+                resolve(&vars).expect("explicit provider").0.as_str(),
+                provider
+            );
+            vars.remove("FLEETHUD_CLOUD_SESSION_ID");
+        }
+    }
+
     use super::{open_shared_read, read_from_offset};
     use std::io::Write as _;
     use tempfile::NamedTempFile;

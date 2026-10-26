@@ -16,6 +16,55 @@ pub fn client() -> Result<reqwest::Client, reqwest::Error> {
         .build()
 }
 
+/// Starts cloud presence automatically inside a daemon whose runtime exposes an identity.
+/// Uses the daemon's existing account pairing; unpaired collection remains local.
+#[must_use]
+pub fn spawn_auto_collector(db_path: std::path::PathBuf) -> Option<tokio::task::JoinHandle<()>> {
+    let (agent, id) = fleethud_platform::cloud_session_identity()?;
+    if !valid_session_id(&id) {
+        return None;
+    }
+    Some(spawn_collector_for(
+        db_path,
+        agent,
+        id,
+        fleethud_platform::fleethud_home().join("session.json"),
+    ))
+}
+
+fn spawn_collector_for(
+    db_path: std::path::PathBuf,
+    agent: AgentId,
+    id: String,
+    pairing: std::path::PathBuf,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let Ok(client) = client() else {
+            tracing::warn!("cloud collector could not initialize HTTPS");
+            return;
+        };
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            ticker.tick().await;
+            let path = db_path.clone();
+            let native_id = id.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let mut db = Database::open(&path)?;
+                heartbeat(&mut db, agent, &native_id)
+            })
+            .await;
+            match result {
+                Ok(Ok(session)) => {
+                    if publish(&client, &pairing, &session).await.is_err() {
+                        tracing::warn!("cloud presence sync unavailable; retrying automatically");
+                    }
+                }
+                _ => tracing::warn!("cloud heartbeat unavailable; retrying automatically"),
+            }
+        }
+    })
+}
+
 /// Validates an opaque provider session ID; arbitrary text is never accepted as metadata.
 #[must_use]
 pub fn valid_session_id(id: &str) -> bool {
@@ -448,5 +497,40 @@ mod tests {
         assert!(session.usage_available);
         assert_eq!(session.input_tokens, 100);
         assert_eq!(session.cost_basis, fleethud_core::TrustLevel::Unknown);
+    }
+    #[tokio::test]
+    async fn automatic_daemon_collector_registers_without_manual_cli() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let path = dir.path().join("state.db");
+        let task = spawn_collector_for(
+            path.clone(),
+            AgentId::Codex,
+            "automatic-thread".to_owned(),
+            dir.path().join("unpaired.json"),
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let found = if path.exists() {
+                Database::open(&path)
+                    .ok()
+                    .and_then(|db| db.list_sessions_paginated(None, None, 0, 10).ok())
+                    .is_some_and(|(items, _)| {
+                        items
+                            .iter()
+                            .any(|s| s.id == "codex:automatic-thread" && s.state == "connected")
+                    })
+            } else {
+                false
+            };
+            if found {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "automatic collector did not register"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        task.abort();
     }
 }
