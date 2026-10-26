@@ -4,6 +4,7 @@
 
 pub mod pricing;
 pub mod redact;
+pub mod rules;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
