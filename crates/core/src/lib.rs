@@ -86,6 +86,8 @@ pub enum Surface {
     Ide,
     /// Standalone desktop app (Antigravity App, ChatGPT / Codex Desktop).
     DesktopApp,
+    /// Agent running in a remote cloud environment.
+    Cloud,
 }
 
 impl Surface {
@@ -96,6 +98,7 @@ impl Surface {
             Self::Cli => "cli",
             Self::Ide => "ide",
             Self::DesktopApp => "desktop_app",
+            Self::Cloud => "cloud",
         }
     }
 }
@@ -116,6 +119,8 @@ pub enum SessionState {
     Error,
     /// Process exited and log inactive for >10 minutes.
     Ended,
+    /// Collector is connected; actual agent activity is unavailable.
+    Connected,
 }
 
 impl SessionState {
@@ -129,6 +134,7 @@ impl SessionState {
             Self::Idle => "idle",
             Self::Error => "error",
             Self::Ended => "ended",
+            Self::Connected => "connected",
         }
     }
 }

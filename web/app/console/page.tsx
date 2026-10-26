@@ -22,6 +22,8 @@ interface SessionItem {
   total_cost_usd?: number;
   title?: string;
   device_name?: string;
+  usage_available?: boolean;
+  cost_basis?: string;
 }
 
 interface QuotaItem {
@@ -151,31 +153,32 @@ export default function ConsolePage() {
   const fetchLiveMetrics = useCallback(async () => {
     if (user) {
       try {
-        const { data, error } = await supabase
-          .from("fleethud_sync_state")
-          .select("*")
-          .eq("user_id", user.id)
-          .single();
-
-        if (!error && data && data.live_snapshot) {
-          const snap = data.live_snapshot;
-          setReport(snap.timelines?.[timeline] || snap.timeline || null);
-          const filtered = (snap.sessions || []).filter((session: SessionItem) =>
-            (agentFilter === "all" || session.agent === agentFilter) &&
-            (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
-          );
-          setSessions(filtered.slice((page - 1) * 10, page * 10));
-          setQuota(snap.quota || []);
-          setRoiByProvider(snap.roi_by_provider || []);
-          setCombinedRoi(snap.combined_roi || null);
-          setUserProfile(snap.user_profile || null);
-          setActiveCount(snap.active_count || 0);
-          setTotalCount(filtered.length);
-          setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
-          const ageMs = Date.now() - Date.parse(data.updated_at);
-          setConnectedSource(ageMs < 120000 ? "Remote daemon (updated within 2 min)" : `Remote data stale (last update ${new Date(data.updated_at).toLocaleString()})`);
+        const [desktop, cloud] = await Promise.all([
+          supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle(),
+          supabase.from("fleethud_cloud_sessions_live").select("session,updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1000),
+        ]);
+        const snap = desktop.data?.live_snapshot;
+        const cloudSessions: SessionItem[] = (cloud.data || []).map((row) => row.session as SessionItem);
+        const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
+        const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
+          (agentFilter === "all" || session.agent === agentFilter) &&
+          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
+        );
+        setSessions(filtered.slice((page - 1) * 10, page * 10));
+        setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
+        setQuota(snap?.quota || []);
+        setRoiByProvider(snap?.roi_by_provider || []);
+        setCombinedRoi(snap?.combined_roi || null);
+        setUserProfile(snap?.user_profile || null);
+        setActiveCount(snap?.active_count || 0);
+        setTotalCount(filtered.length);
+        setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
+        const cloudStatus = cloud.error ? "Cloud sessions unavailable" : `${cloudSessions.length} cloud sessions`;
+        if (snap) {
+          const ageMs = Date.now() - Date.parse(desktop.data.updated_at);
+          setConnectedSource(`${ageMs < 120000 ? "Desktop connected" : "Desktop data stale"} · ${cloudStatus}`);
         } else {
-          setConnectedSource("No paired desktop data yet");
+          setConnectedSource(desktop.error ? `Desktop unavailable · ${cloudStatus}` : cloudStatus);
         }
       } catch {
         setConnectedSource("Offline");
@@ -632,6 +635,7 @@ export default function ConsolePage() {
         </div>
       </div>
 
+      <p className="text-xs text-muted mb-3">Cloud usage and estimated cost appear in session rows. Summary charts show desktop reports.</p>
       {/* Live & Historical Agent Sessions */}
       <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
@@ -660,16 +664,16 @@ export default function ConsolePage() {
           </div>
         </div>
 
-        {sessions.some((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+        {sessions.some((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
           <div className="mb-3 px-3 py-2 bg-red/10 border border-red/30 rounded text-xs text-red flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold">[PRO LABS]</span>
               <span>Context saturation reserve active (&gt;=90%). Sessions are eligible for zero-token handoff via <code className="font-mono text-[11px] bg-red/20 px-1 py-0.5 rounded">.fleethud/HANDOFF.md</code>.</span>
             </div>
-            {sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+            {sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
               <button
                 onClick={() => {
-                  const target = sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
+                  const target = sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
                   if (target) handleRemoteRelay(target);
                 }}
                 className="px-2.5 py-1 bg-red text-white text-[11px] font-semibold rounded hover:opacity-90 transition-opacity"
@@ -723,10 +727,10 @@ export default function ConsolePage() {
                     <td className="py-2.5">{s.model}</td>
                     <td className="py-2.5">
                       <span className="font-semibold text-foreground">
-                        {formatTokens(totalTokens)}
+                        {s.usage_available === false ? "Unknown" : formatTokens(totalTokens)}
                       </span>
                       <span className="text-[10px] text-muted block">
-                        {formatTokens(s.input_tokens)} in &bull; {formatTokens(s.output_tokens)} out
+                        {s.usage_available === false ? "Presence only" : `${formatTokens(s.input_tokens)} in · ${formatTokens(s.output_tokens)} out`}
                       </span>
                       {s.cache_read_tokens && s.cache_read_tokens > 0 ? (
                         <span className="text-[10px] text-green block font-semibold">
@@ -745,7 +749,7 @@ export default function ConsolePage() {
                           <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
                             <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
                           </div>
-                          {fillPct >= 90 ? (
+                          {s.surface !== "cloud" && fillPct >= 90 ? (
                             <button
                               onClick={() => handleRemoteRelay(s)}
                               className="mt-1 text-[10px] font-semibold text-accent hover:underline block"
@@ -762,7 +766,7 @@ export default function ConsolePage() {
                       )}
                     </td>
                     <td className="py-2.5 font-bold text-foreground">
-                      ${(s.total_cost_usd ?? 0).toFixed(2)}
+                      {s.usage_available === false || s.cost_basis === "unknown" ? "Unknown" : `$${(s.total_cost_usd ?? 0).toFixed(2)} EST`}
                     </td>
                     <td className="py-2.5">
                       <span className="flex items-center gap-1.5">
