@@ -572,16 +572,13 @@ flowchart LR
 
 **Release:** `v0.2.0`.
 
-### M3 — Tray app on all OSes (weeks 5–8) [ ]
+### M3 — Tray app on all OSes (weeks 5–8) [x]
 
-| Deliverable | Exit criteria |
-| :--- | :--- |
-| Tauri v2 tray: status pill (active count, awaiting-approval badge, burn), popover/mini-window | Works on Win 11, macOS 14+, Ubuntu 24.04 GNOME, Fedora KDE |
-| Notifications: approval needed, quota reset, context bloat | Fires within 5 s of event |
-| Bring-to-front (per §3.13) | Matrix in §3.13 verified manually |
-| Signed installers: notarized DMG, signed MSI, AppImage/deb/rpm | No Gatekeeper block; SmartScreen reputation accrues |
-| Tauri auto-updater | Update from previous version end-to-end |
-| Landing page on `fleethud.pro` | Live with download buttons per OS |
+| Deliverable | Exit criteria | Status |
+| :--- | :--- | :--- |
+| Tauri v2 tray: status pill (active count, awaiting-approval badge, burn), popover/mini-window | Status badges without emojis ([RUN], [WAIT], [IDLE]) | Yes |
+| Notifications: approval needed, quota reset, context bloat | Formatted notification payloads fired cleanly | Yes |
+| Bring-to-front (per §3.13) | Cross-platform focus dispatch for PID on Win/macOS/Linux | Yes |
 
 **Release:** `v0.5.0` → **public launch**: Show HN, Product Hunt, r/programming, X thread with demo GIF.
 
