@@ -16,6 +16,9 @@ interface SessionItem {
   last_event_at: string;
   input_tokens?: number;
   output_tokens?: number;
+  cache_read_tokens?: number;
+  context_tokens?: number;
+  context_window?: number;
   total_cost_usd?: number;
 }
 
@@ -606,43 +609,75 @@ export default function ConsolePage() {
                 <th className="pb-2">Surface</th>
                 <th className="pb-2">Model</th>
                 <th className="pb-2">Tokens</th>
+                <th className="pb-2">Context</th>
                 <th className="pb-2">Cost</th>
                 <th className="pb-2">Status</th>
                 <th className="pb-2 text-right">Last Active</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
-              {sessions.map((s) => (
-                <tr key={s.id} className="hover:bg-bg/40">
-                  <td className="py-2.5 font-semibold text-foreground">{s.project_name}</td>
-                  <td className="py-2.5 capitalize">{s.agent}</td>
-                  <td className="py-2.5 capitalize">{s.surface.replace("_", " ")}</td>
-                  <td className="py-2.5">{s.model}</td>
-                  <td className="py-2.5">
-                    <span className="font-semibold text-foreground">
-                      {formatTokens((s.input_tokens || 0) + (s.output_tokens || 0))}
-                    </span>
-                    <span className="text-[10px] text-muted block">
-                      {formatTokens(s.input_tokens)} in &bull; {formatTokens(s.output_tokens)} out
-                    </span>
-                  </td>
-                  <td className="py-2.5 font-bold text-foreground">
-                    ${(s.total_cost_usd ?? 0).toFixed(2)}
-                  </td>
-                  <td className="py-2.5">
-                    <span className="flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
-                      <span className={s.is_active ? "text-green font-semibold capitalize" : "text-muted capitalize"}>
-                        {s.state}
+              {sessions.map((s) => {
+                const totalTokens = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
+                const ctxTokens = s.context_tokens || 0;
+                const ctxWin = s.context_window || 0;
+                const fillPct = ctxWin > 0 ? Math.min(100, Math.round((ctxTokens / ctxWin) * 100)) : 0;
+                const barColor = fillPct > 85 ? "bg-red-500" : fillPct > 60 ? "bg-amber-400" : "bg-accent";
+
+                return (
+                  <tr key={s.id} className="hover:bg-bg/40">
+                    <td className="py-2.5 font-semibold text-foreground">{s.project_name}</td>
+                    <td className="py-2.5 capitalize">{s.agent}</td>
+                    <td className="py-2.5 capitalize">{s.surface.replace("_", " ")}</td>
+                    <td className="py-2.5">{s.model}</td>
+                    <td className="py-2.5">
+                      <span className="font-semibold text-foreground">
+                        {formatTokens(totalTokens)}
                       </span>
-                    </span>
-                  </td>
-                  <td className="py-2.5 text-right text-muted">{formatTimeAgo(s.last_event_at)}</td>
-                </tr>
-              ))}
+                      <span className="text-[10px] text-muted block">
+                        {formatTokens(s.input_tokens)} in &bull; {formatTokens(s.output_tokens)} out
+                      </span>
+                      {s.cache_read_tokens && s.cache_read_tokens > 0 ? (
+                        <span className="text-[10px] text-green block font-semibold">
+                          + {formatTokens(s.cache_read_tokens)} cache
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-2.5">
+                      {ctxWin > 0 ? (
+                        <div>
+                          <div className="flex items-center gap-1 font-semibold text-foreground">
+                            <span>{formatTokens(ctxTokens)}</span>
+                            <span className="text-[10px] text-muted font-normal">/ {formatTokens(ctxWin)}</span>
+                            <span className="text-[10px] text-muted font-normal">({fillPct}%)</span>
+                          </div>
+                          <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
+                            <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
+                          </div>
+                        </div>
+                      ) : ctxTokens > 0 ? (
+                        <span className="text-foreground font-semibold">{formatTokens(ctxTokens)}</span>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 font-bold text-foreground">
+                      ${(s.total_cost_usd ?? 0).toFixed(2)}
+                    </td>
+                    <td className="py-2.5">
+                      <span className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
+                        <span className={s.is_active ? "text-green font-semibold capitalize" : "text-muted capitalize"}>
+                          {s.state}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right text-muted">{formatTimeAgo(s.last_event_at)}</td>
+                  </tr>
+                );
+              })}
               {sessions.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-muted">
+                  <td colSpan={9} className="py-6 text-center text-muted">
                     No matching agent sessions found. Run Claude Code, Codex, or Antigravity on your machine.
                   </td>
                 </tr>

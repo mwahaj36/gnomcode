@@ -517,7 +517,17 @@ mod tests {
         fs::create_dir_all(&subfolder).expect("create subfolder");
         let (resolved_root, remote) = resolve_git_repo_and_remote(&subfolder);
         let expected_root = repo_root.canonicalize().unwrap_or(repo_root.clone());
-        assert_eq!(resolved_root.as_deref(), Some(expected_root.as_path()));
+        let clean_path = |p: &std::path::Path| {
+            p.to_str()
+                .unwrap_or_default()
+                .strip_prefix(r"\\?\")
+                .unwrap_or(p.to_str().unwrap_or_default())
+                .to_ascii_lowercase()
+        };
+        assert_eq!(
+            resolved_root.as_deref().map(clean_path),
+            Some(clean_path(expected_root.as_path()))
+        );
         assert_eq!(
             remote.as_deref(),
             Some("git@github.com:mwahaj36/fleethud.git")
@@ -536,7 +546,10 @@ mod tests {
         .expect("write .git file");
 
         let (wt_root, wt_remote) = resolve_git_repo_and_remote(&worktree_dir);
-        assert_eq!(wt_root.as_deref(), Some(expected_root.as_path()));
+        assert_eq!(
+            wt_root.as_deref().map(clean_path),
+            Some(clean_path(expected_root.as_path()))
+        );
         assert_eq!(
             wt_remote.as_deref(),
             Some("git@github.com:mwahaj36/fleethud.git")
