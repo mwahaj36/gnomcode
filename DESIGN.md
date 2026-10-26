@@ -1,45 +1,69 @@
-# DESIGN.md — FleetHUD Design System (Daytona Aesthetic)
+# DESIGN.md: spawnt design system
 
-## 1. Visual World & Philosophy
-FleetHUD adheres to an uncompromising, high-density developer infrastructure aesthetic modeled after Daytona (`daytona.io`). The interface rejects generic "AI slop" (cluttered gradients, oversized padding, generic cards, pastel cards) in favor of high-contrast engineering restraint, crisp 1px borders, and zero-bounce spring physics.
+Source of truth for the look of the marketing site, the console (web and native) and the installers. Tokens live in `web/app/tokens.css` and are mirrored in the console. Contrast is verified by `node scripts/check-contrast.mjs`. Full rollout plan: the redesign plan in the PR description and `docs/SESSION_LOG.md`.
 
-## 2. Color Tokens
-- **Canvas Base**: `#070708` with Daytona's authentic `68x68` dot-matrix background texture (`data:image/svg+xml` micro-dots) masked with a radial gradient.
-- **Elevated Surfaces**:
-  - `Surface 1`: `#0d0d0f` (cards, containers, window chrome)
-  - `Surface 2`: `#091a11` (active states, green hover overlays)
-  - `Surface 3`: `#141416` (secondary controls, icon tiles)
-- **Borders & Dividers**:
-  - `Border Subtle`: `rgba(255, 255, 255, 0.08)` (hairline structural grid)
-  - `Border Bright`: `rgba(255, 255, 255, 0.18)` (hovered cells, floating navbar border)
-  - `Border Green`: `rgba(46, 204, 113, 0.40)` (hovered logo cells, active agent state)
-- **Typography Tokens**:
-  - `Text Primary`: `#ffffff` (headings, active labels)
-  - `Text Secondary`: `#8e8e93` / `#a1a1aa` (subtitles, body copy, inactive tabs)
-  - `Text Muted`: `#55555c` (grid labels, timestamps, line numbers)
-- **Functional Accents (Strict Unified Green Theme — No Blue)**:
-  - `Accent Emerald Green`: `#2ecc71` / `#4ade80` (primary CTA buttons, links, active indicators, live telemetry)
-  - `Accent Green Hover`: `#091a11` surface tint with `rgba(46, 204, 113, 0.25)` ambient glow
-  - `Accent Amber Warning`: `#f59e0b` (quota approaching reset, approval required `[WAIT]`)
-  - `Accent Rose Error`: `#f43f5e` (parse failure, agent crash, runaway loop)
+## 1. Philosophy
 
-## 3. Motion & Micro-Animation Specifications
-- **Animating Floating Island Navbar**:
-  - Flush at top of viewport (`top: 0`, `width: 100%`, `border-radius: 0`).
-  - On scroll down (`scrollY > 35px`), it animates with spring physics into a floating island (`top: 14px`, `width: min(1240px, calc(100% - 2rem))`, `border-radius: 6px`, `box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.85)`).
-  - On scroll back to top, smoothly rejoins the viewport header.
-- **Physics Engine**: Zero-bounce stiff springs (`cubic-bezier(0.16, 1, 0.3, 1)`, duration `0.3s` for navbar, `0.18s` for buttons/cards).
-- **Zero Pills Rule**: Strictly no oval pills (`border-radius: 9999px`). All badges, tags, buttons, and status bars use crisp rectangular geometry with subtle 3px–6px radius.
+Flat, dense, engineered. Daytona-style language: hairline grid cells, uppercase mono labels, square bracketed badges, a floating island navbar. Simple and elegant copy. No "cockpit" or "mission control" wording. The product name is always lowercase: `spawnt`.
 
-## 5. Component Implementations
-- **Web App**:
-  - `MarketingNavbar.tsx`: Sticky glassmorphism header with logo monogram, `/` separator, uppercase monospace nav links, and high-contrast actions.
-  - `Hero`: Asymmetric 2-column layout with bold headline, quickstart command bar, and interactive multi-language/multi-agent telemetry switcher.
-  - `Status Pill`: Rounded dark oval with glowing neon blue dot, clean label, and chevron (`>`).
-  - `Grid Rows`: Crisp 1px border-collapse layout for agent support logos and features.
-  - `Computer Use`: Mock multi-window desktop interface showing live agent cursors.
-  - `FAQ Accordion`: Clean monospace toggle list with square `[+]` / `[-]` indicator boxes.
-  - `Footer`: 3-column navigation, Startup/Pro banner, popular topics, and round compliance seals (`100% LOCAL`, `FAIL OPEN`, `NO TELEMETRY`).
-- **Native Tray App**:
-  - Compact acrylic/mica dark window matching `#070708`.
-  - High-density list of active agent sessions with plain-text status badges (`[WAIT]`, `[RUN]`, `[IDLE]`).
+## 2. Color
+
+Brand (fixed):
+
+| Token | Hex | Use |
+| :--- | :--- | :--- |
+| `primary` | `#FF2544` | Brand, primary buttons, active marker, attention, icons |
+| `secondary` | `#BECBD8` | Neutral chrome, chart gridlines, links on dark |
+| `tertiary` | `#252E99` | Secondary accent, selected rows, chart series 2, links on light |
+| `light` | `#F6F7F8` | Light canvas |
+| `dark` | `#0C1119` | Dark canvas |
+
+Derived tokens (surface, surface-2, border, border-strong, text, text-2, text-3, primary-text, link, warn) are defined per theme in `tokens.css`. Follow `prefers-color-scheme`; a manual `data-theme` attribute overrides it.
+
+Contrast rules (measured, see script output):
+
+- `primary` as a fill with `dark` text: 5.0:1. Buttons use `--on-primary` (dark) in both themes. White on primary is only 3.75:1, so never use it for small text.
+- `primary` as text: use `--primary-text` (`#D4102E` on light, `#FF4D66` on dark). Raw `#FF2544` is graphics, icons and large text only on light (3.5:1).
+- `tertiary` on the dark background is 1.7:1. Never use it as text or an icon on dark. On dark it is a fill with white text only.
+- Status is never color alone: always a text badge (`[RUN]`, `[WAIT]`, `[IDLE]`, `[LIMIT]`, `[ERR]`). Trust level badges on every number: `EXACT`, `EST`, `API`, `UNKNOWN`.
+- `--warn` (amber) is allowed only for quota warnings.
+
+## 3. Shape, borders, depth
+
+- Two radii only: `--radius-sm` 4px (buttons, inputs, badges, chips, tabs, tooltips) and `--radius-md` 6px (cards, panels, tables, drawers, popovers, dialogs, navbar island). Full-bleed regions are 0. No pills; the status dot is the only circle. Nested elements use the smaller radius.
+- Borders are always 1px. Panels are cells of a border-collapsed grid with no gaps.
+- Shadows only on popovers, dialogs and the scrolled navbar island.
+- Optional dot-matrix texture on the page canvas only, at `--dot-alpha` (6% or less), disabled for reduced transparency and print.
+- No gradients, no glassmorphism except the navbar island blur.
+
+## 4. Type and spacing
+
+- Inter for UI, JetBrains Mono for numbers, IDs, commands and labels. Both self-hosted; no remote font requests.
+- Scale (px / line-height): 12/16, 13/20, 14/20 (body), 16/24, 20/28, 28/36, 40/44, 56/60 (marketing hero only). Weights 400 and 600.
+- Labels: uppercase, 11-12px, 600, 0.05em tracking, `--text-3`. Section headers use the `/` separator (`USAGE / THIS WEEK`). Tabular numerals everywhere.
+- Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64.
+
+## 5. Motion
+
+`--spring` (`cubic-bezier(0.16, 1, 0.3, 1)`), zero bounce. 0.18s for controls, 0.32s for panels and the navbar. Reduced motion sets durations to 0.
+
+### Floating island navbar
+
+Flush at the top, pops into a floating island on scroll. Toggle `.scrolled` above 45px and remove below 15px (hysteresis, `requestAnimationFrame`, passive listener, also evaluated on mount). Flush: padding 0, full width, radius 0, bottom hairline only. Scrolled: shell padding `12px 1.25rem 0`, island `max-width: 1240px`, radius 6px, full border in `--border-strong`, shadow. Keep a 1px transparent border on all sides to avoid reflow.
+
+## 6. Logo
+
+Source: `brand/spawnt-mark.svg` (solid triangle plus square, `currentColor`).
+
+- In-app (navbar, sidebar, top bar, splash, installer UI): mark in `--text` (white on dark, black on light), directly on the app background, no container.
+- Icons and favicons: `#FF2544` mark on a `dark` tile and on a `light` tile (`brand/spawnt-icon-red-on-dark.svg`, `brand/spawnt-icon-red-on-light.svg`). `web/app/icon.svg` switches tile with the browser theme.
+- Wordmark: `spawnt`, lowercase, Inter 600, tracking -1%. Lockup is mark, 12px gap, wordmark. Minimum mark size 16px. Do not recolor beyond the values above, stretch, or add effects.
+
+## 7. Copy
+
+Sentence case, plain words, active voice, no emojis, no exclamation marks, verbs on buttons. Tagline: "See what your coding agents are doing." Constants live in `web/lib/brand.ts`.
+
+## 8. Implementation status
+
+- Done: tokens, brand marks, adaptive favicon, brand constants, contrast check.
+- Next: console shell and pages, marketing pages, native app, installers, internal rename.

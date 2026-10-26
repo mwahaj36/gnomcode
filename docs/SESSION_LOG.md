@@ -361,3 +361,28 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 
 
 
+
+
+## Phase 1: spawnt design tokens and logo (branch `feat/design-spawnt-tokens-logo`)
+
+### 1. Goals
+- Start the spawnt rebrand and Daytona-style redesign with the foundation only: tokens, logo, design doc, brand constants. No page redesign yet.
+
+### 2. Outcomes
+- `web/app/tokens.css`: brand palette, derived light/dark tokens, two radii, motion and type tokens.
+- `scripts/check-contrast.mjs`: WCAG check for every text/background pair. All required pairs pass.
+- `brand/`: `spawnt-mark.svg` (currentColor), red-on-dark and red-on-light icon tiles. `web/app/icon.svg` is an adaptive favicon.
+- `web/lib/brand.ts`: name, tagline, copy and URL constants. URLs unchanged until spawnt.xyz is bought.
+- `DESIGN.md` rewritten for spawnt. Tailwind config extended additively with token colors and the two radii.
+
+### 3. Decisions and findings
+| Topic | Decision |
+| :--- | :--- |
+| Button text on primary | White on `#FF2544` is 3.75:1, so buttons use dark text (5.0:1). |
+| Red text on light | `#FF2544` is 3.5:1; text uses `--primary-text` (`#D4102E`). |
+| Tertiary on dark | 1.7:1; fill-only on dark. |
+| Rename scope | User-facing rename first; internal crate, binary and env rename is a separate later PR with aliases and data migration. |
+
+### 4. Deferred
+- Raster icon exports (`.ico`, `.icns`, PNG sets, OG image) need a build script; next PR.
+- Legacy Tailwind color keys stay until pages are redesigned (they would otherwise break existing pages).
