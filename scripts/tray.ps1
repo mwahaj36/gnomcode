@@ -17,15 +17,25 @@ function Get-ConsoleUrl {
 
 function Open-Console {
     $url = Get-ConsoleUrl
-    try {
-        Start-Process "msedge.exe" -ArgumentList "--app=$url --window-size=1280,850" -ErrorAction Stop
-    } catch {
-        try {
-            Start-Process "chrome.exe" -ArgumentList "--app=$url --window-size=1280,850" -ErrorAction Stop
-        } catch {
-            Start-Process $url
+    $candidateExes = @(
+        "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe",
+        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+        "msedge.exe",
+        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+        "$env:ProgramFiles (x86)\Google\Chrome\Application\chrome.exe",
+        "chrome.exe"
+    )
+    foreach ($exe in $candidateExes) {
+        if ($exe.EndsWith(".exe") -and (Test-Path $exe -PathType Leaf -ErrorAction SilentlyContinue)) {
+            Start-Process $exe -ArgumentList "--app=$url --window-size=1280,850"
+            return
         }
+        try {
+            Start-Process $exe -ArgumentList "--app=$url --window-size=1280,850" -ErrorAction Stop
+            return
+        } catch {}
     }
+    Start-Process $url
 }
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon

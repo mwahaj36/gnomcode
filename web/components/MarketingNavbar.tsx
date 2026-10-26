@@ -67,15 +67,13 @@ export default function MarketingNavbar() {
         </div>
 
         <div className="flex items-center gap-3 font-mono text-xs">
-          <a
-            href="https://github.com/mwahaj36/fleethud"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            href="/downloads"
             className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-muted hover:text-foreground hover:border-accent/50 transition-colors"
           >
-            <span>GitHub</span>
+            <span>Download</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-card text-accent border border-border">v1.1.1</span>
-          </a>
+          </Link>
 
           {user ? (
             <div className="flex items-center gap-2">
