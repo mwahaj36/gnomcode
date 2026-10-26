@@ -136,6 +136,9 @@ impl SourceAdapter for ClaudeAdapter {
                             }
                         }
                     }
+                    if msg.get("stop_reason").and_then(Value::as_str) == Some("end_turn") {
+                        sess.state = SessionState::Idle;
+                    }
 
                     // Deduplicate token usage across multi-block assistant lines
                     let msg_id = msg.get("id").and_then(Value::as_str).unwrap_or("");

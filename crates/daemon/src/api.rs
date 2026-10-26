@@ -12,9 +12,10 @@ use axum::{
     response::{IntoResponse, Json, Redirect},
     routing::{get, post},
 };
+use fleethud_core::rules::GuardrailRule;
 use fleethud_store::{Database, UserProfile};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -49,6 +50,8 @@ pub struct ReportQueryParams {
     pub from: Option<String>,
     /// Custom ISO end timestamp.
     pub to: Option<String>,
+    /// Output format (`json` or `csv`).
+    pub format: Option<String>,
 }
 
 /// Daemon health endpoint response.
@@ -96,7 +99,303 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/stats", get(stats_handler))
         .route("/api/v1/supabase-config", get(supabase_config_handler))
         .route("/api/v1/live", get(live_snapshot_handler))
+        .route(
+            "/api/v1/rules",
+            get(rules_get_handler).post(rules_post_handler),
+        )
+        .route(
+            "/api/v1/rules/{id}",
+            axum::routing::delete(rule_delete_handler),
+        )
+        .route("/api/v1/alerts", get(alerts_get_handler))
+        .route("/api/v1/export", get(export_handler))
+        .route(
+            "/api/v1/license",
+            get(license_get_handler)
+                .post(license_post_handler)
+                .delete(license_delete_handler),
+        )
+        .route("/api/v1/resume-queue", get(resume_queue_get_handler))
+        .route("/api/v1/resume-queue/arm", post(resume_queue_arm_handler))
+        .route(
+            "/api/v1/resume-queue/disarm",
+            post(resume_queue_disarm_handler),
+        )
+        .route("/api/v1/guardrails/check", get(guardrail_check_handler))
         .with_state(state)
+}
+
+async fn rules_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    Ok(Json(
+        db.list_rules()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
+}
+
+async fn rules_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(rule): Json<GuardrailRule>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    if rule.id.is_empty()
+        || rule.id.len() > 64
+        || !rule
+            .id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        || rule
+            .max_spend_usd
+            .is_some_and(|v| !v.is_finite() || v <= 0.0)
+        || rule.max_turns == Some(0)
+        || (rule.max_spend_usd.is_none() && rule.max_turns.is_none())
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let db = state.db.lock().await;
+    db.save_rule(&rule)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(rule))
+}
+
+async fn rule_delete_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    db.delete_rule(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "success": true })))
+}
+
+async fn alerts_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    Ok(Json(
+        db.list_alerts(100)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
+}
+
+async fn export_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<ReportQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let range = params.range.as_deref().unwrap_or("30d");
+    if !matches!(range, "today" | "7d" | "30d" | "all") {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let db = state.db.lock().await;
+    let report = db
+        .generate_usage_report_timeline(range, None, None)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if params.format.as_deref() == Some("csv") {
+        let mut csv = String::from(
+            "agent,model,turns,input_tokens,output_tokens,cache_read_tokens,cost_usd,cache_savings_usd\n",
+        );
+        for prov in &report.providers {
+            for m in &prov.models {
+                use std::fmt::Write as _;
+                let _ = writeln!(
+                    csv,
+                    "{},{},{},{},{},{},{:.4},{:.4}",
+                    prov.provider,
+                    m.model,
+                    m.turn_count,
+                    m.input_tokens,
+                    m.output_tokens,
+                    m.cache_read_tokens,
+                    m.cost_usd,
+                    m.cache_savings_usd
+                );
+            }
+        }
+        Ok((
+            [
+                (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=fleethud-report.csv",
+                ),
+            ],
+            csv,
+        )
+            .into_response())
+    } else {
+        Ok((
+            [
+                (header::CONTENT_TYPE, "application/json"),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "attachment; filename=fleethud-report.json",
+                ),
+            ],
+            Json(report),
+        )
+            .into_response())
+    }
+}
+
+async fn license_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(crate::pro::get_license_status()))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct LicenseActivateRequest {
+    pub(crate) license_key: String,
+}
+
+async fn license_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<LicenseActivateRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    match crate::pro::activate_license(&payload.license_key) {
+        Ok(status) => Ok(Json(status)),
+        Err(_) => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+async fn license_delete_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    crate::pro::remove_license().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(crate::pro::get_license_status()))
+}
+
+async fn resume_queue_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    Ok(Json(
+        db.list_resume_queue()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ArmResumeQueueRequest {
+    pub(crate) session_id: String,
+    pub(crate) agent: String,
+    pub(crate) cwd: Option<String>,
+    pub(crate) resume_prompt: Option<String>,
+    pub(crate) max_runs: Option<u32>,
+    pub(crate) eligible_after: Option<String>,
+}
+
+async fn resume_queue_arm_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<ArmResumeQueueRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    if payload.session_id.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let agent = match payload.agent.as_str() {
+        "claude-code" => fleethud_core::AgentId::ClaudeCode,
+        "codex" => fleethud_core::AgentId::Codex,
+        "antigravity" => fleethud_core::AgentId::Antigravity,
+        "gemini-cli" => fleethud_core::AgentId::GeminiCli,
+        "cline" => fleethud_core::AgentId::Cline,
+        "cursor" => fleethud_core::AgentId::Cursor,
+        "aider" => fleethud_core::AgentId::Aider,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    let eligible_after = payload
+        .eligible_after
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(chrono::Utc::now);
+
+    let entry = fleethud_core::rules::ResumeQueueEntry {
+        session_id: payload.session_id,
+        agent,
+        cwd: payload.cwd.unwrap_or_else(|| ".".to_owned()),
+        resume_prompt: payload
+            .resume_prompt
+            .unwrap_or_else(|| "continue".to_owned()),
+        max_runs: payload.max_runs.unwrap_or(1).max(1),
+        runs_completed: 0,
+        eligible_after,
+    };
+    let db = state.db.lock().await;
+    db.arm_resume_queue(&entry)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "success": true, "entry": entry })))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct DisarmResumeQueueRequest {
+    pub(crate) session_id: String,
+}
+
+async fn resume_queue_disarm_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<DisarmResumeQueueRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !crate::pro::has_pro_license() {
+        return Err(StatusCode::PAYMENT_REQUIRED);
+    }
+    let db = state.db.lock().await;
+    db.disarm_resume_queue(&payload.session_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "success": true })))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GuardrailCheckQuery {
+    pub(crate) session_id: String,
+}
+
+async fn guardrail_check_handler(Query(query): Query<GuardrailCheckQuery>) -> impl IntoResponse {
+    let blocked = crate::pro::is_session_blocked(&query.session_id);
+    Json(json!({ "blocked": blocked }))
 }
 
 async fn console_handler() -> impl IntoResponse {
@@ -111,24 +410,8 @@ async fn svg_icon_handler() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/svg+xml")], FLEETHUD_SVG)
 }
 
-#[derive(Debug, Deserialize, Default)]
-struct AuthCallbackQuery {
-    session: Option<String>,
-}
-
-async fn auth_callback_handler(
-    State(state): State<AppState>,
-    Query(params): Query<AuthCallbackQuery>,
-) -> impl IntoResponse {
-    if let Some(session_str) = params.session {
-        let trimmed = session_str.trim();
-        if !trimmed.is_empty() {
-            let home = fleethud_platform::fleethud_home();
-            let session_path = home.join("session.json");
-            let _ = std::fs::write(session_path, trimmed);
-        }
-    }
-    Redirect::to(&format!("/?token={}", state.bearer_token))
+async fn auth_callback_handler() -> impl IntoResponse {
+    Redirect::to("/")
 }
 
 async fn focus_session_handler(
@@ -481,23 +764,14 @@ async fn custom_pricing_delete_handler(
 }
 
 fn cors_headers() -> HeaderMap {
-    let mut h = HeaderMap::new();
-    h.insert(
-        axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        axum::http::HeaderValue::from_static("*"),
-    );
-    h.insert(
-        axum::http::header::ACCESS_CONTROL_ALLOW_METHODS,
-        axum::http::HeaderValue::from_static("GET, POST, DELETE, OPTIONS"),
-    );
-    h.insert(
-        axum::http::header::ACCESS_CONTROL_ALLOW_HEADERS,
-        axum::http::HeaderValue::from_static("Authorization, Content-Type"),
-    );
-    h
+    HeaderMap::new()
 }
 
-async fn supabase_config_handler() -> impl IntoResponse {
+async fn supabase_config_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
     let mut url = std::env::var("FLEETHUD_SUPABASE_URL").unwrap_or_default();
     let mut key = std::env::var("FLEETHUD_SUPABASE_KEY").unwrap_or_default();
 
@@ -516,33 +790,49 @@ async fn supabase_config_handler() -> impl IntoResponse {
         }
     }
 
-    (
+    Ok((
         cors_headers(),
         Json(json!({
             "supabase_url": url,
             "supabase_key": key,
         })),
-    )
+    ))
 }
 
 fn session_file_path() -> std::path::PathBuf {
-    fleethud_platform::user_home_dir()
-        .join(".fleethud")
-        .join("session.json")
+    fleethud_platform::fleethud_home().join("session.json")
 }
 
-async fn auth_session_get_handler() -> impl IntoResponse {
+async fn auth_session_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
-    let session: Option<serde_json::Value> = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|content| serde_json::from_str(&content).ok());
-
-    (cors_headers(), Json(json!({ "session": session })))
+    Ok((cors_headers(), Json(json!({ "paired": path.exists() }))))
 }
 
 async fn auth_session_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if payload
+        .get("access_token")
+        .and_then(Value::as_str)
+        .is_none()
+        || payload
+            .get("refresh_token")
+            .and_then(Value::as_str)
+            .is_none()
+        || payload
+            .pointer("/user/id")
+            .and_then(Value::as_str)
+            .is_none()
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let path = session_file_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -550,14 +840,24 @@ async fn auth_session_post_handler(
     let content =
         serde_json::to_string_pretty(&payload).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     std::fs::write(&path, content).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
 
     Ok((cors_headers(), Json(json!({ "success": true }))))
 }
 
-async fn auth_session_delete_handler() -> impl IntoResponse {
+async fn auth_session_delete_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
     let _ = std::fs::remove_file(path);
-    (cors_headers(), Json(json!({ "success": true })))
+    Ok((cors_headers(), Json(json!({ "success": true }))))
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -572,9 +872,11 @@ struct LiveQueryParams {
 }
 
 async fn live_snapshot_handler(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(params): Query<LiveQueryParams>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
     let range = params.range.as_deref().unwrap_or("all");
     let page = params.page.unwrap_or(1).max(1);
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
@@ -710,10 +1012,6 @@ async fn live_snapshot_handler(
     });
 
     let total_pages = total_count.div_ceil(limit);
-    let paired_session: Option<serde_json::Value> = std::fs::read_to_string(session_file_path())
-        .ok()
-        .and_then(|content| serde_json::from_str(&content).ok());
-
     Ok((
         cors_headers(),
         Json(json!({
@@ -729,7 +1027,6 @@ async fn live_snapshot_handler(
             "total_pages": total_pages.max(1),
             "active_count": active_count,
             "custom_pricing": custom_pricing,
-            "paired_session": paired_session,
         })),
     ))
 }
@@ -761,6 +1058,28 @@ mod tests {
 
         let res = app.oneshot(req).await.expect("response");
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn private_snapshot_and_pairing_require_authentication() {
+        let db = Database::open_in_memory().expect("in-memory db");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(db)),
+            bearer_token: "secret-test-token".to_owned(),
+        });
+        for path in [
+            "/api/v1/live",
+            "/api/v1/auth/session",
+            "/api/v1/supabase-config",
+        ] {
+            let request = Request::builder()
+                .uri(path)
+                .header("Host", "127.0.0.1:41738")
+                .body(Body::empty())
+                .expect("request");
+            let response = app.clone().oneshot(request).await.expect("response");
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
+        }
     }
 
     #[tokio::test]
