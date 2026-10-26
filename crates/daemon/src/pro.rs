@@ -277,10 +277,10 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
 
         if fill_pct >= config.threshold_pct {
             // Check if already recorded/pending for this session
-            if existing_relays
-                .iter()
-                .any(|r| r.session_id == s.id && (r.status == "pending" || r.status == "executed"))
-            {
+            if existing_relays.iter().any(|r| {
+                r.session_id == s.id
+                    && (r.status == "pending" || r.status == "executed" || r.status == "dismissed")
+            }) {
                 continue;
             }
 
@@ -296,11 +296,18 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
             };
 
             let relay_id = format!("relay-{}", s.id);
-            let cwd = db.find_antigravity_workspace(&s.id).unwrap_or_else(|| {
-                std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| ".".to_owned())
-            });
+            let cwd = db
+                .get_session_focus_target(&s.id)
+                .ok()
+                .flatten()
+                .and_then(|t| t.repo_root)
+                .filter(|p| !p.trim().is_empty())
+                .or_else(|| db.find_antigravity_workspace(&s.id))
+                .unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| ".".to_owned())
+                });
 
             let entry = fleethud_store::ContextRelayEntry {
                 id: relay_id,
@@ -344,7 +351,7 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
 
 /// Executes a Context Relay handoff:
 /// 1. Writes zero-knowledge .fleethud/HANDOFF.md checkpoint in project directory.
-/// 2. Spawns target fresh agent session in current working directory without permission escalation.
+/// 2. Spawns fresh agent session in an interactive terminal window without permission escalation.
 pub fn execute_relay_handoff(
     entry: &fleethud_store::ContextRelayEntry,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -373,13 +380,15 @@ pub fn execute_relay_handoff(
     );
     std::fs::write(&handoff_path, content)?;
 
-    // Spawn the fresh target agent session in background without permission escalation
-    let _ = match entry.target_agent.as_str() {
-        "claude-code" => Command::new("claude").current_dir(&entry.cwd).spawn(),
-        "codex" => Command::new("codex").current_dir(&entry.cwd).spawn(),
-        "gemini-cli" => Command::new("gemini").current_dir(&entry.cwd).spawn(),
-        _ => return Ok(()),
-    };
+    // Spawn the fresh target agent session in an interactive terminal or focus editor
+    let _ = fleethud_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd);
+
+    let title = format!("[RELAY] Handoff Complete: {}", entry.target_agent);
+    let body = format!(
+        "Checkpoint created in .fleethud/HANDOFF.md for {}. Clean session initialized.",
+        entry.project_name
+    );
+    let _ = fleethud_platform::send_desktop_notification(&title, &body);
 
     Ok(())
 }
