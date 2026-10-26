@@ -193,9 +193,9 @@ impl SourceAdapter for AntigravityAdapter {
                         .unwrap_or(0);
 
                     if input_tokens > 0 || output_tokens > 0 || cache_read > 0 {
-                        let uncached_in = input_tokens.saturating_sub(cache_read);
+                        let total_context = input_tokens.saturating_add(cache_read);
                         let breakdown = TokenBreakdown {
-                            input_tokens: uncached_in,
+                            input_tokens,
                             output_tokens,
                             reasoning_tokens: 0,
                             cache_read_tokens: cache_read,
@@ -214,7 +214,7 @@ impl SourceAdapter for AntigravityAdapter {
                             cache_read_tokens: cache_read,
                             cache_write_5m_tokens: 0,
                             cache_write_1h_tokens: 0,
-                            context_tokens: input_tokens,
+                            context_tokens: total_context,
                             context_window: eval.context_window,
                             cost_usd: eval.cost_usd,
                             cache_savings_usd: eval.cache_savings_usd,
