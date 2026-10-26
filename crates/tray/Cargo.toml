@@ -1,0 +1,26 @@
+[package]
+name = "fleethud-tray"
+description = "FleetHUD native desktop tray application using Tauri v2."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+fleethud-core = { workspace = true }
+fleethud-daemon = { workspace = true }
+fleethud-store = { workspace = true }
+fleethud-platform = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
