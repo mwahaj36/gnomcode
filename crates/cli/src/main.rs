@@ -349,7 +349,23 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
 fn open_browser(url: &str) {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_owned());
+        let install_dir = std::path::PathBuf::from(&local_app_data).join("FleetHUD");
+
+        // Ensure tray background service is running
+        let run_tray = install_dir.join("run-tray.vbs");
+        if run_tray.exists() {
+            let _ = std::process::Command::new("wscript.exe")
+                .args(["//B", &run_tray.to_string_lossy()])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn();
+        }
+
         let app_arg = format!("--app={url}");
+        let profile_arg = format!("--user-data-dir={local_app_data}\\FleetHUD\\AppProfile");
         let candidate_paths = [
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -361,7 +377,14 @@ fn open_browser(url: &str) {
         let mut opened = false;
         for exe in candidate_paths {
             if std::process::Command::new(exe)
-                .args([&app_arg, "--window-size=1280,850"])
+                .args([
+                    &app_arg,
+                    &profile_arg,
+                    "--window-name=FleetHUD",
+                    "--window-size=1280,850",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ])
                 .spawn()
                 .is_ok()
             {
@@ -381,6 +404,7 @@ fn open_browser(url: &str) {
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
 
+const FLEETHUD_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
 const TRAY_PS1: &str = include_str!("../../../scripts/tray.ps1");
 const RUN_TRAY_VBS: &str = include_str!("../../../scripts/run-tray.vbs");
 const OPEN_CONSOLE_VBS: &str = include_str!("../../../scripts/open-console.vbs");
@@ -426,6 +450,7 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
                 .context("failed to copy fleethud.exe to install directory")?;
         }
 
+        std::fs::write(install_dir.join("fleethud.ico"), FLEETHUD_ICO)?;
         std::fs::write(install_dir.join("tray.ps1"), TRAY_PS1)?;
         std::fs::write(install_dir.join("run-tray.vbs"), RUN_TRAY_VBS)?;
         std::fs::write(install_dir.join("open-console.vbs"), OPEN_CONSOLE_VBS)?;
@@ -436,6 +461,7 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
             r#"
 $InstallDir = '{dir_str}'
 $ExeDest = "$InstallDir\fleethud.exe"
+$IcoDest = "$InstallDir\fleethud.ico"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {{
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
@@ -449,7 +475,7 @@ foreach ($lnkPath in @("$DesktopDir\FleetHUD Console.lnk", "$DesktopDir\FleetHUD
     $Shortcut.TargetPath = "wscript.exe"
     $Shortcut.Arguments = "`"$InstallDir\open-console.vbs`""
     $Shortcut.WorkingDirectory = $InstallDir
-    $Shortcut.IconLocation = "$ExeDest,0"
+    $Shortcut.IconLocation = "$IcoDest,0"
     $Shortcut.Description = "FleetHUD Mission Control Console"
     $Shortcut.Save()
 }}

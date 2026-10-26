@@ -14,6 +14,9 @@ interface SessionItem {
   is_active: boolean;
   started_at: string;
   last_event_at: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_cost_usd?: number;
 }
 
 interface QuotaItem {
@@ -78,7 +81,10 @@ export default function ConsolePage() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
+  const [quickTokenInput, setQuickTokenInput] = useState("");
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState("");
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
@@ -134,8 +140,28 @@ export default function ConsolePage() {
         setConnectedSource(`Local Daemon [127.0.0.1:${daemonPort}] (2s)`);
         daemonLive = true;
 
-        // If authenticated, push local snapshot to Supabase
+        // 1a. Adopt daemon paired session if available
+        if (data.paired_session && !user) {
+          try {
+            await supabase.auth.setSession(data.paired_session);
+          } catch {}
+        }
+
+        // 1b. If authenticated, persist session to local daemon and push snapshot to Supabase
         if (user) {
+          if (!data.paired_session) {
+            try {
+              const { data: sData } = await supabase.auth.getSession();
+              if (sData?.session) {
+                await fetch(`http://127.0.0.1:${daemonPort}/api/v1/auth/session`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(sData.session),
+                });
+              }
+            } catch {}
+          }
+
           try {
             await supabase.from("fleethud_sync_state").upsert({
               user_id: user.id,
@@ -178,11 +204,15 @@ export default function ConsolePage() {
           setActiveCount(snap.active_count || 0);
           setTotalCount(snap.total_count || 0);
           setTotalPages(snap.total_pages || 1);
-          setConnectedSource("Cloud Sync (2s)");
+          setConnectedSource("Cloud Mirror");
+        } else {
+          setConnectedSource("Cloud Offline (No local daemon)");
         }
       } catch {
         setConnectedSource("Offline");
       }
+    } else if (!daemonLive && !user) {
+      setConnectedSource("Offline (No local daemon)");
     }
   }, [user, timeline, agentFilter, statusFilter, page]);
 
@@ -207,6 +237,39 @@ export default function ConsolePage() {
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
+  const copyQuickToken = async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        const tokenStr = btoa(JSON.stringify(data.session));
+        await navigator.clipboard.writeText(tokenStr);
+        setCopyFeedback("Copied pairing token!");
+        setTimeout(() => setCopyFeedback(""), 3500);
+      }
+    } catch {
+      setCopyFeedback("Failed to copy");
+    }
+  };
+
+  const applyQuickToken = async () => {
+    try {
+      const raw = atob(quickTokenInput.trim());
+      const session = JSON.parse(raw);
+      await supabase.auth.setSession(session);
+      setUser(session.user);
+      setShowTokenModal(false);
+      setQuickTokenInput("");
+    } catch {
+      alert("Invalid pairing token format. Please copy fresh from your web browser session.");
+    }
+  };
+
+  const activeAgents = (report?.providers || []).filter(
+    (p) => (p.total_cost_usd > 0) || (p.models && p.models.some((m) => (m.input_tokens ?? 0) > 0 || (m.cost_usd ?? 0) > 0))
+  );
+
+  const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
+
   if (!authChecked) {
     return (
       <div className="flex h-96 items-center justify-center font-mono text-xs text-muted">
@@ -221,27 +284,96 @@ export default function ConsolePage() {
       {!user && (
         <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[LOCAL VIEW]</span> Connect your FleetHUD account to enable cross-device cloud sync and access your fleet from any machine.
+            <span className="text-accent font-semibold">[LOCAL VIEW]</span> Want cross-device cloud sync? Pair this app with your existing browser account or sign in.
           </div>
-          <Link
-            href="/auth"
-            className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity"
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTokenModal(true)}
+              className="px-3 py-1.5 bg-card border border-border text-foreground font-semibold rounded hover:border-accent text-xs"
+            >
+              [Paste Browser Token]
+            </button>
+            <Link
+              href="/auth"
+              className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
+            >
+              Sign In with GitHub &rarr;
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Cloud Mirror Notice when local daemon is not running */}
+      {!connectedSource.includes("Local") && (
+        <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
+          <div>
+            <span className="text-accent font-semibold">[NOTICE]</span> Local FleetHUD app not detected on this machine. {report && report.total_cost_usd > 0 ? "Showing your last recorded cloud telemetry." : "Run FleetHUD Desktop to stream live metrics."}
+          </div>
+          <a
+            href="/downloads"
+            className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
           >
-            Sign In / Sync &rarr;
-          </Link>
+            Download Desktop App &rarr;
+          </a>
+        </div>
+      )}
+
+      {/* Quick Token Pairing Modal */}
+      {showTokenModal && (
+        <div className="fixed inset-0 z-50 bg-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full font-mono text-xs shadow-2xl">
+            <div className="text-sm font-bold text-foreground mb-1">Quick Pair Desktop App</div>
+            <p className="text-muted mb-3 text-[11px]">
+              If you signed into GitHub on your web browser (Chrome/Edge), click <strong>[Copy Desktop Token]</strong> there and paste it here to authenticate instantly without typing passwords.
+            </p>
+            <textarea
+              rows={4}
+              value={quickTokenInput}
+              onChange={(e) => setQuickTokenInput(e.target.value)}
+              placeholder="Paste pairing token here..."
+              className="w-full bg-bg border border-border rounded p-2 text-foreground mb-3 focus:outline-none focus:border-accent"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowTokenModal(false)}
+                className="px-3 py-1.5 bg-card border border-border rounded text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={applyQuickToken}
+                className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90"
+              >
+                Connect Session
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Header Controls */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono">
-        <div>
-          <div className="text-xl font-bold text-foreground">Mission Control Console</div>
-          <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
-            <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
-            <span>Status: {connectedSource}</span>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-white p-1 flex items-center justify-center shadow-sm">
+            <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
+          </div>
+          <div>
+            <div className="text-xl font-bold text-foreground">Mission Control Console</div>
+            <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
+              <span className={`w-2 h-2 rounded-full ${connectedSource.includes("Local") ? "bg-green animate-pulse" : connectedSource.includes("Cloud") ? "bg-accent" : "bg-red"}`}></span>
+              <span>Status: {connectedSource}</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {user && (
+            <button
+              onClick={copyQuickToken}
+              className="px-3 py-1.5 bg-card border border-border rounded text-xs text-foreground hover:border-accent"
+            >
+              {copyFeedback || "[Copy Desktop Token]"}
+            </button>
+          )}
           <Link
             href="/settings"
             className="px-3 py-1.5 bg-card border border-border rounded text-xs text-foreground hover:border-accent"
@@ -312,51 +444,58 @@ export default function ConsolePage() {
             [Edit Plans]
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {roiByProvider.map((roi) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+          {activeRoi.map((roi) => (
             <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
-              <div className="text-[11px] text-muted uppercase">{roi.provider}</div>
+              <div className="text-[11px] text-muted uppercase font-semibold">{roi.provider}</div>
               <div className="text-lg font-bold text-foreground my-1">
                 {(roi.multiplier ?? 0).toFixed(1)}x Return
               </div>
-              <div className={`text-[11px] ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
+              <div className={`text-[11px] font-semibold ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
                 {(roi.net_savings_usd ?? 0) >= 0 ? "+" : ""}${(roi.net_savings_usd ?? 0).toFixed(2)} vs API
               </div>
-              <div className="text-[10px] text-muted mt-1">
-                Paid: ${(roi.plan_usd ?? 0).toFixed(2)}/{roi.period_label || "period"} | Value: ${(roi.spend_usd ?? 0).toFixed(2)}
+              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
+                <div>Plan: <span className="text-foreground">${(roi.monthly_plan_usd ?? 20).toFixed(0)}/mo</span> &bull; ${(roi.plan_usd ?? 0).toFixed(2)} ({roi.period_label || "period"})</div>
+                <div>Delivered Value: <span className="text-accent font-semibold">${(roi.spend_usd ?? 0).toFixed(2)}</span></div>
               </div>
             </div>
           ))}
-          {combinedRoi && (combinedRoi.plan_usd ?? 0) > 0 && (
+          {combinedRoi && (combinedRoi.spend_usd ?? 0) > 0 && (
             <div className="bg-bg border border-accent/40 rounded p-3.5">
-              <div className="text-[11px] text-accent uppercase">Combined Fleet ROI</div>
+              <div className="text-[11px] text-accent uppercase font-semibold">Combined Fleet ROI</div>
               <div className="text-lg font-bold text-accent my-1">
                 {(combinedRoi.multiplier ?? 0).toFixed(1)}x Return
               </div>
-              <div className={`text-[11px] ${(combinedRoi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
+              <div className={`text-[11px] font-semibold ${(combinedRoi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
                 {(combinedRoi.net_savings_usd ?? 0) >= 0 ? "+" : ""}${(combinedRoi.net_savings_usd ?? 0).toFixed(2)} Net
               </div>
-              <div className="text-[10px] text-muted mt-1">
-                Total Paid: ${(combinedRoi.plan_usd ?? 0).toFixed(2)}/{combinedRoi.period_label || "period"}
+              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
+                <div>Total Plan: <span className="text-foreground">${(combinedRoi.monthly_plan_usd ?? 60).toFixed(0)}/mo</span></div>
+                <div>Fleet Value: <span className="text-accent font-semibold">${(combinedRoi.spend_usd ?? 0).toFixed(2)}</span></div>
               </div>
+            </div>
+          )}
+          {activeRoi.length === 0 && (!combinedRoi || (combinedRoi.spend_usd ?? 0) === 0) && (
+            <div className="col-span-full text-xs text-muted py-2">
+              No subscription usage recorded for this timeframe.
             </div>
           )}
         </div>
       </div>
 
-      {/* Spend By Provider (Click to View Models) */}
+      {/* Spend By Agent (Click to View Models) */}
       <div className="mb-6 font-mono">
         <div className="text-xs text-muted uppercase mb-3 font-semibold">
-          Spend by Provider (Click to View Models)
+          Spend by Agent (Click to View Models)
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {report?.providers?.map((prov) => {
-            const isExpanded = expandedProvider === prov.provider;
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+          {activeAgents.map((prov) => {
+            const isExpanded = !!expandedAgents[prov.provider];
             const savingsUsd = prov.total_cache_savings_usd ?? prov.cache_savings_usd ?? 0;
             return (
               <div
                 key={prov.provider}
-                onClick={() => setExpandedProvider(isExpanded ? null : prov.provider)}
+                onClick={() => setExpandedAgents(prev => ({ ...prev, [prov.provider]: !prev[prov.provider] }))}
                 className={`bg-card border rounded-lg p-4 cursor-pointer transition-colors ${
                   isExpanded ? "border-accent" : "border-border hover:border-accent/60"
                 }`}
@@ -389,6 +528,11 @@ export default function ConsolePage() {
               </div>
             );
           })}
+          {activeAgents.length === 0 && (
+            <div className="col-span-3 bg-card border border-border rounded-lg p-6 text-center text-xs text-muted">
+              No agent spending recorded for the selected scope ({timeline.toUpperCase()}).
+            </div>
+          )}
         </div>
       </div>
 
@@ -425,8 +569,14 @@ export default function ConsolePage() {
                     {q.resets_at ? new Date(q.resets_at).toLocaleTimeString() : "Rolling"}
                   </td>
                   <td className="py-2.5 text-right">
-                    <span className="px-1.5 py-0.5 rounded bg-accent/15 text-accent text-[10px] font-bold">
-                      {q.basis ? q.basis.toUpperCase() : "EXACT"}
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        q.basis?.toLowerCase() === "estimated"
+                          ? "bg-card text-muted border border-border"
+                          : "bg-accent/15 text-accent"
+                      }`}
+                    >
+                      {q.basis?.toLowerCase() === "estimated" ? "EST" : "EXACT"}
                     </span>
                   </td>
                 </tr>
@@ -479,6 +629,8 @@ export default function ConsolePage() {
                 <th className="pb-2">Agent</th>
                 <th className="pb-2">Surface</th>
                 <th className="pb-2">Model</th>
+                <th className="pb-2">Tokens</th>
+                <th className="pb-2">Cost</th>
                 <th className="pb-2">Status</th>
                 <th className="pb-2 text-right">Last Active</th>
               </tr>
@@ -490,6 +642,17 @@ export default function ConsolePage() {
                   <td className="py-2.5 capitalize">{s.agent}</td>
                   <td className="py-2.5 capitalize">{s.surface.replace("_", " ")}</td>
                   <td className="py-2.5">{s.model}</td>
+                  <td className="py-2.5">
+                    <span className="font-semibold text-foreground">
+                      {formatTokens((s.input_tokens || 0) + (s.output_tokens || 0))}
+                    </span>
+                    <span className="text-[10px] text-muted block">
+                      {formatTokens(s.input_tokens)} in &bull; {formatTokens(s.output_tokens)} out
+                    </span>
+                  </td>
+                  <td className="py-2.5 font-bold text-foreground">
+                    ${(s.total_cost_usd ?? 0).toFixed(2)}
+                  </td>
                   <td className="py-2.5">
                     <span className="flex items-center gap-1.5">
                       <span className={`w-2 h-2 rounded-full ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
@@ -503,7 +666,7 @@ export default function ConsolePage() {
               ))}
               {sessions.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-muted">
+                  <td colSpan={8} className="py-6 text-center text-muted">
                     No matching agent sessions found. Run Claude Code, Codex, or Antigravity on your machine.
                   </td>
                 </tr>
