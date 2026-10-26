@@ -187,6 +187,9 @@ impl DaemonOrchestrator {
                     if let Err(error) = pro::run_resume_queue(&ingest_db) {
                         tracing::warn!("resume queue evaluation failed: {error}");
                     }
+                    if let Err(error) = pro::run_context_relay(&ingest_db) {
+                        tracing::warn!("context relay evaluation failed: {error}");
+                    }
                     (ingest_db, result)
                 })
                 .await
