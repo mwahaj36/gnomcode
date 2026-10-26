@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FleetHUD — Mission Control</title>
+  <title>FleetHUD — Desktop Cockpit</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -23,14 +23,14 @@
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      padding: 24px;
+      padding: 20px 24px;
       line-height: 1.5;
     }
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 20px;
+      padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
       margin-bottom: 20px;
       flex-wrap: wrap;
@@ -39,12 +39,41 @@
     .header-left {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
     }
     h1 {
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 18px;
+      font-weight: 700;
       letter-spacing: -0.5px;
+    }
+    .nav-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--card-bg);
+      padding: 3px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 14px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+    }
+    .tab-btn.active {
+      background: var(--bg);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      font-weight: 600;
     }
     .badge {
       font-family: var(--font-mono);
@@ -55,14 +84,20 @@
       color: var(--accent);
       border: 1px solid rgba(88, 166, 255, 0.3);
     }
-    .badge-user {
-      cursor: pointer;
-      background: rgba(63, 185, 80, 0.15);
-      color: var(--green);
-      border-color: rgba(63, 185, 80, 0.3);
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
     }
-    .badge-user:hover {
-      background: rgba(63, 185, 80, 0.25);
+    .external-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    .external-link:hover {
+      color: var(--accent);
     }
     .timeline-bar {
       display: flex;
@@ -77,7 +112,7 @@
       gap: 12px;
     }
     .timeline-label {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-muted);
       font-family: var(--font-mono);
     }
@@ -104,7 +139,7 @@
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
       gap: 16px;
       margin-bottom: 20px;
     }
@@ -115,7 +150,7 @@
       padding: 16px;
     }
     .card-title {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -129,14 +164,14 @@
       font-family: var(--font-mono);
     }
     .metric-sub {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
       margin-top: 4px;
       font-family: var(--font-mono);
     }
     .provider-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 16px;
       margin-bottom: 20px;
     }
@@ -158,7 +193,7 @@
       margin-bottom: 12px;
     }
     .provider-name {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
     }
     .model-list {
@@ -195,7 +230,7 @@
       gap: 12px;
     }
     .section-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-muted);
       text-transform: uppercase;
@@ -209,7 +244,7 @@
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 5px 10px;
+      padding: 6px 12px;
       border-radius: 4px;
       font-size: 12px;
       font-family: var(--font-mono);
@@ -218,7 +253,7 @@
       width: 100%;
       border-collapse: collapse;
       font-family: var(--font-mono);
-      font-size: 13px;
+      font-size: 12px;
     }
     th, td {
       padding: 10px 12px;
@@ -257,36 +292,24 @@
       font-size: 12px;
       color: var(--text-muted);
     }
-    /* Modal */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.7);
+    /* Tab View Containers */
+    .view-content {
       display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
     }
-    .modal-backdrop.open {
-      display: flex;
+    .view-content.active {
+      display: block;
     }
-    .modal-content {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      width: 100%;
-      max-width: 500px;
-      padding: 24px;
+    /* Settings Form Styling */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
     }
-    .modal-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      display: flex;
-      justify-content: space-between;
+    @media (max-width: 768px) {
+      .settings-grid { grid-template-columns: 1fr; }
     }
     .form-group {
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
     .form-group label {
       display: block;
@@ -297,23 +320,20 @@
     }
     .form-group input {
       width: 100%;
-      padding: 8px 12px;
-    }
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 20px;
     }
     .btn-primary {
       background: var(--green);
       color: #0d1117;
       border: none;
-      padding: 6px 16px;
+      padding: 8px 20px;
       border-radius: 4px;
       cursor: pointer;
       font-weight: 600;
       font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .btn-primary:hover {
+      opacity: 0.9;
     }
   </style>
 </head>
@@ -321,178 +341,239 @@
   <header>
     <div class="header-left">
       <h1>FleetHUD</h1>
-      <span class="badge">MISSION CONTROL</span>
-      <span class="badge badge-user" id="user-badge" onclick="openProfileModal()">[LOCAL USER] Developer</span>
+      <div class="nav-tabs">
+        <button class="tab-btn active" id="tab-btn-console" onclick="switchTab('console')">Console</button>
+        <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings')">Settings</button>
+        <button class="tab-btn" id="tab-btn-auth" onclick="switchTab('auth')">Auth & Cloud Sync</button>
+      </div>
     </div>
-    <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">
-      [CONNECTED] 127.0.0.1:41738
+    <div class="header-right">
+      <span class="badge">[LOCAL DAEMON] 127.0.0.1:41738</span>
+      <a href="https://fleethud.vercel.app/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
+      <a href="https://fleethud.vercel.app/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
   </header>
 
-  <!-- Timeline Filter Bar -->
-  <div class="timeline-bar">
-    <div class="timeline-label" id="timeline-label">Showing: All Time</div>
-    <div class="timeline-buttons">
-      <button class="btn-pill" onclick="setTimeline('today')">Today</button>
-      <button class="btn-pill" onclick="setTimeline('7d')">Last 7 Days</button>
-      <button class="btn-pill" onclick="setTimeline('30d')">Last 30 Days</button>
-      <button class="btn-pill active" onclick="setTimeline('all')">All Time</button>
+  <!-- ==================== VIEW 1: CONSOLE ==================== -->
+  <main id="view-console" class="view-content active">
+    <!-- Timeline Filter Bar -->
+    <div class="timeline-bar">
+      <div class="timeline-label" id="timeline-label">Showing: All Time</div>
+      <div class="timeline-buttons">
+        <button class="btn-pill" onclick="setTimeline('today')">Today</button>
+        <button class="btn-pill" onclick="setTimeline('7d')">Last 7 Days</button>
+        <button class="btn-pill" onclick="setTimeline('30d')">Last 30 Days</button>
+        <button class="btn-pill active" onclick="setTimeline('all')">All Time</button>
+      </div>
     </div>
-  </div>
 
-  <!-- Top Summary Metrics -->
-  <div class="grid">
-    <div class="card">
-      <div class="card-title">API-Equivalent Spend</div>
-      <div class="metric" id="total-spend">$0.00</div>
-      <div class="metric-sub" id="roi-summary">Plan Value: 0.0x</div>
+    <!-- Top Summary Metrics -->
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">API-Equivalent Spend</div>
+        <div class="metric" id="total-spend">$0.00</div>
+        <div class="metric-sub" id="roi-summary">Plan Value: 0.0x</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Prompt Cache Savings</div>
+        <div class="metric" style="color: var(--green);" id="total-savings">$0.00</div>
+        <div class="metric-sub" id="savings-pct">0% saved vs full price</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Active Fleet Agents</div>
+        <div class="metric" id="active-count">0</div>
+        <div class="metric-sub">Active in last 15 min</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Quota Pools Monitored</div>
+        <div class="metric" id="quota-count">0</div>
+        <div class="metric-sub" id="quota-confirmed">1 Confirmed Pool</div>
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title">Prompt Cache Savings</div>
-      <div class="metric" style="color: var(--green);" id="total-savings">$0.00</div>
-      <div class="metric-sub" id="savings-pct">0% saved vs full price</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Active Fleet Agents</div>
-      <div class="metric" id="active-count">0</div>
-      <div class="metric-sub">Active in last 15 min</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Quota Pools Monitored</div>
-      <div class="metric" id="quota-count">0</div>
-      <div class="metric-sub" id="quota-confirmed">1 Confirmed Pool</div>
-    </div>
-  </div>
 
-  <!-- Multi-Plan ROI Comparison Card -->
-  <div class="card" style="margin-bottom: 20px;">
-    <div class="card-title">
-      <span>Subscription ROI Calculator</span>
-      <span style="cursor: pointer; color: var(--accent);" onclick="openProfileModal()">[Edit Subscriptions]</span>
+    <!-- Multi-Plan ROI Comparison Card -->
+    <div class="card" style="margin-bottom: 20px;">
+      <div class="card-title">
+        <span>Subscription ROI Calculator</span>
+        <span style="cursor: pointer; color: var(--accent);" onclick="switchTab('settings')">[Edit Subscriptions]</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px;" id="roi-cards-container">
+        <!-- Injected dynamically -->
+      </div>
     </div>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px;" id="roi-cards-container">
+
+    <!-- Spend by Provider (Click to Expand Model Breakdown) -->
+    <div class="section-title" style="margin-bottom: 12px;">Spend by Provider (Click to View Models)</div>
+    <div class="provider-grid" id="providers-container">
       <!-- Injected dynamically -->
     </div>
-  </div>
 
-  <!-- Spend by Provider (Click to Expand Model Breakdown) -->
-  <div class="section-title" style="margin-bottom: 12px;">Spend by Provider (Click to View Models)</div>
-  <div class="provider-grid" id="providers-container">
-    <!-- Injected dynamically -->
-  </div>
-
-  <!-- Per-Model Quota Pools Table -->
-  <div class="table-container">
-    <div class="table-header-controls">
-      <div class="section-title">Per-Model Quota Pools</div>
-      <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
-        [CONFIRMED] OpenAI Codex exposes exact rate limits. Google & Anthropic track via tokens below.
-      </div>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Provider</th>
-          <th>Pool ID</th>
-          <th>Window</th>
-          <th>Used %</th>
-          <th>Resets At</th>
-          <th>Basis</th>
-        </tr>
-      </thead>
-      <tbody id="quota-table">
-        <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading quota pools...</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Paginated Sessions Table -->
-  <div class="table-container">
-    <div class="table-header-controls">
-      <div class="section-title">Live & Historical Agent Sessions</div>
-      <div class="filters">
-        <select id="agent-filter" onchange="onFilterChange()">
-          <option value="all">All Agents</option>
-          <option value="antigravity">Antigravity</option>
-          <option value="codex">OpenAI Codex</option>
-          <option value="claude-code">Claude Code</option>
-          <option value="gemini-cli">Gemini CLI</option>
-        </select>
-        <select id="status-filter" onchange="onFilterChange()">
-          <option value="all">All Statuses</option>
-          <option value="active">Active Only</option>
-          <option value="idle">Idle Only</option>
-        </select>
-      </div>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Project</th>
-          <th>Agent</th>
-          <th>Surface</th>
-          <th>Model</th>
-          <th>Status</th>
-          <th>Last Active</th>
-        </tr>
-      </thead>
-      <tbody id="sessions-table">
-        <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
-      </tbody>
-    </table>
-    <div class="pagination">
-      <span id="pagination-info">Page 1 of 1</span>
-      <div>
-        <button class="btn-pill" id="prev-btn" onclick="prevPage()">Previous</button>
-        <button class="btn-pill" id="next-btn" onclick="nextPage()">Next</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- User Profile & Settings Modal -->
-  <div class="modal-backdrop" id="profile-modal">
-    <div class="modal-content">
-      <div class="modal-title">
-        <span>Local User Profile & Subscriptions</span>
-        <span style="cursor: pointer;" onclick="closeProfileModal()">X</span>
-      </div>
-      <div class="form-group">
-        <label>Display Name</label>
-        <input type="text" id="modal-display-name" placeholder="Your Name">
-      </div>
-      <div class="form-group">
-        <label>OpenAI Monthly Plan ($/mo)</label>
-        <input type="number" id="modal-openai-plan" placeholder="20.00" step="1">
-      </div>
-      <div class="form-group">
-        <label>Anthropic / Claude Monthly Plan ($/mo)</label>
-        <input type="number" id="modal-claude-plan" placeholder="20.00" step="1">
-      </div>
-      <div class="form-group">
-        <label>Google Monthly Plan ($/mo)</label>
-        <input type="number" id="modal-google-plan" placeholder="0.00" step="1">
-      </div>
-      <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);">
-        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Custom Model Pricing Overrides ($/1M tokens)</div>
-        <div id="custom-pricing-list" style="margin-bottom: 10px; font-family: var(--font-mono); font-size: 11px;"></div>
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center;">
-          <input type="text" id="custom-model-pattern" placeholder="Model (e.g. claude-3-5)">
-          <input type="number" id="custom-model-in" placeholder="In $" step="0.1">
-          <input type="number" id="custom-model-out" placeholder="Out $" step="0.1">
-          <input type="number" id="custom-model-cache" placeholder="Cache $" step="0.1">
-          <button class="btn-pill" style="height: 34px;" onclick="addCustomPricing()">+ Add</button>
+    <!-- Per-Model Quota Pools Table -->
+    <div class="table-container">
+      <div class="table-header-controls">
+        <div class="section-title">Per-Model Quota Pools</div>
+        <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
+          [CONFIRMED] OpenAI Codex exposes exact rate limits. Google & Anthropic track via tokens below.
         </div>
       </div>
-      <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
-        <div>Database File: ~/.fleethud/state.db</div>
-        <div id="db-stats-text" style="margin-top: 4px;">Loading local storage stats...</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Pool ID</th>
+            <th>Window</th>
+            <th>Used %</th>
+            <th>Resets At</th>
+            <th>Basis</th>
+          </tr>
+        </thead>
+        <tbody id="quota-table">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading quota pools...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Paginated Sessions Table -->
+    <div class="table-container">
+      <div class="table-header-controls">
+        <div class="section-title">Live & Historical Agent Sessions</div>
+        <div class="filters">
+          <select id="agent-filter" onchange="onFilterChange()">
+            <option value="all">All Agents</option>
+            <option value="antigravity">Antigravity</option>
+            <option value="codex">OpenAI Codex</option>
+            <option value="claude-code">Claude Code</option>
+            <option value="gemini-cli">Gemini CLI</option>
+          </select>
+          <select id="status-filter" onchange="onFilterChange()">
+            <option value="all">All Statuses</option>
+            <option value="active">Active Only</option>
+            <option value="idle">Idle Only</option>
+          </select>
+        </div>
       </div>
-      <div class="modal-actions">
-        <button class="btn-pill" onclick="closeProfileModal()">Cancel</button>
-        <button class="btn-primary" onclick="saveProfile()">Save Preferences</button>
+      <table>
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Agent</th>
+            <th>Surface</th>
+            <th>Model</th>
+            <th>Status</th>
+            <th>Last Active</th>
+          </tr>
+        </thead>
+        <tbody id="sessions-table">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
+        </tbody>
+      </table>
+      <div class="pagination">
+        <span id="pagination-info">Page 1 of 1</span>
+        <div>
+          <button class="btn-pill" id="prev-btn" onclick="prevPage()">Previous</button>
+          <button class="btn-pill" id="next-btn" onclick="nextPage()">Next</button>
+        </div>
       </div>
     </div>
-  </div>
+  </main>
+
+  <!-- ==================== VIEW 2: SETTINGS ==================== -->
+  <main id="view-settings" class="view-content">
+    <div class="settings-grid">
+      <!-- Left Column: Subscription Plans -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom: 16px;">Local Profile & Subscriptions</div>
+        <div class="form-group">
+          <label>Display Name</label>
+          <input type="text" id="settings-display-name" placeholder="Developer">
+        </div>
+        <div class="form-group">
+          <label>OpenAI Monthly Plan ($/mo)</label>
+          <input type="number" id="settings-openai-plan" placeholder="20.00" step="1">
+        </div>
+        <div class="form-group">
+          <label>Anthropic / Claude Monthly Plan ($/mo)</label>
+          <input type="number" id="settings-claude-plan" placeholder="20.00" step="1">
+        </div>
+        <div class="form-group">
+          <label>Google Monthly Plan ($/mo)</label>
+          <input type="number" id="settings-google-plan" placeholder="0.00" step="1">
+        </div>
+        <div style="margin-top: 20px;">
+          <button class="btn-primary" onclick="saveSettings()">Save Preferences</button>
+          <span id="settings-saved-feedback" style="margin-left: 10px; font-size: 11px; color: var(--green); display: none;">Saved successfully!</span>
+        </div>
+      </div>
+
+      <!-- Right Column: Database Storage & Custom Pricing -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom: 16px;">Custom Model Pricing Overrides</div>
+        <div id="settings-pricing-list" style="margin-bottom: 14px; font-family: var(--font-mono); font-size: 11px;"></div>
+        
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 20px;">
+          <input type="text" id="settings-model-pattern" placeholder="Model (e.g. claude-3-5)">
+          <input type="number" id="settings-model-in" placeholder="In $" step="0.1">
+          <input type="number" id="settings-model-out" placeholder="Out $" step="0.1">
+          <input type="number" id="settings-model-cache" placeholder="Cache $" step="0.1">
+          <button class="btn-pill" style="height: 32px;" onclick="addCustomPricingSettings()">+ Add</button>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
+          <div class="section-title" style="margin-bottom: 8px;">Local Flight Recorder Storage</div>
+          <div>Database: ~/.fleethud/state.db</div>
+          <div id="settings-db-stats" style="margin-top: 4px;">Loading local storage stats...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== VIEW 3: AUTH & CLOUD SYNC ==================== -->
+  <main id="view-auth" class="view-content">
+    <div style="max-w: 680px; margin: 0 auto;" class="card">
+      <div class="section-title" style="margin-bottom: 16px;">Supabase Cloud Sync & Account Roaming</div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;">
+        FleetHUD operates 100% locally by default. To sync your live fleet metrics, ROI multipliers, and quota pools across multiple workstations, pair your local daemon with your Supabase account.
+      </p>
+
+      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 12px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Supabase Endpoint:</span>
+          <span style="color: var(--accent);">https://jjnuxngvhuvxkxrfmnqx.supabase.co</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: var(--text-muted);">Sync Frequency:</span>
+          <span style="color: var(--green);">Every 2 seconds (Live)</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Privacy Invariant:</span>
+          <span style="color: var(--green);">Zero Prompt Retention & HMAC Masked</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a
+          href="https://fleethud.vercel.app/console"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-primary"
+          style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;"
+        >
+          <span>Open Web Cloud Console</span>
+          <span>&rarr;</span>
+        </a>
+        <a
+          href="https://fleethud.vercel.app/auth"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-pill"
+          style="text-decoration: none; display: inline-flex; align-items: center; padding: 8px 16px;"
+        >
+          <span>Sign In via GitHub / Email</span>
+        </a>
+      </div>
+    </div>
+  </main>
 
   <script>
     let currentTimeline = 'all';
@@ -500,6 +581,20 @@
     const pageLimit = 10;
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.view-content').forEach(v => v.classList.remove('active'));
+
+      const btn = document.getElementById(`tab-btn-${tabName}`);
+      const view = document.getElementById(`view-${tabName}`);
+      if (btn) btn.classList.add('active');
+      if (view) view.classList.add('active');
+
+      if (tabName === 'settings') {
+        loadSettingsData();
+      }
+    }
 
     function formatRelativeTime(isoStr) {
       if (!isoStr) return 'N/A';
@@ -578,7 +673,7 @@
         if (res.combined_roi && res.combined_roi.plan_usd > 0) {
           document.getElementById('roi-summary').textContent = `Plan Value: ${res.combined_roi.multiplier.toFixed(1)}x ROI ($${res.combined_roi.net_savings_usd.toFixed(2)} net)`;
         } else {
-          document.getElementById('roi-summary').textContent = 'Plan Value: Configured below';
+          document.getElementById('roi-summary').textContent = 'Plan Value: Configured in Settings';
         }
 
         // Render ROI cards
@@ -592,7 +687,7 @@
             </div>
             <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Paid: $${r.plan_usd.toFixed(0)}/mo | Value: $${r.spend_usd.toFixed(2)}</div>
           </div>
-        `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Configure your plans in profile settings to see live ROI multipliers.</div>';
+        `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">Configure your plans in Settings tab to see live ROI multipliers.</div>';
 
         // Render Provider Breakdown cards
         const provContainer = document.getElementById('providers-container');
@@ -615,11 +710,6 @@
             </div>
           </div>
         `).join('');
-
-        // User badge
-        if (res.user_profile) {
-          document.getElementById('user-badge').textContent = `[LOCAL USER] ${res.user_profile.display_name}`;
-        }
       } catch (e) {
         console.error('Failed to load report', e);
       }
@@ -685,33 +775,32 @@
       }
     }
 
-    async function openProfileModal() {
-      document.getElementById('profile-modal').classList.add('open');
+    async function loadSettingsData() {
       try {
         const [user, stats] = await Promise.all([
           fetch('/api/v1/user', { headers }).then(r => r.json()),
           fetch('/api/v1/stats', { headers }).then(r => r.json())
         ]);
         if (user) {
-          document.getElementById('modal-display-name').value = user.display_name;
-          document.getElementById('modal-openai-plan').value = user.openai_plan_usd;
-          document.getElementById('modal-claude-plan').value = user.claude_plan_usd;
-          document.getElementById('modal-google-plan').value = user.google_plan_usd;
+          document.getElementById('settings-display-name').value = user.display_name || '';
+          document.getElementById('settings-openai-plan').value = user.openai_plan_usd || 20;
+          document.getElementById('settings-claude-plan').value = user.claude_plan_usd || 20;
+          document.getElementById('settings-google-plan').value = user.google_plan_usd || 0;
         }
         if (stats) {
-          document.getElementById('db-stats-text').textContent =
+          document.getElementById('settings-db-stats').textContent =
             `Local Storage: ${stats.total_turns} turns across ${stats.total_projects} projects (${(stats.db_size_bytes / 1024 / 1024).toFixed(2)} MB)`;
         }
-        await loadCustomPricing();
+        await loadCustomPricingSettings();
       } catch (e) {
         console.error(e);
       }
     }
 
-    async function loadCustomPricing() {
+    async function loadCustomPricingSettings() {
       try {
         const res = await fetch('/api/v1/pricing/custom', { headers }).then(r => r.json());
-        const container = document.getElementById('custom-pricing-list');
+        const container = document.getElementById('settings-pricing-list');
         if (!res || !res.custom_pricing || res.custom_pricing.length === 0) {
           container.innerHTML = '<span style="color: var(--text-muted);">No custom rate overrides configured (using default catalog).</span>';
           return;
@@ -719,7 +808,7 @@
         let html = '<div style="display: flex; flex-direction: column; gap: 4px;">';
         for (const cp of res.custom_pricing) {
           html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;">
               <span><strong>${cp.model_pattern}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
               <button class="btn-pill" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing('${cp.model_pattern}')">Remove</button>
             </div>`;
@@ -731,11 +820,11 @@
       }
     }
 
-    async function addCustomPricing() {
-      const pattern = document.getElementById('custom-model-pattern').value.trim();
-      const inPrice = parseFloat(document.getElementById('custom-model-in').value) || 0.0;
-      const outPrice = parseFloat(document.getElementById('custom-model-out').value) || 0.0;
-      const cachePrice = parseFloat(document.getElementById('custom-model-cache').value) || 0.0;
+    async function addCustomPricingSettings() {
+      const pattern = document.getElementById('settings-model-pattern').value.trim();
+      const inPrice = parseFloat(document.getElementById('settings-model-in').value) || 0.0;
+      const outPrice = parseFloat(document.getElementById('settings-model-out').value) || 0.0;
+      const cachePrice = parseFloat(document.getElementById('settings-model-cache').value) || 0.0;
       if (!pattern) return;
       await fetch('/api/v1/pricing/custom', {
         method: 'POST',
@@ -748,11 +837,11 @@
           updated_at: new Date().toISOString()
         })
       });
-      document.getElementById('custom-model-pattern').value = '';
-      document.getElementById('custom-model-in').value = '';
-      document.getElementById('custom-model-out').value = '';
-      document.getElementById('custom-model-cache').value = '';
-      await loadCustomPricing();
+      document.getElementById('settings-model-pattern').value = '';
+      document.getElementById('settings-model-in').value = '';
+      document.getElementById('settings-model-out').value = '';
+      document.getElementById('settings-model-cache').value = '';
+      await loadCustomPricingSettings();
       loadReport();
     }
 
@@ -761,22 +850,18 @@
         method: 'DELETE',
         headers
       });
-      await loadCustomPricing();
+      await loadCustomPricingSettings();
       loadReport();
     }
 
-    function closeProfileModal() {
-      document.getElementById('profile-modal').classList.remove('open');
-    }
-
-    async function saveProfile() {
+    async function saveSettings() {
       const profile = {
         id: 'local_user',
         username: 'developer',
-        display_name: document.getElementById('modal-display-name').value || 'Local Developer',
-        openai_plan_usd: parseFloat(document.getElementById('modal-openai-plan').value) || 0.0,
-        claude_plan_usd: parseFloat(document.getElementById('modal-claude-plan').value) || 0.0,
-        google_plan_usd: parseFloat(document.getElementById('modal-google-plan').value) || 0.0,
+        display_name: document.getElementById('settings-display-name').value || 'Developer',
+        openai_plan_usd: parseFloat(document.getElementById('settings-openai-plan').value) || 0.0,
+        claude_plan_usd: parseFloat(document.getElementById('settings-claude-plan').value) || 0.0,
+        google_plan_usd: parseFloat(document.getElementById('settings-google-plan').value) || 0.0,
         other_plan_usd: 0.0,
         updated_at: new Date().toISOString()
       };
@@ -787,7 +872,9 @@
         body: JSON.stringify(profile)
       });
 
-      closeProfileModal();
+      const fb = document.getElementById('settings-saved-feedback');
+      fb.style.display = 'inline';
+      setTimeout(() => fb.style.display = 'none', 3000);
       loadReport();
     }
 

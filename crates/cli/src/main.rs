@@ -52,37 +52,61 @@ enum Commands {
         #[arg(long)]
         network: bool,
     },
-    /// Start the FleetHUD background daemon and local web dashboard.
+    /// Start the FleetHUD background daemon and local web console.
     Daemon {
         /// Port to bind the local HTTP server to.
         #[arg(long, default_value_t = 41738)]
         port: u16,
-        /// Open the web dashboard in the default browser.
+        /// Open the web console in the default browser.
         #[arg(long)]
         open: bool,
     },
-    /// Convenience shortcut: start the daemon and open the web dashboard in your browser.
+    /// Convenience shortcut: start the daemon and open the Next.js Mission Control Console in your browser.
+    Console {
+        /// Port to bind the local HTTP server to.
+        #[arg(long, default_value_t = 41738)]
+        port: u16,
+    },
+    /// Backwards compatible alias for `fleethud console`.
+    #[command(hide = true)]
     Dashboard {
         /// Port to bind the local HTTP server to.
         #[arg(long, default_value_t = 41738)]
         port: u16,
     },
+    /// Install FleetHUD to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
+    Install,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     attach_parent_console();
 
+    let exe_is_installer = std::env::current_exe()
+        .ok()
+        .and_then(|p| {
+            p.file_stem()
+                .map(|s| s.to_string_lossy().to_ascii_lowercase())
+        })
+        .is_some_and(|name| name.contains("install") || name.contains("setup"));
+
     let cli = Cli::parse();
     let db_path = cli.db.unwrap_or_else(default_db_path);
-    let command = cli.command.unwrap_or(Commands::Dashboard { port: 41738 });
+    let default_cmd = if exe_is_installer {
+        Commands::Install
+    } else {
+        Commands::Console { port: 41738 }
+    };
+    let command = cli.command.unwrap_or(default_cmd);
 
     match command {
         Commands::Status { limit } => cmd_status(&db_path, limit),
         Commands::Report { plan_usd } => cmd_report(&db_path, plan_usd),
         Commands::Doctor { network } => cmd_doctor(&db_path, network),
         Commands::Daemon { port, open } => cmd_daemon(&db_path, port, open).await,
+        Commands::Console { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Dashboard { port } => cmd_daemon(&db_path, port, true).await,
+        Commands::Install => cmd_install(&db_path),
     }
 }
 
@@ -266,14 +290,16 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         Ok(res) => res,
         Err(fleethud_daemon::Error::AlreadyRunning) => {
             if let Some(existing) = fleethud_daemon::read_daemon_info() {
-                let dashboard_url = format!(
-                    "http://127.0.0.1:{}/?token={}",
-                    existing.port, existing.token
-                );
+                let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| {
+                    format!(
+                        "https://fleethud.vercel.app/console?token={}&port={}",
+                        existing.token, existing.port
+                    )
+                });
                 println!("FleetHUD is already active (PID {}).", existing.pid);
-                println!("Opened Mission Control: {dashboard_url}");
+                println!("Opened Mission Control Console: {console_url}");
                 if open {
-                    open_browser(&dashboard_url);
+                    open_browser(&console_url);
                 }
                 return Ok(());
             }
@@ -300,16 +326,23 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         .await
         .context(format!("failed to bind loopback TCP listener on {addr}"))?;
 
-    let dashboard_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
+    let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| {
+        format!(
+            "https://fleethud.vercel.app/console?token={}&port={port}",
+            info.token
+        )
+    });
+    let local_url = format!("http://127.0.0.1:{port}/console?token={}", info.token);
     println!("=== FLEETHUD DAEMON STARTED ===");
     println!("Status: Running");
     println!("Loopback Port: {port}");
     println!("PID: {}", info.pid);
-    println!("Web Dashboard: {dashboard_url}");
+    println!("Next.js Console: {console_url}");
+    println!("Local Fallback:  {local_url}");
     println!("Press Ctrl+C to terminate the daemon.");
 
     if open {
-        open_browser(&dashboard_url);
+        open_browser(&console_url);
     }
 
     axum::serve(listener, router)
@@ -328,4 +361,112 @@ fn open_browser(url: &str) {
     let _ = std::process::Command::new("open").arg(url).spawn();
     #[cfg(target_os = "linux")]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+}
+
+const TRAY_PS1: &str = include_str!("../../../scripts/tray.ps1");
+const RUN_TRAY_VBS: &str = include_str!("../../../scripts/run-tray.vbs");
+const OPEN_CONSOLE_VBS: &str = include_str!("../../../scripts/open-console.vbs");
+const OPEN_DASH_VBS: &str = include_str!("../../../scripts/open-dashboard.vbs");
+
+fn cmd_install(db_path: &std::path::Path) -> Result<()> {
+    println!("=== FLEETHUD NATIVE INSTALLER ===");
+    if let Ok(mut db) = Database::open(db_path) {
+        let _ = ingest_all(&mut db);
+    }
+
+    let current_exe = std::env::current_exe().context("failed to locate running executable")?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
+            fleethud_home()
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("AppData")
+                .join("Local")
+                .to_string_lossy()
+                .into_owned()
+        });
+        let install_dir = PathBuf::from(local_app_data).join("fleethud");
+        std::fs::create_dir_all(&install_dir).context("failed to create installation directory")?;
+
+        let dest_exe = install_dir.join("fleethud.exe");
+        if current_exe != dest_exe {
+            let my_pid = std::process::id();
+            let kill_cmd = format!(
+                "Get-Process -Name fleethud -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force -ErrorAction SilentlyContinue"
+            );
+            let _ = std::process::Command::new("powershell")
+                .args(["-NoProfile", "-Command", &kill_cmd])
+                .creation_flags(CREATE_NO_WINDOW)
+                .status();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            std::fs::copy(&current_exe, &dest_exe)
+                .context("failed to copy fleethud.exe to install directory")?;
+        }
+
+        std::fs::write(install_dir.join("tray.ps1"), TRAY_PS1)?;
+        std::fs::write(install_dir.join("run-tray.vbs"), RUN_TRAY_VBS)?;
+        std::fs::write(install_dir.join("open-console.vbs"), OPEN_CONSOLE_VBS)?;
+        std::fs::write(install_dir.join("open-dashboard.vbs"), OPEN_DASH_VBS)?;
+
+        let dir_str = install_dir.to_string_lossy();
+        let ps_setup = format!(
+            r#"
+$InstallDir = '{dir_str}'
+$ExeDest = "$InstallDir\fleethud.exe"
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($UserPath -notlike "*$InstallDir*") {{
+    [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
+}}
+$RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+Set-ItemProperty -Path $RunKey -Name "FleetHUD" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
+$WshShell = New-Object -ComObject WScript.Shell
+$DesktopDir = [Environment]::GetFolderPath("Desktop")
+foreach ($lnkPath in @("$DesktopDir\FleetHUD Console.lnk", "$DesktopDir\FleetHUD.lnk", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\FleetHUD Console.lnk")) {{
+    $Shortcut = $WshShell.CreateShortcut($lnkPath)
+    $Shortcut.TargetPath = "wscript.exe"
+    $Shortcut.Arguments = "`"$InstallDir\open-console.vbs`""
+    $Shortcut.WorkingDirectory = $InstallDir
+    $Shortcut.IconLocation = "$ExeDest,0"
+    $Shortcut.Description = "FleetHUD Mission Control Console"
+    $Shortcut.Save()
+}}
+Start-Process -FilePath "wscript.exe" -ArgumentList "//B `"$InstallDir\run-tray.vbs`"" -WindowStyle Hidden
+Start-Process -FilePath "wscript.exe" -ArgumentList "//B `"$InstallDir\open-console.vbs`"" -WindowStyle Hidden
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.MessageBox]::Show("FleetHUD has been installed to $InstallDir.`n`n- Desktop & Start Menu shortcuts created for FleetHUD Console`n- Configured to start automatically on login`n- Mission Control is now running in your system tray.", "FleetHUD Setup Complete", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+"#
+        );
+
+        let _ = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &ps_setup,
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+
+        println!("Installed FleetHUD to {}", install_dir.display());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_owned());
+        let bin_dir = PathBuf::from(home).join(".local").join("bin");
+        std::fs::create_dir_all(&bin_dir)?;
+        let dest = bin_dir.join("fleethud");
+        if current_exe != dest {
+            std::fs::copy(&current_exe, &dest)?;
+        }
+        println!("Installed FleetHUD to {}", dest.display());
+    }
+
+    Ok(())
 }

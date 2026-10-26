@@ -357,6 +357,27 @@ impl Database {
             );
             "#,
         )?;
+
+        let has_v5: bool = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM schema_migrations WHERE version = 5",
+                [],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+
+        if !has_v5 {
+            self.conn.execute_batch(
+                r#"
+                DELETE FROM source_file;
+                DELETE FROM activity_event;
+                INSERT INTO schema_migrations (version, applied_at) VALUES (5, datetime('now'));
+                "#,
+            )?;
+        }
+
         Ok(())
     }
 
@@ -937,6 +958,83 @@ impl Database {
         Ok(())
     }
 
+    /// Queries the stored model name for a session if already known.
+    #[must_use]
+    pub fn get_session_model(&self, session_id: &str) -> Option<String> {
+        self.conn
+            .query_row(
+                "SELECT model FROM session WHERE id = ?1",
+                params![session_id],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .ok()
+            .flatten()
+            .filter(|m| !m.trim().is_empty())
+    }
+
+    /// Automatically populates subscription plan prices from local agent tiers
+    /// (`quota_snapshot.plan` for OpenAI, plus passed-in Anthropic/Google tiers)
+    /// when not yet customized by the user.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if querying or updating `user_profile` fails.
+    pub fn auto_populate_subscriptions(
+        &mut self,
+        anthropic_usd: Option<f64>,
+        google_usd: Option<f64>,
+    ) -> Result<(), Error> {
+        let mut profile = self.get_user_profile()?;
+        let mut changed = false;
+
+        let codex_plan: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT plan FROM quota_snapshot WHERE provider = 'codex' AND plan IS NOT NULL ORDER BY observed_at DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?;
+
+        if let Some(plan) = codex_plan {
+            let detected_openai = match plan.to_ascii_lowercase().as_str() {
+                "pro" => Some(200.0),
+                "enterprise" => Some(60.0),
+                "team" => Some(30.0),
+                "plus" => Some(20.0),
+                _ => None,
+            };
+            if let Some(price) = detected_openai {
+                if (profile.openai_plan_usd - 0.0).abs() < f64::EPSILON
+                    || ((profile.openai_plan_usd - 20.0).abs() < f64::EPSILON && price > 20.0)
+                {
+                    profile.openai_plan_usd = price;
+                    changed = true;
+                }
+            }
+        }
+
+        if let Some(price) = anthropic_usd {
+            if (profile.claude_plan_usd - 0.0).abs() < f64::EPSILON
+                || ((profile.claude_plan_usd - 20.0).abs() < f64::EPSILON && price > 20.0)
+            {
+                profile.claude_plan_usd = price;
+                changed = true;
+            }
+        }
+
+        if let Some(price) = google_usd {
+            if (profile.google_plan_usd - 0.0).abs() < f64::EPSILON {
+                profile.google_plan_usd = price;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.update_user_profile(&profile)?;
+        }
+        Ok(())
+    }
+
     /// Returns paginated session list with joined project names and dynamic active status.
     ///
     /// # Errors
@@ -975,12 +1073,13 @@ impl Database {
             let diff_mins = (now - last_event_at).num_minutes();
             let is_recent = diff_mins <= 15;
 
-            let (state, is_active) = if is_recent
-                && (state_str == "tool"
-                    || state_str == "thinking"
-                    || state_str == "awaiting_approval")
-            {
-                (state_str, true)
+            let (state, is_active) = if is_recent && state_str != "ended" {
+                let effective = if state_str == "idle" {
+                    "thinking".to_owned()
+                } else {
+                    state_str
+                };
+                (effective, true)
             } else {
                 ("idle".to_owned(), false)
             };
@@ -1024,6 +1123,16 @@ impl Database {
             }
             filtered.push(item);
         }
+
+        filtered.sort_by(|a, b| {
+            let ts_a = DateTime::parse_from_rfc3339(&a.last_event_at)
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0);
+            let ts_b = DateTime::parse_from_rfc3339(&b.last_event_at)
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0);
+            b.is_active.cmp(&a.is_active).then_with(|| ts_b.cmp(&ts_a))
+        });
 
         let total_count = filtered.len();
         let paginated = filtered.into_iter().skip(offset).take(limit).collect();

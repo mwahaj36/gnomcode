@@ -60,12 +60,13 @@ pub struct HealthResponse {
     pub timestamp: String,
 }
 
-const DASHBOARD_HTML: &str = include_str!("dashboard.html");
+const CONSOLE_HTML: &str = include_str!("console.html");
 
-/// Builds the axum router for FleetHUD local API and embedded dashboard.
+/// Builds the axum router for FleetHUD local API and embedded console.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(dashboard_handler))
+        .route("/", get(console_handler))
+        .route("/console", get(console_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/report", get(report_handler))
@@ -81,11 +82,13 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(custom_pricing_delete_handler),
         )
         .route("/api/v1/stats", get(stats_handler))
+        .route("/api/v1/supabase-config", get(supabase_config_handler))
+        .route("/api/v1/live", get(live_snapshot_handler))
         .with_state(state)
 }
 
-async fn dashboard_handler() -> impl IntoResponse {
-    axum::response::Html(DASHBOARD_HTML)
+async fn console_handler() -> impl IntoResponse {
+    axum::response::Html(CONSOLE_HTML)
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -155,7 +158,9 @@ async fn list_sessions_handler(
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let active_count = sessions.iter().filter(|s| s.is_active).count();
+    let (_, active_count) = db
+        .list_sessions_paginated(None, Some("active"), 0, 1)
+        .unwrap_or_default();
 
     #[derive(Serialize)]
     struct PaginatedResponse {
@@ -380,6 +385,188 @@ async fn custom_pricing_delete_handler(
         .get_custom_model_pricings()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "custom_pricing": pricings })))
+}
+
+fn cors_headers() -> HeaderMap {
+    let mut h = HeaderMap::new();
+    h.insert(
+        axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        axum::http::HeaderValue::from_static("*"),
+    );
+    h.insert(
+        axum::http::header::ACCESS_CONTROL_ALLOW_METHODS,
+        axum::http::HeaderValue::from_static("GET, POST, DELETE, OPTIONS"),
+    );
+    h.insert(
+        axum::http::header::ACCESS_CONTROL_ALLOW_HEADERS,
+        axum::http::HeaderValue::from_static("Authorization, Content-Type"),
+    );
+    h
+}
+
+async fn supabase_config_handler() -> impl IntoResponse {
+    let mut url = std::env::var("FLEETHUD_SUPABASE_URL").unwrap_or_default();
+    let mut key = std::env::var("FLEETHUD_SUPABASE_KEY").unwrap_or_default();
+
+    if url.is_empty() || key.is_empty() {
+        let home = fleethud_platform::user_home_dir();
+        let env_file = home.join(".fleethud").join("supabase.env");
+        if let Ok(content) = std::fs::read_to_string(env_file) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix("FLEETHUD_SUPABASE_URL=") {
+                    url = rest.trim().to_owned();
+                } else if let Some(rest) = trimmed.strip_prefix("FLEETHUD_SUPABASE_KEY=") {
+                    key = rest.trim().to_owned();
+                }
+            }
+        }
+    }
+
+    (
+        cors_headers(),
+        Json(json!({
+            "supabase_url": url,
+            "supabase_key": key,
+        })),
+    )
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct LiveQueryParams {
+    range: Option<String>,
+    from: Option<String>,
+    to: Option<String>,
+    agent: Option<String>,
+    status: Option<String>,
+    page: Option<usize>,
+    limit: Option<usize>,
+}
+
+async fn live_snapshot_handler(
+    State(state): State<AppState>,
+    Query(params): Query<LiveQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let range = params.range.as_deref().unwrap_or("all");
+    let page = params.page.unwrap_or(1).max(1);
+    let limit = params.limit.unwrap_or(10).clamp(1, 100);
+    let offset = (page - 1) * limit;
+
+    let db = state.db.lock().await;
+
+    let report = db
+        .generate_usage_report_timeline(range, params.from.as_deref(), params.to.as_deref())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let user_profile = db
+        .get_user_profile()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (sessions, total_count) = db
+        .list_sessions_paginated(
+            params.agent.as_deref(),
+            params.status.as_deref(),
+            offset,
+            limit,
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (_, active_count) = db
+        .list_sessions_paginated(None, Some("active"), 0, 1)
+        .unwrap_or_default();
+
+    let quota = db
+        .get_latest_quota_snapshots()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let custom_pricing = db
+        .get_custom_model_pricings()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut roi_by_provider = Vec::new();
+    let mut combined_plan = 0.0;
+    let get_spend = |prov_name: &str| -> f64 {
+        report
+            .providers
+            .iter()
+            .find(|p| p.provider.eq_ignore_ascii_case(prov_name))
+            .map_or(0.0, |p| p.total_cost_usd)
+    };
+
+    let anthropic_spend = get_spend("Anthropic");
+    let openai_spend = get_spend("OpenAI");
+    let google_spend = get_spend("Google");
+
+    if user_profile.claude_plan_usd > 0.0 {
+        combined_plan += user_profile.claude_plan_usd;
+        let roi = fleethud_core::pricing::calculate_plan_roi(
+            anthropic_spend,
+            user_profile.claude_plan_usd,
+        );
+        roi_by_provider.push(json!({
+            "provider": "Anthropic (Claude)",
+            "plan_usd": user_profile.claude_plan_usd,
+            "spend_usd": anthropic_spend,
+            "multiplier": roi.multiplier,
+            "net_savings_usd": roi.net_savings_usd,
+        }));
+    }
+
+    if user_profile.openai_plan_usd > 0.0 {
+        combined_plan += user_profile.openai_plan_usd;
+        let roi =
+            fleethud_core::pricing::calculate_plan_roi(openai_spend, user_profile.openai_plan_usd);
+        roi_by_provider.push(json!({
+            "provider": "OpenAI (Codex)",
+            "plan_usd": user_profile.openai_plan_usd,
+            "spend_usd": openai_spend,
+            "multiplier": roi.multiplier,
+            "net_savings_usd": roi.net_savings_usd,
+        }));
+    }
+
+    if user_profile.google_plan_usd > 0.0 {
+        combined_plan += user_profile.google_plan_usd;
+        let roi =
+            fleethud_core::pricing::calculate_plan_roi(google_spend, user_profile.google_plan_usd);
+        roi_by_provider.push(json!({
+            "provider": "Google (Antigravity)",
+            "plan_usd": user_profile.google_plan_usd,
+            "spend_usd": google_spend,
+            "multiplier": roi.multiplier,
+            "net_savings_usd": roi.net_savings_usd,
+        }));
+    }
+
+    let combined_roi_calc =
+        fleethud_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
+    let combined_roi = json!({
+        "provider": "All Plans (Combined)",
+        "plan_usd": combined_plan,
+        "spend_usd": report.total_cost_usd,
+        "multiplier": combined_roi_calc.multiplier,
+        "net_savings_usd": combined_roi_calc.net_savings_usd,
+    });
+
+    let total_pages = total_count.div_ceil(limit);
+
+    Ok((
+        cors_headers(),
+        Json(json!({
+            "timeline": report,
+            "user_profile": user_profile,
+            "roi_by_provider": roi_by_provider,
+            "combined_roi": combined_roi,
+            "quota": quota,
+            "sessions": sessions,
+            "total_count": total_count,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages.max(1),
+            "active_count": active_count,
+            "custom_pricing": custom_pricing,
+        })),
+    ))
 }
 
 #[cfg(test)]

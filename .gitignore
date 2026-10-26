@@ -6,6 +6,7 @@
 node_modules/
 dist/
 web/build/
+web/.next/
 
 # Tauri
 apps/tray/src-tauri/target/
@@ -26,6 +27,8 @@ Thumbs.db
 *.log
 .env
 .env.local
+**/.env
+**/.env.local
 *.pem
 *.key
 

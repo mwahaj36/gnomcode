@@ -45,6 +45,13 @@ impl SourceAdapter for CodexAdapter {
         let text = String::from_utf8_lossy(chunk);
         let mut current_session: Option<Session> = None;
 
+        if self.active_model.is_none() {
+            self.active_model.clone_from(&ctx.fallback_model);
+        }
+
+        let default_cwd = ctx.fallback_cwd.as_deref().unwrap_or("/unknown");
+        let default_project = Project::from_origin(None, default_cwd, None);
+
         for raw_line in text.lines() {
             let line = raw_line.trim();
             if line.is_empty() {
@@ -71,12 +78,22 @@ impl SourceAdapter for CodexAdapter {
                 continue;
             };
 
+            if self.raw_session_id.is_none() {
+                if let Some(sid) = payload
+                    .get("session_id")
+                    .or_else(|| payload.get("thread_id"))
+                    .and_then(Value::as_str)
+                {
+                    self.raw_session_id = Some(sid.to_owned());
+                }
+            }
+
             if line_type == "session_meta" {
                 let raw_sid = payload
                     .get("session_id")
                     .or_else(|| payload.get("id"))
                     .and_then(Value::as_str)
-                    .unwrap_or_else(|| fallback_id_from_path(&ctx.source_path));
+                    .unwrap_or_else(|| codex_session_id_from_path(&ctx.source_path));
                 self.raw_session_id = Some(raw_sid.to_owned());
 
                 let model = payload
@@ -134,62 +151,109 @@ impl SourceAdapter for CodexAdapter {
                     started_at: ts,
                     last_event_at: ts,
                 });
-            } else if line_type == "event_msg"
-                && payload.get("type").and_then(Value::as_str) == Some("token_count")
-            {
+            } else {
                 let raw_sid = self
                     .raw_session_id
                     .as_deref()
-                    .unwrap_or_else(|| fallback_id_from_path(&ctx.source_path));
+                    .unwrap_or_else(|| codex_session_id_from_path(&ctx.source_path));
                 let session_id = Session::compose_id(AgentId::Codex, raw_sid);
-                let dedup_key = format!("{raw_sid}:{ordinal}");
 
-                if let Some(sess) = &mut current_session {
-                    sess.last_event_at = ts;
+                if batch.projects.is_empty() {
+                    batch.projects.push(default_project.clone());
                 }
 
-                if self.seen_dedup_keys.insert(dedup_key.clone()) {
-                    if let Some(info) = payload.get("info").and_then(Value::as_object) {
-                        if let Some(last) = info.get("last_token_usage").and_then(Value::as_object)
-                        {
-                            let model = self
-                                .active_model
-                                .as_deref()
-                                .or(ctx.fallback_model.as_deref())
-                                .unwrap_or("gpt-codex");
-                            let context_win =
-                                info.get("model_context_window").and_then(Value::as_u64);
-                            let total_ctx = info
-                                .get("total_token_usage")
-                                .and_then(|t| t.get("total_tokens"))
-                                .and_then(Value::as_u64);
-                            let record = build_codex_usage(
-                                dedup_key,
-                                session_id.clone(),
-                                ts,
-                                model,
-                                last,
-                                context_win,
-                                total_ctx,
-                            );
-                            batch.usage_records.push(record);
+                let sess = current_session.get_or_insert_with(|| Session {
+                    id: session_id.clone(),
+                    agent: AgentId::Codex,
+                    surface: Surface::DesktopApp,
+                    project_id: default_project.id.clone(),
+                    parent_session_id: None,
+                    model: self.active_model.clone(),
+                    title: None,
+                    state: SessionState::Thinking,
+                    pid: None,
+                    started_at: ts,
+                    last_event_at: ts,
+                });
+                sess.last_event_at = ts;
+                sess.state = SessionState::Thinking;
+
+                let turn_model = payload.get("model").and_then(Value::as_str).or_else(|| {
+                    payload
+                        .get("thread_settings")
+                        .and_then(|ts_obj| ts_obj.get("model"))
+                        .and_then(Value::as_str)
+                });
+                if let Some(m) = turn_model {
+                    if !m.trim().is_empty() {
+                        self.active_model = Some(m.to_owned());
+                        sess.model = Some(m.to_owned());
+                    }
+                }
+
+                let turn_cwd = payload.get("cwd").and_then(Value::as_str).or_else(|| {
+                    payload
+                        .get("thread_settings")
+                        .and_then(|ts_obj| ts_obj.get("cwd"))
+                        .and_then(Value::as_str)
+                });
+                if let Some(cwd_str) = turn_cwd {
+                    let proj = Project::from_origin(None, cwd_str, None);
+                    if !batch.projects.iter().any(|p| p.id == proj.id) {
+                        batch.projects.push(proj.clone());
+                    }
+                    sess.project_id = proj.id;
+                }
+
+                if line_type == "event_msg"
+                    && payload.get("type").and_then(Value::as_str) == Some("token_count")
+                {
+                    let dedup_key = format!("{raw_sid}:{ordinal}");
+
+                    if self.seen_dedup_keys.insert(dedup_key.clone()) {
+                        if let Some(info) = payload.get("info").and_then(Value::as_object) {
+                            if let Some(last) =
+                                info.get("last_token_usage").and_then(Value::as_object)
+                            {
+                                let model = self
+                                    .active_model
+                                    .as_deref()
+                                    .or(ctx.fallback_model.as_deref())
+                                    .unwrap_or("gpt-codex");
+                                let context_win =
+                                    info.get("model_context_window").and_then(Value::as_u64);
+                                let total_ctx = info
+                                    .get("total_token_usage")
+                                    .and_then(|t| t.get("total_tokens"))
+                                    .and_then(Value::as_u64);
+                                let record = build_codex_usage(
+                                    dedup_key,
+                                    session_id.clone(),
+                                    ts,
+                                    model,
+                                    last,
+                                    context_win,
+                                    total_ctx,
+                                );
+                                batch.usage_records.push(record);
+                            }
                         }
                     }
-                }
 
-                if let Some(rl) = payload.get("rate_limits").and_then(Value::as_object) {
-                    let (snapshots, is_limited) = parse_codex_rate_limits(ts, rl);
-                    if is_limited {
-                        batch.activity_events.push(ActivityEvent {
-                            session_id,
-                            timestamp: ts,
-                            kind: ActivityKind::RateLimited,
-                            tool_name: None,
-                            summary_redacted: Some("Rate limit reached".to_owned()),
-                            duration_ms: None,
-                        });
+                    if let Some(rl) = payload.get("rate_limits").and_then(Value::as_object) {
+                        let (snapshots, is_limited) = parse_codex_rate_limits(ts, rl);
+                        if is_limited {
+                            batch.activity_events.push(ActivityEvent {
+                                session_id,
+                                timestamp: ts,
+                                kind: ActivityKind::RateLimited,
+                                tool_name: None,
+                                summary_redacted: Some("Rate limit reached".to_owned()),
+                                duration_ms: None,
+                            });
+                        }
+                        batch.quota_snapshots.extend(snapshots);
                     }
-                    batch.quota_snapshots.extend(snapshots);
                 }
             }
         }
@@ -305,4 +369,19 @@ fn parse_codex_rate_limits(
         }
     }
     (out, is_rate_limited)
+}
+
+/// Extracts the 36-char session UUID from a Codex rollout filename
+/// (`rollout-YYYY-MM-DDTHH-MM-SS-<uuid>.jsonl`), or falls back to the file stem.
+#[must_use]
+pub fn codex_session_id_from_path(path: &str) -> &str {
+    let stem = fallback_id_from_path(path);
+    if stem.len() >= 36 {
+        let candidate = &stem[stem.len() - 36..];
+        let bytes = candidate.as_bytes();
+        if bytes[8] == b'-' && bytes[13] == b'-' && bytes[18] == b'-' && bytes[23] == b'-' {
+            return candidate;
+        }
+    }
+    stem
 }
