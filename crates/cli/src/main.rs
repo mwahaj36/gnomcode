@@ -290,14 +290,10 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         Ok(res) => res,
         Err(fleethud_daemon::Error::AlreadyRunning) => {
             if let Some(existing) = fleethud_daemon::read_daemon_info() {
-                let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| {
-                    format!(
-                        "https://fleethud.vercel.app/console?token={}&port={}",
-                        existing.token, existing.port
-                    )
-                });
+                let local_url = format!("http://127.0.0.1:{}/?token={}", existing.port, existing.token);
+                let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
                 println!("FleetHUD is already active (PID {}).", existing.pid);
-                println!("Opened Mission Control Console: {console_url}");
+                println!("Opened Native Mission Control Console: {console_url}");
                 if open {
                     open_browser(&console_url);
                 }
@@ -326,19 +322,13 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         .await
         .context(format!("failed to bind loopback TCP listener on {addr}"))?;
 
-    let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| {
-        format!(
-            "https://fleethud.vercel.app/console?token={}&port={port}",
-            info.token
-        )
-    });
-    let local_url = format!("http://127.0.0.1:{port}/console?token={}", info.token);
+    let local_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
+    let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
     println!("=== FLEETHUD DAEMON STARTED ===");
     println!("Status: Running");
     println!("Loopback Port: {port}");
     println!("PID: {}", info.pid);
-    println!("Next.js Console: {console_url}");
-    println!("Local Fallback:  {local_url}");
+    println!("Native Console: {console_url}");
     println!("Press Ctrl+C to terminate the daemon.");
 
     if open {
@@ -354,9 +344,24 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
 
 fn open_browser(url: &str) {
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd")
-        .args(["/C", "start", url])
-        .spawn();
+    {
+        let app_arg = format!("--app={url}");
+        let edge_ok = std::process::Command::new("msedge")
+            .args([&app_arg, "--window-size=1280,850"])
+            .spawn()
+            .is_ok();
+        if !edge_ok {
+            let chrome_ok = std::process::Command::new("chrome")
+                .args([&app_arg, "--window-size=1280,850"])
+                .spawn()
+                .is_ok();
+            if !chrome_ok {
+                let _ = std::process::Command::new("cmd")
+                    .args(["/C", "start", url])
+                    .spawn();
+            }
+        }
+    }
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(url).spawn();
     #[cfg(target_os = "linux")]
