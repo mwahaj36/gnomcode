@@ -7,10 +7,10 @@
 
 use axum::{
     Router,
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Json},
-    routing::get,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode, header},
+    response::{IntoResponse, Json, Redirect},
+    routing::{get, post},
 };
 use fleethud_store::{Database, UserProfile};
 use serde::{Deserialize, Serialize};
@@ -61,14 +61,20 @@ pub struct HealthResponse {
 }
 
 const CONSOLE_HTML: &str = include_str!("console.html");
+const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
+const FLEETHUD_SVG: &str = include_str!("../../../web/public/fleethud.svg");
 
 /// Builds the axum router for FleetHUD local API and embedded console.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(console_handler))
         .route("/console", get(console_handler))
+        .route("/favicon.ico", get(favicon_handler))
+        .route("/fleethud.svg", get(svg_icon_handler))
+        .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
+        .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/quota", get(quota_handler))
         .route(
@@ -95,6 +101,52 @@ pub fn build_router(state: AppState) -> Router {
 
 async fn console_handler() -> impl IntoResponse {
     axum::response::Html(CONSOLE_HTML)
+}
+
+async fn favicon_handler() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON_ICO)
+}
+
+async fn svg_icon_handler() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/svg+xml")], FLEETHUD_SVG)
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct AuthCallbackQuery {
+    session: Option<String>,
+}
+
+async fn auth_callback_handler(
+    State(state): State<AppState>,
+    Query(params): Query<AuthCallbackQuery>,
+) -> impl IntoResponse {
+    if let Some(session_str) = params.session {
+        let trimmed = session_str.trim();
+        if !trimmed.is_empty() {
+            let home = fleethud_platform::fleethud_home();
+            let session_path = home.join("session.json");
+            let _ = std::fs::write(session_path, trimmed);
+        }
+    }
+    Redirect::to(&format!("/?token={}", state.bearer_token))
+}
+
+async fn focus_session_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    if let Ok(Some(target)) = db.get_session_focus_target(&id) {
+        let focused = target.pid.is_some_and(fleethud_platform::bring_to_front);
+        if !focused {
+            if let Some(path) = target.repo_root {
+                let _ = fleethud_platform::focus_project_in_editor(&path);
+            }
+        }
+    }
+    Ok(Json(json!({ "ok": true })))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
