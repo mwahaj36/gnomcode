@@ -255,6 +255,8 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | **Tray Badge Visibility** | Small 7.5pt badge was illegible when downscaled to 16x16 by Windows taskbar | Enlarged badge circle to 18x18 at (13,13), switched font to Arial 9.5pt Bold, and enabled `SingleBitPerPixelGridFit` for sharp sub-pixel contrast. |
 | **Tray Context Menu** | WinForms default menu used blue gradient highlights and lacked padding; user requested square theme | Created `DarkMenuColorTable` in `scripts/tray.ps1` with `#0d1117` solid background, 1px `#30363d` hairline border, and `#21262d` dark hover highlight. Strictly maintained square geometry. Removed redundant token/pin items. |
 | **Windows Compilation** | `aws-lc-sys` failed on Windows MinGW with undefined `nanosleep64` | Switched `reqwest` in `Cargo.toml` to `native-tls` (SChannel on Windows), eliminating C crypto dependencies and linking cleanly. |
+| **Add or Remove Programs** | Windows lacked uninstaller entry in Settings / Control Panel | Added dual-mode uninstaller in `scripts/Setup.cs` registering `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FleetHUD` with `DisplayName`, `DisplayVersion`, `Publisher`, `DisplayIcon`, and `UninstallString` (`FleetHUD-Uninstall.exe --uninstall`). Cleanly terminates services, removes autostart, cleans PATH, removes shortcuts, and purges files. |
+| **Favicon & Web Icons** | Web favicon needed sync with approved 0.65x geometry | Copied approved 0.65x icon to `web/app/favicon.ico`, `web/public/favicon.ico`, and added explicit `icons` metadata in `web/app/layout.tsx`. |
 
 ### 3. Verification & Quality Gate
 - `cargo test -p fleethud-core -p fleethud-adapters -p fleethud-store`: 32 tests passed with 0 failures.
