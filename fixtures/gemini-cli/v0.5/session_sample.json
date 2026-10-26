@@ -1,0 +1,35 @@
+{
+  "sessionId": "gem-sess-0001",
+  "projectHash": "proj_hash_0001",
+  "cwd": "/workspace/sample-project",
+  "gitBranch": "main",
+  "messages": [
+    {
+      "id": "msg-0001",
+      "type": "user",
+      "timestamp": "2026-10-26T10:00:00Z",
+      "content": "[REDACTED]"
+    },
+    {
+      "id": "msg-0002",
+      "type": "gemini",
+      "timestamp": "2026-10-26T10:00:04Z",
+      "model": "gemini-2.5-pro",
+      "tokens": {
+        "input": 12400,
+        "output": 380,
+        "cached": 8000,
+        "thoughts": 120,
+        "total": 12900
+      },
+      "toolCalls": [
+        {
+          "name": "read_file",
+          "args": {
+            "path": "src/main.rs"
+          }
+        }
+      ]
+    }
+  ]
+}
