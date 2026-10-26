@@ -516,6 +516,8 @@ erDiagram
 
 ### 3.15.1 Cloud session collectors
 
+The daemon automatically starts cloud collection when runtime identity is available, reusing its paired account. Other agents can bind `FLEETHUD_CLOUD_AGENT` and `FLEETHUD_CLOUD_SESSION_ID`. A new environment still needs secure account linking.
+
 `fleethud cloud-session` runs on Windows, macOS and Linux and registers cloud
 sessions in the existing local session model (`surface=cloud`). Codex runtime
 identity is detected; all other supported agents accept explicit native IDs.
