@@ -85,6 +85,8 @@ To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/r
 ## 8. Workflow
 
 - **Conventional Commits:** `feat(adapters): …`, `fix(ingest): …`, `docs(spec): …`, `chore(ci): …`. Scope = crate or area.
+- **Branch & PR workflow:** Never commit directly to `main`. Create a focused feature branch (`feat/...`, `fix/...`, `docs/...`), keep each commit small and atomic, verify locally with `.agents/skills/rust-quality-gate/scripts/check.ps1` (`check.sh` on Unix), and merge to `main` via a GitHub Pull Request (`gh pr create` + `gh pr merge`).
+- **Session log (`docs/SESSION_LOG.md`):** Update [`docs/SESSION_LOG.md`](docs/SESSION_LOG.md) in every phase/PR with goals, outcomes, problems encountered, root-cause fixes, and decisions made.
 - Keep each change small and focused. When a roadmap item finishes, update its status in SPEC §5.
 - New agent support → the `add-agent-adapter` skill. Releases → the `cut-release` skill.
 - **Installed engineering skills (`.agents/skills/`):**
