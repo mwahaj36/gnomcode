@@ -300,7 +300,7 @@ export default function ConsolePage() {
   if (!authChecked) {
     return (
       <div className="flex h-96 items-center justify-center font-mono text-xs text-muted">
-        Connecting to FleetHUD Mission Control...
+        Connecting to spawnt console...
       </div>
     );
   }
@@ -309,29 +309,29 @@ export default function ConsolePage() {
     <div className="max-w-7xl mx-auto px-6 py-8 font-sans">
       {/* Top Banner if not authenticated */}
       {!user ? (
-        <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
+        <div className="mb-6 p-4 rounded-md bg-card border border-primary/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[LOCAL VIEW]</span> Want cross-device cloud sync? Pair this app with your existing browser account or sign in.
+            <span className="text-primary font-semibold">[LOCAL VIEW]</span> Want cross-device cloud sync? Pair this app with your existing browser account or sign in.
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowTokenModal(true)}
-              className="px-3 py-1.5 bg-card border border-border text-foreground font-semibold rounded hover:border-accent text-xs"
+              className="px-3 py-1.5 bg-card border border-border text-foreground font-semibold rounded-sm hover:border-primary text-xs"
             >
               [Paste Browser Token]
             </button>
             <Link
               href="/auth"
-              className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
+              className="px-3 py-1.5 bg-primary text-dark font-semibold rounded-sm hover:opacity-90 transition-opacity text-xs"
             >
-              Sign In with GitHub &rarr;
+              Sign In &rarr;
             </Link>
           </div>
         </div>
       ) : (
-        <div className="mb-6 p-3 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
+        <div className="mb-6 p-3 rounded-md bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
             <span>Cloud Account: <strong className="text-foreground">{user.email}</strong></span>
           </div>
           <button
@@ -343,7 +343,7 @@ export default function ConsolePage() {
                 setTimeout(() => setCopyFeedback(""), 4000);
               }
             }}
-            className="px-3 py-1 bg-accent/20 border border-accent/40 text-accent font-semibold rounded hover:bg-accent hover:text-bg transition-colors text-xs"
+            className="px-3 py-1 bg-surface-2 border border-border text-primary font-semibold rounded-sm hover:border-primary transition-colors text-xs"
           >
             {copyFeedback || "[Copy Pairing Token for Desktop App]"}
           </button>
@@ -352,13 +352,13 @@ export default function ConsolePage() {
 
       {/* Pairing help when no desktop has uploaded a snapshot */}
       {!report && (
-        <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
+        <div className="mb-6 p-4 rounded-md bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. The desktop daemon uploads a private snapshot every minute while running.
+            <span className="text-primary font-semibold">[NOTICE]</span> Pair spawnt desktop with this account to monitor it from this device. The desktop daemon uploads a private snapshot every minute while running.
           </div>
           <a
             href="/downloads"
-            className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
+            className="px-3 py-1.5 bg-primary text-dark font-semibold rounded-sm hover:opacity-90 transition-opacity text-xs"
           >
             Download Desktop App &rarr;
           </a>
@@ -368,28 +368,28 @@ export default function ConsolePage() {
       {/* Quick Token Pairing Modal */}
       {showTokenModal && (
         <div className="fixed inset-0 z-50 bg-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full font-mono text-xs shadow-2xl">
+          <div className="bg-card border border-border rounded-md p-6 max-w-md w-full font-mono text-xs shadow-2xl">
             <div className="text-sm font-bold text-foreground mb-1">Quick Pair Desktop App</div>
             <p className="text-muted mb-3 text-[11px]">
-              If you signed into GitHub on your web browser (Chrome/Edge), click <strong>[Copy Desktop Token]</strong> there and paste it here to authenticate instantly without typing passwords.
+              If you signed in on your web browser, click <strong>[Copy Desktop Token]</strong> there and paste it here to authenticate instantly without typing passwords.
             </p>
             <textarea
               rows={4}
               value={quickTokenInput}
               onChange={(e) => setQuickTokenInput(e.target.value)}
               placeholder="Paste pairing token here..."
-              className="w-full bg-bg border border-border rounded p-2 text-foreground mb-3 focus:outline-none focus:border-accent"
+              className="w-full bg-bg border border-border rounded-sm p-2 text-foreground mb-3 focus:outline-none focus:border-primary"
             />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowTokenModal(false)}
-                className="px-3 py-1.5 bg-card border border-border rounded text-muted hover:text-foreground"
+                className="px-3 py-1.5 bg-card border border-border rounded-sm text-muted hover:text-foreground"
               >
                 Cancel
               </button>
               <button
                 onClick={applyQuickToken}
-                className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90"
+                className="px-3 py-1.5 bg-primary text-dark font-semibold rounded-sm hover:opacity-90"
               >
                 Connect Session
               </button>
@@ -401,13 +401,13 @@ export default function ConsolePage() {
       {/* Header Controls */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0d1117] p-1 flex items-center justify-center shadow-sm">
-            <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
+          <div className="w-8 h-8 p-0.5 flex items-center justify-center">
+            <img src="/spawnt.svg" alt="spawnt mark" className="w-full h-full object-contain" />
           </div>
           <div>
-            <div className="text-xl font-bold text-foreground">Mission Control Console</div>
+            <div className="text-xl font-bold text-foreground">spawnt console</div>
             <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
+              <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-primary animate-pulse" : "bg-muted"}`}></span>
               <span>Status: {connectedSource}</span>
             </div>
           </div>
@@ -415,7 +415,7 @@ export default function ConsolePage() {
         <div className="flex items-center gap-2">
           <Link
             href="/settings"
-            className="px-3 py-1.5 bg-card border border-border rounded text-xs text-foreground hover:border-accent"
+            className="px-3 py-1.5 bg-card border border-border rounded-sm text-xs text-foreground hover:border-primary"
           >
             [Manage Subscriptions & Pricing]
           </Link>

@@ -410,3 +410,32 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo fmt --all`: Clean.
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo test --workspace`: All tests pass with 0 failures across all crates.
+
+
+## Phase 3: Console redesigned shell and pages
+
+### 1. Goals
+- Replace the legacy monolithic dashboard with the Daytona-inspired app shell and information architecture.
+- Eliminate visual clutter by partitioning features into dedicated views: Overview, Sessions, Usage Analytics, Quota Limits, Projects, Automations, and Settings.
+- Implement an auto-hiding 56px left navigation rail that expands on hover/focus to 240px with pin support.
+- Embed the updated console directly into `crates/daemon/src/console.html` with bearer token injection, ensuring the web and native consoles are identical.
+
+### 2. Outcomes
+- `crates/daemon/src/console.html`: Rebuilt from scratch with spawnt tokens, Daytona styling, 4px/6px radii, dot-matrix canvas texture, and no external CDN dependencies:
+  - App shell with auto-hide / pin navigation rail (`MONITOR`, `ANALYZE`, `CONTROL`, `SYSTEM`).
+  - Sticky top bar with breadcrumbs, range/repo/agent filters, theme toggle, and Command Palette (`Ctrl+K`).
+  - Overview: Attention strip, 4-cell hairline KPI strip, interactive SVG stacked bar chart ("This week in token usage"), Quota summary meters, live sessions table, and top projects table.
+  - Sessions: State tags (`[RUN]`, `[WAIT]`, `[IDLE]`), sortable table, and slide-out session detail drawer with live token breakdown, context saturation bar, and focus/resume actions.
+  - Usage Analytics: Breakdown ledger, metric/group/interval switcher, and CSV export.
+  - Limits: Live quota pool progress bars with threshold colors (normal, amber at 80%, red at 95%) and reset countdowns.
+  - Projects: Repo attribution rollups with direct filter shortcuts.
+  - Automations: Resume queue and context relay state.
+  - Settings: Sidebar pin preference, theme selection, and privacy guarantees.
+  - Command Palette (`Ctrl+K` / `Cmd+K`) with keyboard navigation.
+- `crates/daemon/src/api.rs`: Updated `console_handler` to inject the daemon bearer token into `console.html` on serve, enabling instant zero-auth local access.
+- `web/app/console/page.tsx`: Updated cloud console UI to use spawnt branding, vector mark, and Daytona rectangular geometry.
+
+### 3. Verification & Quality Gate
+- `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
+- `cargo test --workspace`: All tests pass.
+- `npm run build --prefix web`: Next.js 15 production build passes cleanly.

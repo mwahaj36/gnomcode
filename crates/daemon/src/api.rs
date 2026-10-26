@@ -637,8 +637,9 @@ async fn guardrail_check_handler(Query(query): Query<GuardrailCheckQuery>) -> im
     Json(json!({ "blocked": blocked }))
 }
 
-async fn console_handler() -> impl IntoResponse {
-    axum::response::Html(CONSOLE_HTML)
+async fn console_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let html = CONSOLE_HTML.replace("__SPAWNT_DEFAULT_TOKEN__", &state.bearer_token);
+    ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], html)
 }
 
 async fn favicon_handler() -> impl IntoResponse {
