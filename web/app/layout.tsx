@@ -54,6 +54,13 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://fleethud.vercel.app",
   },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/fleethud.svg",
+  },
 };
 
 const jsonLd = {
