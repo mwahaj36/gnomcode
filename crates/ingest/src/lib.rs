@@ -138,10 +138,17 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             _ => None,
         };
 
+        let fallback_cwd = if file.agent == AgentId::Antigravity {
+            let conv_id = extract_conversation_id(&path_str);
+            db.find_antigravity_workspace(conv_id)
+        } else {
+            None
+        };
+
         let ctx = FileCtx {
             source_path: path_str.clone(),
             fallback_model,
-            fallback_cwd: None,
+            fallback_cwd,
         };
 
         let mut adapter: Box<dyn SourceAdapter> = match file.agent {

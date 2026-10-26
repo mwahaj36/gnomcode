@@ -263,6 +263,54 @@ pub fn attach_parent_console() {
 #[cfg(not(target_os = "windows"))]
 pub fn attach_parent_console() {}
 
+/// Dispatches a window focus request for a process ID across OS platforms (`SPEC §3.13`).
+///
+/// Returns `true` if a focus attempt was dispatched, or `false` if unsupported.
+#[must_use]
+pub fn bring_to_front(pid: u32) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let script =
+            format!("$wshell = New-Object -ComObject Wscript.Shell; $wshell.AppActivate({pid})");
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .spawn();
+        true
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "tell application \"System Events\" to set frontmost of (every process whose unix id is {pid}) to true"
+        );
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn();
+        true
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let pid_str = pid.to_string();
+        let _ = std::process::Command::new("wmctrl")
+            .args(["-a", &pid_str])
+            .spawn();
+        true
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+/// Brings the target project to the foreground in VS Code / Cursor / Windsurf (`SPEC §3.13`).
+#[must_use]
+pub fn focus_project_in_editor(root_path: &str) -> bool {
+    let _ = std::process::Command::new("code")
+        .args(["-r", root_path])
+        .spawn();
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::{open_shared_read, read_from_offset};

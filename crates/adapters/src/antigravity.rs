@@ -271,6 +271,7 @@ pub fn extract_workspace_from_text(content: &str) -> Option<String> {
     for marker in [
         "Active Workspaces:\n- ",
         "Active Workspaces:\r\n- ",
+        "Active Workspaces: - ",
         "Command Working Directory: ",
     ] {
         if let Some(idx) = content.find(marker) {
@@ -278,6 +279,15 @@ pub fn extract_workspace_from_text(content: &str) -> Option<String> {
             let line = content[start..].lines().next().unwrap_or("").trim();
             if !line.is_empty() && (line.contains('/') || line.contains('\\')) {
                 return Some(line.to_owned());
+            }
+        }
+    }
+    if let Some(idx) = content.find("RULE[") {
+        let start = idx + 5;
+        if let Some(end) = content[start..].find(']') {
+            let path_str = &content[start..start + end];
+            if let Some(root) = find_repo_root_from_path(path_str) {
+                return Some(root);
             }
         }
     }
