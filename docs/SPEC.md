@@ -102,11 +102,11 @@ Verified against real files on 2026-10-26 unless marked *(verify)*.
 
 | Agent | Tier | Source | Tokens | Model | Quota | Live state |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Claude Code** (CLI + IDE) | A | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | exact (incl. 5m/1h cache-write split) | Yes | estimated (opt-in: API) | heuristic → exact with hooks |
-| **Codex CLI** | A | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`) | exact (`last_token_usage`) | Yes | **exact** (`rate_limits` 5h + weekly) | heuristic |
-| **Antigravity** (app / IDE / CLI) | A | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | exact per `PLANNER_RESPONSE` | Yes extracted from `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps | per-model pool (`limit_id` per model family: Claude, Gemini, Fable, etc.) | heuristic |
-| **Gemini CLI** | B | `~/.gemini/tmp/<hash>/chats/` *(verify)* | *(verify)* | *(verify)* | unknown | heuristic |
-| **Cline / Roo Code** | B | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | exact (`api_req_started`) | Yes | n/a (API) | heuristic |
+| **Claude Code** (CLI + IDE) | A (M1) | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | exact (incl. 5m/1h cache-write split) | Yes | estimated (opt-in: API) | heuristic → exact with hooks |
+| **Codex CLI + ChatGPT / Codex Desktop App** | A (M1) | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`; `session_meta.payload.originator` distinguishes `"Codex Desktop"` vs CLI vs VS Code) | exact (`last_token_usage`) | Yes (`provenance.model`) | **exact** (`rate_limits` 5h + weekly per `limit_id`) | heuristic |
+| **Antigravity** (app / IDE / CLI) | A (M1) | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | exact per `PLANNER_RESPONSE` | Yes extracted from `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps | per-model pool (`limit_id` per model family: Claude, Gemini, Fable, etc.) | heuristic |
+| **Gemini CLI** | A (M1) | `~/.gemini/tmp/<hash>/chats/` + `~/.gemini/` | exact | Yes | per-model pool | heuristic |
+| **Cline / Roo Code** | B (M4) | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | exact (`api_req_started`) | Yes | n/a (API) | heuristic |
 | **Cursor** | C (experimental, opt-in) | `Cursor/User/globalStorage/state.vscdb` + undocumented usage API | partial | partial | api (fragile) | No |
 | **Aider** | C (opt-in) | `--analytics-log <file>` | exact | Yes | n/a | No |
 
@@ -234,27 +234,33 @@ pub trait SourceAdapter: Send {
 - Watcher (`notify` crate, 150 ms debounce) + **reconciler** (30 s scan of recently modified files) to survive FSEvents coalescing, `IN_Q_OVERFLOW`, `ReadDirectoryChangesW` overflow.
 - Linux: watch narrowly (e.g. Codex: today + yesterday dirs), fall back to polling on watch-limit errors, report in `doctor`.
 - WSL: detect distros (`wsl -l -q`), **poll** `\\wsl$\<distro>\home\*\.{claude,codex,gemini}` every 2 s.
-- Backfill: streaming parse, skip large fields (`serde::de::IgnoredAny`).
+- **Initial backfill (user-prompted, max 30 days):** On first run (or in Settings), the user chooses whether to backfill existing logs (`0 / 7 / 14 / 30 days`, capped at 30 days max). Backfill uses a streaming parser that skips large fields (`serde::de::IgnoredAny`).
 
 ### 3.6 Data model
 
 | Table | Key | Purpose |
 | :--- | :--- | :--- |
-| `project` | `id = hash(repo_root)` | repo root, display name, last branch |
-| `session` | `id = "<agent>:<native_id>"` | agent, surface, project, parent session, title, state, pid, started/last event |
-| `usage_record` | `dedup_key` | ts, model, input, output, reasoning, cache_read, cache_write_5m, cache_write_1h, context_tokens, cost_usd, cost_basis, pricing_version |
-| `activity_event` | autoinc | ts, kind (`prompt/tool_start/tool_end/approval_wait/error/subagent/rate_limited/auto_resume`), tool_name, summary_redacted, duration_ms |
+| `project` | `id = hash(canonical_key)` | Grouped by **normalized Git remote URL first** (merging clones/worktrees of the same repo into one project), falling back to normalized `repo_root` path if not a Git repo. Stores `canonical_key`, `repo_root`, `name`, `git_branch`. |
+| `session` | `id = "<agent>:<native_id>"` | agent, surface (`cli\|ide\|desktop_app`), project, `parent_session_id` (subagent hierarchy), title, state, pid, started/last event |
+| `usage_record` | `dedup_key` | ts, model, input, output, reasoning, cache_read, cache_write_5m, cache_write_1h, context_tokens, cost_usd, cache_savings_usd, cost_basis, pricing_version |
+| `activity_event` | autoinc | ts, kind (`prompt/tool_start/tool_end/approval_wait/error/subagent/rate_limited/auto_resume`), `tool_name`, `summary_redacted` (one-line summary e.g. `run_command: cargo test` with secrets stripped, ≤120 chars), `duration_ms` |
 | `quota_snapshot` | `(provider, limit_id, window, observed_at)` | `limit_id` (e.g. `codex`, `premium`, `claude-opus`, `gemini`, `fable`), used_pct, resets_at, plan, basis |
 | `source_file` | `path` | file identity, offset, partial-line buffer, adapter version |
-| `usage_daily` | `(day, project, agent, model)` | rollup |
+| `usage_daily` | `(day, project, agent, model)` | permanent daily rollup |
+| `user_profile` | singleton / `user_id` | Local & cloud-synced profile: `display_name`, `username`, `email`, `avatar_path_or_url`, `auth_providers` |
+| `user_settings` | singleton | User-configurable retention (`raw_turns_days` default `180`, `activity_days` default `30`, `backfill_days` max `30`), configured subscription plans & monthly prices, notification toggles & thresholds |
 | `rule`, `alert` | autoinc | Pro rules & fired alerts |
 | `resume_queue` | `session_id` | armed sessions: agent, cwd, resume_prompt, max_runs, runs, order, strategy used, status |
 
-Retention defaults: `usage_record` 180 days → rolled into `usage_daily`; `activity_event` 30 days.
+**Retention (user-configurable in Settings):**
+- Defaults: `usage_record` **180 days** (configurable: `30 / 90 / 180 / 365 / forever`), `activity_event` **30 days** (configurable: `7 / 14 / 30 / 90 / forever`), `usage_daily` rollups kept **forever** (until user runs "Clear local DB").
 
-**Derived values:**
-- Context size — Claude: `input + cache_read + cache_write` of latest turn; Codex: `last_token_usage.input_tokens / model_context_window`; Antigravity: `input_tokens`. Bloat warning at > 70% of window.
-- Plan value — Σ API-equivalent cost per billing window ÷ plan price.
+**Tracked Dashboard & CLI Metrics (v1):**
+1. **Live Active Sessions:** agent, surface (`cli` / `ide` / `desktop_app`), project, model, live state (`thinking` / `tool` / `awaiting_approval` / `idle` / `error`), and redacted one-line current tool action.
+2. **Per-Model Quota Pools & Reset Timers:** 5-hour and weekly windows per `(provider, limit_id)`, burn velocity, and lockout ETA.
+3. **Side-by-Side Cost & Quota + Subscription ROI ("Plan Value"):** always shows **both** API-Equivalent USD value (`$X`, plus cache savings) and Plan Quota `%` side-by-side. Users select their active subscription plans and monthly prices in Settings (e.g., Claude Max `$100`, ChatGPT Plus `$20`, Antigravity) to compute live **Subscription ROI** ($\sum \text{API-equivalent compute} \div \text{plan price}$).
+4. **Context Window Fill Level:** current turn tokens vs. model maximum context window (`model_context_window`), with bloat warning at `75%` (configurable).
+5. **Session & Subagent Hierarchy:** parent session → spawned subagents/sidechains, turn counts, and duration.
 
 ### 3.7 Session state machine
 
@@ -454,11 +460,17 @@ erDiagram
     }
 ```
 
-#### B. Device Pairing & Auth Flow (`fleethud login`)
-1. User runs `fleethud login` (or clicks **Connect Cloud** in the tray).
-2. Daemon starts an OAuth 2.0 **Device Authorization Flow** (or localhost PKCE callback) against Supabase Auth (GitHub / Google / Magic Link).
-3. On approval, a Supabase Edge Function mints a **scoped device token** (`fh_dev_...`), stores only `SHA-256(token)` in `devices`, and returns the raw token to the daemon (saved in `~/.fleethud/credentials.json` with `0600` / user-only ACL).
-4. Users can revoke any lost laptop from the web dashboard (`DELETE /devices/:id`).
+#### B. Accounts, Auth Methods & Device Pairing (`fleethud login`)
+- **Optional for Free/Local users:** FleetHUD runs 100% offline with a local profile by default. Signing into a FleetHUD account is required only when activating Pro, syncing across devices, or joining a Team.
+- **Supported Auth Methods (Supabase Auth):**
+  1. **GitHub OAuth** (1-click sign-in + auto-import avatar and username).
+  2. **Google OAuth** (1-click sign-in + auto-import avatar and username).
+  3. **Email + Password** (with email verification, password reset, and in-app email/password change).
+- **Pairing flow:**
+  1. User runs `fleethud login` (or signs in from the dashboard/tray).
+  2. Daemon starts an OAuth 2.0 **Device Authorization Flow** (or localhost PKCE callback) against Supabase Auth.
+  3. On approval, a Supabase Edge Function mints a **scoped device token** (`fh_dev_...`), stores only `SHA-256(token)` in `devices`, and returns the raw token to the daemon (saved in `~/.fleethud/credentials.json` with `0600` / user-only ACL).
+  4. Users can revoke any lost laptop from the web dashboard (`DELETE /devices/:id`).
 
 #### C. Sync Engine & Conflict-Free Idempotency
 - **Push cadence:** Every 60 seconds (when online) and on graceful daemon shutdown, the daemon rolls up dirty local `usage_record` rows into `(device_id, hour_bucket, project_key, agent, model)` buckets and performs an **idempotent `UPSERT`** (`ON CONFLICT DO UPDATE`) to `usage_hourly_sync`.
@@ -477,6 +489,26 @@ erDiagram
   - `billing`: manage subscription and invoices only.
 - **Seat management:** Lemon Squeezy / Paddle subscription quantity webhook → Supabase Edge Function updates `organizations.max_seats`. Inviting a member beyond `max_seats` increments the subscription seat count automatically (or prompts the owner).
 - **Team-wide guardrails:** When a `team_budget_rules` threshold is breached, a Postgres trigger / Edge Function fires the Slack/Discord webhook and sets a flag in the device's sync response; if `hard_stop_via_hooks = true`, connected daemons enforce the block on the next `PreToolUse` hook.
+
+### 3.16 User Profile, Settings & Notifications
+
+#### A. Six Settings Sections
+1. **Profile & Account:** avatar/PFP upload (stored locally and synced to Supabase Storage when signed in), display name, username, email change, password change, connected OAuth accounts (GitHub, Google), and account deletion.
+2. **Data & Storage:**
+   - Initial log backfill selector (prompted on first launch and adjustable in Settings: `0 / 7 / 14 / 30 days`, maximum 30 days).
+   - Raw turn retention (`30 / 90 / 180 / 365 days / forever`, default `180 days`).
+   - Activity feed retention (`7 / 14 / 30 / 90 days / forever`, default `30 days`).
+   - Actions: **Clear local DB** and **Export CSV / JSON**.
+3. **Subscriptions & Plans:** configure active plans and monthly prices (e.g., Claude Max `$100`, Claude Pro `$20`, ChatGPT Plus `$20`, ChatGPT Pro `$200`, Antigravity) used to compute live Subscription ROI ("Plan Value") and estimated quota pools.
+4. **Notifications & Guardrails:**
+   - All five desktop notification types enabled by default (individually toggleable, plus sound toggle):
+     1. Agent awaiting user approval / input for more than $X$ seconds (default `4s`).
+     2. Per-model quota pool hits `80%` / `95%` (warning) or `100%` (locked out).
+     3. Rate-limited quota pool has reset and is ready to use again.
+     4. Context window fill crosses `75%` (context bloat warning).
+     5. Session cost or turn count crosses a user-set guardrail threshold.
+5. **Devices, License & Team:** enter/manage Pro license, view/revoke paired devices, create/manage Team organization, invite/remove members, assign roles (`owner / admin / member / billing`), and configure Slack/Discord webhooks.
+6. **Agent Integrations & Paths:** custom log directory overrides, 1-click install/remove for Claude Code hooks (`fleethud integrate claude`), toggle experimental adapters, and toggle WSL polling.
 
 ---
 
@@ -517,11 +549,11 @@ flowchart LR
 
 | Deliverable | Exit criteria |
 | :--- | :--- |
-| `core`: domain types, pricing engine with bundled LiteLLM snapshot, redactor | Unit tests; redactor property tests |
-| `adapters`: Claude Code, Codex, Antigravity | Golden tests pass; dedup verified on resumed sessions |
-| `ingest`: tailer + checkpoints + reconciler (no daemon yet) | Kill-mid-import test: no double counts |
-| `store`: schema v1 + migrations | Migration test from empty DB |
-| `fleethud report` (daily/weekly/project/agent/model) and `fleethud status` (one-shot live view) | Matches ccusage totals for Claude within 1% on same data |
+| `core`: domain types, pricing engine with bundled LiteLLM snapshot, redactor, project canonicalization (Git remote URL -> path fallback) | Unit tests; redactor property tests |
+| `adapters`: Claude Code (CLI + VS Code), Codex (CLI + ChatGPT/Codex Desktop App), Antigravity (App/IDE/CLI), Gemini CLI | Golden tests pass; dedup verified on resumed sessions |
+| `ingest`: tailer + checkpoints + reconciler + user-configurable backfill (0–30 days max) | Kill-mid-import test: no double counts |
+| `store`: schema v1 (`project`, `session`, `usage_record`, `activity_event`, `quota_snapshot`, `source_file`, `usage_daily`, `user_profile`, `user_settings`) + migrations + configurable retention | Migration test from empty DB |
+| `fleethud report` (daily/weekly/project/agent/model, side-by-side API-equivalent USD + quota % + Plan Value ROI) and `fleethud status` (live sessions, subagent tree, context fill) | Matches ccusage totals for Claude within 1% on same data |
 | `fleethud doctor` | Lists detected agents, paths, parse-error rates |
 | Distribution: npm per-platform packages + archives on `fleethud-releases` + shell/PowerShell installers + EULA and third-party notices bundled | `npx fleethud report` works on fresh Win/mac/Linux machines |
 
