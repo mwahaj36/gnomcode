@@ -4,7 +4,7 @@
   "description": "Universal Flight Recorder & Real-time HUD for AI Coding Agents (Claude Code, Antigravity, Cursor, Cline)",
   "main": "bin/index.js",
   "bin": {
-    "fleethud": "./bin/index.js"
+    "fleethud": "bin/index.js"
   },
   "scripts": {
     "start": "node ./bin/index.js"
