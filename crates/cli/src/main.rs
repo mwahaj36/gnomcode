@@ -11,7 +11,9 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use fleethud_core::pricing::calculate_plan_roi;
 use fleethud_ingest::ingest_all;
-use fleethud_platform::{default_db_path, discover_agent_roots, fleethud_home};
+use fleethud_platform::{
+    attach_parent_console, default_db_path, discover_agent_roots, fleethud_home,
+};
 use fleethud_store::Database;
 use std::path::PathBuf;
 
@@ -27,7 +29,7 @@ struct Cli {
     db: Option<PathBuf>,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -69,10 +71,13 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    attach_parent_console();
+
     let cli = Cli::parse();
     let db_path = cli.db.unwrap_or_else(default_db_path);
+    let command = cli.command.unwrap_or(Commands::Dashboard { port: 41738 });
 
-    match cli.command {
+    match command {
         Commands::Status { limit } => cmd_status(&db_path, limit),
         Commands::Report { plan_usd } => cmd_report(&db_path, plan_usd),
         Commands::Doctor { network } => cmd_doctor(&db_path, network),
@@ -257,8 +262,27 @@ fn truncate_str(s: &str, max_len: usize) -> String {
 }
 
 async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<()> {
-    let (lock, info) = fleethud_daemon::DaemonLock::acquire(port)
-        .context("failed to acquire daemon single-instance lock (is another daemon running?)")?;
+    let (lock, info) = match fleethud_daemon::DaemonLock::acquire(port) {
+        Ok(res) => res,
+        Err(fleethud_daemon::Error::AlreadyRunning) => {
+            if let Some(existing) = fleethud_daemon::read_daemon_info() {
+                let dashboard_url = format!(
+                    "http://127.0.0.1:{}/?token={}",
+                    existing.port, existing.token
+                );
+                println!("FleetHUD is already active (PID {}).", existing.pid);
+                println!("Opened Mission Control: {dashboard_url}");
+                if open {
+                    open_browser(&dashboard_url);
+                }
+                return Ok(());
+            }
+            return Err(anyhow::anyhow!(
+                "daemon is already running but daemon.json could not be read"
+            ));
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     let orchestrator =
         fleethud_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
@@ -285,18 +309,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
     println!("Press Ctrl+C to terminate the daemon.");
 
     if open {
-        #[cfg(target_os = "windows")]
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", &dashboard_url])
-            .spawn();
-        #[cfg(target_os = "macos")]
-        let _ = std::process::Command::new("open")
-            .arg(&dashboard_url)
-            .spawn();
-        #[cfg(target_os = "linux")]
-        let _ = std::process::Command::new("xdg-open")
-            .arg(&dashboard_url)
-            .spawn();
+        open_browser(&dashboard_url);
     }
 
     axum::serve(listener, router)
@@ -304,4 +317,15 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         .context("daemon HTTP server terminated unexpectedly")?;
     drop(lock);
     Ok(())
+}
+
+fn open_browser(url: &str) {
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", url])
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
