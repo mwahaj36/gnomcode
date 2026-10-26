@@ -16,7 +16,7 @@ export default function DownloadsPage() {
       <div className="flex justify-between items-center pb-6 border-b border-border mb-10 flex-wrap gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-green/15 border border-green/30 text-green font-mono text-xs mb-2">
-            <span>Production Release &bull; v1.2.1</span>
+            <span>Production Release &bull; v1.3.0</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
             Download FleetHUD
@@ -54,8 +54,8 @@ export default function DownloadsPage() {
               Download Windows (.exe) &darr;
             </a>
             <div className="flex justify-between items-center text-[11px] text-muted mb-2 px-1">
-              <span>Standalone Installer (3.7 MB)</span>
-              <a href="/downloads/FleetHUD-v1.2.1-windows-x64.zip" download className="text-accent hover:underline">
+              <span>Standalone Installer (x64)</span>
+              <a href="/downloads/FleetHUD-v1.3.0-windows-x64.zip" download className="text-accent hover:underline">
                 Zip (.zip)
               </a>
             </div>
@@ -73,14 +73,14 @@ export default function DownloadsPage() {
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Mac</h2>
             <p className="text-xs text-muted leading-relaxed mb-6">
-              Universal binary (Apple Silicon M1/M2/M3/M4 & Intel) with Menubar status tray, local SQLite flight recorder, and launchd daemon.
+              macOS builds for Apple Silicon and Intel are pending a working macOS build runner. No verified v1.3.0 macOS package is available yet.
             </p>
           </div>
           <div>
             <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              curl -fsSL https://fleethud.vercel.app/sh | bash
+              macOS packages pending
             </div>
-            <div className="text-[11px] text-muted text-center">Homebrew formula & tarball available</div>
+            <div className="text-[11px] text-muted text-center">Native macOS packages pending</div>
           </div>
         </div>
 
@@ -92,14 +92,14 @@ export default function DownloadsPage() {
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Linux</h2>
             <p className="text-xs text-muted leading-relaxed mb-6">
-              POSIX compatible binary for Ubuntu, Debian, Fedora, Arch, and WSL2. Includes systemd user daemon unit.
+              CLI and local web daemon for Linux x86_64 and ARM64 (glibc 2.35+), including WSL2. Existing sessions and account pairing are preserved during updates.
             </p>
           </div>
           <div>
             <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
               curl -fsSL https://fleethud.vercel.app/sh | bash
             </div>
-            <div className="text-[11px] text-muted text-center">Debian .deb, RPM & AUR packages</div>
+            <div className="text-[11px] text-muted text-center">Verified tarball installation; .deb, RPM and AppImage packages are not published</div>
           </div>
         </div>
       </div>
@@ -113,10 +113,10 @@ export default function DownloadsPage() {
           <span className="text-xs text-green font-semibold">[CROSS-PLATFORM]</span>
         </div>
         <p className="text-xs text-muted mb-4">
-          For environments with Node.js installed, download and manage FleetHUD via npm:
+          The v1.3.0 npm package has not been published. Use the verified native installer or Linux installation command above.
         </p>
         <div className="bg-bg border border-border rounded-lg p-3.5 text-xs text-accent select-all">
-          npm install -g fleethud
+          Native downloads above include v1.3.0
         </div>
       </div>
     </div>
