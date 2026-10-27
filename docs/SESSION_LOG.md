@@ -466,3 +466,10 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Goal: bring the signed-in web console and shared marketing header/footer into the approved spawnt design while retaining the existing cloud data/auth path.
 - Outcome: added seven console destinations, dedicated Usage and Limits views, a responsive console shell, updated trust badges, and a system/light/dark footer control. Rebuilt the shared marketing and account headers and footer to match the spawnt visual language. API-equivalent pricing is labeled estimated.
 - Verification: `npm run build --prefix web` passed and `git diff --check` was clean. Desktop/narrow browser and keyboard/reduced-motion checks remain pending. This phase does not complete local console, native, icon, or installer redesign.
+
+## 2026-10-28 — spawnt local console destinations
+
+- Goal: align the daemon-served local console navigation and refresh states with the signed-in console while keeping its local API and bearer-token boundary.
+- Outcome: regrouped existing report, session, quota, account, settings, and Pro guardrail/relay features into Overview, Sessions, Usage, Limits, Projects, Automations, and Settings. Project rollups are explicitly unavailable because the local console API has no rollup view. Added focus and touch-target styling, local trust badges, connection/error states, and successful-update reporting. Reload now reflects failed data requests; Resync retains its authenticated reconcile call and reports an existing operation as in progress. Fixed a duplicate `url` declaration that prevented the embedded JavaScript from parsing.
+- Decision: keep the local HTML renderer and existing Rust data path; no new API or aggregation logic was needed. This PR stacks on the signed-in-console PR.
+- Verification: embedded JavaScript syntax and `git diff --check` passed. Rust quality gate, browser keyboard/reduced-motion review, and desktop/narrow two-theme visual review are pending. Native tray, icon assets, and installer redesign are outside this phase and remain required before the rollout is complete.
