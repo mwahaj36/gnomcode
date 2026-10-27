@@ -45,78 +45,49 @@ export default function AppNavbar() {
     setUser(null);
   };
 
+  const onConsole = pathname.startsWith("/console");
+  const onSettings = pathname.startsWith("/settings");
+
   return (
-    <header className="sp-app-header border-b border-border sticky top-0 z-50 font-mono text-xs">
-      <div className="max-w-7xl mx-auto px-6 h-13 flex items-center justify-between">
-        {/* Left: Cockpit Brand & Tabs */}
-        <div className="flex items-center gap-6">
-          <Link href="/console" className="flex items-center gap-2.5">
-            <span className="font-bold text-sm tracking-tight text-foreground font-sans">
-              spawnt
-            </span>
+    <header className="sp-app-header">
+      <div className="sp-app-header-inner">
+        <div className="sp-app-brand-nav">
+          <Link href="/console" className="sp-app-brand" aria-label="spawnt console">
+            <span className="sp-brand-mark" aria-hidden="true" />
+            <span>spawnt</span>
           </Link>
-
-          <div className="h-4 w-px bg-border"></div>
-
-          <nav className="flex items-center gap-1">
+          <nav className="sp-app-nav" aria-label="App navigation">
             <Link
               href="/console"
-              className={`px-3 py-1 rounded transition-colors ${
-                pathname === "/console"
-                  ? "bg-card text-foreground border border-border font-semibold"
-                  : "text-muted hover:text-foreground"
-              }`}
+              aria-current={onConsole ? "page" : undefined}
+              className={onConsole ? "selected" : ""}
             >
               Console
             </Link>
             <Link
               href="/settings"
-              className={`px-3 py-1 rounded transition-colors ${
-                pathname === "/settings"
-                  ? "bg-card text-foreground border border-border font-semibold"
-                  : "text-muted hover:text-foreground"
-              }`}
+              aria-current={onSettings ? "page" : undefined}
+              className={onSettings ? "selected" : ""}
             >
               Settings
             </Link>
-            <Link
-              href="/docs"
-              className="px-3 py-1 rounded text-muted hover:text-foreground transition-colors"
-            >
-              Docs &rarr;
-            </Link>
+            <Link href="/docs">Docs</Link>
           </nav>
         </div>
 
-        {/* Right: Live Sync Status Beacon & Account */}
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 text-[11px]">
-            <span
-              className={`w-2 h-2 ${
-                daemonLive ? "bg-green animate-pulse" : "bg-yellow"
-              }`}
-            ></span>
-            <span className="text-muted">
-              {daemonLive ? "127.0.0.1:41738 [LIVE]" : "Daemon Standby"}
-            </span>
+        <div className="sp-app-actions">
+          <div className={`sp-app-daemon ${daemonLive ? "is-live" : ""}`} aria-live="polite">
+            <span aria-hidden="true" />
+            <span>{daemonLive ? "DAEMON / LIVE" : "DAEMON / STANDBY"}</span>
           </div>
-
           <ThemeControl className="sp-app-theme" />
 
           {user ? (
-            <div className="flex items-center gap-3">
-              <Link
-                href="/settings"
-                className="text-muted hover:text-foreground font-semibold text-[11px]"
-              >
+            <div className="sp-app-account">
+              <Link href="/settings" title={user.email || "Account"}>
                 {user.email?.split("@")[0] || "Account"}
               </Link>
-              <button
-                onClick={handleSignOut}
-                className="text-red hover:underline text-[11px]"
-              >
-                Sign Out
-              </button>
+              <button type="button" onClick={handleSignOut}>Sign out</button>
             </div>
           ) : null}
         </div>

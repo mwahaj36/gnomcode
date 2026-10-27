@@ -5,7 +5,7 @@ Status: the landing, shared marketing shell, pricing, platform-selectable downlo
 ## Brand and visual language
 
 - Display `spawnt` in lowercase. Keep internal `fleethud` identifiers until a separate migration phase.
-- Keep the Daytona-inspired structure: near-black canvas, thin borders, dense aligned grids, restrained uppercase mono labels, square badges, and the smoothly detaching marketing navbar. Replace the old green and blue accents.
+- Keep the Daytona-inspired structure: near-black canvas, thin borders, aligned grids, restrained uppercase mono labels, square controls, and the smoothly detaching marketing navbar. Use the marketing sans-led type hierarchy and open, divided sections in the console too.
 - Use the solid triangle-and-square mark from `web/public/spawnt-mark.svg` in `currentColor`, without a tile behind it. Red identifies primary actions, active state, and attention. Web and embedded console headers use the same mask asset; generated Windows icon assets and installer marks follow its geometry.
 - No emojis, decorative gradients, oversized pills, or color-only status indicators.
 
@@ -32,7 +32,7 @@ These values match the current landing CSS. Derived surfaces, borders, and text 
 
 Contrast ratios calculated from these hex values: primary on dark 5.37:1; primary on light 3.50:1; small red text on light 5.00:1; small red text on dark 6.93:1; dark text on primary 5.05:1. Use `--primary-text` for small red text on light backgrounds. Recheck contrast wherever a surface changes.
 
-Status and trust semantics stay separate from the brand palette. Pair every color with a label: `[RUN]`, `[WAIT]`, `[IDLE]`, `[LIMIT]`, `[ERR]`. Number trust badges are `EXACT`, `EST`, `API`, or `UNKNOWN`. A quota warning may use amber, but amber is not a brand accent. Never imply an estimate is exact.
+Status and trust semantics stay separate from the brand palette. Use plain status labels such as `RUN`, `WAIT`, `IDLE`, `LIMIT`, and `ERR`, without square-bracket wrappers. Number trust labels are `EXACT`, `EST`, `API`, or `UNKNOWN`. A quota warning may use amber, but amber is not a brand accent. Never imply an estimate is exact.
 
 ## Type, shape, and layout
 
@@ -40,6 +40,7 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 - Body type is generally 14/20 or 16/24; section headings 28/36 or 40/44; marketing hero up to 56/60. Prefer weights 400 and 600.
 - Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64 px. Controls need at least a 44 px touch target.
 - Radius: 4 px for controls and square badges, 6 px for panels and the floating navbar, 0 for grid cells and full-bleed regions. Do not use pill-shaped controls or badges. Borders are 1 px. Shadows belong only on floating layers.
+- Shared action buttons use a 44 px target, square corners, the same mono label style, and consistent outline or red primary treatment. Tabs, theme cycling, and icon-only mobile controls keep their distinct interaction patterns.
 - Console content uses a compact hairline grid: KPIs share borders and tables use row separators. Avoid floating dashboard cards.
 - Use geometric SVG icons and self-hosted agent marks in `web/public/agents/`. Labels remain readable without icons.
 
@@ -56,12 +57,13 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 
 - Marketing header: mark and `spawnt`, Product, Agents, Docs, Pricing, `Log in`, and primary Download. `Log in` goes to `/auth`; the landing's console links also pass through `/auth`, which redirects signed-in users to `/console`.
 - Theme selection is shared across all web routes and both consoles. The marketing footer keeps its minimal `Theme / system` control; the signed-in console, auth page, and daemon-served local console expose the same cycle. It cycles System, Light, Dark. System follows `prefers-color-scheme` and is the default. Stored overrides apply before first paint.
-- The signed-in web console and local daemon console need the same visual hierarchy but keep distinct data and auth paths. Share presentation code as described in the rollout plan.
+- The signed-in web console and local daemon console use the marketing site's sans-led hierarchy, open divided sections, and shared theme tokens, while keeping distinct data and auth paths. Share presentation code as described in the rollout plan.
+- Native console window uses the same large sans-led page heading, canonical mark, compact status line, and full-width hairline divider. Native actions and data remain local.
 - Native tray echoes these tokens and status labels, with the platform fallbacks in SPEC. It is a compact control surface.
 
 ## Current implementation boundary
 
-The landing, shared site shell, pricing, platform-selectable downloads, redesigned documentation and Auth, Settings, and both consoles use canonical spawnt tokens. Documentation uses the same sans-led hierarchy, restrained mono labels, open rows, hairline dividers, and square controls as the marketing surfaces; it should not resemble a raw Markdown export. Settings uses open sections, labels local/cloud state distinctly, and marks user-configured and unknown rates accurately. Auth keeps its Supabase and callback flows while using accessible mode controls, clear pending/error states, and theme-aware account forms. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Tray scripts and installers remain migration targets.
+The landing, shared site shell, pricing, platform-selectable downloads, redesigned documentation and Auth, Settings, and both consoles use canonical spawnt tokens. Documentation uses the same sans-led hierarchy, restrained mono labels, open rows, hairline dividers, and square controls as the marketing surfaces; it should not resemble a raw Markdown export. Settings uses open sections, labels local/cloud state distinctly, and marks user-configured and unknown rates accurately. Auth keeps its Supabase and callback flows while using accessible mode controls, clear pending/error states, and theme-aware account forms. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. Both use matching headings, status hierarchy, divided sections, and control treatment. The native console window uses the same heading, mark, status line, and divider with local actions and data. The web console distinguishes unknown values from zero and reports reload success only after both cloud reads succeed. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Tray scripts and installers remain migration targets.
 
 ## Landing console tour
 
