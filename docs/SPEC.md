@@ -536,6 +536,13 @@ outputs, or credentials are published. This does not provide access to hidden
 provider-hosted transcripts or token totals. Deployment and provider limitations
 are documented in [Cloud sessions](./CLOUD_SESSIONS.md); see ADR 0004.
 
+The signed-in and daemon-served consoles use the shared spawnt marketing visual
+system: sans-led page hierarchy, open sections with hairline dividers, square
+controls, plain status labels, and the same theme tokens. The native console
+window uses the same large heading, brand mark, status line, and divider while
+keeping its actions and data local. Authentication, data sources, and refresh
+behavior remain independent between the cloud and local consoles.
+
 ### 3.16 User Profile, Settings & Notifications
 
 #### A. Six Settings Sections
