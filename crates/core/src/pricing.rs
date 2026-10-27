@@ -499,6 +499,36 @@ pub fn all_model_pricings() -> &'static [ModelPricing] {
     ALL_MODELS
 }
 
+/// Checks whether `word` appears in `text` bounded by non-alphanumeric, non-period characters
+/// or start/end of string, preventing false substring collisions.
+fn has_bounded_word(text: &str, word: &str) -> bool {
+    let mut start = 0;
+    while let Some(idx) = text[start..].find(word) {
+        let abs_idx = start + idx;
+        let end_idx = abs_idx + word.len();
+
+        let prev_ok = if abs_idx == 0 {
+            true
+        } else {
+            let prev_char = text[..abs_idx].chars().next_back().unwrap_or(' ');
+            !prev_char.is_alphanumeric() && prev_char != '.'
+        };
+
+        let next_ok = if end_idx == text.len() {
+            true
+        } else {
+            let next_char = text[end_idx..].chars().next().unwrap_or(' ');
+            !next_char.is_alphanumeric() && next_char != '.'
+        };
+
+        if prev_ok && next_ok {
+            return true;
+        }
+        start = abs_idx + 1;
+    }
+    false
+}
+
 /// Resolves a raw model identifier from any supported agent log to its
 /// [`ModelPricing`] entry.
 #[must_use]
@@ -578,27 +608,7 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         return Some(CLAUDE_HAIKU_3);
     }
 
-    // 4. OpenAI Sol / Astra / Luna Frontier models
-    if lower.contains("6.1-sol") || lower.contains("6.1 sol") || lower.contains("6-1-sol") {
-        return Some(OPENAI_GPT_6_1_SOL);
-    }
-    if lower.contains("6-sol") || lower.contains("6 sol") {
-        return Some(OPENAI_GPT_6_SOL);
-    }
-    if lower.contains("astra") {
-        return Some(OPENAI_GPT_6_ASTRA);
-    }
-    if lower.contains("6-luna") || lower.contains("6 luna") {
-        return Some(OPENAI_GPT_6_LUNA);
-    }
-    if lower.contains("5.6-luna") || lower.contains("5.6 luna") || lower.contains("5-6-luna") {
-        return Some(OPENAI_GPT_5_6_LUNA);
-    }
-    if lower.contains("5-sol") || lower.contains("5 sol") || lower.contains("gpt-5") {
-        return Some(OPENAI_GPT_5_SOL);
-    }
-
-    // 5. Google Gemini models
+    // 4. Google Gemini models (evaluated before OpenAI to avoid generic mini/nano collisions)
     if lower.contains("fable") {
         return Some(GEMINI_FABLE);
     }
@@ -623,37 +633,61 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         }
         return Some(GEMINI_FLASH);
     }
-    if lower.contains("ultra") {
+    if (lower.contains("gemini") && lower.contains("ultra")) || has_bounded_word(&lower, "ultra") {
         return Some(GEMINI_ULTRA);
     }
     if lower.contains("gemini") {
         return Some(GEMINI_PRO_ARGON);
     }
 
+    // 5. OpenAI Sol / Astra / Luna Frontier models
+    if lower.contains("6.1-sol") || lower.contains("6.1 sol") || lower.contains("6-1-sol") {
+        return Some(OPENAI_GPT_6_1_SOL);
+    }
+    if has_bounded_word(&lower, "6-sol") || lower.contains("6 sol") {
+        return Some(OPENAI_GPT_6_SOL);
+    }
+    if lower.contains("6-astra")
+        || lower.contains("6 astra")
+        || (lower.contains("astra") && lower.contains("gpt"))
+        || lower == "astra"
+    {
+        return Some(OPENAI_GPT_6_ASTRA);
+    }
+    if lower.contains("5.6-luna") || lower.contains("5.6 luna") || lower.contains("5-6-luna") {
+        return Some(OPENAI_GPT_5_6_LUNA);
+    }
+    if has_bounded_word(&lower, "6-luna") || lower.contains("6 luna") {
+        return Some(OPENAI_GPT_6_LUNA);
+    }
+    if lower.contains("5-sol") || lower.contains("5 sol") || has_bounded_word(&lower, "gpt-5") {
+        return Some(OPENAI_GPT_5_SOL);
+    }
+
     // 6. OpenAI Reasoning & Flagship models
-    if lower.contains("o3-mini") {
+    if lower.contains("o3-mini") || has_bounded_word(&lower, "o3-mini") {
         return Some(OPENAI_O3_MINI);
     }
-    if lower.contains("o3") {
+    if has_bounded_word(&lower, "o3") {
         return Some(OPENAI_O3);
     }
-    if lower.contains("o1-mini") {
+    if lower.contains("o1-mini") || has_bounded_word(&lower, "o1-mini") {
         return Some(OPENAI_O1_MINI);
     }
-    if lower.starts_with("o1") || lower.contains("-o1") {
+    if has_bounded_word(&lower, "o1") {
         return Some(OPENAI_O1);
     }
-    if lower.contains("4o-mini") || lower.contains("mini") || lower.contains("nano") {
+    if lower.contains("4o-mini")
+        || has_bounded_word(&lower, "mini")
+        || has_bounded_word(&lower, "nano")
+    {
         return Some(OPENAI_MINI);
     }
-    if lower.contains("gpt-4o") || lower.contains("4o") {
+    if lower.contains("gpt-4o") || has_bounded_word(&lower, "4o") {
         return Some(OPENAI_GPT_4O);
     }
-    if lower.contains("gpt-") || lower.contains("codex") || lower.starts_with("o4") {
+    if lower.contains("gpt-") || lower.contains("codex") || has_bounded_word(&lower, "o4") {
         return Some(OPENAI_CODEX_FRONTIER);
-    }
-    if lower.contains("pro") {
-        return Some(GEMINI_PRO_ARGON);
     }
 
     None
@@ -854,5 +888,70 @@ mod tests {
 
         let zero_plan = calculate_plan_roi(50.0, 0.0);
         assert!((zero_plan.multiplier - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn model_lookup_resolves_all_catalog_families_and_rejects_false_substring_collisions() {
+        use super::ALL_MODELS;
+
+        // 1. Every model family in the catalog must resolve without panic
+        for model in ALL_MODELS {
+            let res = lookup_model_pricing(model.family);
+            assert!(
+                res.is_some(),
+                "Family {:?} should resolve in lookup_model_pricing",
+                model.family
+            );
+        }
+
+        // 2. Exact version distinctions: gpt-5.6-luna must not be swallowed by 6-luna
+        let luna_5_6 = lookup_model_pricing("gpt-5.6-luna").expect("5.6-luna");
+        assert_eq!(luna_5_6.family, "openai-gpt-5-6-luna");
+
+        let luna_6 = lookup_model_pricing("gpt-6-luna").expect("6-luna");
+        assert_eq!(luna_6.family, "openai-gpt-6-luna");
+
+        let sol_6_1 = lookup_model_pricing("gpt-6.1-sol").expect("6.1-sol");
+        assert_eq!(sol_6_1.family, "openai-gpt-6-1-sol");
+
+        let sol_6 = lookup_model_pricing("gpt-6-sol").expect("6-sol");
+        assert_eq!(sol_6.family, "openai-gpt-6-sol");
+
+        // 3. Google Gemini Flash variants
+        let flash_med = lookup_model_pricing("Gemini 3.8 Flash (Medium)").expect("flash medium");
+        assert_eq!(flash_med.family, "gemini-flash");
+        assert_eq!(flash_med.context_window, 1_000_000);
+
+        let flash_high = lookup_model_pricing("Gemini 3.8 Flash (High)").expect("flash high");
+        assert_eq!(flash_high.family, "gemini-3-8-flash-high");
+
+        let flash_def = lookup_model_pricing("Gemini 3.8 Flash (Default)").expect("flash default");
+        assert_eq!(flash_def.family, "gemini-3-8-flash-default");
+
+        // 4. False substring collision guards: non-matching strings must return None (Unknown, $0)
+        let false_positives = [
+            "turbo3",
+            "combo3",
+            "macro3",
+            "echo3",
+            "prompt-eval",
+            "production-app",
+            "protocol-v1",
+            "admin-model",
+            "minimax-01",
+            "ultravox-v0.5",
+            "deepseek-v3",
+            "qwen-2.5-coder-32b",
+            "mistral-large-2411",
+            "custom-local-model",
+        ];
+        for fp in false_positives {
+            assert_eq!(
+                lookup_model_pricing(fp),
+                None,
+                "False positive {:?} must not be matched to any catalog model",
+                fp
+            );
+        }
     }
 }
