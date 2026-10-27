@@ -62,3 +62,8 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 ## Current implementation boundary
 
 The landing, shared site shell, pricing and downloads pages, and both consoles use canonical spawnt tokens. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Docs/auth/settings refinements, tray scripts, and installers are still migration targets.
+
+## Landing console tour
+
+- Keep overview KPI labels separate from values and trust markers, with shared alignment across all three metrics.
+- Use consistent grid tracks for every row in a tour table so agent, state, value, and trust columns remain aligned. On narrow screens, hide the value column uniformly rather than allowing content-driven track widths.

@@ -154,7 +154,7 @@ export default function LandingPage() {
             <div className="sp-tour-screen-head"><span><Mark /> spawnt / {tours[tab].name.toLowerCase()}</span><span>[RUN] LOCAL</span></div>
             <div className={tourVisible ? "sp-tour-screen-body visible" : "sp-tour-screen-body"} key={`${tab}-${tourVisible}`}>
               <small>{tours[tab].name.toUpperCase()} / ILLUSTRATIVE DATA</small><h4>{tours[tab].title}</h4>
-              {tours[tab].kind === "overview" && <div className="sp-tour-kpis"><div><small>ACTIVE</small><strong>2 <em>EXACT</em></strong></div><div><small>TOKENS / TODAY</small><strong>39.3k <em>EST</em></strong></div><div><small>COST / TODAY</small><strong>$4.86 <em>API</em></strong></div></div>}
+              {tours[tab].kind === "overview" && <div className="sp-tour-kpis"><div><small>ACTIVE SESSIONS</small><div className="sp-tour-kpi-line"><strong>2</strong><em>EXACT</em></div></div><div><small>TOKENS / TODAY</small><div className="sp-tour-kpi-line"><strong>39.3k</strong><em>EST</em></div></div><div><small>COST / TODAY</small><div className="sp-tour-kpi-line"><strong>$4.86</strong><em>API</em></div></div></div>}
               {tours[tab].kind === "sessions" && <div className="sp-tour-summary"><span>4 RUNS</span><span>1 WAITING</span><span>3 AGENTS</span></div>}
               {tours[tab].kind === "usage" && <div className="sp-tour-usage-summary"><span>296.0k TOKENS <em>EST</em></span><strong>$3.78 <em>API</em></strong><small>API-equivalent cost · sample week</small></div>}
               {tours[tab].kind === "limits" && <div className="sp-tour-summary"><span>3 POOLS</span><span>62% MOST REMAINING</span><span>1 ESTIMATE</span></div>}
