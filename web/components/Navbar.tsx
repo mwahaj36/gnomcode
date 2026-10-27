@@ -13,5 +13,5 @@ export default function Navbar() {
     return <AppNavbar />;
   }
 
-  return <MarketingNavbar />;
+  return <MarketingNavbar showTheme={pathname === "/auth"} />;
 }

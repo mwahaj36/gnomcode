@@ -40,10 +40,15 @@ body {
 .sp-site-footer-bottom a { color: var(--sp-text-2); text-decoration: none; }
 .sp-app-header { min-height: 56px; padding-inline: max(16px, calc((100% - 1200px) / 2)); color: var(--sp-text); background: var(--sp-surface); border-color: var(--sp-border); }
 .sp-app-header a { min-height: 40px; display: inline-flex; align-items: center; }
-.sp-app-header .bg-\[\#0d1117\] { background: var(--sp-bg); }
 .sp-app-header .text-accent { color: var(--sp-primary-text); }
 .sp-app-header .bg-accent { background: var(--sp-primary); }
-.sp-app-header .text-\[\#0d1117\] { color: var(--sp-on-primary); }
+.sp-on-primary-text { color: var(--sp-on-primary); }
+.sp-theme-control { min-height: 40px; border: 0; padding: 0; color: var(--sp-text-2); background: transparent; font: 600 10px/16px var(--sp-font-mono); white-space: nowrap; cursor: pointer; }
+.sp-theme-control:hover { color: var(--sp-primary-text); }
+.sp-theme-control:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
+.sp-app-theme { min-height: 40px; }
+.sp-nav-theme { padding-inline: 4px; }
+.sp-site-footer-grid button.sp-theme-control { font: 13px var(--sp-font-sans); }
 .sp-auth-oauth { color: var(--sp-text); background: var(--sp-surface-2); border: 1px solid var(--sp-border-strong); }
 .sp-auth-oauth:hover { background: var(--sp-surface); }
 @media (max-width: 760px) { .sp-site-header { height: 56px; } .sp-site-nav { width: calc(100% - 32px); gap: 14px; } .sp-site-divider { display: none; } .sp-site-links { display: none; position: absolute; top: 55px; left: 0; right: 0; padding: 16px; border: 1px solid var(--sp-border); background: var(--sp-surface); } .sp-site-links.open { display: flex; flex-direction: column; align-items: stretch; gap: 16px; } .sp-site-mobile-login { display: block; } .sp-site-actions { gap: 8px; } .sp-site-menu { display: block; width: 40px; height: 40px; padding: 8px; border: 0; background: none; } .sp-site-menu span { display: block; height: 1px; margin: 5px 0; background: var(--sp-text); } .sp-site-footer { padding: 48px 16px 20px; } .sp-site-footer-grid { grid-template-columns: repeat(2, 1fr); gap: 28px 16px; } .sp-site-footer-intro { grid-column: 1 / -1; } .sp-site-footer-bottom { font-size: 9px; } }

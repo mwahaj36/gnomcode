@@ -238,7 +238,7 @@ export default function SettingsPage() {
           ) : (
             <Link
               href="/auth"
-              className="px-2.5 py-1 bg-accent text-[#0d1117] rounded text-xs font-semibold hover:opacity-90"
+              className="sp-on-primary-text px-2.5 py-1 bg-accent rounded text-xs font-semibold hover:opacity-90"
             >
               Connect Cloud Account &rarr;
             </Link>

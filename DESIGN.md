@@ -55,7 +55,7 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 ## Navigation, theme, and surfaces
 
 - Marketing header: mark and `spawnt`, Product, Agents, Docs, Pricing, `Log in`, and primary Download. `Log in` goes to `/auth`; the landing's console links also pass through `/auth`, which redirects signed-in users to `/console`.
-- Marketing footer: sparse link columns, privacy statement, oversized wordmark, Back to top, and minimal `Theme / system` control. It cycles System, Light, Dark. System follows `prefers-color-scheme` and is the default. Apply stored overrides before first paint during the wider rollout.
+- Theme selection is shared across all web routes and both consoles. The marketing footer keeps its minimal `Theme / system` control; the signed-in console, auth page, and daemon-served local console expose the same cycle. It cycles System, Light, Dark. System follows `prefers-color-scheme` and is the default. Stored overrides apply before first paint.
 - The signed-in web console and local daemon console need the same visual hierarchy but keep distinct data and auth paths. Share presentation code as described in the rollout plan.
 - Native tray echoes these tokens and status labels, with the platform fallbacks in SPEC. It is a compact control surface.
 

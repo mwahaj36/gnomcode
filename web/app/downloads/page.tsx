@@ -47,7 +47,7 @@ export default function DownloadsPage() {
             <a
               href="/downloads/FleetHUD-Setup.exe"
               download="FleetHUD-Setup.exe"
-              className="w-full block text-center py-3 px-4 bg-accent text-[#0d1117] font-bold rounded-lg text-xs hover:opacity-90 transition-opacity shadow-sm shadow-accent/20 mb-2"
+              className="sp-on-primary-text w-full block text-center py-3 px-4 bg-accent font-bold rounded-lg text-xs hover:opacity-90 transition-opacity shadow-sm shadow-accent/20 mb-2"
             >
               Download Windows (.exe) &darr;
             </a>

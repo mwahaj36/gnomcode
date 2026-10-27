@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>spawnt — Local Console</title>
+  <script>
+    try {
+      const savedTheme = localStorage.getItem('spawnt-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+    } catch (_) {}
+  </script>
   <link rel="icon" type="image/svg+xml" href="/spawnt-mark.svg">
   <link rel="alternate icon" href="/favicon.ico">
   <style>
@@ -26,7 +32,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
-      color-scheme: light dark;
       color: var(--text);
       font-family: Inter, Arial, sans-serif;
       padding: 20px 24px;
@@ -81,7 +86,6 @@
     }
     .tab-btn.active {
       background: var(--bg);
-      color-scheme: dark;
       color: var(--accent);
       border: 1px solid var(--border);
       font-weight: 600;
@@ -102,6 +106,17 @@
       font-family: var(--font-mono);
       font-size: 12px;
     }
+    .theme-control {
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      color: var(--text-muted);
+      background: transparent;
+      font: 10px var(--font-mono);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .theme-control:hover { color: var(--text); }
     .external-link {
       color: var(--text-muted);
       text-decoration: none;
@@ -256,7 +271,6 @@
     }
     select, input {
       background: var(--bg);
-      color-scheme: dark;
       border: 1px solid var(--border);
       color: var(--text);
       padding: 6px 12px;
@@ -391,6 +405,7 @@
       <span class="metric-sub" id="last-updated" aria-live="polite">Last successful update: not yet</span>
       <button class="btn-control" id="reload-view" type="button" onclick="refreshCurrentView()">Reload view</button>
       <button class="btn-control" id="resync-data" type="button" onclick="resyncLocal()">Resync local data</button>
+      <button class="theme-control" id="theme-control" type="button" onclick="cycleTheme()" aria-label="Theme: system. Switch mode">Theme / system</button>
       <a href="/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
       <a href="/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
@@ -791,7 +806,7 @@
           <span class="badge" style="font-size: 10px; font-weight: 700;">[PRO LABS]</span>
         </div>
         <div style="font-size: 11px; color: var(--text-muted);">
-          Zero-token session rotation & repository handoff via <code style="font-family: var(--font-mono); background: rgba(255,255,255,0.06); padding: 2px 4px; border-radius: 3px;">.fleethud/HANDOFF.md</code>
+          Zero-token session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 3px;">.fleethud/HANDOFF.md</code>
         </div>
       </div>
 
@@ -849,6 +864,27 @@
   </main>
 
   <script>
+    function cycleTheme() {
+      const current = document.documentElement.dataset.theme || 'system';
+      const next = current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system';
+      if (next === 'system') delete document.documentElement.dataset.theme;
+      else document.documentElement.dataset.theme = next;
+      try {
+        if (next === 'system') localStorage.removeItem('spawnt-theme');
+        else localStorage.setItem('spawnt-theme', next);
+      } catch (_) {}
+      const button = document.getElementById('theme-control');
+      button.textContent = `Theme / ${next}`;
+      button.setAttribute('aria-label', `Theme: ${next}. Switch mode`);
+    }
+
+    const themeButton = document.getElementById('theme-control');
+    if (themeButton) {
+      const savedTheme = document.documentElement.dataset.theme || 'system';
+      themeButton.textContent = `Theme / ${savedTheme}`;
+      themeButton.setAttribute('aria-label', `Theme: ${savedTheme}. Switch mode`);
+    }
+
     let currentTimeline = 'all';
     let currentPage = 1;
     const pageLimit = 10;
@@ -1440,7 +1476,7 @@
             contextHtml = `<div>
               <span style="font-weight: 600;">${formatTokens(ctxTok)} <span class="trust-mark">EXACT</span></span>
               <span style="font-size: 10px; color: var(--text-muted);">/ ${formatTokens(s.context_window)} (${pct}% EXACT)</span>
-              <div style="background: rgba(255,255,255,0.08); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 3px; width: 80px;">
+              <div style="background: var(--sp-surface-2); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 3px; width: 80px;">
                 <div style="background: ${barColor}; height: 100%; width: ${pct}%;"></div>
               </div>
             </div>`;
