@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 
@@ -28,7 +28,7 @@ export default function SettingsPage() {
 
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
-  const [localDaemonStatus, setLocalDaemonStatus] = useState("Checking...");
+  const saveBusy = useRef(false);
 
   // Password update
   const [newPassword, setNewPassword] = useState("");
@@ -58,44 +58,18 @@ export default function SettingsPage() {
   };
 
   const loadSettings = useCallback(async (currentUser: any) => {
-    // 1. Check local daemon
-    try {
-      const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-      const daemonPort = params?.get("port") || "41738";
-      const bearerToken = params?.get("token") || "";
-      const headers: Record<string, string> = bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {};
-
-      const res = await fetch(`http://127.0.0.1:${daemonPort}/api/v1/live`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setLocalDaemonStatus(`Connected (127.0.0.1:${daemonPort})`);
-        if (data.user_profile) {
-          setDisplayName(data.user_profile.display_name || "Developer");
-          setOpenaiPlan(data.user_profile.openai_plan_usd || 20);
-          setClaudePlan(data.user_profile.claude_plan_usd || 20);
-          setGooglePlan(data.user_profile.google_plan_usd || 20);
-        }
-        if (data.custom_pricing) {
-          setCustomPricing(data.custom_pricing);
-        }
-        return;
-      }
-    } catch {
-      setLocalDaemonStatus("Offline / Not on this machine");
-    }
-
-    // 2. Fall back to Supabase
     if (currentUser) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("fleethud_sync_state")
         .select("*")
         .eq("user_id", currentUser.id)
-        .single();
+        .maybeSingle();
+      if (error) setStatusMessage(`Could not load cloud settings: ${error.message}`);
       if (data) {
         setDisplayName(data.display_name || "Developer");
-        setOpenaiPlan(data.openai_plan_usd || 20);
-        setClaudePlan(data.claude_plan_usd || 20);
-        setGooglePlan(data.google_plan_usd || 20);
+        setOpenaiPlan(data.openai_plan_usd ?? 20);
+        setClaudePlan(data.claude_plan_usd ?? 20);
+        setGooglePlan(data.google_plan_usd ?? 20);
         setCustomPricing(data.custom_pricing || []);
       }
     }
@@ -108,95 +82,39 @@ export default function SettingsPage() {
     });
   }, [loadSettings]);
 
+  const persist = async (values: Record<string, unknown>, success: string) => {
+    if (!user) { setStatusMessage("Sign in to save cloud preferences. Configure local settings in the desktop console."); return false; }
+    if (saveBusy.current) return false;
+    saveBusy.current = true; setSaving(true); setStatusMessage("Saving cloud preferences...");
+    try {
+      const { error } = await supabase.from("fleethud_sync_state").upsert({ user_id: user.id, email: user.email, ...values, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      setStatusMessage(success); return true;
+    } catch (error) {
+      setStatusMessage("Save failed: " + (error instanceof Error ? error.message : (error as { message?: string })?.message || "Connection unavailable"));
+      return false;
+    } finally { saveBusy.current = false; setSaving(false); }
+  };
+
   const savePlans = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    setStatusMessage("");
-
-    const payload = {
-      display_name: displayName,
-      openai_plan_usd: Number(openaiPlan),
-      claude_plan_usd: Number(claudePlan),
-      google_plan_usd: Number(googlePlan),
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      await fetch("http://127.0.0.1:41738/api/v1/user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      // ignore
-    }
-
-    if (user) {
-      await supabase.from("fleethud_sync_state").upsert({
-        user_id: user.id,
-        email: user.email,
-        ...payload,
-      });
-    }
-
-    setSaving(false);
-    setStatusMessage("Settings and subscription plans saved successfully!");
+    await persist({ display_name: displayName, openai_plan_usd: openaiPlan, claude_plan_usd: claudePlan, google_plan_usd: googlePlan }, "Cloud preferences saved. Local desktop configuration is managed separately.");
   };
 
   const addPricing = async () => {
     if (!newPattern.trim()) return;
-    const entry: CustomModelPricing = {
-      model_pattern: newPattern.trim(),
-      input_per_mtok_usd: parseFloat(newInput) || 0.0,
-      output_per_mtok_usd: parseFloat(newOutput) || 0.0,
-      cache_read_per_mtok_usd: parseFloat(newCache) || 0.0,
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      await fetch("http://127.0.0.1:41738/api/v1/pricing/custom", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entry),
-      });
-    } catch {
-      // ignore
+    const rates = [newInput, newOutput, newCache].map(value => value.trim() === "" ? null : Number(value));
+    if (rates.some(value => value !== null && (!Number.isFinite(value) || value < 0))) { setStatusMessage("Enter nonnegative rates; leave unknown rates blank."); return; }
+    const entry: CustomModelPricing = { model_pattern: newPattern.trim(), input_per_mtok_usd: rates[0], output_per_mtok_usd: rates[1], cache_read_per_mtok_usd: rates[2], updated_at: new Date().toISOString() };
+    const next = [...customPricing.filter(p => p.model_pattern !== entry.model_pattern), entry];
+    if (await persist({ custom_pricing: next }, "Cloud pricing preferences saved. Desktop pricing is configured locally.")) {
+      setCustomPricing(next); setNewPattern(""); setNewInput(""); setNewOutput(""); setNewCache("");
     }
-
-    const nextPricing = [...customPricing.filter((p) => p.model_pattern !== entry.model_pattern), entry];
-    setCustomPricing(nextPricing);
-    if (user) {
-      await supabase.from("fleethud_sync_state").upsert({
-        user_id: user.id,
-        custom_pricing: nextPricing,
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    setNewPattern("");
-    setNewInput("");
-    setNewOutput("");
-    setNewCache("");
   };
 
   const deletePricing = async (pattern: string) => {
-    try {
-      await fetch(`http://127.0.0.1:41738/api/v1/pricing/custom?pattern=${encodeURIComponent(pattern)}`, {
-        method: "DELETE",
-      });
-    } catch {
-      // ignore
-    }
-
-    const nextPricing = customPricing.filter((p) => p.model_pattern !== pattern);
-    setCustomPricing(nextPricing);
-    if (user) {
-      await supabase.from("fleethud_sync_state").upsert({
-        user_id: user.id,
-        custom_pricing: nextPricing,
-        updated_at: new Date().toISOString(),
-      });
-    }
+    const next = customPricing.filter(p => p.model_pattern !== pattern);
+    if (await persist({ custom_pricing: next }, "Cloud pricing preference removed.")) setCustomPricing(next);
   };
 
   return (
@@ -242,11 +160,11 @@ export default function SettingsPage() {
         <dl className="sp-settings-facts">
           <div>
             <dt>Cloud account</dt>
-            <dd>{user ? user.email : "Local anonymous · unlinked"}</dd>
+            <dd>{user ? user.email : "Not signed in"}</dd>
           </div>
           <div>
-            <dt>Local daemon</dt>
-            <dd>{localDaemonStatus}</dd>
+            <dt>Data source</dt>
+            <dd>Cloud preferences. Local settings remain on your desktop.</dd>
           </div>
           <div>
             <dt>Privacy</dt>
@@ -267,6 +185,8 @@ export default function SettingsPage() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                aria-label="New account password"
+                autoComplete="new-password"
                 placeholder="New password (min 6 chars)"
                 className="sp-settings-input"
               />
@@ -290,8 +210,8 @@ export default function SettingsPage() {
         </div>
         <form onSubmit={savePlans} className="sp-settings-plans-form">
           <div>
-            <label>Developer display name</label>
-            <input
+            <label htmlFor="display-name">Developer display name</label>
+            <input id="display-name"
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -301,10 +221,10 @@ export default function SettingsPage() {
 
           <div className="sp-settings-plan-grid">
             <div>
-              <label>OpenAI plan ($/mo)</label>
-              <input
+              <label htmlFor="openai-plan">OpenAI plan ($/mo)</label>
+              <input id="openai-plan"
                 type="number"
-                step="1"
+                min="0" step="1"
                 value={openaiPlan}
                 onChange={(e) => setOpenaiPlan(Number(e.target.value))}
                 className="sp-settings-input"
@@ -313,10 +233,10 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label>Claude plan ($/mo)</label>
-              <input
+              <label htmlFor="claude-plan">Claude plan ($/mo)</label>
+              <input id="claude-plan"
                 type="number"
-                step="1"
+                min="0" step="1"
                 value={claudePlan}
                 onChange={(e) => setClaudePlan(Number(e.target.value))}
                 className="sp-settings-input"
@@ -325,10 +245,10 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label>Google AI plan ($/mo)</label>
-              <input
+              <label htmlFor="google-plan">Google AI plan ($/mo)</label>
+              <input id="google-plan"
                 type="number"
-                step="1"
+                min="0" step="1"
                 value={googlePlan}
                 onChange={(e) => setGooglePlan(Number(e.target.value))}
                 className="sp-settings-input"
@@ -340,7 +260,7 @@ export default function SettingsPage() {
           <div className="sp-settings-submit">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !user}
               className="sp-settings-action sp-settings-primary"
             >
               {saving ? "Saving..." : "Save Subscription Preferences"}
@@ -361,7 +281,7 @@ export default function SettingsPage() {
         <div className="sp-settings-pricing-form">
           <input
             type="text"
-            placeholder="Pattern (e.g. gpt-4o)"
+            aria-label="Model pattern" placeholder="Pattern (e.g. gpt-4o)"
             value={newPattern}
             onChange={(e) => setNewPattern(e.target.value)}
             className="sp-settings-input sp-settings-pattern"
@@ -369,7 +289,7 @@ export default function SettingsPage() {
           <input
             type="number"
             step="0.01"
-            placeholder="Input $/M"
+            aria-label="Input dollars per million tokens" placeholder="Input $/M"
             value={newInput}
             onChange={(e) => setNewInput(e.target.value)}
             className="sp-settings-input"
@@ -377,7 +297,7 @@ export default function SettingsPage() {
           <input
             type="number"
             step="0.01"
-            placeholder="Output $/M"
+            aria-label="Output dollars per million tokens" placeholder="Output $/M"
             value={newOutput}
             onChange={(e) => setNewOutput(e.target.value)}
             className="sp-settings-input"
@@ -385,13 +305,14 @@ export default function SettingsPage() {
           <input
             type="number"
             step="0.01"
-            placeholder="Cache $/M"
+            aria-label="Cache dollars per million tokens" placeholder="Cache $/M"
             value={newCache}
             onChange={(e) => setNewCache(e.target.value)}
             className="sp-settings-input"
           />
         </div>
         <button
+          disabled={saving || !user}
           onClick={addPricing}
           className="sp-settings-action sp-settings-add"
         >
@@ -418,6 +339,7 @@ export default function SettingsPage() {
                   <td data-label="Cache read $/M">{p.cache_read_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.cache_read_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
                   <td data-label="Action">
                     <button
+                      disabled={saving || !user}
                       onClick={() => deletePricing(p.model_pattern)}
                       className="sp-settings-delete"
                     >

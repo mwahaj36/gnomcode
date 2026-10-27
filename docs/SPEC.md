@@ -547,6 +547,9 @@ behavior remain independent between the cloud and local consoles.
 
 ### 3.16 User Profile, Settings & Notifications
 
+Signed-in web Settings edits account-scoped cloud preferences only; the authenticated local console configures the desktop. Cloud save success requires a successful persistence response. Web preferences do not imply that a paired desktop has applied a local setting.
+
+
 #### A. Six Settings Sections
 1. **Profile & Account:** avatar/PFP upload (stored locally and synced to Supabase Storage when signed in), display name, username, email change, password change, connected OAuth accounts (GitHub, Google), and account deletion.
 2. **Data & Storage:**
