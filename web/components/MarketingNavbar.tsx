@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import ThemeControl from "./ThemeControl";
 
-export default function MarketingNavbar() {
+export default function MarketingNavbar({ showTheme = false }: { showTheme?: boolean }) {
   const header = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -36,7 +37,7 @@ export default function MarketingNavbar() {
         <Link href="/pricing">Pricing</Link>
         <Link className="sp-site-mobile-login" href="/auth" onClick={() => setMenuOpen(false)}>Log in</Link>
       </nav>
-      <div className="sp-site-actions"><Link className="sp-site-login" href="/auth">Log in <span aria-hidden="true">↗</span></Link><Link className="sp-site-download" href="/downloads">Download <span aria-hidden="true">↗</span></Link></div>
+      <div className="sp-site-actions"><Link className="sp-site-login" href="/auth">Log in <span aria-hidden="true">↗</span></Link>{showTheme && <ThemeControl className="sp-nav-theme" />}<Link className="sp-site-download" href="/downloads">Download <span aria-hidden="true">↗</span></Link></div>
       <button className="sp-site-menu" type="button" aria-label="Toggle menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><span /><span /><span /></button>
     </div>
   </header>;

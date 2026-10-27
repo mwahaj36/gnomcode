@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
+import ThemeControl from "../components/ThemeControl";
 
 const agents = [
   { name: "Claude Code", icons: ["claudecode"] },
@@ -41,7 +42,6 @@ export default function LandingPage() {
   const marqueeRef = useRef<HTMLDivElement>(null);
   const speedFrame = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
 
   useEffect(() => {
     let frame = 0;
@@ -60,8 +60,6 @@ export default function LandingPage() {
     update();
     window.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
-    const stored = localStorage.getItem("spawnt-theme");
-    if (stored === "light" || stored === "dark") setTheme(stored);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", update);
@@ -116,14 +114,7 @@ export default function LandingPage() {
     return () => observer.disconnect();
   }, []);
 
-  function toggleTheme() {
-    const next = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-    setTheme(next);
-    if (next === "system") localStorage.removeItem("spawnt-theme");
-    else localStorage.setItem("spawnt-theme", next);
-  }
-
-  return <div className="sp-page" data-theme={theme}>
+  return <div className="sp-page">
     <a className="sp-skip" href="#content">Skip to content</a>
     <header className="sp-header" ref={headerRef}>
       <div className="sp-nav sp-width">
@@ -186,7 +177,7 @@ export default function LandingPage() {
         <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores metadata only. Prompts, code and output are never saved or sent.</p></div>
         <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
         <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs#privacy">Privacy</Link></div>
-        <div><span>MORE</span><Link href="/auth">Account</Link><button type="button" className="sp-footer-theme" onClick={toggleTheme} aria-label={`Theme: ${theme}. Switch mode`}>Theme / {theme}</button></div>
+        <div><span>MORE</span><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>
       </div>
       <div className="sp-width sp-footer-wordmark" aria-hidden="true">spawnt<span>.</span></div>
       <div className="sp-width sp-footer-bottom"><span>© 2026 spawnt</span><span>LOCAL-FIRST SOFTWARE</span><a href="#content">Back to top <span aria-hidden="true">↑</span></a></div>
