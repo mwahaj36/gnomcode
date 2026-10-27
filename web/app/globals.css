@@ -192,6 +192,8 @@ body {
 .sp-docs-label-list>div { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--sp-border); }
 .sp-docs-label-list dt { color: var(--sp-primary-text); font: 600 10px/1.5 var(--sp-font-mono); }
 .sp-docs-label-list dd { margin: 0; color: var(--sp-text-2); font-size: 12px; line-height: 1.55; }
+.sp-docs-provider-example { padding: 14px 16px; border: 1px solid var(--sp-border); background: var(--sp-surface); }
+.sp-docs-provider-example strong { color: var(--sp-text); }
 .sp-docs-article a:not(.sp-docs-download-link) { color: var(--sp-primary-text); text-decoration: underline; text-underline-offset: 3px; }
 .sp-docs-trust-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border-top: 1px solid var(--sp-border); border-bottom: 1px solid var(--sp-border); }
 .sp-docs-trust-grid>div { padding: 14px 16px 14px 0; }
