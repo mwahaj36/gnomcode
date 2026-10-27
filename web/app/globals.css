@@ -264,6 +264,8 @@ body {
 .sp-settings-header h1 { margin: 0; font-size: clamp(30px, 4vw, 42px); line-height: 1.1; letter-spacing: -.035em; font-weight: 600; }
 .sp-settings-header p { max-width: 64ch; margin: 10px 0 0; color: var(--sp-text-2); font: 13px/1.6 var(--sp-font-sans); }
 .sp-settings-back { flex: none; color: var(--sp-primary-text); font: 600 10px/1.4 var(--sp-font-mono); text-decoration: none; }
+.sp-settings-link { display: inline-flex; align-items: center; min-height: 40px; color: var(--sp-primary-text); font: 600 10px/1.4 var(--sp-font-mono); text-decoration: underline; text-underline-offset: 4px; }
+.sp-settings-link:hover { color: var(--sp-text); }
 .sp-settings-section { padding: 28px 0 32px; border-bottom: 1px solid var(--sp-border); }
 .sp-settings-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .sp-settings-section-heading h2 { margin: 0; color: var(--sp-text); font-size: 17px; font-weight: 600; }
