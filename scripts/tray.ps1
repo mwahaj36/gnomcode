@@ -1,4 +1,4 @@
-# FleetHUD Windows System Tray Service — https://fleethud.vercel.app
+# spawnt Windows system tray — https://fleethud.pro
 $trayMutex = New-Object System.Threading.Mutex($false, "Local\FleetHUDTray")
 try {
     $ownsTray = $trayMutex.WaitOne(0)
@@ -42,19 +42,19 @@ public class Win32 {
 }
 
 public class DarkMenuColorTable : ProfessionalColorTable {
-    public override Color MenuBorder { get { return Color.FromArgb(48, 54, 61); } }
+    public override Color MenuBorder { get { return Color.FromArgb(56, 56, 62); } }
     public override Color MenuItemBorder { get { return Color.Transparent; } }
-    public override Color MenuItemSelected { get { return Color.FromArgb(33, 38, 45); } }
-    public override Color ToolStripDropDownBackground { get { return Color.FromArgb(13, 17, 23); } }
-    public override Color ImageMarginGradientBegin { get { return Color.FromArgb(13, 17, 23); } }
-    public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(13, 17, 23); } }
-    public override Color ImageMarginGradientEnd { get { return Color.FromArgb(13, 17, 23); } }
-    public override Color SeparatorDark { get { return Color.FromArgb(48, 54, 61); } }
-    public override Color SeparatorLight { get { return Color.FromArgb(13, 17, 23); } }
-    public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(33, 38, 45); } }
-    public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(33, 38, 45); } }
-    public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(40, 46, 54); } }
-    public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(40, 46, 54); } }
+    public override Color MenuItemSelected { get { return Color.FromArgb(20, 20, 22); } }
+    public override Color ToolStripDropDownBackground { get { return Color.FromArgb(13, 13, 15); } }
+    public override Color ImageMarginGradientBegin { get { return Color.FromArgb(13, 13, 15); } }
+    public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(13, 13, 15); } }
+    public override Color ImageMarginGradientEnd { get { return Color.FromArgb(13, 13, 15); } }
+    public override Color SeparatorDark { get { return Color.FromArgb(36, 36, 40); } }
+    public override Color SeparatorLight { get { return Color.FromArgb(13, 13, 15); } }
+    public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(20, 20, 22); } }
+    public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(20, 20, 22); } }
+    public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(28, 28, 32); } }
+    public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(28, 28, 32); } }
 }
 "@
 
@@ -71,7 +71,7 @@ function Get-ConsoleUrl {
 function Find-FleetHUDWindow {
     $procs = Get-Process -Name "msedge", "chrome" -ErrorAction SilentlyContinue
     foreach ($p in $procs) {
-        if ($p.MainWindowTitle -like "*FleetHUD*" -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
+        if (($p.MainWindowTitle -like "*spawnt*" -or $p.MainWindowTitle -like "*FleetHUD*") -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
             return $p.MainWindowHandle
         }
     }
@@ -92,7 +92,7 @@ function Open-Console {
     $url = Get-ConsoleUrl
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
     $profileArg = "--user-data-dir=`"$localAppData\FleetHUD\AppProfile`""
-    $windowArg = "--window-name=FleetHUD"
+    $windowArg = "--window-name=spawnt"
     $candidateExes = @(
         "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe",
         "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
@@ -128,7 +128,7 @@ if (Test-Path $IconPath) {
 } else {
     $notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
 }
-$notifyIcon.Text = "FleetHUD Mission Control"
+$notifyIcon.Text = "spawnt Mission Control"
 $notifyIcon.Visible = $true
 
 function Update-TrayIconBadge([int]$count) {
@@ -160,25 +160,23 @@ function Update-TrayIconBadge([int]$count) {
         }
 
         if ($count -gt 0) {
-            # Large, crisp high-contrast green badge in lower-right
-            $greenBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(34, 197, 94))
-            $darkPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(13, 17, 23), 2.0)
-            
-            # 18x18 circle at (13, 13)
+            # Square red session count matches the canonical brand mark.
+            $badgeBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 37, 68))
+            $darkPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(7, 7, 8), 2.0)
             $badgeRect = New-Object System.Drawing.Rectangle 13, 13, 18, 18
-            $g.FillEllipse($greenBrush, $badgeRect)
-            $g.DrawEllipse($darkPen, $badgeRect)
+            $g.FillRectangle($badgeBrush, $badgeRect)
+            $g.DrawRectangle($darkPen, $badgeRect)
 
             # High-visibility bold typography
             $badgeFont = New-Object System.Drawing.Font("Arial", 9.5, [System.Drawing.FontStyle]::Bold)
-            $badgeTextBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(13, 17, 23))
+            $badgeTextBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(7, 7, 8))
             $sf = New-Object System.Drawing.StringFormat
             $sf.Alignment = [System.Drawing.StringAlignment]::Center
             $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
             $textStr = if ($count -gt 9) { "9+" } else { "$count" }
             $g.DrawString($textStr, $badgeFont, $badgeTextBrush, (New-Object System.Drawing.RectangleF 13, 14, 18, 18), $sf)
 
-            $greenBrush.Dispose()
+            $badgeBrush.Dispose()
             $darkPen.Dispose()
             $badgeFont.Dispose()
             $badgeTextBrush.Dispose()
@@ -204,13 +202,13 @@ $colorTable = New-Object DarkMenuColorTable
 $contextMenu.Renderer = New-Object System.Windows.Forms.ToolStripProfessionalRenderer($colorTable)
 $contextMenu.ShowImageMargin = $false
 $contextMenu.ShowCheckMargin = $false
-$contextMenu.BackColor = [System.Drawing.Color]::FromArgb(13, 17, 23)
+$contextMenu.BackColor = [System.Drawing.Color]::FromArgb(13, 13, 15)
 $contextMenu.ForeColor = [System.Drawing.Color]::White
 $contextMenu.Font = New-Object System.Drawing.Font("Segoe UI", 9.0)
 $contextMenu.Padding = New-Object System.Windows.Forms.Padding(2, 4, 2, 4)
 
 # 1. Open Console
-$openItem = $contextMenu.Items.Add("Open Mission Control")
+$openItem = $contextMenu.Items.Add("Open spawnt")
 $openItem.Font = New-Object System.Drawing.Font("Segoe UI", 9.0, [System.Drawing.FontStyle]::Bold)
 $openItem.ForeColor = [System.Drawing.Color]::White
 $openItem.Add_Click({ Open-Console })
@@ -219,13 +217,13 @@ $openItem.Add_Click({ Open-Console })
 $contextMenu.Items.Add("-") | Out-Null
 
 # Active Sessions Header & dynamic list
-$sessionsHeader = $contextMenu.Items.Add("Active Sessions (0)")
+$sessionsHeader = $contextMenu.Items.Add("Active sessions (0)")
 $sessionsHeader.Enabled = $false
 $sessionsHeader.Font = New-Object System.Drawing.Font("Segoe UI", 8.0, [System.Drawing.FontStyle]::Bold)
 $sessionsHeader.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
 
 # Placeholder item when idle
-$idleSessionItem = $contextMenu.Items.Add("  Fleet Idle (no active agents)")
+$idleSessionItem = $contextMenu.Items.Add("  No active agents")
 $idleSessionItem.Enabled = $false
 $idleSessionItem.ForeColor = [System.Drawing.Color]::FromArgb(110, 118, 129)
 
@@ -242,7 +240,7 @@ for ($i = 0; $i -lt 5; $i++) {
 $contextMenu.Items.Add("-") | Out-Null
 
 # Metrics
-$spendItem = $contextMenu.Items.Add("Today: `$0.00 API-equivalent")
+$spendItem = $contextMenu.Items.Add("Today: Unknown UNKNOWN")
 $spendItem.Enabled = $false
 $spendItem.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $spendItem.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
@@ -250,7 +248,7 @@ $spendItem.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
 $contextMenu.Items.Add("-") | Out-Null
 
 # Exit
-$exitItem = $contextMenu.Items.Add("Quit FleetHUD")
+$exitItem = $contextMenu.Items.Add("Quit spawnt")
 $exitItem.ForeColor = [System.Drawing.Color]::FromArgb(248, 81, 73)
 $exitItem.Add_Click({
     $notifyIcon.Visible = $false
@@ -373,16 +371,21 @@ $timer.Add_Tick({
         if (-not $live) { return }
 
         $count = $live.active_count
-        $spend = if ($live.timeline -and $live.timeline.total_cost_usd) { [double]$live.timeline.total_cost_usd } else { 0.0 }
-        $spendItem.Text = "Today: `$$($spend.ToString('0.00')) API-equivalent"
-        $sessionsHeader.Text = "Active Sessions ($count)"
+        $hasSpend = $null -ne $live.timeline -and $null -ne $live.timeline.total_cost_usd
+        if ($hasSpend) {
+            $spend = [double]$live.timeline.total_cost_usd
+            $spendItem.Text = "Today: `$$($spend.ToString('0.00')) EST"
+        } else {
+            $spendItem.Text = "Today: Unknown UNKNOWN"
+        }
+        $sessionsHeader.Text = "Active sessions: $count EXACT"
 
         Update-TrayIconBadge $count
 
         if ($count -gt 0) {
-            $notifyIcon.Text = "FleetHUD: [RUN] $count Active | `$$($spend.ToString('0.00'))"
+            $notifyIcon.Text = "spawnt · $count active EXACT"
         } else {
-            $notifyIcon.Text = "FleetHUD: [IDLE] Ready | `$$($spend.ToString('0.00'))"
+            $notifyIcon.Text = "spawnt · IDLE"
         }
 
         # The live response already includes the first five sessions, active first.
@@ -398,10 +401,10 @@ $timer.Add_Tick({
             for ($i = 0; $i -lt 5; $i++) {
                 if ($i -lt $activeList.Count) {
                     $s = $activeList[$i]
-                    $badge = if ($s.state -eq "awaiting_approval") { "[WAIT]" } else { "[RUN]" }
+                    $badge = if ($s.state -eq "awaiting_approval") { "WAIT" } else { "RUN" }
                     $proj = if ($s.project_name -and $s.project_name -ne "unknown") { $s.project_name } else { "fleet" }
                     $stateText = $s.state
-                    $menuText = "  $badge $proj | $($s.agent) ($stateText)"
+                    $menuText = "  $badge · $proj | $($s.agent) · $stateText"
 
                     $sessionMenuItems[$i].Text = $menuText
                     $sessionMenuItems[$i].Visible = $true
@@ -418,7 +421,7 @@ $timer.Add_Tick({
                         $ctxPct = [Math]::Round(($s.context_tokens / $s.context_window) * 100)
                         if ($ctxPct -ge 90 -and -not $lastNotifiedSaturation.ContainsKey($s.id)) {
                             $lastNotifiedSaturation[$s.id] = [DateTime]::UtcNow
-                            $notifyIcon.ShowBalloonTip(5000, "$($s.agent) Context Saturation", "[WAIT] $($s.agent) in $proj is at $($ctxPct)% context. Safety reserve active.", [System.Windows.Forms.ToolTipIcon]::Warning)
+                            $notifyIcon.ShowBalloonTip(5000, "$($s.agent) context saturation", "$($s.agent) in $proj is at $($ctxPct)% EST context use. Safety reserve active.", [System.Windows.Forms.ToolTipIcon]::Warning)
                         }
                     }
                 } else {
@@ -435,7 +438,7 @@ $timer.Add_Tick({
                     $lastNotifiedQuotaResets[$qKey] = "limited"
                 } elseif ($lastNotifiedQuotaResets.ContainsKey($qKey) -and $lastNotifiedQuotaResets[$qKey] -eq "limited" -and $q.used_pct -lt 100) {
                     $lastNotifiedQuotaResets[$qKey] = "reset"
-                    $notifyIcon.ShowBalloonTip(5000, "Quota Pool Reset", "[READY] $($q.provider) quota pool has reset. Rate-limited sessions can resume.", [System.Windows.Forms.ToolTipIcon]::Info)
+                    $notifyIcon.ShowBalloonTip(5000, "Quota pool reset", "$($q.provider) quota pool has reset. Rate-limited sessions can resume.", [System.Windows.Forms.ToolTipIcon]::Info)
                 }
             }
         }

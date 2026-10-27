@@ -629,7 +629,7 @@ flowchart LR
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
-| Native Rust tray controller and platform tray scripts: status (active count, awaiting-approval badge), open local console | Status badges without emojis ([RUN], [WAIT], [IDLE]); Tauri mini-window migration is pending | Partial |
+| Native Rust tray controller and platform tray scripts: status (active count, awaiting-approval badge), open local console | Plain RUN, WAIT, and IDLE labels; shared spawnt colors and square count badge in the current Windows script. Tauri mini-window migration remains future work. | Partial |
 | Notifications: approval needed, quota reset, context bloat | Formatted notification payloads fired cleanly | Yes |
 | Bring-to-front (per §3.13) | Cross-platform focus dispatch for PID on Win/macOS/Linux | Yes |
 

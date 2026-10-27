@@ -24,7 +24,7 @@
       --text: var(--sp-text);
       --text-muted: var(--sp-text-2);
       --accent: var(--sp-primary);
-      --green: var(--sp-text-2);
+      --green: var(--sp-primary-text);
       --yellow: #becbd8;
       --red: var(--sp-primary-text);
       --font-mono: var(--sp-font-mono);
@@ -39,62 +39,68 @@
       margin: 0 auto;
       line-height: 1.5;
     }
-    header {
+    .app-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 20px;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 20px;
+      min-height: 60px;
     }
     .header-left {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 28px;
     }
-    h1 {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
+    .app-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+      text-decoration: none;
+      white-space: nowrap;
     }
+    .app-brand .sp-brand-mark { width: 20px; height: 20px; }
     .nav-tabs {
       display: flex;
-      gap: 4px;
-      background: var(--card-bg);
-      padding: 3px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
+      align-self: stretch;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
     }
     .nav-tabs .tab-btn { text-transform: uppercase; letter-spacing: .04em; }
     .tab-btn {
       background: transparent;
       border: none;
       color: var(--text-muted);
-      padding: 8px 14px;
-      font-size: 12px;
-      border-radius: 4px;
+      position: relative;
+      padding: 0 12px;
+      font-size: 10px;
+      border-radius: 0;
       cursor: pointer;
       font-family: var(--font-mono);
       font-weight: 500;
       min-height: 44px;
-      transition: all 0.15s ease;
+      transition: color .18s cubic-bezier(.16,1,.3,1);
     }
     .tab-btn:hover {
       color: var(--text);
     }
     .tab-btn.active {
-      background: var(--bg);
-      color: var(--accent);
-      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      border: 0;
       font-weight: 600;
     }
+    .tab-btn.active::after { position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; background: var(--sp-primary); content: ""; }
     .badge {
       font-family: var(--font-mono);
       font-size: 11px;
       padding: 2px 8px;
-      border-radius: 4px;
+      border-radius: 0;
       background: var(--sp-surface-2);
       color: var(--accent);
       border: 1px solid var(--sp-border);
@@ -106,6 +112,23 @@
       font-family: var(--font-mono);
       font-size: 12px;
     }
+    .console-hero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin: 64px 0 28px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .console-hero-lockup { display: flex; align-items: flex-start; gap: 18px; }
+    .console-hero-mark { width: 40px; height: 40px; margin-top: 0; color: var(--text); }
+    #console-title { margin: 0; color: var(--text); font: 600 clamp(36px, 5.2vw, 60px)/1 Inter, Arial, sans-serif; letter-spacing: -.04em; }
+    .console-status { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--text-muted); font: 13px/1.4 var(--font-mono); }
+    .console-status-marker { width: 10px; height: 10px; flex: none; background: var(--sp-primary); }
+    .console-hero-side { display: grid; justify-items: end; gap: 12px; }
+    .console-hero-actions { display: flex; gap: 8px; }
+    #last-updated { color: var(--text-muted); font: 10px/1.4 var(--font-mono); }
     .theme-control {
       min-height: 44px;
       padding: 0;
@@ -129,10 +152,11 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px 16px;
+      background: transparent;
+      border-block: 1px solid var(--border);
+      border-inline: 0;
+      border-radius: 0;
+      padding: 12px 0;
       margin-bottom: 20px;
       flex-wrap: wrap;
       gap: 12px;
@@ -144,7 +168,7 @@
     }
     .timeline-buttons {
       display: flex;
-      gap: 8px;
+      gap: 0;
     }
     .btn-control {
       background: transparent;
@@ -152,31 +176,33 @@
       color: var(--text);
       padding: 8px 12px;
       font-size: 12px;
-      border-radius: 4px;
+      border-radius: 0;
       cursor: pointer;
       font-family: var(--font-mono);
-      transition: all 0.15s ease;
+      transition: color .18s cubic-bezier(.16,1,.3,1), background-color .18s cubic-bezier(.16,1,.3,1), border-color .18s cubic-bezier(.16,1,.3,1);
       min-height: 44px;
     }
     .btn-control:disabled, .btn-primary:disabled { opacity: .55; cursor: wait; }
     tbody tr:hover { background: var(--card-hover); }
     .btn-control:hover, .btn-control.active {
-      background: var(--accent);
+      background: var(--sp-primary);
       color: var(--sp-on-primary);
-      border-color: var(--accent);
+      border-color: var(--sp-primary);
       font-weight: 600;
     }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-      gap: 16px;
-      margin-bottom: 20px;
+      gap: 0;
+      margin-bottom: 28px;
+      border-block: 1px solid var(--border);
     }
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+      padding: 22px 0;
     }
     .card-title {
       font-size: 11px;
@@ -205,10 +231,11 @@
       margin-bottom: 20px;
     }
     .provider-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+      padding: 16px 0;
       cursor: pointer;
       transition: border-color 0.15s ease;
     }
@@ -228,7 +255,7 @@
     .model-list {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px dashed var(--border);
+      border-top: 1px solid var(--border);
       display: none;
     }
     .model-list.open {
@@ -243,10 +270,11 @@
       border-bottom: 1px solid var(--border);
     }
     .table-container {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
+      background: transparent;
+      border: 0;
+      border-block: 1px solid var(--border);
+      border-radius: 0;
+      padding: 16px 0;
       margin-bottom: 24px;
       overflow-x: auto;
     }
@@ -274,7 +302,7 @@
       border: 1px solid var(--border);
       color: var(--text);
       padding: 6px 12px;
-      border-radius: 4px;
+      border-radius: 0;
       font-size: 12px;
       font-family: var(--font-mono);
       min-height: 44px;
@@ -332,11 +360,18 @@
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
     @media (max-width: 760px) {
       body { padding: 12px; }
-      header { align-items: flex-start; }
-      .header-left { width: 100%; flex-wrap: wrap; }
+      .app-header { align-items: flex-start; }
+      .header-left { width: 100%; flex-wrap: wrap; gap: 12px; }
       .nav-tabs { width: 100%; overflow-x: auto; }
       .tab-btn { min-height: 44px; white-space: nowrap; }
       .header-right { width: 100%; flex-wrap: wrap; }
+      .console-hero { align-items: flex-start; flex-direction: column; margin: 40px 0 24px; }
+      .console-hero-side { justify-items: start; }
+      .console-hero-mark { width: 30px; height: 30px; }
+      .console-hero-lockup { gap: 12px; }
+      #console-title { font-size: clamp(34px, 8vw, 48px); }
+      .console-status { margin-top: 12px; font-size: 11px; }
+      .console-hero-actions { flex-wrap: wrap; }
       .grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
       .table-container { overflow-x: auto; }
       table { min-width: 760px; }
@@ -369,15 +404,16 @@
       width: 100%;
     }
     .btn-primary {
-      background: var(--green);
+      background: var(--sp-primary);
       color: var(--sp-on-primary);
-      border: none;
-      padding: 8px 20px;
-      border-radius: 4px;
+      border: 1px solid var(--sp-primary);
+      padding: 0 16px;
+      border-radius: 0;
       cursor: pointer;
       font-weight: 600;
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 10px;
+      min-height: 44px;
     }
     .btn-primary:hover {
       opacity: 0.9;
@@ -386,33 +422,51 @@
 <link rel="stylesheet" href="/spawnt-tokens.css">
 </head>
 <body>
-  <header>
+  <header class="app-header">
     <div class="header-left">
-      <span class="sp-brand-mark" aria-hidden="true" style="width: 28px; height: 28px; margin-right: 6px;"></span>
-      <h1 id="console-title">spawnt</h1>
-      <nav class="nav-tabs" aria-label="Console views">
-        <button class="tab-btn active" id="tab-btn-overview" onclick="switchTab('overview')">Overview</button>
-        <button class="tab-btn" id="tab-btn-sessions" onclick="switchTab('sessions')">Sessions</button>
-        <button class="tab-btn" id="tab-btn-usage" onclick="switchTab('usage')">Usage</button>
-        <button class="tab-btn" id="tab-btn-limits" onclick="switchTab('limits')">Limits</button>
-        <button class="tab-btn" id="tab-btn-projects" onclick="switchTab('projects')">Projects</button>
-        <button class="tab-btn" id="tab-btn-automations" onclick="switchTab('automations')">Automations</button>
-        <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings')">Settings</button>
+      <a class="app-brand" href="/" aria-label="spawnt local console">
+        <span class="sp-brand-mark" aria-hidden="true"></span>
+        <span>spawnt</span>
+      </a>
+      <nav class="nav-tabs" role="tablist" aria-label="Console views">
+        <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" onclick="switchTab('overview')">Overview</button>
+        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('sessions')">Sessions</button>
+        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('usage')">Usage</button>
+        <button class="tab-btn" id="tab-btn-limits" data-view="limits" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('limits')">Limits</button>
+        <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" onclick="switchTab('projects')">Projects</button>
+        <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" onclick="switchTab('automations')">Automations</button>
+        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" onclick="switchTab('settings')">Settings</button>
       </nav>
     </div>
     <div class="header-right">
-      <span class="badge" id="sync-state" aria-live="polite">[RUN] CONNECTING</span>
-      <span class="metric-sub" id="last-updated" aria-live="polite">Last successful update: not yet</span>
-      <button class="btn-control" id="reload-view" type="button" onclick="refreshCurrentView()">Reload view</button>
-      <button class="btn-control" id="resync-data" type="button" onclick="resyncLocal()">Resync local data</button>
       <button class="theme-control" id="theme-control" type="button" onclick="cycleTheme()" aria-label="Theme: system. Switch mode">Theme / system</button>
       <a href="/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
       <a href="/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
   </header>
 
+  <section class="console-hero" aria-labelledby="console-title">
+    <div class="console-hero-lockup">
+      <span class="sp-brand-mark console-hero-mark" aria-hidden="true"></span>
+      <div>
+        <h1 id="console-title">Your agent fleet</h1>
+        <div class="console-status" aria-live="polite">
+          <span class="console-status-marker" aria-hidden="true"></span>
+          <span id="sync-state">Connecting</span>
+        </div>
+      </div>
+    </div>
+    <div class="console-hero-side">
+      <div class="console-hero-actions">
+        <button class="btn-control" id="reload-view" type="button" onclick="refreshCurrentView()">Reload view</button>
+        <button class="btn-control" id="resync-data" type="button" onclick="resyncLocal()">Resync local data</button>
+      </div>
+      <span id="last-updated" aria-live="polite">Last successful update: not yet</span>
+    </div>
+  </section>
+
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
-  <main id="view-console" class="view-content active">
+  <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
     <!-- Timeline Filter Bar -->
     <div class="timeline-bar">
       <div class="timeline-label" id="timeline-label">Showing: All Time</div>
@@ -456,7 +510,7 @@
     <div class="card" data-local-view="overview" style="margin-bottom: 20px;">
       <div class="card-title">
         <span>Subscription ROI Calculator</span>
-        <span style="cursor: pointer; color: var(--accent);" onclick="switchTab('settings')">[Edit Subscriptions]</span>
+        <span style="cursor: pointer; color: var(--accent);" onclick="switchTab('settings')">Edit subscriptions</span>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px;" id="roi-cards-container">
         <!-- Injected dynamically -->
@@ -541,13 +595,13 @@
     </div>
   </main>
 
-  <main id="view-projects" class="view-content">
+  <main id="view-projects" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-projects">
     <h2>Projects</h2>
     <p class="local-view-message">Project-level activity is not available from the current local console API. Session records remain available in Sessions; no project totals are inferred here.</p>
   </main>
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
-  <main id="view-settings" class="view-content">
+  <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
     <button class="btn-control" type="button" onclick="switchTab('auth')">Account and cloud pairing</button>
     <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
@@ -606,7 +660,7 @@
         spawnt operates 100% locally by default. To sync your live fleet metrics, ROI multipliers, and quota pools across multiple workstations, pair your local daemon with your Supabase account.
       </p>
 
-      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 12px;">
+      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 12px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
           <span style="color: var(--text-muted);">Cloud Telemetry Mirror:</span>
           <span style="color: var(--green);">Connected & Ready</span>
@@ -645,7 +699,7 @@
       </div>
 
       <!-- Paired Account Status Card -->
-      <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
+      <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-top: 20px;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div>
             <div style="font-weight: 600; font-size: 13px; color: var(--green); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
@@ -667,7 +721,7 @@
       </div>
 
       <!-- Quick Account Pairing / Token Paste Card -->
-      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
+      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-top: 20px;">
         <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
         <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
           Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to instantly pair this desktop cockpit.
@@ -677,7 +731,7 @@
             type="text"
             id="auth-token-input"
             placeholder="Paste pairing token or session JSON here..."
-            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
+            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
           >
           <button
             onclick="pairTokenDirectly()"
@@ -693,14 +747,14 @@
   </main>
 
   <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
-  <main id="view-automations" class="view-content">
+  <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
       <!-- License Activation Card -->
       <div class="card">
         <div class="card-title">spawnt Pro Offline License</div>
         <div style="margin: 12px 0; display: flex; align-items: center; gap: 10px;">
           <span style="color: var(--text-muted); font-size: 12px;">Active Tier:</span>
-          <span id="pro-tier-badge" class="badge" style="font-weight: 700;">[FREE]</span>
+          <span id="pro-tier-badge" class="badge" style="font-weight: 700;">FREE</span>
         </div>
         <div id="pro-license-details" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
           Free tier active. Pro features (Spend Guardrails, Auto-Resume Queue, CSV Analytics Export) unlock with an offline Ed25519-signed license key.
@@ -710,7 +764,7 @@
             type="text"
             id="license-key-input"
             placeholder="Paste Ed25519 license JSON here..."
-            style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
+            style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
           >
           <button class="btn-primary" onclick="activateLicenseKey()">Activate Pro</button>
           <button class="btn-control" onclick="removeLicenseKey()">Remove</button>
@@ -803,15 +857,15 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <div class="card-title" style="margin: 0;">Context Relay Engine</div>
-          <span class="badge" style="font-size: 10px; font-weight: 700;">[PRO LABS]</span>
+          <span class="badge" style="font-size: 10px; font-weight: 700;">PRO LABS</span>
         </div>
         <div style="font-size: 11px; color: var(--text-muted);">
-          Zero-token session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 3px;">.fleethud/HANDOFF.md</code>
+          Zero-token session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 0;">.fleethud/HANDOFF.md</code>
         </div>
       </div>
 
       <!-- Explainer Box (SPEC §3.14 & Transparency) -->
-      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
+      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
         <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. spawnt maintains strict privacy invariants and does not access closed GUI databases. Rotated sessions launch in your terminal pane with a clean context window (0 tokens), continuing your workspace task via repository checkpoints without token degradation.
       </div>
 
@@ -819,7 +873,7 @@
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
         <div>
           <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Execution Policy</label>
-          <select id="relay-policy-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text);">
+          <select id="relay-policy-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; color: var(--text);">
             <option value="ask_first">Ask First (Recommended / Default)</option>
             <option value="auto">Auto-Relay (Zero-Touch Rotation)</option>
             <option value="disabled">Disabled (Manual Only)</option>
@@ -827,14 +881,14 @@
         </div>
         <div>
           <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Strategy</label>
-          <select id="relay-strategy-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text);">
+          <select id="relay-strategy-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; color: var(--text);">
             <option value="same_agent">Same Agent & Model (Default)</option>
             <option value="failover">Failover on Rate Limit (Claude to Codex)</option>
           </select>
         </div>
         <div>
           <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Safety Buffer Threshold</label>
-          <select id="relay-threshold-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 11px; color: var(--text);">
+          <select id="relay-threshold-select" onchange="saveRelayConfig()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; color: var(--text);">
             <option value="85">85% Context Fill</option>
             <option value="90">90% Context Fill (Recommended)</option>
             <option value="95">95% Context Fill</option>
@@ -896,16 +950,36 @@
 
     function setView(view, updateUrl = true) {
       activeView = view;
-      document.getElementById('console-title').textContent = `spawnt / ${view}`;
+      const titles = { overview: 'Your agent fleet', sessions: 'Sessions', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Settings' };
+      document.getElementById('console-title').textContent = titles[view] || 'Your agent fleet';
+      if (['overview', 'sessions', 'usage', 'limits'].includes(view)) {
+        document.getElementById('view-console').setAttribute('aria-labelledby', `tab-btn-${view}`);
+      }
       document.querySelectorAll('.tab-btn').forEach(button => {
-        const selected = button.id === `tab-btn-${view}`;
+        const selected = button.dataset.view === view;
         button.classList.toggle('active', selected);
-        if (selected) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+        button.setAttribute('aria-selected', String(selected));
+        button.tabIndex = selected ? 0 : -1;
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
       if (updateUrl) history.replaceState(null, '', view === 'overview' ? '/' : `/#${view}`);
     }
+
+    document.querySelector('.nav-tabs').addEventListener('keydown', event => {
+      const tabs = [...document.querySelectorAll('.nav-tabs [role="tab"]')];
+      const current = tabs.indexOf(document.activeElement);
+      let next = current;
+      if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      const tab = tabs[next];
+      tab.focus();
+      navigateView(tab.dataset.view);
+    });
 
     function navigateView(view) { setView(view); refreshCurrentView(); }
     window.addEventListener('hashchange', () => {
@@ -933,10 +1007,10 @@
         }
         lastSuccessfulUpdate = new Date();
         document.getElementById('last-updated').textContent = `Last updated: ${lastSuccessfulUpdate.toLocaleTimeString()}`;
-        document.getElementById('sync-state').textContent = '[LOCAL] VIEW REFRESHED';
+        document.getElementById('sync-state').textContent = 'View refreshed';
         document.getElementById('sync-state').classList.remove('local-status-error');
       } catch {
-        document.getElementById('sync-state').textContent = '[ERR] REFRESH FAILED';
+        document.getElementById('sync-state').textContent = 'Refresh failed';
         document.getElementById('sync-state').classList.add('local-status-error');
       } finally {
         button.disabled = false;
@@ -954,10 +1028,10 @@
       if (results.every(Boolean)) {
         lastSuccessfulUpdate = new Date();
         updated.textContent = `Last successful update: ${lastSuccessfulUpdate.toLocaleTimeString()}`;
-        state.textContent = '[LOCAL] CONNECTED';
+        state.textContent = 'Local daemon connected';
         state.classList.remove('local-status-error');
       } else {
-        state.textContent = lastSuccessfulUpdate ? '[WARN] LOCAL DATA STALE' : '[ERR] LOCAL DATA UNAVAILABLE';
+        state.textContent = lastSuccessfulUpdate ? 'Local data stale' : 'Local data unavailable';
         state.classList.add('local-status-error');
       }
     }
@@ -969,24 +1043,24 @@
       button.disabled = true;
       document.getElementById('reload-view').disabled = true;
       button.textContent = 'Reconciling...';
-      document.getElementById('sync-state').textContent = '[RUN] LOCAL RECONCILIATION';
+      document.getElementById('sync-state').textContent = 'Reconciling local data';
       try {
         const response = await fetch('/api/v1/reconcile', { method: 'POST', headers });
         if (response.status === 409) {
-          document.getElementById('sync-state').textContent = '[RUN] RECONCILIATION IN PROGRESS';
+          document.getElementById('sync-state').textContent = 'Reconciliation in progress';
         } else if (!response.ok) throw new Error('Reconciliation failed');
         const refreshed = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
         if (refreshed.some(result => !result)) throw new Error('Local data refresh failed');
         if (response.status === 409) {
-          document.getElementById('sync-state').textContent = '[RUN] RECONCILIATION IN PROGRESS';
+          document.getElementById('sync-state').textContent = 'Reconciliation in progress';
         } else {
           lastSuccessfulUpdate = new Date();
           document.getElementById('last-updated').textContent = `Last successful update: ${lastSuccessfulUpdate.toLocaleTimeString()}`;
-          document.getElementById('sync-state').textContent = '[LOCAL] RECONCILED';
+          document.getElementById('sync-state').textContent = 'Local data reconciled';
         }
         document.getElementById('sync-state').classList.remove('local-status-error');
       } catch {
-        document.getElementById('sync-state').textContent = '[ERR] RECONCILIATION FAILED';
+        document.getElementById('sync-state').textContent = 'Reconciliation failed';
         document.getElementById('sync-state').classList.add('local-status-error');
       } finally {
         button.disabled = false;
@@ -1041,11 +1115,11 @@
           const badge = document.getElementById('pro-tier-badge');
           const details = document.getElementById('pro-license-details');
           if (lic.licensed) {
-            badge.innerText = `[${lic.tier.toUpperCase()}]`;
+            badge.innerText = lic.tier.toUpperCase();
             badge.style.color = 'var(--green)';
             details.innerText = `License active for ${lic.customer_name || 'user'}. ${lic.expires_at ? 'Expires ' + lic.expires_at : 'Perpetual license.'}`;
           } else {
-            badge.innerText = '[FREE]';
+            badge.innerText = 'FREE';
             badge.style.color = 'var(--text-muted)';
             details.innerText = 'Free tier active. Pro features unlock with an offline Ed25519-signed license key.';
           }
@@ -1086,7 +1160,7 @@
                 <td>${r.agent || 'All Agents'}</td>
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) + ' EXACT' : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns + ' EXACT' : 'None'}</td>
-                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">[${r.action}]</span></td>
+                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${r.action}</span></td>
                 <td><button class="btn-control" onclick="deleteRule('${r.id}')">Delete</button></td>
               </tr>
             `).join('');
@@ -1104,7 +1178,7 @@
               <tr>
                 <td style="font-family: var(--font-mono); font-size: 11px;">${a.session_id}</td>
                 <td style="font-weight: 600;">${a.rule_id}</td>
-                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">[${a.action}]</span></td>
+                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${a.action}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(a.created_at)}</td>
               </tr>
             `).join('');
@@ -1147,7 +1221,7 @@
                 <td style="font-weight: 600;">${r.project_name}</td>
                 <td>${r.source_agent} &rarr; ${r.target_agent}</td>
                 <td style="font-weight: 600; color: ${r.fill_pct >= 90 ? 'var(--red)' : 'var(--yellow)'};">${r.fill_pct}% <span class="trust-mark">EXACT</span></td>
-                <td><span class="badge" style="color: ${statusColor}; border-color: ${statusColor};">[${r.status.toUpperCase()}]</span></td>
+                <td><span class="badge" style="color: ${statusColor}; border-color: ${statusColor};">${r.status.toUpperCase()}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(r.created_at)}</td>
                 <td>${actionBtn}</td>
               </tr>`;
@@ -1394,7 +1468,7 @@
         const activeRoi = (res.roi_by_provider || []).filter(r => r.spend_usd > 0);
         const roiContainer = document.getElementById('roi-cards-container');
         roiContainer.innerHTML = activeRoi.map(r => `
-          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px; font-family: var(--font-mono);">
+          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px; font-family: var(--font-mono);">
             <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${r.provider}</div>
             <div style="font-size: 18px; font-weight: 600; margin: 4px 0;">${r.multiplier.toFixed(1)}x Return <span class="trust-mark">EST</span></div>
             <div style="font-size: 11px; color: ${r.net_savings_usd >= 0 ? 'var(--green)' : 'var(--red)'};">
@@ -1476,7 +1550,7 @@
             contextHtml = `<div>
               <span style="font-weight: 600;">${formatTokens(ctxTok)} <span class="trust-mark">EXACT</span></span>
               <span style="font-size: 10px; color: var(--text-muted);">/ ${formatTokens(s.context_window)} (${pct}% EXACT)</span>
-              <div style="background: var(--sp-surface-2); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 3px; width: 80px;">
+              <div style="background: var(--sp-surface-2); height: 4px; border-radius: 0; overflow: hidden; margin-top: 3px; width: 80px;">
                 <div style="background: ${barColor}; height: 100%; width: ${pct}%;"></div>
               </div>
             </div>`;
@@ -1703,7 +1777,7 @@
         let html = '<div style="display: flex; flex-direction: column; gap: 4px;">';
         for (const cp of res.custom_pricing) {
           html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 0;">
               <span><strong>${cp.model_pattern}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
               <button class="btn-control" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing('${cp.model_pattern}')">Remove</button>
             </div>`;
