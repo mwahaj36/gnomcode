@@ -222,7 +222,7 @@ pub trait SourceAdapter: Send {
 | Adapter | Dedup key | Gotchas |
 | :--- | :--- | :--- |
 | Claude Code | `message.id + requestId` | One message is written once per content block; resumed sessions copy history. `isSidechain` = subagent. |
-| Codex | `session_id + ordinal` | Use `last_token_usage` deltas, not cumulative totals. `rate_limits` = exact quota. |
+| Codex | `session_id + ordinal` | Use `last_token_usage` for per-turn usage and current context fill; never use rollout-cumulative `total_token_usage` for context fill, since compaction removes prior turns from the active context. `rate_limits` = exact quota. |
 | Antigravity | `conversation_id + step_index` | Model is tracked as a state variable updated by `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps (`Model Selection` -> e.g. `Claude Opus 5.5 (Medium)`, `Gemini 4 Argon (Medium)`). Subagents = `invoke_subagent` tool calls. Titles from `conversation_summaries.db` (read-only). |
 | Cline / Roo | `task_id + ts` | File is rewritten whole → re-read + diff, debounce 500 ms. |
 | Cursor | — | Open SQLite with `mode=ro&immutable=1` or copy first. |

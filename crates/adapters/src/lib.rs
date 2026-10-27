@@ -188,6 +188,19 @@ mod tests {
     }
 
     #[test]
+    fn codex_context_window_uses_current_usage_after_compaction() {
+        let path = workspace_root().join("fixtures/codex/v0.162/compaction_context.jsonl");
+        let bytes = fs::read(path).expect("read Codex compaction fixture");
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), &bytes);
+
+        assert_eq!(batch.parse_errors, 0);
+        assert_eq!(batch.usage_records.len(), 2);
+        assert_eq!(batch.usage_records[0].context_tokens, 190_000);
+        assert_eq!(batch.usage_records[1].context_tokens, 20_000);
+        assert_eq!(batch.usage_records[1].context_window, Some(258_000));
+    }
+
+    #[test]
     fn codex_task_complete_ends_thinking_state() {
         let lines = concat!(
             "{\"timestamp\":\"2026-10-26T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"s1\",\"cwd\":\"/workspace/test\"}}\n",

@@ -1,0 +1,4 @@
+{"timestamp":"2026-10-28T10:00:00Z","type":"session_meta","payload":{"id":"synthetic-session","cwd":"/workspace/sample"}}
+{"timestamp":"2026-10-28T10:01:00Z","ordinal":1,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":313700000},"last_token_usage":{"input_tokens":189000,"output_tokens":1000,"total_tokens":190000},"model_context_window":258000}}}
+{"timestamp":"2026-10-28T10:02:00Z","ordinal":2,"type":"event_msg","payload":{"type":"context_compacted"}}
+{"timestamp":"2026-10-28T10:03:00Z","ordinal":3,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"total_tokens":313710000},"last_token_usage":{"input_tokens":19000,"output_tokens":1000,"total_tokens":20000},"model_context_window":258000}}}
