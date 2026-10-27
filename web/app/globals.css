@@ -44,6 +44,8 @@ body {
 .sp-app-header .text-accent { color: var(--sp-primary-text); }
 .sp-app-header .bg-accent { background: var(--sp-primary); }
 .sp-app-header .text-\[\#0d1117\] { color: var(--sp-on-primary); }
+.sp-auth-oauth { color: var(--sp-text); background: var(--sp-surface-2); border: 1px solid var(--sp-border-strong); }
+.sp-auth-oauth:hover { background: var(--sp-surface); }
 @media (max-width: 760px) { .sp-site-header { height: 56px; } .sp-site-nav { width: calc(100% - 32px); gap: 14px; } .sp-site-divider { display: none; } .sp-site-links { display: none; position: absolute; top: 55px; left: 0; right: 0; padding: 16px; border: 1px solid var(--sp-border); background: var(--sp-surface); } .sp-site-links.open { display: flex; flex-direction: column; align-items: stretch; gap: 16px; } .sp-site-mobile-login { display: block; } .sp-site-actions { gap: 8px; } .sp-site-menu { display: block; width: 40px; height: 40px; padding: 8px; border: 0; background: none; } .sp-site-menu span { display: block; height: 1px; margin: 5px 0; background: var(--sp-text); } .sp-site-footer { padding: 48px 16px 20px; } .sp-site-footer-grid { grid-template-columns: repeat(2, 1fr); gap: 28px 16px; } .sp-site-footer-intro { grid-column: 1 / -1; } .sp-site-footer-bottom { font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .sp-site-header, .sp-site-header * { transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 

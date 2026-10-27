@@ -81,9 +81,7 @@ export default function DocsPage() {
         <article className="flex-1 max-w-4xl prose prose-invert">
           {/* Header */}
           <div className="border-b border-border pb-8 mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent font-mono text-xs mb-4">
-              <span>FleetHUD Reference Guide &bull; v1.1.1</span>
-            </div>
+            <p className="font-mono text-xs text-accent mb-4">REFERENCE GUIDE / v1.1.1</p>
             <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-4">
               FleetHUD Documentation
             </h1>
