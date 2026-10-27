@@ -39,7 +39,7 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 - Inter for headings and body; JetBrains Mono for labels, numbers, IDs, and commands. Self-host fonts in shipped surfaces; make no remote font requests. Use tabular numerals.
 - Body type is generally 14/20 or 16/24; section headings 28/36 or 40/44; marketing hero up to 56/60. Prefer weights 400 and 600.
 - Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64 px. Controls need at least a 44 px touch target.
-- Radius: 4 px for controls and badges, 6 px for panels and the floating navbar, 0 for grid cells and full-bleed regions. Borders are 1 px. Shadows belong only on floating layers.
+- Radius: 4 px for controls and square badges, 6 px for panels and the floating navbar, 0 for grid cells and full-bleed regions. Do not use pill-shaped controls or badges. Borders are 1 px. Shadows belong only on floating layers.
 - Console content uses a compact hairline grid: KPIs share borders and tables use row separators. Avoid floating dashboard cards.
 - Use geometric SVG icons and self-hosted agent marks in `web/public/agents/`. Labels remain readable without icons.
 
