@@ -17,22 +17,8 @@ export default function AuthPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const cb = params.get("callback");
-      if (cb) {
-        localStorage.setItem("fleethud_auth_callback", cb);
-      }
-    }
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        const cb = localStorage.getItem("fleethud_auth_callback");
-        if (cb) {
-          localStorage.removeItem("fleethud_auth_callback");
-          window.location.href = `${cb}?session=${encodeURIComponent(JSON.stringify(session))}`;
-          return;
-        }
         router.push("/console");
       }
     });

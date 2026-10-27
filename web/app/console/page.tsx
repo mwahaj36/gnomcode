@@ -116,9 +116,6 @@ export default function ConsolePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
-  const [quickTokenInput, setQuickTokenInput] = useState("");
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState("");
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
@@ -133,16 +130,14 @@ export default function ConsolePage() {
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
 
   useEffect(() => {
+    if (sessionStorage.getItem("fleethud_pair_request")) {
+      window.location.replace("/pair" + window.location.search + window.location.hash);
+      return;
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthChecked(true);
-      if (session && typeof window !== "undefined") {
-        const cb = localStorage.getItem("fleethud_auth_callback");
-        if (cb) {
-          localStorage.removeItem("fleethud_auth_callback");
-          window.location.href = `${cb}?session=${encodeURIComponent(JSON.stringify(session))}`;
-        }
-      }
+
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -210,33 +205,6 @@ export default function ConsolePage() {
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
-  };
-
-  const copyQuickToken = async () => {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        const tokenStr = btoa(JSON.stringify(data.session));
-        await navigator.clipboard.writeText(tokenStr);
-        setCopyFeedback("Copied pairing token!");
-        setTimeout(() => setCopyFeedback(""), 3500);
-      }
-    } catch {
-      setCopyFeedback("Failed to copy");
-    }
-  };
-
-  const applyQuickToken = async () => {
-    try {
-      const raw = atob(quickTokenInput.trim());
-      const session = JSON.parse(raw);
-      await supabase.auth.setSession(session);
-      setUser(session.user);
-      setShowTokenModal(false);
-      setQuickTokenInput("");
-    } catch {
-      alert("Invalid pairing token format. Please copy fresh from your web browser session.");
-    }
   };
 
   const handleRemoteRelay = async (session: SessionItem) => {
@@ -317,15 +285,9 @@ export default function ConsolePage() {
       {!user ? (
         <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[LOCAL VIEW]</span> Want cross-device cloud sync? Pair this app with your existing browser account or sign in.
+            <span className="text-accent font-semibold">[CLOUD CONSOLE]</span> Sign in to view devices and cloud sessions paired with your account.
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowTokenModal(true)}
-              className="px-3 py-1.5 bg-card border border-border text-foreground font-semibold rounded hover:border-accent text-xs"
-            >
-              [Paste Browser Token]
-            </button>
             <Link
               href="/auth"
               className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
@@ -340,19 +302,7 @@ export default function ConsolePage() {
             <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
             <span>Cloud Account: <strong className="text-foreground">{user.email}</strong></span>
           </div>
-          <button
-            onClick={async () => {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session) {
-                await navigator.clipboard.writeText(JSON.stringify(session));
-                setCopyFeedback("Pairing token copied! Paste into Desktop App -> Auth tab.");
-                setTimeout(() => setCopyFeedback(""), 4000);
-              }
-            }}
-            className="px-3 py-1 bg-accent/20 border border-accent/40 text-accent font-semibold rounded hover:bg-accent hover:text-bg transition-colors text-xs"
-          >
-            {copyFeedback || "[Copy Pairing Token for Desktop App]"}
-          </button>
+          <Link href="/pair" className="text-accent underline">Connect a cloud workspace or device</Link>
         </div>
       )}
 
@@ -360,7 +310,7 @@ export default function ConsolePage() {
       {!report && (
         <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. The desktop daemon uploads a private snapshot every minute while running.
+            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. For cloud sessions, run fleethud pair inside the cloud environment. Desktop summaries upload every minute while the daemon runs.
           </div>
           <a
             href="/downloads"
@@ -368,39 +318,6 @@ export default function ConsolePage() {
           >
             Download Desktop App &rarr;
           </a>
-        </div>
-      )}
-
-      {/* Quick Token Pairing Modal */}
-      {showTokenModal && (
-        <div className="fixed inset-0 z-50 bg-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full font-mono text-xs shadow-2xl">
-            <div className="text-sm font-bold text-foreground mb-1">Quick Pair Desktop App</div>
-            <p className="text-muted mb-3 text-[11px]">
-              If you signed into GitHub on your web browser (Chrome/Edge), click <strong>[Copy Desktop Token]</strong> there and paste it here to authenticate instantly without typing passwords.
-            </p>
-            <textarea
-              rows={4}
-              value={quickTokenInput}
-              onChange={(e) => setQuickTokenInput(e.target.value)}
-              placeholder="Paste pairing token here..."
-              className="w-full bg-bg border border-border rounded p-2 text-foreground mb-3 focus:outline-none focus:border-accent"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowTokenModal(false)}
-                className="px-3 py-1.5 bg-card border border-border rounded text-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={applyQuickToken}
-                className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90"
-              >
-                Connect Session
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

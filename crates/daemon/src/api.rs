@@ -98,6 +98,12 @@ pub fn build_router(state: AppState) -> Router {
                 .post(auth_session_post_handler)
                 .delete(auth_session_delete_handler),
         )
+        .route(
+            "/api/v1/auth/pair",
+            get(pair_status_handler)
+                .post(pair_start_handler)
+                .delete(pair_cancel_handler),
+        )
         .route("/api/v1/stats", get(stats_handler))
         .route("/api/v1/supabase-config", get(supabase_config_handler))
         .route("/api/v1/live", get(live_snapshot_handler))
@@ -635,6 +641,54 @@ async fn health_handler(
     }))
 }
 
+fn visible_sessions(
+    db: &Database,
+    cloud: Vec<fleethud_store::SessionListItem>,
+    agent: Option<&str>,
+    status: Option<&str>,
+    offset: usize,
+    limit: usize,
+) -> Result<(Vec<fleethud_store::SessionListItem>, usize), StatusCode> {
+    let cloud = cloud
+        .into_iter()
+        .filter(|row| {
+            (agent.is_none_or(|agent| agent == "all" || row.agent == agent))
+                && status != Some("active")
+        })
+        .filter_map(|row| match db.contains_session(&row.id) {
+            Ok(false) => Some(Ok(row)),
+            Ok(true) => None,
+            Err(_) => Some(Err(StatusCode::INTERNAL_SERVER_ERROR)),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    // At most cloud.len() rows can shift any local row across this page boundary.
+    let local_offset = offset.saturating_sub(cloud.len());
+    let (mut local, total) = db
+        .list_sessions_paginated(
+            agent,
+            status,
+            local_offset,
+            limit.saturating_add(cloud.len()),
+        )
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let total = total + cloud.len();
+    local.extend(cloud);
+    local.sort_by(|a, b| {
+        b.is_active
+            .cmp(&a.is_active)
+            .then_with(|| b.last_event_at.cmp(&a.last_event_at))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    Ok((
+        local
+            .into_iter()
+            .skip(offset - local_offset)
+            .take(limit)
+            .collect(),
+        total,
+    ))
+}
+
 async fn list_sessions_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -643,17 +697,18 @@ async fn list_sessions_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let page = params.page.unwrap_or(1).max(1);
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
-    let offset = (page - 1) * limit;
+    let offset = (page - 1).saturating_mul(limit);
 
     let db = state.db.lock().await;
-    let (mut sessions, total_count) = db
-        .list_sessions_paginated(
-            params.agent.as_deref(),
-            params.status.as_deref(),
-            offset,
-            limit,
-        )
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (cloud_sessions, cloud_status) = crate::cloud::cached_sessions().await;
+    let (mut sessions, total_count) = visible_sessions(
+        &db,
+        cloud_sessions.clone(),
+        params.agent.as_deref(),
+        params.status.as_deref(),
+        offset,
+        limit,
+    )?;
 
     let host = fleethud_platform::hostname();
     for s in &mut sessions {
@@ -674,6 +729,7 @@ async fn list_sessions_handler(
         limit: usize,
         total_pages: usize,
         active_count: usize,
+        cloud_status: &'static str,
     }
 
     let total_pages = total_count.div_ceil(limit);
@@ -685,6 +741,7 @@ async fn list_sessions_handler(
         limit,
         total_pages: total_pages.max(1),
         active_count,
+        cloud_status,
     }))
 }
 
@@ -1056,19 +1113,25 @@ async fn auth_session_get_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
-    let paired = path.exists();
-    let email = if paired {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-            .and_then(|v| {
-                v.pointer("/user/email")
-                    .and_then(Value::as_str)
-                    .map(ToOwned::to_owned)
-            })
-    } else {
-        None
-    };
+    let session = std::fs::read(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<Value>(&raw).ok());
+    let paired = session.as_ref().is_some_and(|session| {
+        session
+            .pointer("/user/id")
+            .and_then(Value::as_str)
+            .is_some()
+            && session["access_token"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+            && session["refresh_token"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+    });
+    let email = session
+        .as_ref()
+        .and_then(|session| session.pointer("/user/email"))
+        .and_then(Value::as_str);
     Ok((
         cors_headers(),
         Json(json!({ "paired": paired, "email": email })),
@@ -1081,34 +1144,14 @@ async fn auth_session_post_handler(
     Json(payload): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if payload
-        .get("access_token")
-        .and_then(Value::as_str)
-        .is_none()
-        || payload
-            .get("refresh_token")
-            .and_then(Value::as_str)
-            .is_none()
-        || payload
-            .pointer("/user/id")
-            .and_then(Value::as_str)
-            .is_none()
-    {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    let path = session_file_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let content =
-        serde_json::to_string_pretty(&payload).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    std::fs::write(&path, content).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    }
+    let client = crate::cloud::client().map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let (base, key) = crate::sync::cloud_config();
+    crate::pairing::validate_session(&client, &base, &key, &payload)
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    crate::sync::save_cloud_session(&session_file_path(), &payload)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok((cors_headers(), Json(json!({ "success": true }))))
 }
@@ -1118,9 +1161,38 @@ async fn auth_session_delete_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    crate::pairing::browser_cancel().await;
     let path = session_file_path();
-    let _ = std::fs::remove_file(path);
+    crate::sync::remove_cloud_session(&path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((cors_headers(), Json(json!({ "success": true }))))
+}
+
+async fn pair_start_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let progress = crate::pairing::browser_start()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(progress))
+}
+async fn pair_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(crate::pairing::browser_status().await))
+}
+async fn pair_cancel_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    crate::pairing::browser_cancel().await;
+    Ok(Json(json!({"success": true})))
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -1143,7 +1215,7 @@ async fn live_snapshot_handler(
     let range = params.range.as_deref().unwrap_or("all");
     let page = params.page.unwrap_or(1).max(1);
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
-    let offset = (page - 1) * limit;
+    let offset = (page - 1).saturating_mul(limit);
 
     let db = state.db.lock().await;
 
@@ -1155,14 +1227,15 @@ async fn live_snapshot_handler(
         .get_user_profile()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (mut sessions, total_count) = db
-        .list_sessions_paginated(
-            params.agent.as_deref(),
-            params.status.as_deref(),
-            offset,
-            limit,
-        )
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (cloud_sessions, cloud_status) = crate::cloud::cached_sessions().await;
+    let (mut sessions, total_count) = visible_sessions(
+        &db,
+        cloud_sessions.clone(),
+        params.agent.as_deref(),
+        params.status.as_deref(),
+        offset,
+        limit,
+    )?;
 
     let host = fleethud_platform::hostname();
     for s in &mut sessions {
@@ -1297,6 +1370,8 @@ async fn live_snapshot_handler(
             "total_pages": total_pages.max(1),
             "active_count": active_count,
             "custom_pricing": custom_pricing,
+            "cloud_sessions": cloud_sessions,
+            "cloud_status": cloud_status,
         })),
     ))
 }
@@ -1310,6 +1385,96 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
+
+    #[test]
+    fn cloud_presence_merges_pages_without_duplicates_or_active_work() {
+        use fleethud_core::{AgentId, Project, Session, SessionState, Surface};
+        use fleethud_store::SourceCheckpoint;
+        let mut db = Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, "test", None);
+        let sessions: Vec<_> = [2, 4, 6]
+            .into_iter()
+            .map(|day| {
+                let at = chrono::DateTime::parse_from_rfc3339(&format!(
+                    "2026-01-{day:02}T00:00:00+00:00"
+                ))
+                .expect("timestamp")
+                .with_timezone(&chrono::Utc);
+                Session {
+                    id: format!("codex:local{day}"),
+                    agent: AgentId::Codex,
+                    surface: Surface::Cli,
+                    project_id: project.id.clone(),
+                    parent_session_id: None,
+                    model: None,
+                    title: None,
+                    state: SessionState::Idle,
+                    pid: None,
+                    started_at: at,
+                    last_event_at: at,
+                }
+            })
+            .collect();
+        db.commit_batch(
+            &[project],
+            &sessions,
+            &[],
+            &[],
+            &[],
+            &SourceCheckpoint {
+                file_path: "test".to_owned(),
+                last_read_offset: 0,
+                file_size: 0,
+                fingerprint: "test".to_owned(),
+                last_ingested_at: chrono::Utc::now(),
+            },
+        )
+        .expect("commit");
+        let (local, _) = db
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("sessions");
+        let mut cloud: Vec<_> = [1, 3, 5]
+            .into_iter()
+            .map(|day| {
+                let mut row = local[0].clone();
+                row.id = format!("codex:remote{day}");
+                row.surface = "cloud".to_owned();
+                row.last_event_at = format!("2026-01-{day:02}T00:00:00+00:00");
+                row
+            })
+            .collect();
+        cloud.push(local[0].clone());
+        let mut ids = Vec::new();
+        for offset in [0, 2, 4] {
+            let (page, total) =
+                super::visible_sessions(&db, cloud.clone(), None, None, offset, 2).expect("page");
+            assert_eq!(total, 6);
+            ids.extend(page.into_iter().map(|row| row.id));
+        }
+        assert_eq!(
+            ids,
+            [
+                "codex:local6",
+                "codex:remote5",
+                "codex:local4",
+                "codex:remote3",
+                "codex:local2",
+                "codex:remote1"
+            ]
+        );
+        assert_eq!(
+            super::visible_sessions(&db, cloud.clone(), None, Some("active"), 0, 10)
+                .expect("active")
+                .1,
+            0
+        );
+        assert_eq!(
+            super::visible_sessions(&db, cloud, Some("claude-code"), None, 0, 10)
+                .expect("agent")
+                .1,
+            0
+        );
+    }
 
     #[tokio::test]
     async fn rejects_missing_bearer_token() {
@@ -1340,6 +1505,7 @@ mod tests {
         for path in [
             "/api/v1/live",
             "/api/v1/auth/session",
+            "/api/v1/auth/pair",
             "/api/v1/supabase-config",
         ] {
             let request = Request::builder()

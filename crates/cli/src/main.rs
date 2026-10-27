@@ -92,6 +92,12 @@ enum Commands {
         #[command(subcommand)]
         action: LicenseCommands,
     },
+    /// Pair this device or cloud environment through a browser (no session file copying).
+    Pair {
+        /// Name shown on the approval screen.
+        #[arg(long)]
+        name: Option<String>,
+    },
     /// Register a cloud session and send presence heartbeats (no inferred usage).
     CloudSession {
         /// Provider; omitted only when Codex cloud metadata is available.
@@ -160,6 +166,39 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
+        Commands::Pair { name } => {
+            let name = name.unwrap_or_else(fleethud_platform::hostname);
+            let request = fleethud_daemon::pairing::PairingRequest::new(&name)
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            println!(
+                "Pair this environment with the same FleetHUD account you use on your other devices."
+            );
+            println!(
+                "Open this link in your browser (keep it private):\n{}",
+                request.url
+            );
+            println!(
+                "Verify code: {}. Approve within ten minutes. Waiting...",
+                request.code
+            );
+            let session_path = fleethud_home().join("session.json");
+            tokio::select! {
+                result = request.complete(&session_path) => {
+                    result.map_err(|error| anyhow::anyhow!("{error}"))?;
+                    let mut daemon = std::process::Command::new(std::env::current_exe()?);
+                    daemon.arg("daemon").stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+                    #[cfg(target_os = "windows")]
+                    {
+                        use std::os::windows::process::CommandExt as _;
+                        daemon.creation_flags(0x0800_0000);
+                    }
+                    daemon.spawn().context("Account paired, but the daemon could not start. Run fleethud daemon.")?;
+                    println!("Account paired. FleetHUD daemon started or already running. Allow up to 60 seconds for sync.");
+                }
+                _ = tokio::signal::ctrl_c() => println!("Pairing cancelled."),
+            }
+            Ok(())
+        }
         Commands::CloudSession {
             agent,
             session_id,
@@ -674,7 +713,10 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         fleethud_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
-    let _cloud_sync_handle = fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db());
+    let _cloud_sync_handle = fleethud_platform::cloud_session_identity()
+        .is_none()
+        .then(|| fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db()));
+    let _cloud_reader_handle = fleethud_daemon::cloud::spawn_cloud_reader();
     let _cloud_presence_handle =
         fleethud_daemon::cloud::spawn_auto_collector(db_path.to_path_buf());
 

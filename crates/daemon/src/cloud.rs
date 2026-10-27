@@ -290,6 +290,110 @@ pub fn ingest_usage_file(
     Ok(())
 }
 
+struct CloudCache {
+    user_id: String,
+    sessions: Vec<SessionListItem>,
+    status: &'static str,
+}
+static CLOUD_CACHE: tokio::sync::RwLock<CloudCache> = tokio::sync::RwLock::const_new(CloudCache {
+    user_id: String::new(),
+    sessions: Vec::new(),
+    status: "Not paired",
+});
+
+/// Refreshes remote presence for the native console and tray without delaying local API reads.
+pub fn spawn_cloud_reader() -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let Ok(client) = client() else {
+            return;
+        };
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            ticker.tick().await;
+            let path = fleethud_platform::fleethud_home().join("session.json");
+            let result = async {
+                let Some(auth) = crate::sync::read_cloud_auth(&client, &path).await? else {
+                    return Ok(None);
+                };
+                let mut url = reqwest::Url::parse(&format!(
+                    "{}/rest/v1/fleethud_cloud_sessions_live",
+                    auth.base_url
+                ))?;
+                url.query_pairs_mut().extend_pairs([
+                    ("select", "session"),
+                    ("user_id", &format!("eq.{}", auth.user_id)),
+                    ("order", "updated_at.desc"),
+                    ("limit", "1000"),
+                ]);
+                let rows: Vec<serde_json::Value> = client
+                    .get(url)
+                    .header("apikey", &auth.public_key)
+                    .bearer_auth(&auth.access_token)
+                    .send()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await?;
+                let sessions = rows
+                    .into_iter()
+                    .filter_map(|row| {
+                        serde_json::from_value::<SessionListItem>(row["session"].clone()).ok()
+                    })
+                    .filter(|row| row.surface == "cloud")
+                    .collect();
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(Some((auth.user_id, sessions)))
+            }
+            .await;
+            let mut cache = CLOUD_CACHE.write().await;
+            match result {
+                Ok(Some((user_id, sessions))) => {
+                    cache.user_id = user_id;
+                    cache.sessions = sessions;
+                    cache.status = "Cloud session sync available";
+                }
+                Ok(None) => {
+                    cache.user_id.clear();
+                    cache.sessions.clear();
+                    cache.status = "Not paired";
+                }
+                Err(_) => {
+                    cache.status = "Cloud sessions unavailable. Check account, network and migrations; retrying automatically.";
+                }
+            }
+        }
+    })
+}
+
+pub(crate) async fn cached_sessions() -> (Vec<SessionListItem>, &'static str) {
+    // A changed or removed account must never expose the previous account's cached sessions.
+    let user_id = std::fs::read(fleethud_platform::fleethud_home().join("session.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok())
+        .and_then(|session| {
+            session
+                .pointer("/user/id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        });
+    let cache = CLOUD_CACHE.read().await;
+    if user_id.as_deref() != Some(cache.user_id.as_str()) {
+        return (Vec::new(), "Not paired or awaiting first cloud refresh");
+    }
+    let mut sessions = cache.sessions.clone();
+    for session in &mut sessions {
+        session.is_active = false;
+        let connected = chrono::DateTime::parse_from_rfc3339(&session.last_event_at)
+            .is_ok_and(|at| (Utc::now() - at.with_timezone(&Utc)).num_seconds() <= 90);
+        session.state = if connected {
+            "connected"
+        } else {
+            "disconnected"
+        }
+        .to_owned();
+    }
+    (sessions, cache.status)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
