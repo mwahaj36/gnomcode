@@ -518,5 +518,9 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
 - Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
 - Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
-- Verification: pending production build, desktop/narrow theme review, and keyboard review.
->>>>>>> 1ab7670 (feat(web): redesign downloads route)
+
+## 2026-10-28 — landing tour alignment
+
+- Goal: fix crowded KPI labels and inconsistent tour table columns reported in the landing page screenshots.
+- Outcome: split each overview metric into a label and value/trust row; set shared table tracks so agent, state, usage, and trust columns line up. Narrow layouts consistently hide the usage value column.
+- Verification: Next.js production build and `git diff --check` passed. Desktop landing preview screenshot and accessibility tree reviewed; the tour section still needs a fresh browser visual review after restarting the stale dev server, plus narrow viewport and keyboard review.
