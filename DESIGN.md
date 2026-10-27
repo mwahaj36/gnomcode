@@ -67,3 +67,8 @@ The landing, shared site shell, pricing, downloads and documentation pages, and 
 
 - Keep overview KPI labels separate from values and trust markers, with shared alignment across all three metrics.
 - Use consistent grid tracks for every row in a tour table so agent, state, value, and trust columns remain aligned. On narrow screens, hide the value column uniformly rather than allowing content-driven track widths.
+
+## Command snippets
+
+- Every executable command shown in the app has an adjacent square `Copy` button with an accessible name, visible success/failure feedback, and keyboard focus styling.
+- Copy the exact command shown. Keep long commands horizontally scrollable or safely wrapped at narrow widths; the copy control remains visible.
