@@ -744,3 +744,121 @@ mod tests {
         );
     }
 }
+
+/// Atomically writes account credentials with owner-only file access.
+///
+/// # Errors
+/// Fails without replacing the existing file if permissions or writing fail.
+pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("Missing parent directory"))?;
+    fs::create_dir_all(parent)?;
+    let pending = parent.join(format!(
+        ".fleethud-private-{}-{}.tmp",
+        std::process::id(),
+        NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut opts = OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    let result = (|| -> io::Result<()> {
+        let mut file = opts.open(&pending)?;
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            let output = std::process::Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); Set-Acl -LiteralPath $env:FLEETHUD_PRIVATE_FILE -AclObject $acl"])
+                .env("FLEETHUD_PRIVATE_FILE", &pending)
+                .creation_flags(0x0800_0000).output()?;
+            if !output.status.success() {
+                return Err(io::Error::other("Cannot restrict credential file access"));
+            }
+        }
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&pending, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&pending);
+    }
+    result.map_err(Error::from)
+}
+
+/// Opens an OS-held exclusive file lock, released when the returned file closes.
+///
+/// # Errors
+/// Returns an error when another process owns the lock or the file cannot be opened.
+pub fn open_exclusive_lock(path: &Path) -> io::Result<File> {
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(false);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        opts.share_mode(0);
+    }
+    let file = opts.open(path)?;
+    #[cfg(unix)]
+    file_lock::lock(&file)?;
+    Ok(file)
+}
+
+#[cfg(unix)]
+mod file_lock {
+    #![allow(unsafe_code)]
+    use std::os::fd::AsRawFd as _;
+    pub(super) fn lock(file: &std::fs::File) -> std::io::Result<()> {
+        // SAFETY: the file descriptor is valid for the call; flock retains no Rust pointer.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+}
+
+#[cfg(test)]
+mod private_file_tests {
+    #[test]
+    fn replaces_credentials_without_leaving_partial_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("session.json");
+        super::write_private_file(&path, b"old").expect("write");
+        super::write_private_file(&path, b"new").expect("replace");
+        assert_eq!(std::fs::read(&path).expect("read"), b"new");
+        assert_eq!(std::fs::read_dir(dir.path()).expect("files").count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            assert_eq!(
+                std::fs::metadata(path)
+                    .expect("metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod daemon_lock_tests {
+    #[test]
+    fn second_daemon_cannot_replace_a_running_daemons_credentials() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("daemon.lock");
+        let first = super::open_exclusive_lock(&path).expect("first daemon");
+        assert!(super::open_exclusive_lock(&path).is_err());
+        drop(first);
+        assert!(super::open_exclusive_lock(&path).is_ok());
+    }
+}

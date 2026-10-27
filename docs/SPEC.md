@@ -516,7 +516,16 @@ erDiagram
 
 ### 3.15.1 Cloud session collectors
 
-The daemon automatically starts cloud collection when runtime identity is available, reusing its paired account. Other agents can bind `FLEETHUD_CLOUD_AGENT` and `FLEETHUD_CLOUD_SESSION_ID`. A new environment still needs secure account linking.
+The daemon automatically starts cloud collection when runtime identity is available, reusing its paired account. Other agents can bind `FLEETHUD_CLOUD_AGENT` and `FLEETHUD_CLOUD_SESSION_ID`. `fleethud pair` opens an explanatory browser approval flow for each new environment.
+The same flow is available under desktop Auth & Cloud Sync. A separate login is
+sent as an AES-256-GCM encrypted, expiring, one-time envelope through authenticated
+approval and secret-protected consumption RPCs (`supabase_device_pairing_v4.sql`).
+The collector validates and privately saves it, then starts the daemon. Browser
+callbacks use isolated PKCE storage; raw login tokens are never placed in callback
+URLs. Native consoles merge remote cloud presence into All sessions; the Windows
+tray lists connected cloud sessions separately. Cloud daemons do not replace the
+desktop summary snapshot. Platform-held locks prevent concurrent daemons from
+replacing one another’s bearer credentials.
 
 `fleethud cloud-session` runs on Windows, macOS and Linux and registers cloud
 sessions in the existing local session model (`surface=cloud`). Codex runtime
@@ -643,7 +652,7 @@ flowchart LR
 
 ### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [in progress]
 
-- Cloud collector implementation: portable presence, measured native/imported usage and estimated per-session cost implemented; production migration, account pairing and native Windows/macOS execution pending.
+- Cloud collector implementation: portable presence, measured native/imported usage and estimated per-session cost implemented; browser pairing and native cloud visibility implemented; native Windows/macOS hardware validation pending.
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
@@ -828,6 +837,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
+| [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Accepted |
 
 ## 10. Open questions
 
