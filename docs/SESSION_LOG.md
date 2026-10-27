@@ -7,8 +7,8 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 ## 2026-10-28 — Codex context compaction accounting
 
 - Goal: keep Codex's displayed context-window usage aligned with the active context after compaction.
-- Outcome: Codex usage records now take `context_tokens` from `last_token_usage.total_tokens`, while cumulative `total_token_usage` remains reserved for session-wide accounting. Added an anonymized synthetic rollout fixture that demonstrates context dropping from 190k to 20k after `context_compacted` even while cumulative tokens continue increasing.
-- Verification: regression test failed before the fix with the cumulative value and passed after; existing Codex adapter fixture test and full Rust quality gate passed. `cargo-deny` was skipped because it is not installed.
+- Outcome: Codex usage records now take `context_tokens` from `last_token_usage.total_tokens`, while cumulative `total_token_usage` remains reserved for session-wide accounting. Existing persisted Codex rows are corrected at query time from their latest turn input/output counts, without a database rewrite. Added an anonymized synthetic rollout fixture demonstrating context dropping from 190k to 20k after `context_compacted` even while cumulative tokens increase.
+- Verification: adapter and store regression tests each reproduced the cumulative-token bug before their fixes and passed after. Full Rust quality gate passed with the store compatibility correction; `cargo-deny` was skipped because it is not installed.
 
 ## 2026-10-26 — Session 1: Architecture Validation, Repo Initialization & M0 Foundation
 
