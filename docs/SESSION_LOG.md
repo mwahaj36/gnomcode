@@ -456,3 +456,12 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Native Windows GUI and macOS hardware are unavailable in this cloud environment. Windows executable behavior is checked under Wine; macOS packages remain unavailable rather than relabeling old artifacts.
 
 - Verification: 65 Rust tests, Clippy, cargo-deny and MSRV 1.87 passed. Both embedded PostgreSQL migration suites and real-browser email/PKCE approval checks passed. Windows PE/installer payload and PowerShell updater checks passed; Linux/ARM64 versions and Wine Windows collector smoke checks passed. Unix updater rejects corrupt manifests without replacing the existing install. Final Linux x86_64 packaging explicitly selects static OpenSSL to avoid an accidental host shared-library dependency.
+
+## 2026-10-27 — Synthetic browser-auth fixture clarification
+
+GitGuardian flagged the hardcoded JWT header/signature in the browser integration
+fixture in PR #44 as a Generic High Entropy Secret. The token is synthetic, uses
+an all-zero test account and an invalid signature, and is accepted only by mocked
+auth transport. Generate its header and signature from clearly named test values
+instead. No real account credential was committed or needs rotating. Production
+code and packaged binaries are unchanged. Rerun the browser flow with this fixture.
