@@ -173,7 +173,7 @@ const downloadsPagePath = "web/app/downloads/page.tsx";
 let downloadsPage = read(downloadsPagePath);
 if (downloadsPage) {
   downloadsPage = downloadsPage
-    .replace(/Production Release &bull; v[0-9.]+/g, `Production Release &bull; v${newVersion}`)
+    .replace(/v[0-9]+\.[0-9]+\.[0-9]+/g, `v${newVersion}`)
     .replace(/\/downloads\/FleetHUD-v[0-9.]+-windows-x64\.zip/g, `/downloads/FleetHUD-v${newVersion}-windows-x64.zip`);
   write(downloadsPagePath, downloadsPage);
   results.push({ file: downloadsPagePath, detail: `UI Badge & Download Link -> v${newVersion}` });

@@ -10,6 +10,13 @@ Starting the FleetHUD daemon or tray backend automatically starts a cloud
 collector when runtime identity is available. Codex cloud identity is detected
 without extra flags. The daemon reuses its existing paired account; no separate
 collector command or pairing file argument is needed in an already paired environment.
+Run `fleethud pair --name "My cloud workspace"` once in a new environment.
+Open its browser link, compare the verification code, sign in to the same account
+as your desktop, and approve. Wait for `Account paired` in the terminal. Pairing
+starts the daemon automatically. On the desktop use **Auth & Cloud Sync → Connect
+Account** for the same flow. A persistent environment keeps its credentials;
+an ephemeral environment must pair again if its FleetHUD home is discarded.
+
 A new environment still requires one secure account link; repository ownership
 and runtime IDs are not account authorization.
 
@@ -97,15 +104,32 @@ reports. This importer does not implement each provider's telemetry exporter.
 1. Apply `crates/store/migrations/supabase_cloud_presence_v3.sql` to the account's
    Supabase project (Postgres 15+). It is additive and can be applied repeatedly.
 2. Deploy the updated web app. Old clients do not read the cloud-session table.
-3. Provision a valid Supabase login session JSON securely into the collector's
-   environment. Reuse FleetHUD's existing paired `FLEETHUD_HOME/session.json`, or
-   supply `--pairing-file PATH`. This file contains credentials: use user-only
-   permissions/ACLs and never commit it, print it, or paste it into chat.
-   It needs a `user.id`, access token, expiry and refresh token from the same
-   Supabase project. Give the cloud collector its own login session rather than
-   concurrently sharing a rotating refresh-token file with a desktop process.
-4. Start the collector. A successful publish prints `Cloud presence synchronized.`
-   Without pairing, local collection works and the remote dashboard is unchanged.
+3. Apply `crates/store/migrations/supabase_device_pairing_v4.sql` to that same
+   project. This enables expiring, single-use browser approvals.
+4. Run `fleethud pair` in the cloud terminal. Open the link in a browser on your
+   own computer. Compare the code, then sign in using GitHub or email/password
+   and approve. The collector receives its own login session; no file or token
+   copying is required. The terminal must remain open until pairing completes.
+5. Open the desktop or web **All sessions** view. Allow up to 60 seconds. The
+   Windows tray lists **Connected cloud sessions** separately from active local
+   agents. A stopped collector becomes disconnected after 90 seconds.
+
+Approval links expire after ten minutes; approved envelopes can be collected once
+within five minutes. Credentials are encrypted in the browser with AES-256-GCM;
+the encryption key is in the URL fragment and is not sent to the web server or
+Supabase. The collector validates the decrypted login with the configured auth
+server before saving it atomically with owner-only permissions. Approval uses a
+separate browser login to avoid sharing rotating refresh tokens with your desktop.
+Only approve links you started. Do not share pairing links, `session.json`, or
+screenshots of credential files. Deleting a local pairing disconnects that device;
+existing historical account data remains in your account.
+
+Advanced existing integrations can still supply `--pairing-file PATH`. Do not
+share one rotating session file across separate collectors. A cloud daemon
+publishes cloud rows only; it does not replace the desktop summary snapshot.
+The local console and tray fetch account cloud presence every 30 seconds. If
+remote sync fails, local monitoring continues and the UI reports that status.
+Summary charts remain desktop reports; cloud usage and costs are on session rows.
 
 The default project URL/key match the existing FleetHUD client. Custom projects
 use `FLEETHUD_SUPABASE_URL` and `FLEETHUD_SUPABASE_KEY` for the collector and the
@@ -146,6 +170,11 @@ checkout), then run `node scripts/check-cloud-presence.mjs DIRECTORY` with that
 npm prefix. The development run used `@electric-sql/pglite@0.5.12`. The script
 creates disposable auth roles/users and checks repeated migration application,
 account isolation, typed metadata, measured usage, server timestamps and expiry.
-It never connects to production. Native Windows/macOS checks run through the
+It never connects to production. Run
+`node scripts/check-device-pairing.mjs DIRECTORY` to check approval permissions,
+secret verification, one-time consumption and replay rejection. Run
+`node scripts/check-console.mjs` before packaging. The browser integration check
+is `node scripts/check-pairing-ui.mjs PLAYWRIGHT_PREFIX DAEMON_JSON WEB_ORIGIN`;
+it exercises a real daemon and web build, stubbing only external auth transport. Native Windows/macOS checks run through the
 manual CI matrix alongside Linux; Linux validation alone is not proof of native
 execution on the other systems.

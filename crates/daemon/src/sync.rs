@@ -239,12 +239,64 @@ pub(crate) struct CloudAuth {
 
 static AUTH_REFRESH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+async fn credential_lock(path: &std::path::Path) -> Result<std::fs::File, std::io::Error> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let lock_path = path.with_extension("json.lock");
+    for _ in 0..150 {
+        match fleethud_platform::open_exclusive_lock(&lock_path) {
+            Ok(file) => return Ok(file),
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock
+                    || error.kind() == std::io::ErrorKind::PermissionDenied =>
+            {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::other(
+        "Account credentials are busy; try again",
+    ))
+}
+
+fn collector_session(session: &Value) -> Value {
+    // OAuth provider tokens and unrelated account metadata do not belong on the collector.
+    json!({"access_token":session["access_token"],"refresh_token":session["refresh_token"],
+        "expires_at":session["expires_at"],"expires_in":session["expires_in"],"token_type":"bearer",
+        "user":{"id":session.pointer("/user/id"),"email":session.pointer("/user/email")}})
+}
+
+pub(crate) async fn save_cloud_session(
+    path: &std::path::Path,
+    session: &Value,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _guard = AUTH_REFRESH_LOCK.lock().await;
+    let _file_guard = credential_lock(path).await?;
+    fleethud_platform::write_private_file(path, &serde_json::to_vec(&collector_session(session))?)?;
+    Ok(())
+}
+
+pub(crate) async fn remove_cloud_session(path: &std::path::Path) -> Result<(), std::io::Error> {
+    let _guard = AUTH_REFRESH_LOCK.lock().await;
+    let _file_guard = credential_lock(path).await?;
+    match tokio::fs::remove_file(path).await {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
 pub(crate) async fn read_cloud_auth(
     client: &reqwest::Client,
     session_path: &std::path::Path,
 ) -> Result<Option<CloudAuth>, Box<dyn std::error::Error + Send + Sync>> {
     // Desktop sync and automatic cloud collection share one rotating login session.
     let _refresh_guard = AUTH_REFRESH_LOCK.lock().await;
+    if !session_path.exists() {
+        return Ok(None);
+    }
+    let _file_guard = credential_lock(session_path).await?;
     let raw = match tokio::fs::read_to_string(session_path).await {
         Ok(raw) => raw,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -292,7 +344,10 @@ pub(crate) async fn read_cloud_auth(
                 .unwrap_or(3600);
             session["expires_at"] = json!(chrono::Utc::now().timestamp() + expires_in);
         }
-        tokio::fs::write(session_path, serde_json::to_vec(&session)?).await?;
+        fleethud_platform::write_private_file(
+            session_path,
+            &serde_json::to_vec(&collector_session(&session))?,
+        )?;
     }
     let Some(access_token) = session
         .get("access_token")
@@ -309,7 +364,7 @@ pub(crate) async fn read_cloud_auth(
     }))
 }
 
-fn cloud_config() -> (String, String) {
+pub(crate) fn cloud_config() -> (String, String) {
     let url = std::env::var("FLEETHUD_SUPABASE_URL")
         .unwrap_or_else(|_| obfstr::obfstr!("https://jjnuxngvhuvxkxrfmnqx.supabase.co").to_owned());
     let key = std::env::var("FLEETHUD_SUPABASE_KEY").unwrap_or_else(|_| {
@@ -321,6 +376,15 @@ fn cloud_config() -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::hash_project_key;
+
+    #[test]
+    fn saved_credentials_exclude_oauth_provider_tokens() {
+        let input = serde_json::json!({"access_token":"account","refresh_token":"renew","provider_token":"must-not-copy","user":{"id":"user-1","email":"test@example.invalid","user_metadata":{"anything":"must-not-copy"}}});
+        let saved = super::collector_session(&input);
+        assert_eq!(saved["access_token"], "account");
+        assert_eq!(saved["user"]["id"], "user-1");
+        assert!(!saved.to_string().contains("must-not-copy"));
+    }
 
     #[test]
     fn project_key_hashing_is_deterministic_and_prefixes_proj() {
