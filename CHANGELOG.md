@@ -3,6 +3,16 @@
 All notable changes to FleetHUD are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-10-27
+
+- Add explanatory browser pairing for cloud workspaces and desktop devices with an independent, encrypted, single-use account login.
+- Fix embedded console JavaScript failing before any session or quota data could load; display authorization and connection errors.
+- Show remote cloud sessions in native consoles and a separate connected-cloud section in the Windows tray.
+- Keep cloud publishers from overwriting desktop summaries; serialize credential writes and enforce private atomic persistence.
+- Enforce daemon file locking on Unix and preserve Windows lock behavior; recover unavailable tray connections visibly.
+- Replace raw credential-copy pairing controls and unsafe callback redirects with the new approval flow.
+- Update Windows x64 and Linux x86_64/ARM64 packages and checksum manifests. macOS packages still require a native build runner.
+
 ## [1.3.0] — 2026-10-27
 
 ### Added

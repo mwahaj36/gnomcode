@@ -400,11 +400,12 @@
       <div class="card">
         <div class="card-title">Quota Pools Monitored</div>
         <div class="metric" id="quota-count">0</div>
-        <div class="metric-sub" id="quota-confirmed">1 Confirmed Pool</div>
+        <div class="metric-sub" id="quota-confirmed">Measured pools</div>
       </div>
     </div>
 
     <!-- Multi-Plan ROI Comparison Card -->
+    <p id="cloud-session-status" role="status" style="font-size:12px;color:var(--text-muted);margin:12px 0"></p>
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-title">
         <span>Subscription ROI Calculator</span>
@@ -426,7 +427,7 @@
       <div class="table-header-controls">
         <div class="section-title">Per-Model Quota Pools</div>
         <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
-          [CONFIRMED] OpenAI Codex exposes exact rate limits. Google & Anthropic track via tokens below.
+          Quota pools appear only when the provider exposes measured limits.
         </div>
       </div>
       <table>
@@ -552,43 +553,9 @@
         FleetHUD operates 100% locally by default. To sync your live fleet metrics, ROI multipliers, and quota pools across multiple workstations, pair your local daemon with your Supabase account.
       </p>
 
-      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 12px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Cloud Telemetry Mirror:</span>
-          <span style="color: var(--green);">Connected & Ready</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Sync Frequency:</span>
-          <span style="color: var(--green);">Every 2 seconds (Live)</span>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-muted);">Privacy Invariant:</span>
-          <span style="color: var(--green);">Zero Prompt Retention & HMAC Masked</span>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <a
-          href="https://fleethud.vercel.app/console"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-primary"
-          style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;"
-        >
-          <span>Open Web Cloud Console</span>
-          <span>&rarr;</span>
-        </a>
-        <a
-          id="auth-signin-link"
-          href="https://fleethud.vercel.app/auth"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-pill"
-          style="text-decoration: none; display: inline-flex; align-items: center; padding: 8px 16px;"
-        >
-          <span>Sign In via GitHub / Email</span>
-        </a>
-      </div>
+      <p id="auth-cloud-status" role="status" style="font-size:12px;color:var(--text-muted)">Checking account status…</p>
+      <p style="font-size:12px;line-height:1.7;color:var(--text-muted)">Connect this device once. For a cloud workspace, run <code>fleethud pair</code> inside that workspace and approve its browser link using the same FleetHUD account. Keep the daemon or collector running. Cloud presence updates every 30 seconds; desktop summaries update every minute. Connected does not mean the agent is actively working. Tokens and estimated API cost require readable usage data.</p>
+      <a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-pill" style="display:inline-block;margin-top:12px">Open Web Cloud Console</a>
 
       <!-- Paired Account Status Card -->
       <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
@@ -599,7 +566,7 @@
               <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
             </div>
             <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
-              Desktop daemon is actively paired with cloud roaming and syncing private snapshots.
+              Account credentials are saved for this device. Sync retries automatically while the daemon runs.
             </p>
           </div>
           <button
@@ -612,28 +579,16 @@
         </div>
       </div>
 
-      <!-- Quick Account Pairing / Token Paste Card -->
-      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
-        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
-        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
-          Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to instantly pair this desktop cockpit.
-        </p>
-        <div style="display: flex; gap: 8px;">
-          <input
-            type="text"
-            id="auth-token-input"
-            placeholder="Paste pairing token or session JSON here..."
-            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
-          >
-          <button
-            onclick="pairTokenDirectly()"
-            class="btn-primary"
-            style="padding: 8px 16px; white-space: nowrap; font-size: 11px;"
-          >
-            Connect Account
-          </button>
+      <div id="auth-unpaired-card" style="border:1px solid var(--border);border-radius:6px;padding:16px;margin-top:20px">
+        <h3 style="margin-bottom:10px">Connect this device</h3>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Open an approval link in your browser, compare the verification code, then sign in. You do not need to copy login tokens or session files.</p>
+        <button onclick="startBrowserPairing()" class="btn-primary">Connect Account</button>
+        <div id="browser-pair-details" hidden style="margin-top:16px">
+          <p>Verification code: <strong id="browser-pair-code" style="font-family:var(--font-mono)"></strong></p>
+          <a id="browser-pair-link" target="_blank" rel="noopener noreferrer" style="color:var(--accent);display:inline-block;margin-top:10px">Open approval screen</a>
+          <button onclick="cancelBrowserPairing()" class="btn-pill" style="margin-left:12px">Cancel</button>
         </div>
-        <div id="auth-pair-status" style="margin-top: 10px; font-size: 11px; font-family: var(--font-mono); display: none;"></div>
+        <p id="browser-pair-status" role="status" style="font-size:12px;margin-top:12px"></p>
       </div>
     </div>
   </main>
@@ -809,12 +764,27 @@
     </div>
   </main>
 
+  <p id="connection-status" role="alert" hidden style="position:sticky;bottom:12px;padding:16px;background:var(--card-bg);border:1px solid var(--red);color:var(--red)"></p>
   <script>
     let currentTimeline = 'all';
     let currentPage = 1;
     const pageLimit = 10;
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+    async function apiJson(url, options = { headers }) {
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error(response.status === 401 ? 'Authorization expired. Reopen FleetHUD from its tray icon or shortcut.' : `FleetHUD request failed (${response.status}). Restart FleetHUD if this persists.`);
+      return response.json();
+    }
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+    }
+    function showConnectionError(error) {
+      const status = document.getElementById('connection-status');
+      status.textContent = error.message;
+      status.hidden = false;
+    }
 
     function switchTab(tabName) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -852,14 +822,14 @@
           return;
         }
         const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+        const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = `fleethud-report-${currentTimeline}.${fmt}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(downloadUrl);
       } catch (err) {
         alert("Export failed: " + err);
       }
@@ -1181,13 +1151,14 @@
           d.setHours(0, 0, 0, 0);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
-        const res = await fetch(url, { headers }).then(r => r.json());
+        const res = await apiJson(url, { headers });
         if (!res || !res.timeline) return;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastReportJson) return;
         lastReportJson = jsonStr;
 
+        document.getElementById('connection-status').hidden = true;
         const tl = res.timeline;
         document.getElementById('total-spend').textContent = `$${tl.total_cost_usd.toFixed(2)}`;
         document.getElementById('total-savings').textContent = `$${tl.total_cache_savings_usd.toFixed(2)}`;
@@ -1250,7 +1221,7 @@
           </div>
         `}).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No agent spending recorded for this timeframe.</div>';
       } catch (e) {
-        console.error('Failed to load report', e);
+        showConnectionError(e);
       }
     }
 
@@ -1258,7 +1229,7 @@
       try {
         const agent = document.getElementById('agent-filter').value;
         const status = document.getElementById('status-filter').value;
-        const res = await fetch(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers }).then(r => r.json());
+        const res = await apiJson(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers });
         if (!res) return;
 
         const jsonStr = JSON.stringify(res);
@@ -1266,6 +1237,7 @@
         lastSessionsJson = jsonStr;
 
         document.getElementById('active-count').textContent = res.active_count || 0;
+        document.getElementById('cloud-session-status').textContent = res.cloud_status || '';
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
         document.getElementById('prev-btn').disabled = res.page <= 1;
         document.getElementById('next-btn').disabled = res.page >= res.total_pages;
@@ -1276,7 +1248,9 @@
           return;
         }
 
-        table.innerHTML = res.sessions.map(s => {
+        table.innerHTML = res.sessions.map(raw => {
+          const s = { ...raw };
+          for (const key of ['project_name', 'title', 'agent', 'surface', 'device_name', 'model', 'state']) s[key] = escapeHtml(s[key]);
           const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
           const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
           const cacheBadge = (s.cache_read_tokens && s.cache_read_tokens > 0)
@@ -1322,7 +1296,8 @@
           </tr>`;
         }).join('');
       } catch (e) {
-        console.error('Failed to load sessions', e);
+        document.getElementById('sessions-table').textContent = e.message;
+        showConnectionError(e);
       }
     }
 
@@ -1350,56 +1325,39 @@
       }
     }
 
-    async function pairTokenDirectly() {
-      const input = document.getElementById('auth-token-input');
-      const status = document.getElementById('auth-pair-status');
-      if (!input || !status) return;
-      const val = input.value.trim();
-      if (!val) return;
-
-      status.style.display = 'block';
-      status.style.color = 'var(--text-muted)';
-      status.textContent = 'Verifying and saving session...';
-
+    async function startBrowserPairing() {
+      const status = document.getElementById('browser-pair-status');
       try {
-        let sessionData = null;
-        try {
-          sessionData = JSON.parse(val);
-        } catch {
-          try {
-            sessionData = JSON.parse(atob(val));
-          } catch {
-            sessionData = { access_token: val, token_type: 'bearer' };
-          }
-        }
+        const res = await fetch('/api/v1/auth/pair', { method: 'POST', headers });
+        if (!res.ok) throw new Error('Cannot start pairing. Reopen the console using the tray or FleetHUD shortcut.');
+        showBrowserPairing(await res.json());
+      } catch (error) { status.textContent = error.message; }
+    }
 
-        const res = await fetch('/api/v1/auth/session', {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(sessionData)
-        });
+    function showBrowserPairing(flow) {
+      if (!flow) return;
+      document.getElementById('browser-pair-status').textContent = flow.message;
+      document.getElementById('browser-pair-details').hidden = flow.status !== 'pending';
+      document.getElementById('browser-pair-code').textContent = flow.code;
+      const link = document.getElementById('browser-pair-link');
+      if (flow.url) link.href = flow.url; else link.removeAttribute('href');
+    }
 
-        if (res.ok) {
-          status.style.color = 'var(--green)';
-          status.textContent = 'Account successfully paired! Roaming enabled.';
-          input.value = '';
-          setTimeout(() => location.reload(), 1200);
-        } else {
-          status.style.color = 'var(--red)';
-          status.textContent = 'Failed to save session. Check token and try again.';
-        }
-      } catch (err) {
-        status.style.color = 'var(--red)';
-        status.textContent = 'Error: ' + err.message;
-      }
+    async function cancelBrowserPairing() {
+      await fetch('/api/v1/auth/pair', { method: 'DELETE', headers });
+      document.getElementById('browser-pair-details').hidden = true;
+      document.getElementById('browser-pair-status').textContent = 'Pairing cancelled.';
     }
 
     async function checkAuthSession() {
       try {
-        const res = await fetch('/api/v1/auth/session', { headers }).then(r => r.json());
+        const res = await apiJson('/api/v1/auth/session', { headers });
         const pairedCard = document.getElementById('auth-paired-card');
         const unpairedCard = document.getElementById('auth-unpaired-card');
         const emailEl = document.getElementById('auth-paired-email');
+        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Account paired on this device. Cloud session sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
+        const flow = await fetch('/api/v1/auth/pair', { headers }).then(r => r.ok ? r.json() : null);
+        showBrowserPairing(flow);
         if (res && res.paired) {
           if (pairedCard) pairedCard.style.display = 'block';
           if (unpairedCard) unpairedCard.style.display = 'none';
@@ -1432,13 +1390,9 @@
 
     async function loadQuota() {
       try {
-        const res = await fetch('/api/v1/quota', { headers }).then(r => r.json());
+        const res = await apiJson('/api/v1/quota', { headers });
         if (!res) return;
 
-        const authLink = document.getElementById('auth-signin-link');
-        if (authLink) {
-          authLink.href = `https://fleethud.vercel.app/auth?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
-        }
         checkAuthSession();
 
         const jsonStr = JSON.stringify(res);
@@ -1464,15 +1418,16 @@
           </tr>
         `).join('');
       } catch (e) {
-        console.error('Failed to load quota', e);
+        document.getElementById('quota-table').textContent = e.message;
+        showConnectionError(e);
       }
     }
 
     async function loadSettingsData() {
       try {
         const [user, stats] = await Promise.all([
-          fetch('/api/v1/user', { headers }).then(r => r.json()),
-          fetch('/api/v1/stats', { headers }).then(r => r.json())
+          apiJson('/api/v1/user', { headers }),
+          apiJson('/api/v1/stats', { headers })
         ]);
         if (user) {
           document.getElementById('settings-display-name').value = user.display_name || '';
@@ -1492,7 +1447,7 @@
 
     async function loadCustomPricingSettings() {
       try {
-        const res = await fetch('/api/v1/pricing/custom', { headers }).then(r => r.json());
+        const res = await apiJson('/api/v1/pricing/custom', { headers });
         const container = document.getElementById('settings-pricing-list');
         if (!res || !res.custom_pricing || res.custom_pricing.length === 0) {
           container.innerHTML = '<span style="color: var(--text-muted);">No custom rate overrides configured (using default catalog).</span>';
