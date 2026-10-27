@@ -138,9 +138,7 @@ export default function PricingPage() {
 
       {/* Header */}
       <div className="text-center max-w-3xl mx-auto mb-12">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent font-mono text-xs mb-4">
-          <span>Simple, Transparent Pricing</span>
-        </div>
+        <p className="font-mono text-xs uppercase tracking-wider text-accent mb-4">Simple, transparent pricing</p>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground mb-4">
           Invest in Your Agent Productivity
         </h1>
@@ -149,29 +147,27 @@ export default function PricingPage() {
         </p>
 
         {/* Annual / Monthly Toggle */}
-        <div className="mt-8 inline-flex items-center gap-3 bg-card border border-border p-1.5 rounded-full font-mono text-xs">
+        <div className="mt-8 inline-flex items-stretch border border-border font-mono text-xs">
           <button
             onClick={() => setAnnual(false)}
-            className={`px-4 py-1.5 rounded-full transition-all ${
+            className={`min-h-11 px-4 transition-colors ${
               !annual
-                ? "bg-accent text-bg font-bold shadow-sm"
-                : "text-muted hover:text-foreground"
+                ? "bg-accent text-bg font-bold"
+                : "text-muted hover:bg-card hover:text-foreground"
             }`}
           >
             Monthly Billing
           </button>
           <button
             onClick={() => setAnnual(true)}
-            className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
+            className={`min-h-11 px-4 border-l border-border transition-colors flex items-center gap-2 ${
               annual
-                ? "bg-accent text-bg font-bold shadow-sm"
-                : "text-muted hover:text-foreground"
+                ? "bg-accent text-bg font-bold"
+                : "text-muted hover:bg-card hover:text-foreground"
             }`}
           >
             <span>Annual Billing</span>
-            <span className="px-1.5 py-0.2 rounded bg-green/20 text-green font-bold text-[10px] border border-green/30">
-              SAVE 20%
-            </span>
+            <span className={annual ? "text-bg" : "text-green"}>SAVE 20%</span>
           </button>
         </div>
       </div>
@@ -183,26 +179,18 @@ export default function PricingPage() {
             key={t.name}
             className={`rounded-xl p-8 flex flex-col justify-between transition-all ${
               t.primary
-                ? "bg-card border-2 border-accent shadow-xl shadow-accent/10 relative"
+              ? "bg-card border-2 border-accent shadow-xl shadow-accent/10"
                 : "bg-card/50 border border-border hover:border-border/80"
             }`}
           >
-            {t.primary && (
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-accent text-bg text-[10px] font-bold tracking-wider uppercase">
-                {t.badge}
-              </div>
-            )}
-
             <div>
               <div className="flex justify-between items-center mb-3">
                 <span className="text-sm font-bold text-foreground uppercase tracking-wider">
                   {t.name}
                 </span>
-                {!t.primary && (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-border text-muted">
-                    {t.badge}
-                  </span>
-                )}
+                <span className={`font-mono text-[10px] uppercase tracking-wider ${t.primary ? "text-accent" : "text-muted"}`}>
+                  {t.badge}
+                </span>
               </div>
 
               <div className="mb-4">

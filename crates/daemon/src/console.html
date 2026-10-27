@@ -131,7 +131,7 @@
       display: flex;
       gap: 8px;
     }
-    .btn-pill {
+    .btn-control {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--text);
@@ -143,9 +143,9 @@
       transition: all 0.15s ease;
       min-height: 44px;
     }
-    .btn-pill:disabled, .btn-primary:disabled { opacity: .55; cursor: wait; }
+    .btn-control:disabled, .btn-primary:disabled { opacity: .55; cursor: wait; }
     tbody tr:hover { background: var(--card-hover); }
-    .btn-pill:hover, .btn-pill.active {
+    .btn-control:hover, .btn-control.active {
       background: var(--accent);
       color: var(--sp-on-primary);
       border-color: var(--accent);
@@ -285,7 +285,7 @@
       display: inline-block;
       width: 8px;
       height: 8px;
-      border-radius: 50%;
+      border-radius: 0;
       margin-right: 8px;
     }
     .status-running {
@@ -389,8 +389,8 @@
     <div class="header-right">
       <span class="badge" id="sync-state" aria-live="polite">[RUN] CONNECTING</span>
       <span class="metric-sub" id="last-updated" aria-live="polite">Last successful update: not yet</span>
-      <button class="btn-pill" id="reload-view" type="button" onclick="refreshCurrentView()">Reload view</button>
-      <button class="btn-pill" id="resync-data" type="button" onclick="resyncLocal()">Resync local data</button>
+      <button class="btn-control" id="reload-view" type="button" onclick="refreshCurrentView()">Reload view</button>
+      <button class="btn-control" id="resync-data" type="button" onclick="resyncLocal()">Resync local data</button>
       <a href="/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
       <a href="/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
@@ -402,14 +402,14 @@
     <div class="timeline-bar">
       <div class="timeline-label" id="timeline-label">Showing: All Time</div>
       <div class="timeline-buttons">
-        <button class="btn-pill" onclick="setTimeline('today', this)">Today</button>
-        <button class="btn-pill" onclick="setTimeline('7d', this)">Last 7 Days</button>
-        <button class="btn-pill" onclick="setTimeline('30d', this)">Last 30 Days</button>
-        <button class="btn-pill active" onclick="setTimeline('all', this)">All Time</button>
+        <button class="btn-control" onclick="setTimeline('today', this)">Today</button>
+        <button class="btn-control" onclick="setTimeline('7d', this)">Last 7 Days</button>
+        <button class="btn-control" onclick="setTimeline('30d', this)">Last 30 Days</button>
+        <button class="btn-control active" onclick="setTimeline('all', this)">All Time</button>
       </div>
       <div style="margin-left: auto; display: flex; gap: 8px;">
-        <button class="btn-pill" onclick="exportData('csv')">Export CSV</button>
-        <button class="btn-pill" onclick="exportData('json')">Export JSON</button>
+        <button class="btn-control" onclick="exportData('csv')">Export CSV</button>
+        <button class="btn-control" onclick="exportData('json')">Export JSON</button>
       </div>
     </div>
 
@@ -519,8 +519,8 @@
       <div class="pagination">
         <span id="pagination-info">Page 1 of 1</span>
         <div>
-          <button class="btn-pill" id="prev-btn" onclick="prevPage()">Previous</button>
-          <button class="btn-pill" id="next-btn" onclick="nextPage()">Next</button>
+          <button class="btn-control" id="prev-btn" onclick="prevPage()">Previous</button>
+          <button class="btn-control" id="next-btn" onclick="nextPage()">Next</button>
         </div>
       </div>
     </div>
@@ -533,7 +533,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content">
-    <button class="btn-pill" type="button" onclick="switchTab('auth')">Account and cloud pairing</button>
+    <button class="btn-control" type="button" onclick="switchTab('auth')">Account and cloud pairing</button>
     <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
@@ -571,7 +571,7 @@
           <input type="number" id="settings-model-in" placeholder="In $" step="0.1">
           <input type="number" id="settings-model-out" placeholder="Out $" step="0.1">
           <input type="number" id="settings-model-cache" placeholder="Cache $" step="0.1">
-          <button class="btn-pill" style="height: 32px;" onclick="addCustomPricingSettings()">+ Add</button>
+          <button class="btn-control" style="height: 32px;" onclick="addCustomPricingSettings()">+ Add</button>
         </div>
 
         <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
@@ -583,7 +583,7 @@
     </div>
   </main>
 
-  <!-- ==================== VIEW 3: AUTH & CLOUD SYNC ==================== -->
+  <!-- ==================== VIEW 3: ACCOUNT ==================== -->
   <main id="view-auth" class="view-content">
     <div style="max-w: 680px; margin: 0 auto;" class="card">
       <div class="section-title" style="margin-bottom: 16px;">Supabase Cloud Sync & Account Roaming</div>
@@ -622,7 +622,7 @@
           href="https://fleethud.vercel.app/auth"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn-pill"
+          class="btn-control"
           style="text-decoration: none; display: inline-flex; align-items: center; padding: 8px 16px;"
         >
           <span>Sign In via GitHub / Email</span>
@@ -634,7 +634,7 @@
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
           <div>
             <div style="font-weight: 600; font-size: 13px; color: var(--green); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-              <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green);"></span>
+              <span style="display: inline-block; width: 8px; height: 8px; background: var(--green);"></span>
               <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
             </div>
             <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
@@ -643,7 +643,7 @@
           </div>
           <button
             onclick="unpairSession()"
-            class="btn-pill"
+            class="btn-control"
             style="border-color: var(--red); color: var(--red); font-size: 11px; padding: 6px 14px; cursor: pointer;"
           >
             Unpair / Disconnect
@@ -698,7 +698,7 @@
             style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
           >
           <button class="btn-primary" onclick="activateLicenseKey()">Activate Pro</button>
-          <button class="btn-pill" onclick="removeLicenseKey()">Remove</button>
+          <button class="btn-control" onclick="removeLicenseKey()">Remove</button>
         </div>
         <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
       </div>
@@ -711,7 +711,7 @@
         </p>
         <div style="display: flex; gap: 10px;">
           <button class="btn-primary" onclick="exportData('csv')">Export CSV (Excel / Sheets)</button>
-          <button class="btn-pill" onclick="exportData('json')">Export JSON</button>
+          <button class="btn-control" onclick="exportData('json')">Export JSON</button>
         </div>
       </div>
     </div>
@@ -1031,7 +1031,7 @@
                 <td>${e.max_runs} <span class="trust-mark">EXACT</span></td>
                 <td>${e.runs_completed} <span class="trust-mark">EXACT</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(e.eligible_after)}</td>
-                <td><button class="btn-pill" onclick="disarmResume('${e.session_id}')">Disarm</button></td>
+                <td><button class="btn-control" onclick="disarmResume('${e.session_id}')">Disarm</button></td>
               </tr>
             `).join('');
           }
@@ -1051,7 +1051,7 @@
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) + ' EXACT' : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns + ' EXACT' : 'None'}</td>
                 <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">[${r.action}]</span></td>
-                <td><button class="btn-pill" onclick="deleteRule('${r.id}')">Delete</button></td>
+                <td><button class="btn-control" onclick="deleteRule('${r.id}')">Delete</button></td>
               </tr>
             `).join('');
           }
@@ -1104,7 +1104,7 @@
             table.innerHTML = data.relays.map(r => {
               const statusColor = r.status === 'executed' ? 'var(--green)' : (r.status === 'pending' ? 'var(--yellow)' : 'var(--text-muted)');
               const actionBtn = r.status === 'pending'
-                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-right: 6px;" onclick="executeRelay('${r.id}')">Handoff & Rotate</button><button class="btn-pill" style="padding: 4px 8px; font-size: 11px;" onclick="dismissRelay('${r.id}')">Dismiss</button>`
+                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-right: 6px;" onclick="executeRelay('${r.id}')">Handoff & Rotate</button><button class="btn-control" style="padding: 4px 8px; font-size: 11px;" onclick="dismissRelay('${r.id}')">Dismiss</button>`
                 : `<span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${r.status}</span>`;
               return `<tr>
                 <td style="font-family: var(--font-mono); font-size: 11px;">${r.session_id}</td>
@@ -1282,11 +1282,11 @@
 
     function setTimeline(range, btn) {
       currentTimeline = range;
-      document.querySelectorAll('.timeline-buttons .btn-pill').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.timeline-buttons .btn-control').forEach(b => b.classList.remove('active'));
       if (btn) {
         btn.classList.add('active');
       } else {
-        const found = Array.from(document.querySelectorAll('.timeline-buttons .btn-pill')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(range));
+        const found = Array.from(document.querySelectorAll('.timeline-buttons .btn-control')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(range));
         if (found) found.classList.add('active');
       }
       lastReportJson = '';
@@ -1669,7 +1669,7 @@
           html += `
             <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;">
               <span><strong>${cp.model_pattern}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
-              <button class="btn-pill" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing('${cp.model_pattern}')">Remove</button>
+              <button class="btn-control" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing('${cp.model_pattern}')">Remove</button>
             </div>`;
         }
         html += '</div>';

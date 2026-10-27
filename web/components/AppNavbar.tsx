@@ -53,9 +53,6 @@ export default function AppNavbar() {
             <span className="font-bold text-sm tracking-tight text-foreground font-sans">
               spawnt
             </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
-              ACCOUNT
-            </span>
           </Link>
 
           <div className="h-4 w-px bg-border"></div>
@@ -92,9 +89,9 @@ export default function AppNavbar() {
 
         {/* Right: Live Sync Status Beacon & Account */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-[#0d1117] border border-border text-[11px]">
+          <div className="hidden sm:flex items-center gap-2 text-[11px]">
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2 h-2 ${
                 daemonLive ? "bg-green animate-pulse" : "bg-yellow"
               }`}
             ></span>

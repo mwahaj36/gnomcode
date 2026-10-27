@@ -388,7 +388,7 @@ export default function ConsolePage() {
       ) : (
         <div className="mb-6 p-3 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
+            <span className="w-2 h-2 bg-green animate-pulse"></span>
             <span>Cloud Account: <strong className="text-foreground">{user.email}</strong></span>
           </div>
           <button
@@ -462,7 +462,7 @@ export default function ConsolePage() {
           <div>
             <div className="text-xl font-bold text-foreground">spawnt / {activeView}</div>
             <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
+              <span className={`w-2 h-2 ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
               <span>Status: {connectedSource}</span>
             </div>
           </div>
@@ -851,7 +851,7 @@ export default function ConsolePage() {
                     </td>
                     <td className="py-2.5">
                       <span className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
+                        <span className={`w-2 h-2 ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
                         <span className={s.is_active ? "text-green font-semibold capitalize" : "text-muted capitalize"}>
                           {s.state} <span className="sp-trust">EXACT</span>
                         </span>
