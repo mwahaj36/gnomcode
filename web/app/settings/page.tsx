@@ -233,7 +233,7 @@ export default function SettingsPage() {
           ) : (
             <Link
               href="/auth"
-              className="sp-settings-action sp-settings-primary"
+              className="sp-settings-link"
             >
               Connect account
             </Link>
