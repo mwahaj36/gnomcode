@@ -1627,6 +1627,18 @@ impl Database {
         Ok(())
     }
 
+    /// Checks whether a session already exists before merging remote presence.
+    ///
+    /// # Errors
+    /// Returns a query error if the session index cannot be read.
+    pub fn contains_session(&self, id: &str) -> Result<bool, Error> {
+        Ok(self.conn.query_row(
+            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM session WHERE id = ?1)"),
+            [id],
+            |row| row.get(0),
+        )?)
+    }
+
     /// Queries the stored model name for a session if already known.
     #[must_use]
     pub fn get_session_model(&self, session_id: &str) -> Option<String> {
