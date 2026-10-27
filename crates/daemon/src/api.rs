@@ -226,7 +226,7 @@ async fn export_handler(
     }
     let db = state.db.lock().await;
     let report = db
-        .generate_usage_report_timeline(range, None, None)
+        .generate_usage_report_timeline(range, params.from.as_deref(), params.to.as_deref())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if params.format.as_deref() == Some("csv") {
