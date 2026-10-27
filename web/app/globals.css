@@ -208,6 +208,18 @@ body {
 .sp-docs-cta-actions .sp-docs-cta-primary { border-color: var(--sp-primary); background: var(--sp-primary); color: var(--sp-on-primary) !important; }
 .sp-docs-cta-actions a:hover { border-color: var(--sp-primary); }
 .sp-docs-cta-actions a:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
+.sp-copy-command { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; }
+.sp-copy-command code { min-width: 0; display: block; overflow-x: auto; padding: 10px; border: 1px solid var(--sp-border); background: var(--sp-surface); color: var(--sp-text); font: 10px/1.5 var(--sp-font-mono); white-space: pre; }
+.sp-copy-command button { min-height: 36px; padding: 0 10px; border: 1px solid var(--sp-border-strong); border-radius: 0; background: transparent; color: var(--sp-text); font: 600 9px/1.4 var(--sp-font-mono); text-transform: uppercase; cursor: pointer; }
+.sp-copy-command button:hover { border-color: var(--sp-primary); background: var(--sp-surface-2); }
+.sp-copy-command button:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
+.sp-copy-command-status { grid-column: 1 / -1; min-height: 0; color: var(--sp-text-2); font: 10px/1.4 var(--sp-font-sans); }
+.sp-copy-command-status:empty { display: none; }
+.sp-docs-install .sp-copy-command code { min-height: 46px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.sp-docs-article .sp-copy-command { margin: 0 0 10px; }
+.sp-docs-article .sp-copy-command code { font: 10px/1.5 var(--sp-font-mono); }
+.sp-install-command .sp-copy-command code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sp-downloads-page .sp-copy-command code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .sp-docs-article .bg-card.border { padding: 16px 0; border: 0; border-top: 1px solid var(--sp-border); border-radius: 0; background: transparent; }
 .sp-docs-article .bg-card.border:last-child { border-bottom: 1px solid var(--sp-border); }
 .sp-docs-article .bg-card.border .text-foreground { font-size: 13px; }

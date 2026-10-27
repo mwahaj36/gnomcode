@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CopyCommand } from "../components/CopyCommand";
 
 export const metadata: Metadata = {
   title: "Downloads — spawnt",
@@ -68,7 +69,7 @@ export default function DownloadsPage() {
             {platform.command && (
               <div className="sp-install-command">
                 <span>QUICK INSTALL</span>
-                <code>{platform.command}</code>
+                <CopyCommand command={platform.command} />
               </div>
             )}
             {platform.actions.length > 0 ? (
