@@ -6,9 +6,9 @@ import { supabase } from "../../lib/supabase";
 
 interface CustomModelPricing {
   model_pattern: string;
-  input_per_mtok_usd: number;
-  output_per_mtok_usd: number;
-  cache_read_per_mtok_usd: number;
+  input_per_mtok_usd: number | null;
+  output_per_mtok_usd: number | null;
+  cache_read_per_mtok_usd: number | null;
   updated_at: string;
 }
 
@@ -200,34 +200,29 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="sp-console-shell max-w-4xl mx-auto px-6 py-10 font-mono">
-      <div className="flex justify-between items-center mb-8 border-b border-border pb-4">
+    <main className="sp-console-shell sp-settings-page mx-auto px-6 py-10 font-mono">
+      <header className="sp-settings-header">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">
             spawnt / settings
           </h1>
           <p className="text-xs text-muted mt-1 font-sans">
-            Manage your subscription tiers, custom model rate overrides, and sync connection.
+            Manage your account, plan costs, and custom pricing overrides.
           </p>
         </div>
-        <Link
-          href="/console"
-          className="px-3 py-1.5 bg-bg border border-border rounded text-xs hover:border-accent"
-        >
-          &larr; Return to Console
-        </Link>
-      </div>
+        <Link href="/console" className="sp-settings-back">← Return to Console</Link>
+      </header>
 
       {statusMessage && (
-        <div className="mb-6 text-xs bg-green/15 text-green border border-green/30 rounded p-3">
+        <div className="sp-settings-message" role="status" aria-live="polite">
           {statusMessage}
         </div>
       )}
 
       {/* Account & Sync Status */}
-      <div className="bg-card border border-border rounded-xl p-6 mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-sm font-bold uppercase text-foreground">Account & Sync Connectivity</h2>
+      <section className="sp-settings-section" aria-labelledby="settings-account">
+        <div className="sp-settings-section-heading">
+          <h2 id="settings-account">Account</h2>
           {user ? (
             <button
               onClick={handleSignOut}
@@ -238,136 +233,138 @@ export default function SettingsPage() {
           ) : (
             <Link
               href="/auth"
-              className="sp-on-primary-text px-2.5 py-1 bg-accent rounded text-xs font-semibold hover:opacity-90"
+              className="sp-settings-action sp-settings-primary"
             >
-              Connect Cloud Account &rarr;
+              Connect account
             </Link>
           )}
         </div>
-        <div className="space-y-3 text-xs">
-          <div className="flex justify-between items-center py-1.5 border-b border-border/40">
-            <span className="text-muted">Cloud User Account</span>
-            <span className="font-semibold text-foreground">{user ? user.email : "Local Anonymous (Unlinked)"}</span>
+        <dl className="sp-settings-facts">
+          <div>
+            <dt>Cloud account</dt>
+            <dd>{user ? user.email : "Local anonymous · unlinked"}</dd>
           </div>
-          <div className="flex justify-between items-center py-1.5 border-b border-border/40">
-            <span className="text-muted">Local Daemon Engine</span>
-            <span className="font-semibold text-accent">{localDaemonStatus}</span>
+          <div>
+            <dt>Local daemon</dt>
+            <dd>{localDaemonStatus}</dd>
           </div>
-          <div className="flex justify-between items-center py-1.5">
-            <span className="text-muted">Telemetry & Privacy</span>
-            <span className="text-green font-semibold">100% Private &bull; Zero Content Stored</span>
+          <div>
+            <dt>Privacy</dt>
+            <dd>Prompts, code, and tool output are never stored or sent.</dd>
           </div>
-        </div>
+        </dl>
 
         {user && (
-          <div className="mt-6 pt-5 border-t border-border/60">
-            <h3 className="text-xs font-semibold uppercase text-muted mb-3">Update Account Password</h3>
+          <div className="sp-settings-password">
+            <h3>Update account password</h3>
             {passwordMessage && (
-              <div className="mb-3 text-xs p-2.5 rounded bg-bg border border-border text-foreground">
+              <div className="sp-settings-message" role="status">
                 {passwordMessage}
               </div>
             )}
-            <form onSubmit={handleUpdatePassword} className="flex gap-3 items-center">
+            <form onSubmit={handleUpdatePassword} className="sp-settings-form-row">
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="New password (min 6 chars)"
-                className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-accent"
+                className="sp-settings-input"
               />
               <button
                 type="submit"
                 disabled={passwordUpdating}
-                className="px-4 py-1.5 bg-accent text-bg text-xs font-semibold rounded hover:opacity-90 disabled:opacity-50"
+                className="sp-settings-action sp-settings-primary"
               >
                 {passwordUpdating ? "Updating..." : "Update Password"}
               </button>
             </form>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Monthly Subscription Plans */}
-      <div className="bg-card border border-border rounded-xl p-6 mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-sm font-bold uppercase text-foreground">Monthly Subscription Plans ($/mo)</h2>
-          <span className="text-[11px] text-muted">Used for ROI multiplier calculations</span>
+      <section className="sp-settings-section" aria-labelledby="settings-plans">
+        <div className="sp-settings-section-heading">
+          <h2 id="settings-plans">Subscription costs</h2>
+          <span>Suggested monthly costs · edit to match your plans for ROI estimates</span>
         </div>
-        <form onSubmit={savePlans} className="space-y-4 text-xs">
+        <form onSubmit={savePlans} className="sp-settings-plans-form">
           <div>
-            <label className="block text-muted mb-1">Developer Display Name</label>
+            <label>Developer display name</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+              className="sp-settings-input"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sp-settings-plan-grid">
             <div>
-              <label className="block text-muted mb-1">OpenAI Plan ($/mo)</label>
+              <label>OpenAI plan ($/mo)</label>
               <input
                 type="number"
                 step="1"
                 value={openaiPlan}
                 onChange={(e) => setOpenaiPlan(Number(e.target.value))}
-                className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+                className="sp-settings-input"
               />
-              <span className="text-[10px] text-muted mt-1 block">Plus: $20 &bull; Pro: $200</span>
+              <span className="sp-settings-hint">Plus: $20 · Pro: $200</span>
             </div>
 
             <div>
-              <label className="block text-muted mb-1">Claude Plan ($/mo)</label>
+              <label>Claude plan ($/mo)</label>
               <input
                 type="number"
                 step="1"
                 value={claudePlan}
                 onChange={(e) => setClaudePlan(Number(e.target.value))}
-                className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+                className="sp-settings-input"
               />
-              <span className="text-[10px] text-muted mt-1 block">Pro: $20 &bull; Max 5x: $100</span>
+              <span className="sp-settings-hint">Pro: $20 · Max 5x: $100</span>
             </div>
 
             <div>
-              <label className="block text-muted mb-1">Google AI Plan ($/mo)</label>
+              <label>Google AI plan ($/mo)</label>
               <input
                 type="number"
                 step="1"
                 value={googlePlan}
                 onChange={(e) => setGooglePlan(Number(e.target.value))}
-                className="w-full bg-bg border border-border rounded px-3 py-2 text-foreground focus:outline-none focus:border-accent"
+                className="sp-settings-input"
               />
-              <span className="text-[10px] text-muted mt-1 block">Pro: $20 &bull; Free: $0</span>
+              <span className="sp-settings-hint">Pro: $20 · Free: $0</span>
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end">
+          <div className="sp-settings-submit">
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2 bg-accent text-bg font-semibold rounded text-xs hover:opacity-90 transition-opacity"
+              className="sp-settings-action sp-settings-primary"
             >
               {saving ? "Saving..." : "Save Subscription Preferences"}
             </button>
           </div>
         </form>
-      </div>
+      </section>
 
       {/* Custom Model Pricing Overrides */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-sm font-bold uppercase text-foreground mb-2">Custom Model Pricing Overrides</h2>
-        <p className="text-xs text-muted mb-5 font-sans">
+      <section className="sp-settings-section" aria-labelledby="settings-custom-pricing">
+        <div className="sp-settings-section-heading sp-settings-stack-heading">
+        <h2 id="settings-custom-pricing">Custom model pricing</h2>
+        <p>
           Override default catalog token rates with custom negotiated pricing or enterprise discount tiers.
         </p>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mb-4 text-xs">
+        <div className="sp-settings-pricing-form">
           <input
             type="text"
             placeholder="Pattern (e.g. gpt-4o)"
             value={newPattern}
             onChange={(e) => setNewPattern(e.target.value)}
-            className="sm:col-span-2 bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="sp-settings-input sp-settings-pattern"
           />
           <input
             type="number"
@@ -375,7 +372,7 @@ export default function SettingsPage() {
             placeholder="Input $/M"
             value={newInput}
             onChange={(e) => setNewInput(e.target.value)}
-            className="bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="sp-settings-input"
           />
           <input
             type="number"
@@ -383,7 +380,7 @@ export default function SettingsPage() {
             placeholder="Output $/M"
             value={newOutput}
             onChange={(e) => setNewOutput(e.target.value)}
-            className="bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="sp-settings-input"
           />
           <input
             type="number"
@@ -391,19 +388,19 @@ export default function SettingsPage() {
             placeholder="Cache $/M"
             value={newCache}
             onChange={(e) => setNewCache(e.target.value)}
-            className="bg-bg border border-border rounded px-3 py-1.5 focus:outline-none focus:border-accent"
+            className="sp-settings-input"
           />
         </div>
         <button
           onClick={addPricing}
-          className="px-4 py-1.5 bg-green text-bg font-semibold rounded text-xs hover:opacity-90 mb-5"
+          className="sp-settings-action sp-settings-add"
         >
           Add / Update Price Override
         </button>
 
-        <div className="border border-border rounded-lg overflow-hidden text-xs">
+        <div className="sp-settings-table-scroll" role="region" aria-label="Custom pricing overrides" tabIndex={0}>
           <table className="w-full text-left">
-            <thead className="bg-bg text-[11px] text-muted border-b border-border uppercase">
+            <thead>
               <tr>
                 <th className="p-3">Model Pattern</th>
                 <th className="p-3">Input $/M</th>
@@ -414,15 +411,15 @@ export default function SettingsPage() {
             </thead>
             <tbody className="divide-y divide-border/40">
               {customPricing.map((p) => (
-                <tr key={p.model_pattern} className="hover:bg-bg/40">
-                  <td className="p-3 font-semibold text-foreground">{p.model_pattern}</td>
-                  <td className="p-3">${(p.input_per_mtok_usd ?? 0).toFixed(2)}</td>
-                  <td className="p-3">${(p.output_per_mtok_usd ?? 0).toFixed(2)}</td>
-                  <td className="p-3">${(p.cache_read_per_mtok_usd ?? 0).toFixed(2)}</td>
-                  <td className="p-3 text-right">
+              <tr key={p.model_pattern}>
+                  <td data-label="Model pattern">{p.model_pattern}</td>
+                  <td data-label="Input $/M">{p.input_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.input_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
+                  <td data-label="Output $/M">{p.output_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.output_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
+                  <td data-label="Cache read $/M">{p.cache_read_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.cache_read_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
+                  <td data-label="Action">
                     <button
                       onClick={() => deletePricing(p.model_pattern)}
-                      className="text-red hover:underline"
+                      className="sp-settings-delete"
                     >
                       Delete
                     </button>
@@ -431,7 +428,7 @@ export default function SettingsPage() {
               ))}
               {customPricing.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-4 text-center text-muted">
+                  <td colSpan={5} className="sp-settings-empty">
                     No custom pricing overrides configured. Default provider rates apply.
                   </td>
                 </tr>
@@ -439,7 +436,7 @@ export default function SettingsPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

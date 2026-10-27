@@ -118,16 +118,7 @@ export default function AppNavbar() {
                 Sign Out
               </button>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/auth"
-                className="px-2.5 py-1 rounded bg-accent/20 text-accent border border-accent/40 hover:bg-accent/30 font-semibold text-[11px]"
-              >
-                [Connect Cloud Sync]
-              </Link>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     </header>
