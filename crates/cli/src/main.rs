@@ -45,6 +45,9 @@ enum Commands {
         /// Optional monthly subscription price in USD to calculate Plan Value ROI (e.g. 20.0).
         #[arg(long)]
         plan_usd: Option<f64>,
+        /// Optional timeline range filter (`today`, `7d`, `30d`, `all`).
+        #[arg(long, default_value = "all")]
+        range: String,
     },
     /// Run diagnostic checks on local agent log directories and system environment.
     Doctor {
@@ -148,7 +151,7 @@ async fn main() -> Result<()> {
 
     match command {
         Commands::Status { limit } => cmd_status(&db_path, limit),
-        Commands::Report { plan_usd } => cmd_report(&db_path, plan_usd),
+        Commands::Report { plan_usd, range } => cmd_report(&db_path, plan_usd, &range),
         Commands::Doctor { network } => cmd_doctor(&db_path, network),
         Commands::Daemon { port, open } => cmd_daemon(&db_path, port, open).await,
         Commands::Console { port } => cmd_daemon(&db_path, port, true).await,
@@ -422,9 +425,92 @@ fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
     Ok(())
 }
 
-fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>) -> Result<()> {
+fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> Result<()> {
     let mut db = Database::open(db_path).context("failed to open database")?;
     let _ = ingest_all(&mut db);
+
+    if range != "all" {
+        let tl = db
+            .generate_usage_report_timeline(range, None, None)
+            .context("failed to generate timeline report")?;
+
+        println!(
+            "=== FLEETHUD USAGE & COST REPORT ({}) ===",
+            tl.range_label.to_uppercase()
+        );
+        if tl.providers.is_empty() {
+            println!("No usage data recorded for this timeframe.");
+            return Ok(());
+        }
+
+        println!(
+            "{:<20} {:<24} {:>10} {:>10} {:>10} {:>10}",
+            "PROVIDER", "MODEL", "IN (TOK)", "CACHED", "OUT (TOK)", "COST ($)"
+        );
+        println!("{}", "-".repeat(90));
+        for prov in &tl.providers {
+            for m in &prov.models {
+                println!(
+                    "{:<20} {:<24} {:>10} {:>10} {:>10} {:>10.2}",
+                    truncate_str(&prov.provider, 20),
+                    truncate_str(&m.model, 24),
+                    format_tokens(m.input_tokens),
+                    format_tokens(m.cache_read_tokens),
+                    format_tokens(m.output_tokens),
+                    m.cost_usd,
+                );
+            }
+        }
+        println!("{}", "-".repeat(90));
+        println!(
+            "TOTAL: API-Equivalent Spend: ${:.2}  |  Prompt Cache Savings: ${:.2} [EXACT]",
+            tl.total_cost_usd, tl.total_cache_savings_usd
+        );
+
+        if let Some(price) = plan_usd {
+            let (time_factor, period_label): (f64, &str) = match range {
+                "today" | "24h" => (1.0 / 30.0, "day"),
+                "7d" => (7.0 / 30.0, "7d"),
+                "30d" => (1.0, "mo"),
+                _ => (1.0, "period"),
+            };
+            let eff_plan = price * time_factor;
+            let roi = calculate_plan_roi(tl.total_cost_usd, eff_plan);
+            println!(
+                "PLAN VALUE ROI: ${:.2}/{} Plan -> {:.1}x Value (Net Value: +${:.2}) [EXACT]",
+                eff_plan, period_label, roi.multiplier, roi.net_savings_usd
+            );
+        }
+
+        let quota = db
+            .get_latest_quota_snapshots()
+            .context("failed to get quota pools")?;
+        if !quota.is_empty() {
+            println!("\n=== PER-MODEL QUOTA POOLS ===");
+            println!(
+                "{:<12} {:<16} {:<10} {:>10} {:<25}",
+                "PROVIDER", "LIMIT ID", "WINDOW", "USED %", "RESETS AT"
+            );
+            println!("{}", "-".repeat(78));
+            for q in quota {
+                let win_str = match q.window {
+                    fleethud_core::QuotaWindow::FiveHour => "5-hour",
+                    fleethud_core::QuotaWindow::Weekly => "weekly",
+                    fleethud_core::QuotaWindow::Monthly => "monthly",
+                };
+                let reset_str = q.resets_at.map_or_else(
+                    || "N/A".to_owned(),
+                    |dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+                );
+                println!(
+                    "{:<12} {:<16} {:<10} {:>9.1}% {:<25}",
+                    q.provider, q.limit_id, win_str, q.used_pct, reset_str
+                );
+            }
+        }
+        println!();
+        return Ok(());
+    }
 
     let report_rows = db
         .generate_usage_report()

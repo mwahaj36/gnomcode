@@ -56,6 +56,9 @@ interface TimelineReport {
   total_cost_usd: number;
   total_cache_savings_usd: number;
   providers: ProviderSpend[];
+  range_label?: string;
+  earliest_at?: string | null;
+  latest_at?: string | null;
 }
 
 interface PlanRoiInfo {
@@ -429,6 +432,15 @@ export default function ConsolePage() {
       <div className="flex justify-between items-center bg-card border border-border rounded-md px-4 py-2.5 mb-6 flex-wrap gap-3 font-mono">
         <div className="text-xs text-muted">
           Scope: <span className="text-foreground uppercase">{timeline}</span>
+          {report?.earliest_at && report?.latest_at && (
+            <span className="ml-2 text-muted">
+              {(() => {
+                const e = new Date(report.earliest_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+                const l = new Date(report.latest_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+                return e === l ? `(${e})` : `(${e} — ${l})`;
+              })()}
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           {["today", "7d", "30d", "all"].map((t) => (
