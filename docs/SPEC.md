@@ -83,7 +83,7 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 - Not an enterprise APM. No SDK instrumentation required.
 - We never store prompts, code, file contents or tool output.
 - No product telemetry / phone-home. Ever. (Update checks are opt-out and send only the version.)
-- Remote tracking requires an opt-in collector in the environment; provider-wide hosted-session discovery is not automatic (see §3.15.1).
+- Hosted cloud-session tracking is not supported (withdrawn in v1.4.1; see §3.15.1).
 
 ### 1.7 Success metrics (first 6 months after public launch)
 
@@ -514,36 +514,13 @@ erDiagram
 - **Seat management:** Lemon Squeezy / Paddle subscription quantity webhook → Supabase Edge Function updates `organizations.max_seats`. Inviting a member beyond `max_seats` increments the subscription seat count automatically (or prompts the owner).
 - **Team-wide guardrails:** When a `team_budget_rules` threshold is breached, a Postgres trigger / Edge Function fires the Slack/Discord webhook and sets a flag in the device's sync response; if `hard_stop_via_hooks = true`, connected daemons enforce the block on the next `PreToolUse` hook.
 
-### 3.15.1 Cloud session collectors
+### 3.15.1 Hosted cloud sessions (withdrawn)
 
-The daemon automatically starts cloud collection when runtime identity is available, reusing its paired account. Other agents can bind `FLEETHUD_CLOUD_AGENT` and `FLEETHUD_CLOUD_SESSION_ID`. `fleethud pair` opens an explanatory browser approval flow for each new environment.
-The same flow is available under desktop Auth & Cloud Sync. A separate login is
-sent as an AES-256-GCM encrypted, expiring, one-time envelope through authenticated
-approval and secret-protected consumption RPCs (`supabase_device_pairing_v4.sql`).
-The collector validates and privately saves it, then starts the daemon. Browser
-callbacks use isolated PKCE storage; raw login tokens are never placed in callback
-URLs. Native consoles merge remote cloud presence into All sessions; the Windows
-tray lists connected cloud sessions separately. Cloud daemons do not replace the
-desktop summary snapshot. Platform-held locks prevent concurrent daemons from
-replacing one another’s bearer credentials.
-
-`fleethud cloud-session` runs on Windows, macOS and Linux and registers cloud
-sessions in the existing local session model (`surface=cloud`). Codex runtime
-identity is detected; all other supported agents accept explicit native IDs.
-A 30-second collector heartbeat means `connected`, not active agent work. Presence
-expires after 90 seconds, and costs/model/usage stay unknown without measured data.
-Native adapters or an explicit metadata-only `--usage-file` supply per-invocation
-usage deltas. Rust pricing computes estimated API-equivalent cost, with unknown
-prices preserved. Stable event IDs and durable offsets prevent duplicate costs.
-
-Opt-in account pairing publishes one row per account/session to
-`fleethud_cloud_sessions`; owner RLS and server timestamps govern visibility.
-The web console combines cloud rows with desktop snapshots and displays cloud
-usage/cost in session rows. Existing summary charts remain desktop reports.
-Remote payloads omit repository labels, paths and titles. No prompts, raw tool
-outputs, or credentials are published. This does not provide access to hidden
-provider-hosted transcripts or token totals. Deployment and provider limitations
-are documented in [Cloud sessions](./CLOUD_SESSIONS.md); see ADR 0004.
+Hosted cloud-session tracking and its browser pairing flow were removed in
+v1.4.1 at the owner’s request. No provider identity detection, cloud collector,
+presence polling, usage-file import, `pair` command or `/pair` screen is shipped.
+Older desktop account sign-in and opt-in desktop summary sync remain available.
+See `docs/CLOUD_SESSIONS.md` for upgrade and optional backend cleanup instructions.
 
 ### 3.16 User Profile, Settings & Notifications
 
@@ -652,7 +629,7 @@ flowchart LR
 
 ### M5 — Cloud Sync (Pro Multi-Device) & Teams (§3.15) [in progress]
 
-- Cloud collector implementation: portable presence, measured native/imported usage and estimated per-session cost implemented; browser pairing and native cloud visibility implemented; native Windows/macOS hardware validation pending.
+- Hosted cloud collectors and browser device pairing: withdrawn in v1.4.1. Older desktop summary sync remains.
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
@@ -836,8 +813,8 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0001](./adr/0001-rust-core.md) | Rust for core, CLI, daemon and hooks | Accepted |
 | [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
-| [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
-| [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Accepted |
+| [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
+| [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 
 ## 10. Open questions
 
