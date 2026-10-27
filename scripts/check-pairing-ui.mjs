@@ -28,7 +28,9 @@ try {
   const fragment = new URLSearchParams({id,key,expires:String(Math.floor(Date.now()/1000)+550),name:'Cloud test workspace',project:'https://jjnuxngvhuvxkxrfmnqx.supabase.co'});
   const exp = Math.floor(Date.now()/1000)+3600;
   const payload = Buffer.from(JSON.stringify({sub:'00000000-0000-0000-0000-000000000001',exp,aud:'authenticated',role:'authenticated'})).toString('base64url');
-  const token = 'eyJhbGciOiJIUzI1NiJ9.'+payload+'.c2lnbmF0dXJl';
+  const header = Buffer.from(JSON.stringify({alg:'HS256'})).toString('base64url');
+  const signature = Buffer.from('synthetic-test-signature').toString('base64url');
+  const token = [header,payload,signature].join('.');
   const session = {provider_token:'unneeded-github-token',access_token:token,refresh_token:'test-refresh-only',expires_in:3600,expires_at:exp,token_type:'bearer',user:{id:'00000000-0000-0000-0000-000000000001',aud:'authenticated',role:'authenticated',email:'test@example.invalid',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}};
   let envelope;
   let challenge;
