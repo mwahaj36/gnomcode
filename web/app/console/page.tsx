@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 
@@ -131,6 +131,21 @@ export default function ConsolePage() {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState<Date | null>(null);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const refreshInFlight = useRef(false);
+  const [activeView, setActiveView] = useState("overview");
+
+  useEffect(() => {
+    const path = window.location.pathname.split("/").filter(Boolean).at(-1);
+    if (path && ["overview", "sessions", "usage", "limits", "projects", "automations"].includes(path)) setActiveView(path);
+  }, []);
+
+  const changeConsoleView = (view: string) => {
+    setActiveView(view);
+    window.history.replaceState(null, "", view === "overview" ? "/console" : `/console/${view}`);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -153,7 +168,15 @@ export default function ConsolePage() {
   }, []);
 
   // Live 2-second fetch loop
-  const fetchLiveMetrics = useCallback(async () => {
+  const fetchLiveMetrics = useCallback(async (force = false) => {
+    if (refreshInFlight.current && !force) return;
+    if (refreshInFlight.current && force) await new Promise<void>((resolve) => {
+      const check = () => refreshInFlight.current ? window.setTimeout(check, 50) : resolve();
+      check();
+    });
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    try {
     if (user) {
       try {
         const [desktop, cloud] = await Promise.all([
@@ -189,7 +212,25 @@ export default function ConsolePage() {
     } else {
       setConnectedSource("Sign in to monitor your desktop remotely");
     }
+    } finally {
+    refreshInFlight.current = false;
+    }
   }, [user, timeline, agentFilter, statusFilter, page]);
+
+  const refreshCloudSnapshot = async () => {
+    if (refreshInFlight.current || refreshing) return;
+    setRefreshing(true);
+    setRefreshMessage("Refreshing cloud view...");
+    try {
+      await fetchLiveMetrics(true);
+      setLastSuccessfulUpdate(new Date());
+      setRefreshMessage("Cloud view refreshed. Cloud snapshot publishing is controlled by the paired desktop daemon.");
+    } catch {
+      setRefreshMessage("Refresh failed. Showing the last available data.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     fetchLiveMetrics();
@@ -312,7 +353,7 @@ export default function ConsolePage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 font-sans">
+    <div className="sp-console-shell max-w-7xl mx-auto px-6 py-8 font-sans">
       {/* Top Banner if not authenticated */}
       {!user ? (
         <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
@@ -405,13 +446,13 @@ export default function ConsolePage() {
       )}
 
       {/* Header Controls */}
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono">
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono sp-console-heading">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0d1117] p-1 flex items-center justify-center shadow-sm">
-            <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
+          <div className="sp-console-mark" aria-hidden="true">
+            <svg viewBox="0 0 2048 2048"><polygon points="290.67 1756.53 290.67 291.47 1755.73 291.47" /><rect x="799.39" y="789.88" width="957.95" height="957.95" /></svg>
           </div>
           <div>
-            <div className="text-xl font-bold text-foreground">Mission Control Console</div>
+            <div className="text-xl font-bold text-foreground">spawnt / overview</div>
             <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
               <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
               <span>Status: {connectedSource}</span>
@@ -419,14 +460,25 @@ export default function ConsolePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" onClick={refreshCloudSnapshot} disabled={refreshing} className="px-3 py-2 bg-card border border-border text-xs text-foreground hover:border-accent disabled:opacity-50">{refreshing ? "Refreshing..." : "Reload view"}</button>
           <Link
             href="/settings"
             className="px-3 py-1.5 bg-card border border-border rounded text-xs text-foreground hover:border-accent"
           >
-            [Manage Subscriptions & Pricing]
+            Settings
           </Link>
         </div>
       </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px] text-muted" aria-live="polite">
+        <span>{refreshMessage || connectedSource}</span>
+        <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
+      </div>
+
+      <nav className="sp-console-nav" aria-label="Console views">
+        {["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => view === "settings" ? window.location.assign("/settings") : changeConsoleView(view)}>{view}</button>)}
+      </nav>
+      {activeView !== "overview" && activeView !== "sessions" && activeView !== "usage" && activeView !== "limits" && <div className="sp-console-notice" role="status">{activeView === "projects" ? (sessions.some((s) => s.project_name) ? "Project names are available for the sessions shown below." : "Project identity is not available in the current cloud snapshot.") : "Automation controls are managed by the paired local daemon. This account view does not execute local actions."}</div>}
 
       {/* Timeline Filter Bar */}
       <div className="flex justify-between items-center bg-card border border-border rounded-md px-4 py-2.5 mb-6 flex-wrap gap-3 font-mono">
@@ -463,29 +515,29 @@ export default function ConsolePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 font-mono">
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">Active Fleet Agents</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{activeCount}</div>
+          <div className="text-2xl font-bold mt-1 text-foreground">{activeCount} <span className="sp-trust">EXACT</span></div>
           <div className="text-[11px] text-muted mt-1">Active in last 15 min</div>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">API-Equivalent Spend</div>
           <div className="text-2xl font-bold mt-1 text-accent">
-            ${report?.total_cost_usd?.toFixed(2) || "0.00"}
+            ${report ? report.total_cost_usd.toFixed(2) : "Unknown"} <span className="sp-trust">{report ? "API" : "UNKNOWN"}</span>
           </div>
-          <div className="text-[11px] text-muted mt-1">Exact Token Attribution</div>
+          <div className="text-[11px] text-muted mt-1">API-equivalent cost basis</div>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">Prompt Cache Savings</div>
           <div className="text-2xl font-bold mt-1 text-green">
-            ${report?.total_cache_savings_usd?.toFixed(2) || "0.00"}
+            ${report ? report.total_cache_savings_usd.toFixed(2) : "Unknown"} <span className="sp-trust">{report ? "EST" : "UNKNOWN"}</span>
           </div>
           <div className="text-[11px] text-green mt-1">Direct Cost Avoided</div>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">Quota Pools Monitored</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{quota.length}</div>
+          <div className="text-2xl font-bold mt-1 text-foreground">{quota.length} <span className="sp-trust">EXACT</span></div>
           <div className="text-[11px] text-muted mt-1">5h & 7d Window Bounds</div>
         </div>
       </div>
@@ -778,7 +830,7 @@ export default function ConsolePage() {
                       )}
                     </td>
                     <td className="py-2.5 font-bold text-foreground">
-                      {s.usage_available === false || s.cost_basis === "unknown" ? "Unknown" : `$${(s.total_cost_usd ?? 0).toFixed(2)} EST`}
+                      {s.usage_available === false || s.cost_basis === "unknown" ? <>Unknown <span className="sp-trust">UNKNOWN</span></> : <>${(s.total_cost_usd ?? 0).toFixed(2)} <span className="sp-trust">{s.cost_basis?.toUpperCase() || "UNKNOWN"}</span></>}
                     </td>
                     <td className="py-2.5">
                       <span className="flex items-center gap-1.5">

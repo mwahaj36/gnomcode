@@ -37,7 +37,7 @@ export default function DocsPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12 font-sans">
+    <div className="sp-console-shell max-w-7xl mx-auto px-6 py-12 font-sans">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(docsJsonLd) }}

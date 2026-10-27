@@ -181,7 +181,7 @@ flowchart LR
 | `fleethud` | Rust single binary | Subcommands: `daemon`, `status`, `report`, `hook <event>`, `integrate <agent>`, `doctor`, `install`, `uninstall`, `open` |
 | daemon (`fleethud daemon`) | tokio + axum + rusqlite | Owns watchers, DB, API. Single instance via lockfile + port probe. |
 | Web dashboard | React + Vite + Tailwind, embedded via `rust-embed` | Served at `http://127.0.0.1:3333` |
-| Tray app | Tauri v2 | Thin client of the daemon API; spawns the daemon as a sidecar if absent; reuses the web bundle. |
+| Tray app | Rust tray controller (`crates/tray`) and platform scripts | Thin local client; opens the daemon-served console and invokes platform focus/notification behavior. The Tauri v2 shell remains a future migration, not the current shipped implementation. |
 
 **FleetHUD home:** `~/.fleethud/` on all OSes (override: `FLEETHUD_HOME`). Contains `fleethud.db`, `daemon.json` (port + token, user-only perms), `ipc.sock` (Unix), `config.toml`, `pricing.toml`, `license.json`, `bin/`, `logs/`.
 
@@ -618,11 +618,11 @@ flowchart LR
 
 **Release:** `v0.2.0`.
 
-### M3 — Tray app on all OSes (weeks 5–8) [x]
+### M3 — Tray app on all OSes (weeks 5–8) [in progress]
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
-| Tauri v2 tray: status pill (active count, awaiting-approval badge, burn), popover/mini-window | Status badges without emojis ([RUN], [WAIT], [IDLE]) | Yes |
+| Native Rust tray controller and platform tray scripts: status (active count, awaiting-approval badge), open local console | Status badges without emojis ([RUN], [WAIT], [IDLE]); Tauri mini-window migration is pending | Partial |
 | Notifications: approval needed, quota reset, context bloat | Formatted notification payloads fired cleanly | Yes |
 | Bring-to-front (per §3.13) | Cross-platform focus dispatch for PID on Win/macOS/Linux | Yes |
 
@@ -828,6 +828,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
+| [0005](./adr/0005-shared-spawnt-console-ui.md) | Shared token source and matched local/cloud presentation; preserve separate data adapters and existing native runtime pending a separate migration | Accepted |
 
 ## 10. Open questions
 
