@@ -550,3 +550,9 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Outcome: replaced nested cards with three open, divided sections; aligned account state, password, subscription costs, and custom rates to square controls and shared typography. Missing price values now show `UNKNOWN` rather than `$0.00`; configured rates are identified as user-entered. The pricing table scrolls horizontally and can receive keyboard focus. Removed the `[Connect Cloud Sync]` header link; account connection remains available in Settings and Auth.
 - Follow-up: replaced the filled Connect account button with a restrained text link after visual review.
 - Verification: Next.js production build and `git diff --check` passed. Chromium review confirmed the route renders, sections and form controls are exposed accessibly, and the theme is applied. The local daemon is offline in this browser so live settings saves/password updates were not exercised; narrow viewport and keyboard-only review remain pending.
+
+## 2026-10-28 — account route presentation
+
+- Goal: align Auth with the spawnt visual language while retaining GitHub and email sign-in, account creation, password reset, and local-console access.
+- Outcome: added keyboard-friendly native mode toggles, clear field labels and focus states, responsive square forms, readable GitHub sign-in, and accessible status/error messaging. OAuth now prevents duplicate clicks and reports a provider-start failure. Existing Supabase calls and callback handling remain in place.
+- Verification: Next.js production build and `git diff --check` passed. Chromium review covered light/dark themes, the sign-in/create/reset content states, accessible control names, and the visible GitHub action. No credentials were entered and no external sign-in was submitted; narrow viewport and end-to-end Supabase flows remain pending.
