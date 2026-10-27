@@ -330,7 +330,9 @@ Every quota record and UI meter is keyed by `(provider, limit_id, window)`:
 - Bind **127.0.0.1 only**. Random bearer token in `daemon.json` (0600 / user-only ACL).
 - Validate `Host` and `Origin` on every request (DNS-rebinding defense).
 - IPC: `~/.fleethud/ipc.sock` (Unix), `\\.\pipe\fleethud-<user>` (Windows).
-- Endpoints (v1): `GET /v1/sessions?active=1`, `GET /v1/usage?group=project|agent|model&from&to`, `GET /v1/quota`, `WS /v1/stream`, `POST /v1/sessions/:id/focus`, `GET|POST /v1/rules`, `GET /v1/health`.
+- Current HTTP routes: `GET /api/v1/sessions?page=&limit=&agent=&status=`, `GET /api/v1/report?range=&from=&to=`, `GET /api/v1/projects?range=&from=&to=`, `GET /api/v1/quota`, `POST /api/v1/reconcile`, `GET /api/v1/sync/status`, `POST /api/v1/sessions/:id/focus`, `GET|POST /api/v1/rules`, and `GET /health`. Local clients poll these routes; a WebSocket stream remains planned.
+- Timeline reports include Rust-produced UTC daily token/cost measurements and chart proportions. Session and project totals count provider cache tokens once. Project rollups and repository identity remain local; cloud sources without project rollups show an explicit unavailable state.
+- Cloud snapshots carry `generated_at` from the daemon. Cloud settings-row edits must not make old observations appear fresh. Authenticated local sync status exposes the last publication attempt/success and a credential-free failure message. Provider quota provenance is retained, and a past reset timestamp does not prove a new quota observation.
 
 ### 3.12 Cross-platform matrix
 
@@ -836,6 +838,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
 | [0005](./adr/0005-shared-spawnt-console-ui.md) | Shared token source and matched local/cloud presentation; preserve separate data adapters and existing native runtime pending a separate migration | Accepted |
+| [0006](./adr/0006-shared-console-renderers.md) | Shared console presenters and navigation layout, Rust daily measurements, source-generated freshness and authenticated sync status | Accepted |
 
 ## 10. Open questions
 

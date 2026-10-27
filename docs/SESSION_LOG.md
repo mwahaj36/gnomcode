@@ -2,6 +2,15 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — shared console activity, sessions and quota freshness
+
+- Added shared framework-neutral presenters and a common navigation rail, daily chart/token grid, quota panels, compact expandable session table, and project rollup presentation. Local project totals are computed in Rust and do not enter cloud snapshots.
+- Added Rust daily/session/project token totals that count cached tokens once, source-generated snapshot times, remaining quota capacity, and an authenticated cloud publication-status endpoint. Fixed stored estimated quota provenance being returned as exact. Fixed web deep links that previously produced nonexistent console subroutes; query-based navigation supports Back/Forward.
+- Live polling preserves expanded day/session details and focus, pauses in hidden web tabs, and does not replay chart entrance motion. Removed the cloud navbar's unauthenticated loopback probe and removed misleading immediate-completion messages for queued rotation. Rotation requires explicit confirmation and prevents concurrent clicks.
+- Replaced the landing's generic console mock tables with the completed shared session/activity/quota presenters. The illustrative week totals 296k tokens and $3.78, with 39.3k tokens and $0.86 on its final day; the three daily sessions reconcile to those day totals. Added keyboard navigation to tour tabs and reused the platform selector in documentation. Shared summary cells now have identical order and layout in both consoles; missing pricing stays unknown.
+- Live diagnosis: the installed desktop pairing token is expired and its refresh grant is rejected. The user elected to re-pair later. No credentials or activity content were printed or added to the repository.
+- Verification: Rust regression tests reproduced quota trust and project/report omissions before fixes. Production web builds, embedded script parsing, shared presenter trust/escaping checks, and the full Rust gate including cargo-deny passed. Visual inspection remains blocked by the browser tool reporting disabled after the user enabled access. No merge or release has been claimed yet.
+
 ## 2026-10-28 — platform brand assets and font parity
 
 - Added a reproducible generator using the canonical spawnt SVG for ICO, ICNS, Apple, and Linux PNG sizes. Windows setup now uses that generated image, the approved canvas/text palette, plain spawnt branding, and a red progress track. Installation paths and registry identity remain compatible with existing installs.
