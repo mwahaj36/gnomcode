@@ -1,11 +1,11 @@
 # FleetHUD Windows updater: use the same native installer as the download page.
 $ErrorActionPreference = "Stop"
-$Version = "1.3.0"
+$Version = "1.4.0"
 $BaseUrl = "https://fleethud.vercel.app/downloads"
 if (-not [Environment]::Is64BitOperatingSystem) {
     throw "FleetHUD requires 64-bit Windows. The existing installation was not changed."
 }
-$Asset = "FleetHUD-v1.3.0-windows-x64.zip"
+$Asset = "FleetHUD-v1.4.0-windows-x64.zip"
 $Stage = Join-Path ([IO.Path]::GetTempPath()) ("fleethud-update-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $Stage | Out-Null
 try {
