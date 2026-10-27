@@ -537,3 +537,9 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Goal: make every executable command shown in the app easy to copy without selecting text manually.
 - Outcome: added a shared accessible copy control to Windows/Linux install commands, verification and CLI commands in docs, and the download page. The existing standalone Daytona preview already has copy controls.
 - Verification: Next.js production build and `git diff --check` passed. Desktop browser review confirmed the buttons and layout in docs/downloads, the accessibility tree names each copy action, and clicking a docs command displayed “Copied”. Narrow viewport and keyboard-only review remain pending.
+
+## 2026-10-28 — platform-selectable downloads
+
+- Goal: replace the crowded three-column installer instructions with the platform-tab interaction shown in the console tour and default to the visitor's platform.
+- Outcome: added Windows, macOS, and Linux tabs with browser-platform detection, arrow/Home/End keyboard navigation, focus states, a single focused release panel, and reduced-motion behavior. Kept published URLs and marked macOS unavailable until a verified package exists.
+- Verification: production Next.js build and `git diff --check` passed. Chromium accessibility tree confirmed tab roles, selected state, Windows release links, and the macOS unavailable state after selection; desktop light and dark styling were inspected. Narrow viewport and non-Windows platform default require additional review.
