@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Documentation — Setup, Agents & API Reference",
   description:
-    "Complete technical guide for FleetHUD: 1-minute quickstart, log adapter architecture for Claude Code, Codex, and Antigravity, CLI commands, and REST APIs.",
+    "Complete technical guide for spawnt: quickstart, agent support, CLI commands, and REST APIs.",
   alternates: {
     canonical: "https://fleethud.vercel.app/docs",
   },
@@ -13,12 +13,12 @@ export const metadata: Metadata = {
 const docsJsonLd = {
   "@context": "https://schema.org",
   "@type": "TechArticle",
-  headline: "FleetHUD Technical Documentation and Architecture Guide",
+  headline: "spawnt Technical Documentation and Architecture Guide",
   description:
     "Complete manual for monitoring AI coding agents with zero content storage: setup, log adapters, CLI usage, and REST API.",
   author: {
     "@type": "Organization",
-    name: "FleetHUD",
+    name: "spawnt",
     url: "https://fleethud.vercel.app",
   },
   dependencies: "Windows 10/11, macOS 12+, Ubuntu/Debian/Fedora",
@@ -83,10 +83,10 @@ export default function DocsPage() {
           <div className="border-b border-border pb-8 mb-10">
             <p className="font-mono text-xs text-accent mb-4">REFERENCE GUIDE / v1.1.1</p>
             <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-4">
-              FleetHUD Documentation
+              spawnt Documentation
             </h1>
             <p className="text-muted text-base leading-relaxed">
-              FleetHUD is a live mission control cockpit for AI coding agents. It runs locally as a native background daemon or desktop tray app, reads agent runtime logs in real time, computes exact token spend attribution and prompt cache savings, and tracks per-model rate limit quota pools without ever storing prompts, source code, or tool responses.
+              spawnt is live mission control for AI coding agents. It reads local agent activity and reports usage and quota without storing prompts, source code, or tool responses.
             </p>
           </div>
 
@@ -96,7 +96,7 @@ export default function DocsPage() {
               # Quickstart (1 Minute)
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-4">
-              FleetHUD runs as a standalone native binary with zero external runtime dependencies. Choose your platform below:
+              spawnt runs locally with no external runtime dependencies. Choose an available platform release below:
             </p>
 
             <div className="space-y-4 font-mono text-xs">
@@ -148,7 +148,7 @@ export default function DocsPage() {
               # Supported Agents & Adapters
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-6">
-              FleetHUD connects directly to the local file outputs of popular AI coding tools. It requires zero configuration in the target agent.
+              spawnt reads local activity files from supported AI coding tools. It requires no configuration in the target agent.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
@@ -220,7 +220,7 @@ export default function DocsPage() {
               # Non-Negotiable Privacy Invariants
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-4">
-              FleetHUD is designed for defense, enterprise, and privacy-conscious engineering teams. We uphold 4 non-negotiable architectural guarantees:
+              spawnt is designed for privacy-conscious developers. It upholds four non-negotiable architectural guarantees:
             </p>
 
             <div className="space-y-3 font-mono text-xs">
@@ -229,7 +229,7 @@ export default function DocsPage() {
                   1. Zero Content Storage
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Prompts, completions, code snippets, diffs, and tool output payloads NEVER touch disk or network. FleetHUD only persists numeric metadata: turn count, token counts, timestamps, status enums, and scrubbed project identifiers.
+                  Prompts, completions, code snippets, diffs, and tool output payloads NEVER touch disk or network. spawnt only persists metadata such as turn counts, token counts, timestamps, status, and scrubbed project identifiers.
                 </div>
               </div>
 
@@ -247,7 +247,7 @@ export default function DocsPage() {
                   3. Fail-Open Architecture (50ms IPC Timeout)
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Integrations and hooks operate asynchronously. If the FleetHUD daemon is stopped or slow, agent execution never blocks.
+                  Integrations and hooks operate asynchronously. If the spawnt daemon is stopped or slow, agent execution never blocks.
                 </div>
               </div>
 
@@ -413,7 +413,7 @@ export default function DocsPage() {
                 Source Integrity & Anti-Ambiguity Guarantee
               </div>
               <div className="text-muted text-[11px] leading-relaxed">
-                FleetHUD never estimates rates arbitrarily. Base rates mirror official developer pricing documentation from Anthropic, OpenAI, and Google. Live dynamic updates synchronize against the open-source <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json" target="_blank" rel="noopener noreferrer" className="text-accent underline">BerriAI/LiteLLM Model Catalog</a> (MIT Licensed, tracking 4,300+ models).
+                spawnt does not calculate prices in this page. Pricing and quota math are produced by the local Rust engine and carry an explicit trust level.
               </div>
             </div>
 
@@ -533,7 +533,7 @@ export default function DocsPage() {
                   Q: Why did an agent turn status switch from "Thinking" to "Idle"?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  FleetHUD marks an agent session idle if no new turn events or tool calls are detected within 15 minutes. As soon as the agent begins a new step or generates a token, the session immediately snaps back to "Thinking" or "Tool".
+                  spawnt marks an agent session idle if no new turn events or tool calls are detected within 15 minutes. New activity changes the session state again.
                 </div>
               </div>
 
@@ -542,7 +542,7 @@ export default function DocsPage() {
                   Q: How is prompt cache savings computed?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Prompt caching reduces token rates by up to 90%. FleetHUD calculates savings as: <br />
+                  Prompt caching may reduce provider token rates. The local Rust pricing engine calculates cache savings using the selected model's rates: <br />
                   <code className="text-accent">(cached_tokens * raw_input_rate) - (cached_tokens * cached_rate)</code>.
                   This shows the direct dollar savings your subscription or API key realized.
                 </div>
@@ -550,7 +550,7 @@ export default function DocsPage() {
 
               <div className="bg-card border border-border rounded-lg p-4">
                 <div className="text-foreground font-semibold mb-1">
-                  Q: Can I use FleetHUD completely offline?
+                  Q: Can I use spawnt completely offline?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
                   Yes. The local CLI, daemon, SQLite store, and tray app operate 100% locally with zero internet access required. Connecting to Supabase is strictly optional for cross-device roaming.

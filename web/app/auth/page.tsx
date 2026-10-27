@@ -101,7 +101,7 @@ export default function AuthPage() {
         </div>
         <p className="text-xs text-muted mb-6 font-sans">
           {mode === "signin" && "Sign in to access your cross-device fleet, live quota metrics, and multi-plan ROI."}
-          {mode === "signup" && "Create your FleetHUD account to sync across multiple machines and manage team fleets."}
+          {mode === "signup" && "Create your spawnt account to sync across multiple machines and manage team fleets."}
           {mode === "forgot" && "Enter your registered email address to receive password reset instructions."}
         </p>
 
@@ -216,7 +216,7 @@ export default function AuthPage() {
             {loading
               ? "Processing..."
               : mode === "signup"
-              ? "Create FleetHUD Account"
+              ? "Create spawnt Account"
               : mode === "signin"
               ? "Sign In to Console"
               : "Send Reset Link"}
