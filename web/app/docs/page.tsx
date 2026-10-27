@@ -347,6 +347,7 @@ export default function DocsPage() {
               <div><dt>Exact</dt><dd>In a provider pricing catalog, the rate is listed by the provider for the named model and conditions. In spawnt's live views, <code>EXACT</code> separately means the measurement came directly from an exact local record or provider limit response.</dd></div>
             </dl>
             <p><strong>Provider family matters:</strong> Claude Fable 5 and Claude Fable 5.1 are Anthropic Claude models, never Gemini models. See <a href="https://www.anthropic.com/claude/fable" target="_blank" rel="noreferrer">Anthropic's Claude Fable page</a> for current model details.</p>
+            <p className="sp-docs-provider-example"><strong>Published rate example:</strong> Anthropic lists Claude Fable 5.1 at $10 per million input tokens and $50 per million output tokens for Claude API usage. Provider rates and conditions can change; this example is not used to calculate spawnt data.</p>
             <div className="sp-docs-trust-grid" aria-label="Measurement trust levels">
               <div><strong>EXACT</strong><p>Measured from local usage records or an exact provider limit response.</p></div>
               <div><strong>EST</strong><p>Calculated from a rate catalog when provider usage is not an invoice.</p></div>
