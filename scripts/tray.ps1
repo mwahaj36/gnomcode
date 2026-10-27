@@ -247,18 +247,6 @@ for ($i = 0; $i -lt 5; $i++) {
     $sessionMenuItems += $item
 }
 
-# Cloud presence is separate from locally active agent work.
-$contextMenu.Items.Add("-") | Out-Null
-$cloudHeader = $contextMenu.Items.Add("Cloud sessions: checking account")
-$cloudHeader.Enabled = $false
-$cloudMenuItems = @()
-for ($i = 0; $i -lt 5; $i++) {
-    $item = $contextMenu.Items.Add("")
-    $item.Visible = $false
-    $item.Add_Click({ Open-Console })
-    $cloudMenuItems += $item
-}
-
 # Separator
 $contextMenu.Items.Add("-") | Out-Null
 
@@ -393,15 +381,6 @@ $timer.Add_Tick({
         $from = [uri]::EscapeDataString([DateTime]::Today.ToUniversalTime().ToString("o"))
         $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&from=$from&status=active&page=1&limit=5" -Headers $headers -TimeoutSec 3 -ErrorAction Stop
         if (-not $live) { throw "Daemon unavailable" }
-        $cloud = @($live.cloud_sessions | Where-Object { $_.state -eq "connected" })
-        $cloudHeader.Text = if ($live.cloud_status -eq "Cloud session sync available") { "Connected cloud sessions ($($cloud.Count))" } elseif ($live.cloud_status -like "Not paired*") { "Cloud sessions: pair this device" } else { "Cloud sync unavailable (open console)" }
-        for ($i = 0; $i -lt 5; $i++) {
-            $cloudMenuItems[$i].Visible = $i -lt $cloud.Count
-            if ($i -lt $cloud.Count) {
-                $cloudMenuItems[$i].Text = "  [CLOUD] $($cloud[$i].agent) | $($cloud[$i].device_name)"
-            }
-        }
-
         $idleSessionItem.Text = "  Fleet Idle (no active local agents)"
         $count = $live.active_count
         $spend = if ($live.timeline -and $live.timeline.total_cost_usd) { [double]$live.timeline.total_cost_usd } else { 0.0 }
@@ -475,8 +454,7 @@ $timer.Add_Tick({
         $sessionsHeader.Text = "Local sessions unavailable"
         $idleSessionItem.Text = "  Open Mission Control to reconnect"
         $idleSessionItem.Visible = $true
-        $cloudHeader.Text = "Cloud sessions unavailable"
-        foreach ($item in $sessionMenuItems + $cloudMenuItems) { $item.Visible = $false }
+        foreach ($item in $sessionMenuItems) { $item.Visible = $false }
     }
 })
 $timer.Start()

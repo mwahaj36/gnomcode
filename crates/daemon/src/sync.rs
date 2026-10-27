@@ -261,8 +261,8 @@ async fn credential_lock(path: &std::path::Path) -> Result<std::fs::File, std::i
     ))
 }
 
-fn collector_session(session: &Value) -> Value {
-    // OAuth provider tokens and unrelated account metadata do not belong on the collector.
+fn stored_auth_session(session: &Value) -> Value {
+    // Persist only the credentials needed for desktop summary sync.
     json!({"access_token":session["access_token"],"refresh_token":session["refresh_token"],
         "expires_at":session["expires_at"],"expires_in":session["expires_in"],"token_type":"bearer",
         "user":{"id":session.pointer("/user/id"),"email":session.pointer("/user/email")}})
@@ -274,7 +274,10 @@ pub(crate) async fn save_cloud_session(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _guard = AUTH_REFRESH_LOCK.lock().await;
     let _file_guard = credential_lock(path).await?;
-    fleethud_platform::write_private_file(path, &serde_json::to_vec(&collector_session(session))?)?;
+    fleethud_platform::write_private_file(
+        path,
+        &serde_json::to_vec(&stored_auth_session(session))?,
+    )?;
     Ok(())
 }
 
@@ -291,7 +294,7 @@ pub(crate) async fn read_cloud_auth(
     client: &reqwest::Client,
     session_path: &std::path::Path,
 ) -> Result<Option<CloudAuth>, Box<dyn std::error::Error + Send + Sync>> {
-    // Desktop sync and automatic cloud collection share one rotating login session.
+    // Desktop sync and manual account linking share one rotating login session.
     let _refresh_guard = AUTH_REFRESH_LOCK.lock().await;
     if !session_path.exists() {
         return Ok(None);
@@ -346,7 +349,7 @@ pub(crate) async fn read_cloud_auth(
         }
         fleethud_platform::write_private_file(
             session_path,
-            &serde_json::to_vec(&collector_session(&session))?,
+            &serde_json::to_vec(&stored_auth_session(&session))?,
         )?;
     }
     let Some(access_token) = session
@@ -362,6 +365,43 @@ pub(crate) async fn read_cloud_auth(
         base_url,
         public_key,
     }))
+}
+
+pub(crate) async fn validate_session(
+    client: &reqwest::Client,
+    base: &str,
+    key: &str,
+    session: &Value,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let token = session["access_token"]
+        .as_str()
+        .filter(|v| !v.is_empty())
+        .ok_or("Missing login token")?;
+    let id = session
+        .pointer("/user/id")
+        .and_then(Value::as_str)
+        .ok_or("Missing account ID")?;
+    if session["refresh_token"].as_str().is_none_or(str::is_empty) {
+        return Err("A renewable login session is required".into());
+    }
+    let response = client
+        .get(format!("{base}/auth/v1/user"))
+        .header("apikey", key)
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| "Cannot validate account login")?;
+    if !response.status().is_success() {
+        return Err("Login expired or belongs to another Supabase project".into());
+    }
+    let user: Value = response
+        .json()
+        .await
+        .map_err(|_| "Invalid account response")?;
+    if user["id"].as_str() != Some(id) {
+        return Err("Account identity mismatch".into());
+    }
+    Ok(())
 }
 
 pub(crate) fn cloud_config() -> (String, String) {
@@ -380,7 +420,7 @@ mod tests {
     #[test]
     fn saved_credentials_exclude_oauth_provider_tokens() {
         let input = serde_json::json!({"access_token":"account","refresh_token":"renew","provider_token":"must-not-copy","user":{"id":"user-1","email":"test@example.invalid","user_metadata":{"anything":"must-not-copy"}}});
-        let saved = super::collector_session(&input);
+        let saved = super::stored_auth_session(&input);
         assert_eq!(saved["access_token"], "account");
         assert_eq!(saved["user"]["id"], "user-1");
         assert!(!saved.to_string().contains("must-not-copy"));
