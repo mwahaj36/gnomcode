@@ -92,11 +92,11 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="max-w-md mx-auto my-16 px-4 font-mono">
+    <div className="sp-console-shell max-w-md mx-auto my-16 px-4 font-mono">
       <div className="bg-card border border-border rounded-xl p-8 shadow-2xl">
         <div className="flex items-center gap-2 mb-2">
           <h1 className="text-xl font-bold tracking-tight text-foreground font-sans">
-            FleetHUD Account
+            spawnt / account
           </h1>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 font-semibold">
             CLOUD SYNC

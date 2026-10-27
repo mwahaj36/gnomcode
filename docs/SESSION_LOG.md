@@ -443,3 +443,20 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Comprehensive Test: `model_lookup_resolves_all_catalog_families_and_rejects_false_substring_collisions` verified all 39 catalog models and 14 negative test cases.
 - Native Windows Installer: `FleetHUD-Setup.exe` compiled and verified with `check-installer-payload.cs`.
 - Local Daemon: Restarted with hardened binary; live session context correctly shows `200.5k / 1,000,000 (20.0%)` with healthy green progress bar.
+
+## 2026-10-28 — spawnt landing preview
+
+- Goal: build and show a local landing page using the attached `spawnt_redesign_plan.md`, while preserving the Daytona reference navbar behavior.
+- Outcome: replaced the Next.js home route with a spawnt landing preview, including the supported-agent strip, feature cells, interactive console tour, privacy facts, and Free/Pro/Teams teaser. Kept other routes intact.
+- Decision: console figures and tour screens are labeled illustrative until the redesigned console exists. Current downloads and pricing routes still carry FleetHUD branding and need their planned redesign in a later phase. Removed a duplicate favicon asset that caused a route conflict.
+- Verification: Next.js production build passed; local server and browser review performed in dark and light themes, including scroll navbar, tour tabs, selectable bars and rows, scroll-triggered graph motion, self-hosted agent logos, a tighter final CTA, a typographic footer inspired by footer.design, and device-default theme control moved to the footer.
+- Added a Log in nav action (in the mobile menu on narrow screens) and routed the landing's console links through web authentication, since the web console requires a signed-in account to be useful.
+- Preserved the user-provided `spawnt_redesign_plan.md` verbatim under `docs/`, rewrote `DESIGN.md` for the current red and near-black palette, and added `docs/spawnt_rollout_plan.md` to reconcile the draft with the repo's separate local and signed-in web consoles. No console implementation was changed in this documentation pass.
+
+## 2026-10-28 — spawnt foundation and local refresh slice
+
+- Goal: establish one token source, record the local/cloud presentation boundary, improve the illustrative landing tour, and add an accurate local console refresh/reconciliation action.
+- Outcome: added ADR 0005; Next.js and daemon now consume `web/app/spawnt-tokens.css`. Updated local console palette, responsive overflow, focus treatment, and reduced-motion behavior. Added POST `/api/v1/reconcile`, secured by the existing bearer/Host/Origin validation, with duplicate reconciliation suppression. Added separate local view reload and reconcile controls with progress/result/time labels. The signed-in web console now has a view reload action that refetches existing cloud snapshot/session APIs and explicitly does not claim to trigger daemon synchronization. Improved trust labels where source values are available. Replaced landing hero copy with the requested approved text and made tour screens distinct by view.
+- Decision: current native delivery is Rust tray control plus OS scripts and installer; Tauri window migration is a separate scope decision. SPEC now reflects the actual state and marks that migration pending.
+- Follow-up: both consoles now expose Overview, Sessions, Usage, Limits, Projects, Automations, and Settings destinations with separate transports. Web route selection updates its URL; local selection uses the page hash. Web Project/Automations unavailable data are stated plainly. Landing hero now uses the requested WINDOWS · MACOS · LINUX eyebrow and message.
+- Verification: `npm run build --prefix web` passed; full Rust quality gate passed (cargo-deny unavailable and skipped); 16 daemon tests include missing bearer and DNS-rebinding rejection for reconcile. Browser accessibility tree confirms the updated landing hero, navigation and distinct illustrative view content. Visual desktop/narrow screenshots and installer/native cross-platform verification remain pending. This is a foundation slice, not redesign completion.

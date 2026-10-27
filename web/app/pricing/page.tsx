@@ -130,7 +130,7 @@ export default function PricingPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-16 font-sans">
+    <div className="sp-console-shell max-w-7xl mx-auto px-6 py-16 font-sans">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingJsonLd) }}
