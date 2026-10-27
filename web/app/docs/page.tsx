@@ -221,7 +221,7 @@ export default function DocsPage() {
               CLI commands
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-4">
-              The <code className="text-foreground">fleethud</code> binary provides fast terminal commands for local inspection:
+              The spawnt CLI provides fast terminal commands for local inspection:
             </p>
 
             <div className="space-y-4 font-mono text-xs">
