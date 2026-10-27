@@ -24,7 +24,7 @@ body {
 .sp-site-links a, .sp-site-login, .sp-site-download { color: var(--sp-text-2); font: 600 11px/16px var(--sp-font-mono); letter-spacing: .04em; text-decoration: none; text-transform: uppercase; }
 .sp-site-links a:hover, .sp-site-login:hover { color: var(--sp-primary-text); }
 .sp-site-actions { margin-left: auto; gap: 14px; }
-.sp-site-download { padding: 10px 14px; color: var(--sp-on-primary); background: var(--sp-primary); border-radius: 4px; }
+.sp-site-download { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; color: var(--sp-on-primary); background: var(--sp-primary); border-radius: 0; }
 .sp-site-mobile-login, .sp-site-menu { display: none; }
 .sp-site-footer { padding: 64px max(24px, calc((100% - 1200px) / 2)) 24px; color: var(--sp-text); background: var(--sp-bg); border-top: 1px solid var(--sp-border); }
 .sp-site-footer-grid { display: grid; grid-template-columns: 3fr repeat(3, 1fr); gap: 32px; padding-bottom: 52px; }
@@ -101,7 +101,7 @@ body {
 @media (max-width: 760px) { .sp-site-header { height: 56px; } .sp-site-nav { width: calc(100% - 32px); gap: 14px; } .sp-site-divider { display: none; } .sp-site-links { display: none; position: absolute; top: 55px; left: 0; right: 0; padding: 16px; border: 1px solid var(--sp-border); background: var(--sp-surface); } .sp-site-links.open { display: flex; flex-direction: column; align-items: stretch; gap: 16px; } .sp-site-mobile-login { display: block; } .sp-site-actions { gap: 8px; } .sp-site-menu { display: block; width: 40px; height: 40px; padding: 8px; border: 0; background: none; } .sp-site-menu span { display: block; height: 1px; margin: 5px 0; background: var(--sp-text); } .sp-site-footer { padding: 48px 16px 20px; } .sp-site-footer-grid { grid-template-columns: repeat(2, 1fr); gap: 28px 16px; } .sp-site-footer-intro { grid-column: 1 / -1; } .sp-site-footer-bottom { font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .sp-site-header, .sp-site-header * { transition-duration: .01ms !important; scroll-behavior: auto !important; } }
 
-.sp-site-download, .sp-pricing-action, .sp-download-action, .sp-settings-action, .sp-auth-oauth, .sp-auth-submit, .sp-console-link, .sp-console-action { min-height: 44px; border-radius: 0; font: 600 10px/1.4 var(--sp-font-mono); }
+.sp-site-download, .sp-pricing-action, .sp-download-action, .sp-settings-action, .sp-auth-oauth, .sp-auth-submit, .sp-console-link, .sp-console-action { box-sizing: border-box; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 18px; border-radius: 0; font: 600 11px/20px var(--sp-font-mono); text-align: center; }
 .sp-settings-action { min-height: 44px; }
 .sp-console-app button:not(.sp-console-nav button):not(.sp-console-timeline-filter button) { min-height: 44px; border-radius: 0; font: 600 10px/1.4 var(--sp-font-mono); }
 .sp-settings-delete { min-height: 44px; padding-inline: 8px; }
@@ -311,12 +311,13 @@ body {
 .sp-docs-cta-actions .sp-docs-cta-primary { border-color: var(--sp-primary); background: var(--sp-primary); color: var(--sp-on-primary) !important; }
 .sp-docs-cta-actions a:hover { border-color: var(--sp-primary); }
 .sp-docs-cta-actions a:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
-.sp-copy-command { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; }
-.sp-copy-command code { min-width: 0; display: block; overflow-x: auto; padding: 10px; border: 1px solid var(--sp-border); background: var(--sp-surface); color: var(--sp-text); font: 10px/1.5 var(--sp-font-mono); white-space: pre; }
-.sp-copy-command button { min-height: 36px; padding: 0 10px; border: 1px solid var(--sp-border-strong); border-radius: 0; background: transparent; color: var(--sp-text); font: 600 9px/1.4 var(--sp-font-mono); text-transform: uppercase; cursor: pointer; }
+.sp-copy-command { position: relative; min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) 44px; align-items: start; border: 1px solid var(--sp-border); background: var(--sp-surface); }
+.sp-copy-command code { min-width: 0; display: block; overflow-x: auto; padding: 14px; border: 0; background: transparent; color: var(--sp-text); font: 11px/1.6 var(--sp-font-mono); white-space: pre; }
+.sp-copy-command button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; color: var(--sp-text-2); cursor: pointer; }
 .sp-copy-command button:hover { border-color: var(--sp-primary); background: var(--sp-surface-2); }
 .sp-copy-command button:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
-.sp-copy-command-status { grid-column: 1 / -1; min-height: 0; color: var(--sp-text-2); font: 10px/1.4 var(--sp-font-sans); }
+.sp-copy-command-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.sp-copy-command.is-error .sp-copy-command-status { position: static; width: auto; height: auto; clip-path: none; grid-column: 1 / -1; padding: 0 14px 12px; color: var(--sp-primary-text); font: 11px/1.5 var(--sp-font-sans); }
 .sp-copy-command-status:empty { display: none; }
 .sp-docs-install .sp-copy-command code { min-height: 46px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .sp-docs-article .sp-copy-command { margin: 0 0 10px; }
