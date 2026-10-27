@@ -1870,25 +1870,50 @@ impl Database {
         let now = Utc::now();
         let (cutoff, range_label) = match range_kind {
             "today" => {
-                let start_of_day = now
-                    .date_naive()
-                    .and_hms_opt(0, 0, 0)
-                    .map(|dt| dt.and_utc())
-                    .unwrap_or(now);
-                (Some(start_of_day.to_rfc3339()), "Today".to_owned())
+                if let Some(f) = from_ts {
+                    (Some(f.to_owned()), "Today".to_owned())
+                } else {
+                    let local_now = chrono::Local::now();
+                    let start_of_day = local_now
+                        .date_naive()
+                        .and_hms_opt(0, 0, 0)
+                        .and_then(|dt| dt.and_local_timezone(chrono::Local).earliest())
+                        .map(|dt| dt.to_utc())
+                        .unwrap_or_else(|| {
+                            now.date_naive()
+                                .and_hms_opt(0, 0, 0)
+                                .map(|dt| dt.and_utc())
+                                .unwrap_or(now)
+                        });
+                    (Some(start_of_day.to_rfc3339()), "Today".to_owned())
+                }
             }
             "7d" => {
-                let d = now - chrono::Duration::days(7);
-                (Some(d.to_rfc3339()), "Last 7 Days".to_owned())
+                if let Some(f) = from_ts {
+                    (Some(f.to_owned()), "Last 7 Days".to_owned())
+                } else {
+                    let d = now - chrono::Duration::days(7);
+                    (Some(d.to_rfc3339()), "Last 7 Days".to_owned())
+                }
             }
             "30d" => {
-                let d = now - chrono::Duration::days(30);
-                (Some(d.to_rfc3339()), "Last 30 Days".to_owned())
+                if let Some(f) = from_ts {
+                    (Some(f.to_owned()), "Last 30 Days".to_owned())
+                } else {
+                    let d = now - chrono::Duration::days(30);
+                    (Some(d.to_rfc3339()), "Last 30 Days".to_owned())
+                }
             }
             "custom" if from_ts.is_some() => {
                 (from_ts.map(str::to_owned), "Custom Range".to_owned())
             }
-            _ => (None, "All Time".to_owned()),
+            _ => {
+                if let Some(f) = from_ts {
+                    (Some(f.to_owned()), "Custom Range".to_owned())
+                } else {
+                    (None, "All Time".to_owned())
+                }
+            }
         };
 
         let mut stmt = self.conn.prepare(
@@ -2413,5 +2438,107 @@ mod tests {
             .expect("delete");
         let after_del = db.get_custom_model_pricings().expect("query custom prices");
         assert!(after_del.is_empty());
+    }
+
+    #[test]
+    fn usage_report_timeline_honors_explicit_from_ts_and_local_start_of_day() {
+        let mut db = Database::open_in_memory().expect("in-memory db");
+        let p = Project::from_origin(
+            Some("https://github.com/mwahaj36/fleethud"),
+            "/workspace/fleethud",
+            Some("main"),
+        );
+        let s = Session {
+            id: "antigravity:s1".to_owned(),
+            agent: AgentId::Antigravity,
+            surface: Surface::Ide,
+            project_id: p.id.clone(),
+            parent_session_id: None,
+            model: Some("gemini-2.5-pro".to_owned()),
+            title: Some("Date filtering test".to_owned()),
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+
+        // Record from 2 days ago
+        let two_days_ago = Utc::now() - chrono::Duration::days(2);
+        let u_old = UsageRecord {
+            dedup_key: "old:1".to_owned(),
+            session_id: s.id.clone(),
+            timestamp: two_days_ago,
+            model: "gemini-2.5-pro".to_owned(),
+            input_tokens: 1000,
+            output_tokens: 100,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 1100,
+            context_window: Some(1_000_000),
+            cost_usd: 10.0,
+            cache_savings_usd: 0.0,
+            cost_basis: TrustLevel::Exact,
+            pricing_version: "2026-10-26".to_owned(),
+        };
+
+        // Record from now (today)
+        let now = Utc::now();
+        let u_now = UsageRecord {
+            dedup_key: "now:1".to_owned(),
+            session_id: s.id.clone(),
+            timestamp: now,
+            model: "gemini-2.5-pro".to_owned(),
+            input_tokens: 500,
+            output_tokens: 50,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 550,
+            context_window: Some(1_000_000),
+            cost_usd: 5.0,
+            cache_savings_usd: 0.0,
+            cost_basis: TrustLevel::Exact,
+            pricing_version: "2026-10-26".to_owned(),
+        };
+
+        let cp = SourceCheckpoint {
+            file_path: "/path/to/log.jsonl".to_owned(),
+            last_read_offset: 100,
+            file_size: 100,
+            fingerprint: "hash".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+
+        db.commit_batch(&[p], &[s], &[u_old, u_now], &[], &[], &cp)
+            .expect("commit batch");
+
+        // 1. "all" should return total 15.0
+        let rep_all = db
+            .generate_usage_report_timeline("all", None, None)
+            .expect("report all");
+        assert_eq!(rep_all.total_cost_usd, 15.0);
+
+        // 2. "today" should include u_now (5.0) and exclude u_old
+        let rep_today = db
+            .generate_usage_report_timeline("today", None, None)
+            .expect("report today");
+        assert_eq!(rep_today.total_cost_usd, 5.0);
+
+        // 3. "today" with explicit from_ts overriding cutoff to before u_old should return 15.0
+        let explicit_from = (two_days_ago - chrono::Duration::hours(1)).to_rfc3339();
+        let rep_custom_today = db
+            .generate_usage_report_timeline("today", Some(&explicit_from), None)
+            .expect("report explicit from");
+        assert_eq!(rep_custom_today.total_cost_usd, 15.0);
+
+        // 4. "today" with to_ts before u_now should return 0.0
+        let before_now = (now - chrono::Duration::seconds(5)).to_rfc3339();
+        let rep_to = db
+            .generate_usage_report_timeline("today", None, Some(&before_now))
+            .expect("report with to_ts");
+        assert_eq!(rep_to.total_cost_usd, 0.0);
     }
 }
