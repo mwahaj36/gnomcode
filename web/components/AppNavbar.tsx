@@ -45,16 +45,16 @@ export default function AppNavbar() {
   };
 
   return (
-    <header className="border-b border-border bg-[#161b22] sticky top-0 z-50 font-mono text-xs">
+    <header className="sp-app-header border-b border-border sticky top-0 z-50 font-mono text-xs">
       <div className="max-w-7xl mx-auto px-6 h-13 flex items-center justify-between">
         {/* Left: Cockpit Brand & Tabs */}
         <div className="flex items-center gap-6">
           <Link href="/console" className="flex items-center gap-2.5">
             <span className="font-bold text-sm tracking-tight text-foreground font-sans">
-              FleetHUD
+              spawnt
             </span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
-              COCKPIT
+              ACCOUNT
             </span>
           </Link>
 

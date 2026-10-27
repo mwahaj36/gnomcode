@@ -55,6 +55,9 @@ interface ProviderSpend {
 interface TimelineReport {
   total_cost_usd: number;
   total_cache_savings_usd: number;
+  total_input_tokens: number;
+  total_cache_read_tokens: number;
+  total_output_tokens: number;
   providers: ProviderSpend[];
   range_label?: string;
   earliest_at?: string | null;
@@ -136,6 +139,7 @@ export default function ConsolePage() {
   const [refreshMessage, setRefreshMessage] = useState("");
   const refreshInFlight = useRef(false);
   const [activeView, setActiveView] = useState("overview");
+  const [viewError, setViewError] = useState("");
 
   useEffect(() => {
     const path = window.location.pathname.split("/").filter(Boolean).at(-1);
@@ -176,6 +180,7 @@ export default function ConsolePage() {
     });
     if (refreshInFlight.current) return;
     refreshInFlight.current = true;
+    setViewError("");
     try {
     if (user) {
       try {
@@ -184,6 +189,7 @@ export default function ConsolePage() {
           supabase.from("fleethud_cloud_sessions_live").select("session,updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1000),
         ]);
         const snap = desktop.data?.live_snapshot;
+        if (desktop.error && cloud.error) setViewError("Cloud data is unavailable. Last received snapshot remains visible when available.");
         const cloudSessions: SessionItem[] = (cloud.data || []).map((row) => row.session as SessionItem);
         const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
@@ -208,6 +214,7 @@ export default function ConsolePage() {
         }
       } catch {
         setConnectedSource("Offline");
+        setViewError("Connection failed. Showing the last data held in this page.");
       }
     } else {
       setConnectedSource("Sign in to monitor your desktop remotely");
@@ -343,6 +350,9 @@ export default function ConsolePage() {
   );
 
   const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
+  const tokenTotal = report ? report.total_input_tokens + report.total_cache_read_tokens + report.total_output_tokens : null;
+  const chartValues = report?.providers?.map((provider) => ({ label: provider.provider, value: provider.total_cost_usd })) || [];
+  const maxChartValue = Math.max(0, ...chartValues.map((item) => item.value));
 
   if (!authChecked) {
     return (
@@ -452,7 +462,7 @@ export default function ConsolePage() {
             <svg viewBox="0 0 2048 2048"><polygon points="290.67 1756.53 290.67 291.47 1755.73 291.47" /><rect x="799.39" y="789.88" width="957.95" height="957.95" /></svg>
           </div>
           <div>
-            <div className="text-xl font-bold text-foreground">spawnt / overview</div>
+            <div className="text-xl font-bold text-foreground">spawnt / {activeView}</div>
             <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
               <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
               <span>Status: {connectedSource}</span>
@@ -512,7 +522,7 @@ export default function ConsolePage() {
       </div>
 
       {/* 4 KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 font-mono">
+      {activeView === "overview" && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 font-mono">
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">Active Fleet Agents</div>
           <div className="text-2xl font-bold mt-1 text-foreground">{activeCount} <span className="sp-trust">EXACT</span></div>
@@ -522,7 +532,7 @@ export default function ConsolePage() {
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">API-Equivalent Spend</div>
           <div className="text-2xl font-bold mt-1 text-accent">
-            ${report ? report.total_cost_usd.toFixed(2) : "Unknown"} <span className="sp-trust">{report ? "API" : "UNKNOWN"}</span>
+            ${report ? report.total_cost_usd.toFixed(2) : "Unknown"} <span className="sp-trust">{report ? "EST" : "UNKNOWN"}</span>
           </div>
           <div className="text-[11px] text-muted mt-1">API-equivalent cost basis</div>
         </div>
@@ -537,13 +547,13 @@ export default function ConsolePage() {
 
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="text-xs text-muted uppercase">Quota Pools Monitored</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{quota.length} <span className="sp-trust">EXACT</span></div>
+          <div className="text-2xl font-bold mt-1 text-foreground">{report ? quota.length : "Unknown"} <span className="sp-trust">{report ? "EXACT" : "UNKNOWN"}</span></div>
           <div className="text-[11px] text-muted mt-1">5h & 7d Window Bounds</div>
         </div>
-      </div>
+      </div>}
 
       {/* Subscription ROI Breakdown */}
-      <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
+      {activeView === "overview" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
         <div className="flex justify-between items-center mb-3">
           <div className="text-xs text-muted uppercase font-semibold">Subscription ROI Breakdown</div>
           <Link href="/settings" className="text-xs text-accent hover:underline">
@@ -587,10 +597,10 @@ export default function ConsolePage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Spend By Agent (Click to View Models) */}
-      <div className="mb-6 font-mono">
+      {(activeView === "overview" || activeView === "usage") && <div className="mb-6 font-mono">
         <div className="text-xs text-muted uppercase mb-3 font-semibold">
           Spend by Agent (Click to View Models)
         </div>
@@ -640,13 +650,13 @@ export default function ConsolePage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Per-Model Quota Pools */}
-      <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
+      {(activeView === "overview" || activeView === "limits") && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
         <div className="flex justify-between items-center mb-3">
           <div className="text-xs text-muted uppercase font-semibold">Per-Model Quota Pools</div>
-          <div className="text-[11px] text-muted">[CONFIRMED] Exact provider limits.</div>
+          <div className="text-[11px] text-muted">Source and trust are shown per pool.</div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
@@ -668,7 +678,7 @@ export default function ConsolePage() {
                   <td className="py-2.5 capitalize">{q.window ? q.window.replace("_", "-") : "rolling"}</td>
                   <td className="py-2.5">
                     <span className={`font-bold ${(q.used_pct ?? 0) >= 90 ? "text-red" : (q.used_pct ?? 0) >= 60 ? "text-accent" : "text-green"}`}>
-                      {(q.used_pct ?? 0).toFixed(1)}%
+                      {typeof q.used_pct === "number" ? q.used_pct.toFixed(1) : "Unknown"}% <span className="sp-trust">{q.basis?.toUpperCase() || "UNKNOWN"}</span>
                     </span>
                   </td>
                   <td className="py-2.5 text-muted">
@@ -682,7 +692,7 @@ export default function ConsolePage() {
                           : "bg-accent/15 text-accent"
                       }`}
                     >
-                      {q.basis?.toLowerCase() === "estimated" ? "EST" : "EXACT"}
+                      {q.basis?.toUpperCase() || "UNKNOWN"}
                     </span>
                   </td>
                 </tr>
@@ -690,18 +700,27 @@ export default function ConsolePage() {
               {quota.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-4 text-center text-muted">
-                    No quota pools monitored yet. Active sessions will populate live limits.
+                    No quota pools are present in the latest account snapshot.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
+      {viewError && <div className="sp-console-notice" role="status">{viewError}</div>}
+      {activeView === "usage" && <section className="sp-usage-panel" aria-labelledby="usage-title">
+        <div className="sp-panel-heading"><div><span className="sp-console-eyebrow">USAGE / {timeline.toUpperCase()}</span><h2 id="usage-title">Usage breakdown</h2></div><span className="sp-trust">{report ? "EST" : "UNKNOWN"}</span></div>
+        {report ? <><div className="sp-usage-summary"><strong>{formatTokens(tokenTotal)} <span className="sp-trust">EXACT</span></strong><span>API-equivalent cost: ${report.total_cost_usd.toFixed(2)} <span className="sp-trust">EST</span></span></div><div className="sp-usage-bars" role="img" aria-label={`Cost by provider, maximum $${maxChartValue.toFixed(2)}`}>{chartValues.map((item) => <div className="sp-usage-bar-row" key={item.label}><span>{item.label}</span><div><i style={{ "--bar-width": `${maxChartValue ? item.value / maxChartValue * 100 : 0}%` } as React.CSSProperties} /></div><b>${item.value.toFixed(2)} <span className="sp-trust">EST</span></b></div>)}</div><p className="sp-console-caption">Provider totals are API-equivalent estimates from the Rust timeline report. Token counts are read from the report.</p></> : <div className="sp-console-empty">Usage data is unavailable in the current cloud snapshot. Values are unknown, not zero.</div>}
+      </section>}
+      {activeView === "limits" && <section className="sp-usage-panel" aria-labelledby="limits-title">
+        <div className="sp-panel-heading"><div><span className="sp-console-eyebrow">LIMITS / QUOTA POOLS</span><h2 id="limits-title">Remaining capacity</h2></div><span className="sp-trust">PER POOL</span></div>
+        {quota.length ? <div className="sp-limit-list">{quota.map((pool) => { const used = typeof pool.used_pct === "number" ? Math.min(100, Math.max(0, pool.used_pct)) : null; return <div className="sp-limit-row" key={`${pool.provider}-${pool.limit_id}-${pool.window}`}><div><strong>{pool.provider} / {pool.limit_id}</strong><span>{pool.window.replace("_", " ")} · resets {formatResetCountdown(pool.resets_at, pool.window)}</span></div><div className="sp-limit-meter" role="img" aria-label={used === null ? "Quota remaining unknown" : `${100 - used}% remaining`}><i style={{ "--bar-width": `${used === null ? 0 : 100 - used}%` } as React.CSSProperties} /></div><b>{used === null ? "Unknown" : `${(100 - used).toFixed(1)}% left`} <span className="sp-trust">{pool.basis?.toUpperCase() || "UNKNOWN"}</span></b></div>; })}</div> : <div className="sp-console-empty">No quota pools are available in the current account snapshot. Remaining capacity and reset time are unknown.</div>}
+      </section>}
       <p className="text-xs text-muted mb-3">Cloud usage and estimated cost appear in session rows. Summary charts show desktop reports.</p>
       {/* Live & Historical Agent Sessions */}
-      <div className="bg-card border border-border rounded-lg p-5 font-mono">
+      {(activeView === "overview" || activeView === "sessions" || activeView === "projects") && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div className="text-xs text-muted uppercase font-semibold">Live & Historical Agent Sessions</div>
           <div className="flex gap-2">
@@ -791,7 +810,7 @@ export default function ConsolePage() {
                     <td className="py-2.5">{s.model}</td>
                     <td className="py-2.5">
                       <span className="font-semibold text-foreground">
-                        {s.usage_available === false ? "Unknown" : formatTokens(totalTokens)}
+                        {s.usage_available === false ? <>Unknown <span className="sp-trust">UNKNOWN</span></> : <>{formatTokens(totalTokens)} <span className="sp-trust">EXACT</span></>}
                       </span>
                       <span className="text-[10px] text-muted block">
                         {s.usage_available === false ? "Presence only" : `${formatTokens(s.input_tokens)} in · ${formatTokens(s.output_tokens)} out`}
@@ -808,7 +827,7 @@ export default function ConsolePage() {
                           <div className="flex items-center gap-1 font-semibold text-foreground">
                             <span>{formatTokens(ctxTokens)}</span>
                             <span className="text-[10px] text-muted font-normal">/ {formatTokens(ctxWin)}</span>
-                            <span className="text-[10px] text-muted font-normal">({fillPct}%)</span>
+                            <span className="text-[10px] text-muted font-normal">({fillPct}% <span className="sp-trust">EXACT</span>)</span>
                           </div>
                           <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
                             <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
@@ -836,7 +855,7 @@ export default function ConsolePage() {
                       <span className="flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
                         <span className={s.is_active ? "text-green font-semibold capitalize" : "text-muted capitalize"}>
-                          {s.state}
+                          {s.state} <span className="sp-trust">EXACT</span>
                         </span>
                       </span>
                     </td>
@@ -877,7 +896,7 @@ export default function ConsolePage() {
             </button>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

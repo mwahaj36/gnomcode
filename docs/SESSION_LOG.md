@@ -460,3 +460,9 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Decision: current native delivery is Rust tray control plus OS scripts and installer; Tauri window migration is a separate scope decision. SPEC now reflects the actual state and marks that migration pending.
 - Follow-up: both consoles now expose Overview, Sessions, Usage, Limits, Projects, Automations, and Settings destinations with separate transports. Web route selection updates its URL; local selection uses the page hash. Web Project/Automations unavailable data are stated plainly. Landing hero now uses the requested WINDOWS · MACOS · LINUX eyebrow and message.
 - Verification: `npm run build --prefix web` passed; full Rust quality gate passed (cargo-deny unavailable and skipped); 16 daemon tests include missing bearer and DNS-rebinding rejection for reconcile. Browser accessibility tree confirms the updated landing hero, navigation and distinct illustrative view content. Visual desktop/narrow screenshots and installer/native cross-platform verification remain pending. This is a foundation slice, not redesign completion.
+
+## 2026-10-28 — spawnt marketing shell and web console
+
+- Goal: bring the signed-in web console and shared marketing header/footer into the approved spawnt design while retaining the existing cloud data/auth path.
+- Outcome: added seven console destinations, dedicated Usage and Limits views, a responsive console shell, updated trust badges, and a system/light/dark footer control. Rebuilt the shared marketing and account headers and footer to match the spawnt visual language. API-equivalent pricing is labeled estimated.
+- Verification: `npm run build --prefix web` passed and `git diff --check` was clean. Desktop/narrow browser and keyboard/reduced-motion checks remain pending. This phase does not complete local console, native, icon, or installer redesign.
