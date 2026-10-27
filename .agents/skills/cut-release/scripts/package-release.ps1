@@ -26,6 +26,7 @@ $CompilerArgs = @(
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
     "/resource:target/release/fleethud.exe,fleethud.exe",
     "/resource:scripts/tray.ps1,tray.ps1", "/resource:scripts/fleethud.ico,fleethud.ico",
+    "/resource:web/public/icons/spawnt-512.png,spawnt-mark.png",
     "/resource:scripts/run-tray.vbs,run-tray.vbs", "/resource:scripts/open-console.vbs,open-console.vbs",
     "/resource:scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:LICENSE,LICENSE",
     "/resource:web/public/downloads/THIRD_PARTY_NOTICES.html,THIRD_PARTY_NOTICES.html",
