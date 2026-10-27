@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CopyCommand } from "../components/CopyCommand";
+import { PlatformDownloads } from "../downloads/PlatformDownloads";
 
 export const metadata: Metadata = {
   title: "Documentation — Setup, Agents & API Reference",
@@ -79,23 +80,7 @@ export default function DocsPage() {
               spawnt runs locally with no external runtime dependencies. Choose an available platform release below:
             </p>
 
-            <div className="sp-docs-install-list font-mono text-xs">
-              <div className="sp-docs-install">
-                <header><strong>Windows</strong><span>AVAILABLE · x64</span></header>
-                <CopyCommand command="irm https://fleethud.vercel.app/win | iex" />
-                <p>Downloads the v1.3.0 installer and creates Start menu and desktop shortcuts. Updates preserve recorded sessions and account pairing.</p>
-              </div>
-              <div className="sp-docs-install">
-                <header><strong>Linux</strong><span>AVAILABLE · x86_64 / ARM64</span></header>
-                <CopyCommand command="curl -fsSL https://fleethud.vercel.app/sh | bash" />
-                <p>Downloads the verified tarball, checks its SHA-256 digest, and installs the CLI. WSL2 is supported.</p>
-              </div>
-              <div className="sp-docs-install sp-docs-install-pending">
-                <header><strong>macOS</strong><span>NOT PUBLISHED</span></header>
-                <p>A verified macOS package is not available yet. Check the Downloads page for current release availability.</p>
-                <Link href="/downloads">View downloads <span aria-hidden="true">→</span></Link>
-              </div>
-            </div>
+            <PlatformDownloads />
 
             <p className="text-muted text-xs mt-4">
               Once installed, verify the installation by running:

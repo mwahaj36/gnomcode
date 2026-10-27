@@ -3,6 +3,23 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
+import { updateActivity, updateSessions, renderQuota, renderProjects, renderSummary } from "../../lib/console-presentation.js";
+
+function ActivityPanel({ report }: { report: unknown }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateActivity(element.current, report); }, [report]);
+  return <div ref={element} />;
+}
+
+function SessionsPanel({ sessions, onRotate }: { sessions: SessionItem[]; onRotate: (session: SessionItem) => Promise<void> }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateSessions(element.current, sessions, { rotate: true }); }, [sessions]);
+  return <div ref={element} className="overflow-x-auto" role="region" aria-label="Agent sessions" tabIndex={0} onClick={event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-session-action="rotate"]');
+    const session = sessions.find(session => session.id === button?.dataset.sessionId);
+    if (session) void onRotate(session);
+  }} />;
+}
 
 interface SessionItem {
   id: string;
@@ -53,6 +70,10 @@ interface ProviderSpend {
 }
 
 interface TimelineReport {
+  cost_basis?: string;
+  cache_share_pct?: number | null;
+  total_tokens?: number;
+  daily?: unknown[];
   total_cost_usd: number;
   total_cache_savings_usd: number;
   total_input_tokens: number;
@@ -128,6 +149,7 @@ export default function ConsolePage() {
   const [report, setReport] = useState<TimelineReport | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quota, setQuota] = useState<QuotaItem[]>([]);
+  const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
   const [roiByProvider, setRoiByProvider] = useState<PlanRoiInfo[]>([]);
   const [combinedRoi, setCombinedRoi] = useState<PlanRoiInfo | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -140,18 +162,34 @@ export default function ConsolePage() {
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState<Date | null>(null);
   const [refreshMessage, setRefreshMessage] = useState("");
   const refreshInFlight = useRef(false);
+  const metricsGeneration = useRef(0);
   const manualRefreshInFlight = useRef(false);
   const [activeView, setActiveView] = useState("overview");
   const [viewError, setViewError] = useState("");
+  const lastDesktopSnapshot = useRef<any>(null);
+  const lastCloudSessions = useRef<SessionItem[]>([]);
 
   useEffect(() => {
-    const path = window.location.pathname.split("/").filter(Boolean).at(-1);
-    if (path && ["overview", "sessions", "usage", "limits", "projects", "automations"].includes(path)) setActiveView(path);
+    lastDesktopSnapshot.current = null; lastCloudSessions.current = [];
+    setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
+    setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
+    setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
+    setRefreshMessage(""); setConnectedSource(user ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
+  }, [user?.id]);
+
+  useEffect(() => {
+    const restore = () => {
+      const view = new URLSearchParams(window.location.search).get("view") || "overview";
+      if (["overview", "sessions", "usage", "limits", "projects", "automations"].includes(view)) setActiveView(view);
+    };
+    restore();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
   }, []);
 
   const changeConsoleView = (view: string) => {
     setActiveView(view);
-    window.history.replaceState(null, "", view === "overview" ? "/console" : `/console/${view}`);
+    window.history.pushState(null, "", view === "overview" ? "/console" : `/console?view=${view}`);
   };
 
   useEffect(() => {
@@ -176,12 +214,13 @@ export default function ConsolePage() {
 
   // Live metrics polling
   const fetchLiveMetrics = useCallback(async (force = false) => {
+    const generation = metricsGeneration.current;
     if (refreshInFlight.current && !force) return false;
     if (refreshInFlight.current && force) await new Promise<void>((resolve) => {
       const check = () => refreshInFlight.current ? window.setTimeout(check, 50) : resolve();
       check();
     });
-    if (refreshInFlight.current) return false;
+    if (refreshInFlight.current || generation !== metricsGeneration.current) return false;
     refreshInFlight.current = true;
     setViewError("");
     let refreshed = false;
@@ -192,11 +231,14 @@ export default function ConsolePage() {
           supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle(),
           supabase.from("fleethud_cloud_sessions_live").select("session,updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1000),
         ]);
-        const snap = desktop.data?.live_snapshot;
+        if (generation !== metricsGeneration.current) return false;
+        if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
+        if (!cloud.error) lastCloudSessions.current = (cloud.data || []).map(row => row.session as SessionItem);
+        const snap = lastDesktopSnapshot.current;
         if (desktop.error || cloud.error) setViewError("Some cloud data is unavailable. Last received data remains visible where available.");
         refreshed = !desktop.error && !cloud.error;
         if (refreshed) setLastSuccessfulUpdate(new Date());
-        const cloudSessions: SessionItem[] = (cloud.data || []).map((row) => row.session as SessionItem);
+        const cloudSessions = lastCloudSessions.current;
         const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
           (agentFilter === "all" || session.agent === agentFilter) &&
@@ -205,6 +247,7 @@ export default function ConsolePage() {
         setSessions(filtered.slice((page - 1) * 10, page * 10));
         setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
         setQuota(snap?.quota || []);
+        setSnapshotGeneratedAt(snap?.generated_at || null);
         setRoiByProvider(snap?.roi_by_provider || []);
         setCombinedRoi(snap?.combined_roi || null);
         setUserProfile(snap?.user_profile || null);
@@ -214,12 +257,13 @@ export default function ConsolePage() {
         setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
         const cloudStatus = cloud.error ? "Cloud sessions unavailable" : `${cloudSessions.length} cloud sessions · EXACT`;
         if (snap) {
-          const ageMs = Date.now() - Date.parse(desktop.data.updated_at);
+          const ageMs = snap.generated_at ? Date.now() - Date.parse(snap.generated_at) : Infinity;
           setConnectedSource(`${ageMs < 120000 ? "Desktop connected" : "Desktop data stale"} · ${cloudStatus}`);
         } else {
           setConnectedSource(desktop.error ? `Desktop unavailable · ${cloudStatus}` : cloudStatus);
         }
       } catch {
+        if (generation !== metricsGeneration.current) return false;
         setConnectedSource("Offline");
         setViewError("Connection failed. Showing the last data held in this page.");
       }
@@ -227,6 +271,13 @@ export default function ConsolePage() {
       setConnectedSource("Sign in to monitor your desktop remotely");
       setSnapshotLoaded(false);
       setActiveCount(null);
+      setSessions([]);
+      setQuota([]);
+      setReport(null);
+      setRoiByProvider([]);
+      setCombinedRoi(null);
+      setUserProfile(null);
+      setSnapshotGeneratedAt(null);
     }
     } finally {
     refreshInFlight.current = false;
@@ -260,9 +311,10 @@ export default function ConsolePage() {
   };
 
   useEffect(() => {
-    fetchLiveMetrics();
-    const timer = setInterval(fetchLiveMetrics, 15000);
-    return () => clearInterval(timer);
+    metricsGeneration.current += 1;
+    void fetchLiveMetrics(true);
+    const timer = setInterval(() => { if (!document.hidden) void fetchLiveMetrics(); }, 15000);
+    return () => { clearInterval(timer); metricsGeneration.current += 1; };
   }, [fetchLiveMetrics]);
 
   const formatTokens = (num: number | undefined | null) => {
@@ -310,24 +362,14 @@ export default function ConsolePage() {
     }
   };
 
+  const relayBusy = useRef(false);
   const handleRemoteRelay = async (session: SessionItem) => {
-    // 1. Try local daemon endpoint if running on this device
-    try {
-      const res = await fetch("http://127.0.0.1:41738/api/v1/pro/relay/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: `relay-${session.id}` }),
-      });
-      if (res.ok) {
-        alert("Context Relay handoff executed locally! Clean session starting with 0 tokens.");
-        fetchLiveMetrics();
-        return;
-      }
-    } catch {}
-
+    if (relayBusy.current || !window.confirm("Request a clean session on the paired desktop? The daemon applies your existing permissions.")) return;
+    relayBusy.current = true;
     // 2. If remote (away from laptop), communicate via Supabase sync state to local daemon
     if (!user) {
-      alert("Sign in to execute remote relay handoff to your desktop daemon.");
+      setRefreshMessage("Sign in to request a session rotation.");
+      relayBusy.current = false;
       return;
     }
 
@@ -362,9 +404,11 @@ export default function ConsolePage() {
         .eq("user_id", user.id);
 
       if (error) throw error;
-      alert("Handoff command transmitted to your desktop daemon! Rotation in progress.");
+      setRefreshMessage("Rotation requested. Awaiting execution by the paired desktop.");
     } catch (err: any) {
-      alert("Failed to transmit handoff command: " + err.message);
+      setRefreshMessage("Rotation request failed. Check account connectivity and try again.");
+    } finally {
+      relayBusy.current = false;
     }
   };
 
@@ -373,9 +417,6 @@ export default function ConsolePage() {
   );
 
   const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
-  const tokenTotal = report ? report.total_input_tokens + report.total_cache_read_tokens + report.total_output_tokens : null;
-  const chartValues = report?.providers?.map((provider) => ({ label: provider.provider, value: provider.total_cost_usd })) || [];
-  const maxChartValue = Math.max(0, ...chartValues.map((item) => item.value));
 
   if (!authChecked) {
     return (
@@ -425,7 +466,7 @@ export default function ConsolePage() {
         <div className="sp-console-brand-lockup">
           <span className="sp-console-mark sp-brand-mark" aria-hidden="true" />
           <div>
-            <div className="sp-console-title">{activeView === "overview" ? "Your agent fleet" : activeView[0].toUpperCase() + activeView.slice(1)}</div>
+            <h1 className="sp-console-title">{activeView === "overview" ? "Your agent fleet" : activeView[0].toUpperCase() + activeView.slice(1)}</h1>
             <div className="sp-console-status">
               <span className={`w-2 h-2 ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
               <span>{connectedSource}</span>
@@ -456,10 +497,13 @@ export default function ConsolePage() {
         <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
       </div>
 
+      <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
         {["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => view === "settings" ? window.location.assign("/settings") : changeConsoleView(view)}>{view}</button>)}
       </nav>
-      {activeView !== "overview" && activeView !== "sessions" && activeView !== "usage" && activeView !== "limits" && <div className="sp-console-notice" role="status">{activeView === "projects" ? (sessions.some((s) => s.project_name) ? "Project names are available for the sessions shown below." : "Project identity is not available in the current cloud snapshot.") : "Automation controls are managed by the paired local daemon. This account view does not execute local actions."}</div>}
+      <div className="sp-console-content">
+      {activeView === "projects" && <div dangerouslySetInnerHTML={{ __html: renderProjects(undefined) }} />}
+      {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
 
       {/* Timeline Filter Bar */}
       <div className="sp-console-timeline-filter">
@@ -493,86 +537,11 @@ export default function ConsolePage() {
         </div>
       </div>
 
-      {/* 4 KPI Cards */}
-      {activeView === "overview" && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 font-mono">
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">Active Fleet Agents</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{activeCount === null ? "Unknown" : activeCount} <span className="sp-trust">{activeCount === null ? "UNKNOWN" : "EXACT"}</span></div>
-          <div className="text-[11px] text-muted mt-1">Active in last 15 min</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">API-Equivalent Spend</div>
-          <div className="text-2xl font-bold mt-1 text-accent">
-            {report ? `$${report.total_cost_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{report ? "EST" : "UNKNOWN"}</span>
-          </div>
-          <div className="text-[11px] text-muted mt-1">API-equivalent cost basis</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">Prompt Cache Savings</div>
-          <div className="text-2xl font-bold mt-1 text-green">
-            {report ? `$${report.total_cache_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{report ? "EST" : "UNKNOWN"}</span>
-          </div>
-          <div className="text-[11px] text-green mt-1">Direct Cost Avoided</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">Quota Pools Monitored</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{snapshotLoaded ? quota.length : "Unknown"} <span className="sp-trust">{snapshotLoaded ? "EXACT" : "UNKNOWN"}</span></div>
-          <div className="text-[11px] text-muted mt-1">5h & 7d Window Bounds</div>
-        </div>
-      </div>}
-
-      {/* Subscription ROI Breakdown */}
-      {activeView === "overview" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
-        <div className="flex justify-between items-center mb-3">
-          <div className="text-xs text-muted uppercase font-semibold">Subscription ROI Breakdown</div>
-          <Link href="/settings" className="text-xs text-accent hover:underline">
-            Edit plans
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-          {activeRoi.map((roi) => (
-              <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
-              <div className="text-[11px] text-muted uppercase font-semibold">{roi.provider}</div>
-              <div className="text-lg font-bold text-foreground my-1">
-                {typeof roi.multiplier === "number" ? `${roi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof roi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
-              </div>
-              <div className={`text-[11px] font-semibold ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
-                {typeof roi.net_savings_usd === "number" ? `${roi.net_savings_usd >= 0 ? "+" : ""}$${roi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> vs API
-              </div>
-              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Plan: <span className="text-foreground">{typeof roi.monthly_plan_usd === "number" ? `$${roi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof roi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span> · {typeof roi.plan_usd === "number" ? `$${roi.plan_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span> ({roi.period_label || "period"})</div>
-                <div>Delivered value: <span className="text-accent font-semibold">{typeof roi.spend_usd === "number" ? `$${roi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
-              </div>
-            </div>
-          ))}
-          {combinedRoi && (combinedRoi.spend_usd ?? 0) > 0 && (
-            <div className="bg-bg border border-accent/40 rounded p-3.5">
-              <div className="text-[11px] text-accent uppercase font-semibold">Combined Fleet ROI</div>
-              <div className="text-lg font-bold text-accent my-1">
-                {typeof combinedRoi.multiplier === "number" ? `${combinedRoi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
-              </div>
-              <div className={`text-[11px] font-semibold ${typeof combinedRoi.net_savings_usd !== "number" ? "text-muted" : combinedRoi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
-                {typeof combinedRoi.net_savings_usd === "number" ? `${combinedRoi.net_savings_usd >= 0 ? "+" : ""}$${combinedRoi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> Net
-              </div>
-              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Total plan: <span className="text-foreground">{typeof combinedRoi.monthly_plan_usd === "number" ? `$${combinedRoi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span></div>
-                <div>Fleet value: <span className="text-accent font-semibold">{typeof combinedRoi.spend_usd === "number" ? `$${combinedRoi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
-              </div>
-            </div>
-          )}
-          {activeRoi.length === 0 && (!combinedRoi || (combinedRoi.spend_usd ?? 0) === 0) && (
-            <div className="col-span-full text-xs text-muted py-2">
-              No subscription usage recorded for this timeframe.
-            </div>
-          )}
-        </div>
-      </div>}
+      {activeView === "overview" && <div dangerouslySetInnerHTML={{ __html: renderSummary({ activeCount, report, quotaCount: snapshotLoaded ? quota.length : null }) }} />}
+      {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
 
       {/* Spend By Agent (Click to View Models) */}
-      {(activeView === "overview" || activeView === "usage") && <div className="mb-6 font-mono">
+      {activeView === "usage" && <div className="mb-6 font-mono">
         <div className="text-xs text-muted uppercase mb-3 font-semibold">
           Spend by Agent (Click to View Models)
         </div>
@@ -629,69 +598,58 @@ export default function ConsolePage() {
         </div>
       </div>}
 
-      {/* Per-Model Quota Pools */}
-      {activeView === "overview" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
+      {/* Subscription ROI Breakdown */}
+      {activeView === "usage" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-xs text-muted uppercase font-semibold">Per-Model Quota Pools</div>
-          <div className="text-[11px] text-muted">Source and trust are shown per pool.</div>
+          <div className="text-xs text-muted uppercase font-semibold">Subscription ROI Breakdown</div>
+          <Link href="/settings" className="text-xs text-accent hover:underline">
+            Edit plans
+          </Link>
         </div>
-        <div className="overflow-x-auto" role="region" aria-label="Quota pool table" tabIndex={0}>
-          <table className="w-full text-xs text-left">
-            <thead className="text-[11px] text-muted border-b border-border uppercase">
-              <tr>
-                <th className="pb-2">Provider</th>
-                <th className="pb-2">Pool ID</th>
-                <th className="pb-2">Window</th>
-                <th className="pb-2">Used %</th>
-                <th className="pb-2">Resets At</th>
-                <th className="pb-2 text-right">Basis</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {quota.map((q, idx) => (
-                <tr key={`${q.provider}-${q.limit_id}-${idx}`} className="hover:bg-bg/40">
-                  <td className="py-2.5 font-semibold">{q.provider}</td>
-                  <td className="py-2.5">{q.limit_id}</td>
-                  <td className="py-2.5 capitalize">{q.window ? q.window.replace("_", "-") : "rolling"}</td>
-                  <td className="py-2.5">
-                    <span className={`font-bold ${typeof q.used_pct !== "number" ? "text-muted" : q.used_pct >= 90 ? "text-red" : q.used_pct >= 60 ? "text-accent" : "text-green"}`}>
-                      {typeof q.used_pct === "number" ? q.used_pct.toFixed(1) : "Unknown"}% <span className="sp-trust">{q.basis?.toUpperCase() || "UNKNOWN"}</span>
-                    </span>
-                  </td>
-                  <td className="py-2.5 text-muted">
-                    {formatResetCountdown(q.resets_at, q.window)} {q.resets_at ? <span className="sp-trust">EST</span> : null}
-                  </td>
-                  <td className="py-2.5 text-right">
-                    <span className="text-[10px] font-mono text-muted">
-                      {q.basis?.toUpperCase() || "UNKNOWN"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {quota.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-4 text-center text-muted">
-                    {snapshotLoaded ? "No quota pools are present in the latest account snapshot." : "Quota data is unavailable; capacity and reset times are unknown."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+          {activeRoi.map((roi) => (
+              <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
+              <div className="text-[11px] text-muted uppercase font-semibold">{roi.provider}</div>
+              <div className="text-lg font-bold text-foreground my-1">
+                {typeof roi.multiplier === "number" ? `${roi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof roi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
+              </div>
+              <div className={`text-[11px] font-semibold ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
+                {typeof roi.net_savings_usd === "number" ? `${roi.net_savings_usd >= 0 ? "+" : ""}$${roi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> vs API
+              </div>
+              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
+                <div>Plan: <span className="text-foreground">{typeof roi.monthly_plan_usd === "number" ? `$${roi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof roi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span> · {typeof roi.plan_usd === "number" ? `$${roi.plan_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span> ({roi.period_label || "period"})</div>
+                <div>Delivered value: <span className="text-accent font-semibold">{typeof roi.spend_usd === "number" ? `$${roi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
+              </div>
+            </div>
+          ))}
+          {combinedRoi && (combinedRoi.spend_usd ?? 0) > 0 && (
+            <div className="bg-bg border border-accent/40 rounded p-3.5">
+              <div className="text-[11px] text-accent uppercase font-semibold">Combined Fleet ROI</div>
+              <div className="text-lg font-bold text-accent my-1">
+                {typeof combinedRoi.multiplier === "number" ? `${combinedRoi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
+              </div>
+              <div className={`text-[11px] font-semibold ${typeof combinedRoi.net_savings_usd !== "number" ? "text-muted" : combinedRoi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
+                {typeof combinedRoi.net_savings_usd === "number" ? `${combinedRoi.net_savings_usd >= 0 ? "+" : ""}$${combinedRoi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> Net
+              </div>
+              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
+                <div>Total plan: <span className="text-foreground">{typeof combinedRoi.monthly_plan_usd === "number" ? `$${combinedRoi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span></div>
+                <div>Fleet value: <span className="text-accent font-semibold">{typeof combinedRoi.spend_usd === "number" ? `$${combinedRoi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
+              </div>
+            </div>
+          )}
+          {activeRoi.length === 0 && (!combinedRoi || (combinedRoi.spend_usd ?? 0) === 0) && (
+            <div className="col-span-full text-xs text-muted py-2">
+              No subscription usage recorded for this timeframe.
+            </div>
+          )}
         </div>
       </div>}
 
+      {(activeView === "overview" || activeView === "limits") && <div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} />}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
-      {activeView === "usage" && <section className="sp-usage-panel" aria-labelledby="usage-title">
-        <div className="sp-panel-heading"><div><span className="sp-console-eyebrow">USAGE / {timeline.toUpperCase()}</span><h2 id="usage-title">Usage breakdown</h2></div><span className="sp-trust">{report ? "EST" : "UNKNOWN"}</span></div>
-        {report ? <><div className="sp-usage-summary"><strong>{formatTokens(tokenTotal)} <span className="sp-trust">EXACT</span></strong><span>API-equivalent cost: ${report.total_cost_usd.toFixed(2)} <span className="sp-trust">EST</span></span></div><div className="sp-usage-bars" role="img" aria-label={`Cost by provider, maximum $${maxChartValue.toFixed(2)}`}>{chartValues.map((item) => <div className="sp-usage-bar-row" key={item.label}><span>{item.label}</span><div><i style={{ "--bar-width": `${maxChartValue ? item.value / maxChartValue * 100 : 0}%` } as React.CSSProperties} /></div><b>${item.value.toFixed(2)} <span className="sp-trust">EST</span></b></div>)}</div><p className="sp-console-caption">Provider totals are API-equivalent estimates from the Rust timeline report. Token counts are read from the report.</p></> : <div className="sp-console-empty">Usage data is unavailable in the current cloud snapshot. Values are unknown, not zero.</div>}
-      </section>}
-      {activeView === "limits" && <section className="sp-usage-panel" aria-labelledby="limits-title">
-        <div className="sp-panel-heading"><div><span className="sp-console-eyebrow">LIMITS / QUOTA POOLS</span><h2 id="limits-title">Remaining capacity</h2></div><span className="sp-trust">PER POOL</span></div>
-        {quota.length ? <div className="sp-limit-list">{quota.map((pool) => { const used = typeof pool.used_pct === "number" ? Math.min(100, Math.max(0, pool.used_pct)) : null; return <div className="sp-limit-row" key={`${pool.provider}-${pool.limit_id}-${pool.window}`}><div><strong>{pool.provider} / {pool.limit_id}</strong><span>{pool.window.replace("_", " ")} · resets {formatResetCountdown(pool.resets_at, pool.window)}</span></div><div className="sp-limit-meter" role="img" aria-label={used === null ? "Quota remaining unknown" : `${100 - used}% remaining`}><i style={{ "--bar-width": `${used === null ? 0 : 100 - used}%` } as React.CSSProperties} /></div><b>{used === null ? "Unknown" : `${(100 - used).toFixed(1)}% left`} <span className="sp-trust">{pool.basis?.toUpperCase() || "UNKNOWN"}</span></b></div>; })}</div> : <div className="sp-console-empty">No quota pools are available in the current account snapshot. Remaining capacity and reset time are unknown.</div>}
-      </section>}
       <p className="text-xs text-muted mb-3">Cloud usage and estimated cost appear in session rows. Summary charts show desktop reports.</p>
       {/* Live & Historical Agent Sessions */}
-      {(activeView === "overview" || activeView === "sessions" || activeView === "projects") && <div className="bg-card border border-border rounded-lg p-5 font-mono">
+      {(activeView === "overview" || activeView === "sessions") && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div className="text-xs text-muted uppercase font-semibold">Live & Historical Agent Sessions</div>
           <div className="flex gap-2">
@@ -718,135 +676,7 @@ export default function ConsolePage() {
           </div>
         </div>
 
-        {sessions.some((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
-          <div className="mb-3 px-3 py-2 bg-red/10 border border-red/30 rounded text-xs text-red flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="font-mono font-bold">PRO LABS</span>
-              <span>Context saturation reserve active (&gt;=90%). Sessions are eligible for zero-token handoff via <code className="font-mono text-[11px] bg-red/20 px-1 py-0.5 rounded">.fleethud/HANDOFF.md</code>.</span>
-            </div>
-            {sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
-              <button
-                onClick={() => {
-                  const target = sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
-                  if (target) handleRemoteRelay(target);
-                }}
-                className="px-2.5 py-1 bg-red text-white text-[11px] font-semibold rounded hover:opacity-90 transition-opacity"
-              >
-                Handoff & Rotate Saturated Session
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="overflow-x-auto" role="region" aria-label="Agent sessions table" tabIndex={0}>
-          <table className="w-full text-xs text-left">
-            <thead className="text-[11px] text-muted border-b border-border uppercase">
-              <tr>
-                <th className="pb-2">Project</th>
-                <th className="pb-2">Agent</th>
-                <th className="pb-2">Surface</th>
-                <th className="pb-2">Model</th>
-                <th className="pb-2">Tokens</th>
-                <th className="pb-2">Context</th>
-                <th className="pb-2">Cost</th>
-                <th className="pb-2">Status</th>
-                <th className="pb-2 text-right">Last Active</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {sessions.map((s) => {
-                const hasTokenUsage = s.usage_available !== false && typeof s.input_tokens === "number" && typeof s.output_tokens === "number";
-                const totalTokens = hasTokenUsage ? s.input_tokens! + s.output_tokens! + (s.cache_read_tokens ?? 0) : null;
-                const ctxTokens = s.context_tokens;
-                const ctxWin = s.context_window;
-                const hasContext = typeof ctxTokens === "number" && typeof ctxWin === "number" && ctxWin > 0;
-                const fillPct = hasContext ? Math.min(100, Math.round((ctxTokens / ctxWin) * 100)) : null;
-                const barColor = (fillPct ?? 0) > 85 ? "bg-red" : (fillPct ?? 0) > 60 ? "bg-yellow" : "bg-accent";
-
-                return (
-                  <tr key={s.id} className="hover:bg-bg/40">
-                    <td className="py-2.5">
-                      <span className="font-semibold text-foreground block">{s.project_name}</span>
-                      {s.title ? (
-                        <span className="text-[11px] text-muted block truncate max-w-[200px]" title={s.title}>
-                          {s.title}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="py-2.5 capitalize">{s.agent}</td>
-                    <td className="py-2.5">
-                      <span className="capitalize block">{s.surface.replace("_", " ")}</span>
-                      <span className="text-[10px] text-muted block font-mono">
-                        {s.device_name || "local"}
-                      </span>
-                    </td>
-                    <td className="py-2.5">{s.model}</td>
-                    <td className="py-2.5">
-                      <span className="font-semibold text-foreground">
-                        {!hasTokenUsage ? <>Unknown <span className="sp-trust">UNKNOWN</span></> : <>{formatTokens(totalTokens)} <span className="sp-trust">EXACT</span></>}
-                      </span>
-                      <span className="text-[10px] text-muted block">
-                        {!hasTokenUsage ? "Presence only" : `${formatTokens(s.input_tokens)} in · ${formatTokens(s.output_tokens)} out`}
-                      </span>
-                      {s.cache_read_tokens && s.cache_read_tokens > 0 ? (
-                        <span className="text-[10px] text-green block font-semibold">
-                          + {formatTokens(s.cache_read_tokens)} cache <span className="sp-trust">EXACT</span>
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="py-2.5">
-                      {hasContext ? (
-                        <div>
-                          <div className="flex items-center gap-1 font-semibold text-foreground">
-                            <span>{formatTokens(ctxTokens)} <span className="sp-trust">EXACT</span></span>
-                            <span className="text-[10px] text-muted font-normal">/ {formatTokens(ctxWin)} <span className="sp-trust">EXACT</span></span>
-                            <span className="text-[10px] text-muted font-normal">({fillPct}% <span className="sp-trust">EST</span>)</span>
-                          </div>
-                          <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
-                            <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
-                          </div>
-                          {s.surface !== "cloud" && fillPct !== null && fillPct >= 90 ? (
-                            <button
-                              onClick={() => handleRemoteRelay(s)}
-                              className="mt-1 text-[10px] font-semibold text-accent hover:underline block"
-                              title="Handoff to clean session with 0 context tokens via .fleethud/HANDOFF.md"
-                            >
-                              [Handoff & Rotate]
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : typeof ctxTokens === "number" ? (
-                        <span className="text-foreground font-semibold">{formatTokens(ctxTokens)} <span className="sp-trust">EXACT</span> / window <span className="sp-trust">UNKNOWN</span></span>
-                      ) : (
-                        <span className="text-muted">Unknown <span className="sp-trust">UNKNOWN</span></span>
-                      )}
-                    </td>
-                    <td className="py-2.5 font-bold text-foreground">
-                      {typeof s.total_cost_usd !== "number" || !s.cost_basis || s.cost_basis === "unknown" ? <>Unknown <span className="sp-trust">UNKNOWN</span></> : <>${s.total_cost_usd.toFixed(2)} <span className="sp-trust">{s.cost_basis.toUpperCase()}</span></>}
-                    </td>
-                    <td className="py-2.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
-                        <span className={s.is_active ? "text-green font-semibold capitalize" : "text-muted capitalize"}>
-                          {s.state} <span className="sp-trust">EXACT</span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-right text-muted">{formatTimeAgo(s.last_event_at)} <span className="sp-trust">EST</span></td>
-                  </tr>
-                );
-              })}
-                    {sessions.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="py-6 text-center text-muted">
-                    {viewError ? "Session data could not be refreshed. Check the cloud connection and reload the view." : !snapshotLoaded ? "No desktop snapshot is connected to this account yet." : totalCount === 0 ? "No sessions match these filters." : "No session rows are available on this page."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
+        <SessionsPanel sessions={sessions} onRotate={handleRemoteRelay} />
         {/* Pagination Controls */}
         <div className="flex justify-between items-center mt-4 pt-3 border-t border-border text-xs text-muted">
           <div>
@@ -870,6 +700,7 @@ export default function ConsolePage() {
           </div>
         </div>
       </div>}
+      </div></div>
     </main>
   );
 }

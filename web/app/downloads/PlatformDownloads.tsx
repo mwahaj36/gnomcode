@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CopyCommand } from "../components/CopyCommand";
+import { version } from "../../package.json";
 
 const platforms = [
   {
     id: "windows", name: "Windows", availability: "AVAILABLE", detail: "Windows 10 / 11 · x64",
-    body: "Install the tray app and local daemon. The standalone installer and zip contain the same v1.3.0 release.",
+    body: `Install the tray app and local daemon. The standalone installer and zip contain the same v${version} release.`,
     actions: [
       { label: "Download installer", href: "/downloads/FleetHUD-Setup.exe", detail: ".exe" },
-      { label: "Download archive", href: "/downloads/FleetHUD-v1.3.0-windows-x64.zip", detail: ".zip" },
+      { label: "Download archive", href: `/downloads/FleetHUD-v${version}-windows-x64.zip`, detail: ".zip" },
     ], command: "irm https://fleethud.vercel.app/win | iex",
     note: "Updates preserve the account and recorded sessions.",
   },
@@ -20,10 +21,10 @@ const platforms = [
   },
   {
     id: "linux", name: "Linux", availability: "AVAILABLE", detail: "x86_64 / ARM64 · glibc 2.35+",
-    body: "Install the CLI and local web daemon from the verified v1.3.0 tarball. WSL2 is supported.",
+    body: `Install the CLI and local web daemon from the verified v${version} tarball. WSL2 is supported.`,
     actions: [
       { label: "Install script", href: "/sh", detail: "SHA-256 verified" },
-      { label: "Release checksums", href: "/downloads/SHA256SUMS-v1.3.0.txt", detail: "SHA256SUMS" },
+      { label: "Release checksums", href: `/downloads/SHA256SUMS-v${version}.txt`, detail: "SHA256SUMS" },
     ], command: "curl -fsSL https://fleethud.vercel.app/sh | bash",
     note: "Updates preserve local user data and account pairing.",
   },
