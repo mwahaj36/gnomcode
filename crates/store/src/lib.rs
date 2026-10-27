@@ -2457,8 +2457,15 @@ mod tests {
             fingerprint: "synthetic".to_owned(),
             last_ingested_at: Utc::now(),
         };
-        db.commit_batch(&[project], &[session], &[usage], &[], &[], &checkpoint)
-            .expect("commit synthetic Codex usage");
+        db.commit_batch(
+            std::slice::from_ref(&project),
+            std::slice::from_ref(&session),
+            std::slice::from_ref(&usage),
+            &[],
+            &[],
+            &checkpoint,
+        )
+        .expect("commit synthetic Codex usage");
 
         let (sessions, count) = db
             .list_sessions_paginated(None, None, 0, 10)
@@ -2466,6 +2473,52 @@ mod tests {
         assert_eq!(count, 1);
         assert_eq!(sessions[0].context_tokens, 190_000);
         assert_eq!(sessions[0].context_window, Some(258_000));
+
+        // Every provider must use the latest context snapshot, even when it decreases.
+        for agent in [
+            AgentId::ClaudeCode,
+            AgentId::Codex,
+            AgentId::Antigravity,
+            AgentId::GeminiCli,
+            AgentId::Cline,
+            AgentId::Cursor,
+            AgentId::Aider,
+        ] {
+            let mut provider_session = session.clone();
+            provider_session.agent = agent;
+            provider_session.id = format!("{}:compaction", agent.as_str());
+            let mut before = usage.clone();
+            before.session_id = provider_session.id.clone();
+            before.dedup_key = format!("{}:before", provider_session.id);
+            before.context_tokens = 190_000;
+            let mut after = before.clone();
+            after.dedup_key = format!("{}:after", provider_session.id);
+            after.input_tokens = 19_000;
+            after.output_tokens = 1_000;
+            after.context_tokens = 20_000;
+            db.commit_batch(
+                std::slice::from_ref(&project),
+                &[provider_session.clone()],
+                &[before, after],
+                &[],
+                &[],
+                &checkpoint,
+            )
+            .expect("store provider context snapshots");
+            let (rows, _) = db
+                .list_sessions_paginated(None, None, 0, 100)
+                .expect("query snapshots");
+            let row = rows
+                .iter()
+                .find(|row| row.id == provider_session.id)
+                .expect("provider session");
+            assert_eq!(
+                row.context_tokens,
+                20_000,
+                "{} context must decrease",
+                agent.as_str()
+            );
+        }
     }
 
     #[test]

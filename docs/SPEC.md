@@ -260,7 +260,7 @@ pub trait SourceAdapter: Send {
 1. **Live Active Sessions:** agent, surface (`cli` / `ide` / `desktop_app`), project, model, live state (`thinking` / `tool` / `awaiting_approval` / `idle` / `error`), and redacted one-line current tool action.
 2. **Per-Model Quota Pools & Reset Timers:** 5-hour and weekly windows per `(provider, limit_id)`, burn velocity, and lockout ETA.
 3. **Side-by-Side Cost & Quota + Subscription ROI ("Plan Value"):** always shows **both** API-Equivalent USD value (`$X`, plus cache savings) and Plan Quota `%` side-by-side. Users select their active subscription plans and monthly prices in Settings (e.g., Claude Max `$100`, ChatGPT Plus `$20`, Antigravity) to compute live **Subscription ROI** ($\sum \text{API-equivalent compute} \div \text{plan price}$).
-4. **Context Window Fill Level:** current turn tokens vs. model maximum context window (`model_context_window`), with bloat warning at `75%` (configurable).
+4. **Context Window Fill Level:** latest request context snapshot vs. model maximum context window (`model_context_window`), with bloat warning at `75%` (configurable). This applies to every provider: a smaller snapshot after compaction replaces the previous value; session lifetime token totals must never determine context fill. The displayed value remains the last observed request until the provider emits another usage snapshot.
 5. **Session & Subagent Hierarchy:** parent session → spawned subagents/sidechains, turn counts, and duration.
 
 ### 3.7 Session state machine
