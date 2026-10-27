@@ -27,7 +27,7 @@ Use one focused branch and PR per phase. Update `docs/SESSION_LOG.md` for each. 
 | 6. Native and distribution | Make the native tray/open-console experience use the same local console UI; update installer and app branding after parity. | Windows, macOS, and Linux fallbacks in SPEC still work; upgrades keep user data. |
 | 7. Internal rename | Rename binary, package, env vars, and data dir separately with aliases and migration tests. | Existing installs, integrations, and scripts keep working through the documented transition. |
 
-The landing and shared web shell are partial Phase 5 work; PRs #47 and #48 are stacked and unmerged. Pricing is implemented on its own stacked branch. Do not infer that Phase 1, the other inner marketing routes, native surface, or installers are finished because the home route looks new.
+The landing and shared web shell are partial Phase 5 work; PRs #47 and #48 are stacked and unmerged. Pricing and Downloads are implemented on separate stacked branches. Do not infer that Phase 1, the other inner marketing routes, native surface, or installers are finished because the home route looks new.
 
 ## Console redesign
 
