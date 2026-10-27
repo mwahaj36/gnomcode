@@ -40,6 +40,11 @@
 .sp-tour-kpis>div+div{border-left:1px solid var(--border)}
 .sp-tour-kpis small{font:600 10px 'JetBrains Mono',Consolas,monospace;letter-spacing:.04em;color:var(--text-3);white-space:nowrap}
 .sp-tour-kpi-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sp-tour-kpi-line em{flex:none;font:500 10px/1.4 var(--sp-font-mono);font-style:normal;color:var(--text-3);letter-spacing:.03em}
+.sp-tour-kpis-usage{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sp-tour-kpis-usage small{white-space:normal}
+.sp-tour-metric-caption{margin:0 0 20px;color:var(--text-3);font:11px/1.6 var(--sp-font-sans);max-width:65ch}
+.sp-tour-summary{display:flex;flex-wrap:wrap;gap:12px 24px;padding:14px 0;margin-bottom:16px;border-block:1px solid var(--border);color:var(--text-2);font:500 11px/1.5 var(--sp-font-mono)}
 .sp-tour-kpi-line strong{font:600 20px/26px 'JetBrains Mono',Consolas,monospace;color:var(--text);font-variant-numeric:tabular-nums}
 @media(max-width:640px){.sp-tour-data{grid-template-columns:minmax(0,1fr) minmax(56px,.7fr) auto}.sp-tour-data>span:nth-of-type(2){display:none}.sp-tour-kpis>div{padding:8px}.sp-tour-kpis small{font-size:9px}.sp-tour-kpi-line strong{font-size:16px}}
 .sp-tour-selection{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font:11px 'JetBrains Mono',Consolas,monospace;color:var(--text-2)}
