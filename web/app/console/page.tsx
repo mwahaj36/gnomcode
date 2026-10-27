@@ -357,7 +357,7 @@ export default function ConsolePage() {
   if (!authChecked) {
     return (
       <div className="flex h-96 items-center justify-center font-mono text-xs text-muted">
-        Connecting to FleetHUD Mission Control...
+        Connecting to spawnt Mission Control...
       </div>
     );
   }
@@ -411,7 +411,7 @@ export default function ConsolePage() {
       {!report && (
         <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. The desktop daemon uploads a private snapshot every minute while running.
+            <span className="text-accent font-semibold">[NOTICE]</span> Pair the spawnt desktop app with this account to monitor it from this device. The desktop daemon uploads a private snapshot every minute while running.
           </div>
           <a
             href="/downloads"

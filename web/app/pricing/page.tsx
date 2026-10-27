@@ -62,7 +62,7 @@ const tiers = [
 const questions = [
   {
     question: "Does spawnt store prompts, code, or tool output?",
-    answer: "No. FleetHUD stores redacted activity metadata and usage details. Prompt and tool-output content is never stored or sent.",
+    answer: "No. spawnt stores redacted activity metadata and usage details. Prompt and tool-output content is never stored or sent.",
   },
   {
     question: "Can I use spawnt without an account?",
@@ -113,7 +113,7 @@ export default function PricingPage() {
         <dl>
           <div><dt>Agent activity</dt><dd>See running, waiting, idle, and error states.</dd></div>
           <div><dt>Usage and quota</dt><dd>Every measurement carries its source and trust level.</dd></div>
-          <div><dt>Privacy</dt><dd>Prompts, code, and tool output stay out of FleetHUD storage.</dd></div>
+          <div><dt>Privacy</dt><dd>Prompts, code, and tool output stay out of spawnt storage.</dd></div>
         </dl>
       </section>
 
