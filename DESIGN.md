@@ -1,6 +1,6 @@
 # spawnt design guide
 
-Status: the landing, shared marketing shell, signed-in web console, daemon-served local console, and current Windows icon assets use the spawnt direction and canonical tokens in `web/app/spawnt-tokens.css`. `web/public/spawnt-mark.svg` is the canonical solid triangle-and-square mark. Native tray layout, account/settings and remaining marketing route refinements, and installers remain rollout work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
+Status: the landing, shared marketing shell, pricing page, signed-in web console, daemon-served local console, and current Windows icon assets use the spawnt direction and canonical tokens in `web/app/spawnt-tokens.css`. `web/public/spawnt-mark.svg` is the canonical solid triangle-and-square mark. Native tray layout, docs/downloads/auth/settings refinements, and installers remain rollout work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
 
 ## Brand and visual language
 
@@ -61,4 +61,4 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 
 ## Current implementation boundary
 
-The landing, shared site shell, and both consoles use canonical spawnt tokens. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Marketing inner routes, tray scripts, canonical icon generation, and installers are still migration targets.
+The landing, shared site shell, pricing page, and both consoles use canonical spawnt tokens. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Docs/downloads/auth/settings refinements, tray scripts, and installers are still migration targets.
