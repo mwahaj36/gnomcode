@@ -598,30 +598,7 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
         return Some(OPENAI_GPT_5_SOL);
     }
 
-    // 5. OpenAI Reasoning & Flagship models
-    if lower.contains("o3-mini") {
-        return Some(OPENAI_O3_MINI);
-    }
-    if lower.contains("o3") {
-        return Some(OPENAI_O3);
-    }
-    if lower.contains("o1-mini") {
-        return Some(OPENAI_O1_MINI);
-    }
-    if lower.starts_with("o1") || lower.contains("-o1") {
-        return Some(OPENAI_O1);
-    }
-    if lower.contains("4o-mini") || lower.contains("mini") || lower.contains("nano") {
-        return Some(OPENAI_MINI);
-    }
-    if lower.contains("gpt-4o") || lower.contains("4o") {
-        return Some(OPENAI_GPT_4O);
-    }
-    if lower.contains("gpt-") || lower.contains("codex") || lower.starts_with("o4") {
-        return Some(OPENAI_CODEX_FRONTIER);
-    }
-
-    // 6. Google Gemini models
+    // 5. Google Gemini models
     if lower.contains("fable") {
         return Some(GEMINI_FABLE);
     }
@@ -649,7 +626,33 @@ pub fn lookup_model_pricing(model: &str) -> Option<ModelPricing> {
     if lower.contains("ultra") {
         return Some(GEMINI_ULTRA);
     }
-    if lower.contains("gemini") || lower.contains("pro") {
+    if lower.contains("gemini") {
+        return Some(GEMINI_PRO_ARGON);
+    }
+
+    // 6. OpenAI Reasoning & Flagship models
+    if lower.contains("o3-mini") {
+        return Some(OPENAI_O3_MINI);
+    }
+    if lower.contains("o3") {
+        return Some(OPENAI_O3);
+    }
+    if lower.contains("o1-mini") {
+        return Some(OPENAI_O1_MINI);
+    }
+    if lower.starts_with("o1") || lower.contains("-o1") {
+        return Some(OPENAI_O1);
+    }
+    if lower.contains("4o-mini") || lower.contains("mini") || lower.contains("nano") {
+        return Some(OPENAI_MINI);
+    }
+    if lower.contains("gpt-4o") || lower.contains("4o") {
+        return Some(OPENAI_GPT_4O);
+    }
+    if lower.contains("gpt-") || lower.contains("codex") || lower.starts_with("o4") {
+        return Some(OPENAI_CODEX_FRONTIER);
+    }
+    if lower.contains("pro") {
         return Some(GEMINI_PRO_ARGON);
     }
 
@@ -809,6 +812,11 @@ mod tests {
 
         let fable = lookup_model_pricing("gemini-fable");
         assert!(fable.is_some());
+
+        let flash_med = lookup_model_pricing("Gemini 3.8 Flash (Medium)")
+            .expect("gemini 3.8 flash medium should not collide with openai mini");
+        assert_eq!(flash_med.family, "gemini-flash");
+        assert_eq!(flash_med.context_window, 1_000_000);
     }
 
     #[test]

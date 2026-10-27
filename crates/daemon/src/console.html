@@ -836,7 +836,13 @@
 
     async function exportData(fmt) {
       try {
-        const res = await fetch(`/api/v1/export?range=${currentTimeline}&format=${fmt}`, { headers });
+        let url = `/api/v1/export?range=${currentTimeline}&format=${fmt}`;
+        if (currentTimeline === 'today') {
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          url += `&from=${encodeURIComponent(d.toISOString())}`;
+        }
+        const res = await fetch(url, { headers });
         if (res.status === 402) {
           alert("Exporting analytics requires a Pro license. Activate Pro under the 'Pro & Guardrails' tab.");
           return;
@@ -1169,7 +1175,13 @@
 
     async function loadReport() {
       try {
-        const res = await fetch(`/api/v1/report?range=${currentTimeline}`, { headers }).then(r => r.json());
+        let url = `/api/v1/report?range=${currentTimeline}`;
+        if (currentTimeline === 'today') {
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          url += `&from=${encodeURIComponent(d.toISOString())}`;
+        }
+        const res = await fetch(url, { headers }).then(r => r.json());
         if (!res || !res.timeline) return;
 
         const jsonStr = JSON.stringify(res);
@@ -1189,7 +1201,7 @@
         if (tl.earliest_at && tl.latest_at) {
           const e = new Date(tl.earliest_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
           const l = new Date(tl.latest_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-          dateStr = `Showing: ${tl.range_label} (${e} — ${l})`;
+          dateStr = e === l ? `Showing: ${tl.range_label} (${e})` : `Showing: ${tl.range_label} (${e} — ${l})`;
         }
         document.getElementById('timeline-label').textContent = dateStr;
 
