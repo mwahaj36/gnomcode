@@ -1,6 +1,6 @@
 # spawnt design guide
 
-Status: the `/` route and early console surfaces use the spawnt direction; shared canonical tokens are defined in `web/app/spawnt-tokens.css` and served to the daemon console. The consoles and other site pages are migrating in phases. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
+Status: the marketing shell and signed-in web console use the spawnt direction; shared canonical tokens are defined in `web/app/spawnt-tokens.css` and served to the daemon console. The native tray and installer surfaces remain rollout work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
 
 ## Brand and visual language
 
