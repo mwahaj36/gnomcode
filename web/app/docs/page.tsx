@@ -567,7 +567,7 @@ export default function DocsPage() {
             <div className="flex gap-3">
               <Link
                 href="/console"
-                className="px-4 py-2 bg-accent text-[#0d1117] font-semibold rounded hover:opacity-90 transition-opacity"
+                className="sp-on-primary-text px-4 py-2 bg-accent font-semibold rounded hover:opacity-90 transition-opacity"
               >
                 Launch Console &rarr;
               </Link>

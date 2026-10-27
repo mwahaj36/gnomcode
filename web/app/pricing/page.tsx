@@ -243,7 +243,7 @@ export default function PricingPage() {
         <div className="bg-card border border-border rounded-xl overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-border bg-[#0d1117]">
+              <tr className="border-b border-border bg-card">
                 <th className="p-4 text-muted font-semibold">Capability</th>
                 <th className="p-4 text-muted font-semibold">Free</th>
                 <th className="p-4 text-accent font-semibold">Pro</th>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import ThemeControl from "./ThemeControl";
 
 export default function AppNavbar() {
   const pathname = usePathname();
@@ -62,7 +63,7 @@ export default function AppNavbar() {
               href="/console"
               className={`px-3 py-1 rounded transition-colors ${
                 pathname === "/console"
-                  ? "bg-[#0d1117] text-foreground border border-border font-semibold"
+                  ? "bg-card text-foreground border border-border font-semibold"
                   : "text-muted hover:text-foreground"
               }`}
             >
@@ -72,7 +73,7 @@ export default function AppNavbar() {
               href="/settings"
               className={`px-3 py-1 rounded transition-colors ${
                 pathname === "/settings"
-                  ? "bg-[#0d1117] text-foreground border border-border font-semibold"
+                  ? "bg-card text-foreground border border-border font-semibold"
                   : "text-muted hover:text-foreground"
               }`}
             >
@@ -100,13 +101,15 @@ export default function AppNavbar() {
             </span>
           </div>
 
+          <ThemeControl className="sp-app-theme" />
+
           {user ? (
             <div className="flex items-center gap-3">
               <Link
                 href="/settings"
-                className="px-2.5 py-1 rounded bg-green/15 text-green border border-green/30 hover:bg-green/25 font-semibold text-[11px]"
+                className="text-muted hover:text-foreground font-semibold text-[11px]"
               >
-                [PRO] {user.email?.split("@")[0] || "User"}
+                {user.email?.split("@")[0] || "Account"}
               </Link>
               <button
                 onClick={handleSignOut}

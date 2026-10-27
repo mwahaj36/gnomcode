@@ -11,6 +11,7 @@
   --sp-text-3: #8d99aa;
   --sp-primary: #ff2544;
   --sp-primary-text: #ff6177;
+  --sp-accent: #becbd8;
   --sp-on-primary: #0c1119;
   --sp-font-sans: Inter, Arial, sans-serif;
   --sp-font-mono: "JetBrains Mono", Consolas, monospace;
@@ -28,6 +29,7 @@
     --sp-text-2: #4a5565;
     --sp-text-3: #657184;
     --sp-primary-text: #d4102e;
+    --sp-accent: #252e99;
   }
 }
 
@@ -42,6 +44,7 @@
   --sp-text-2: #4a5565;
   --sp-text-3: #657184;
   --sp-primary-text: #d4102e;
+  --sp-accent: #252e99;
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }
