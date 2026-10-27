@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -111,37 +110,18 @@ public class SetupForm : Form
             g.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
         }
 
-        // Draw Squircle Logo (at 36, 32, size 42x42)
+        // Draw the solid triangle-and-square spawnt mark.
         int x = 36, y = 34, size = 42;
-        using (GraphicsPath path = RoundedRect(new Rectangle(x, y, size, size), 10)) {
-            using (Brush b = new SolidBrush(Color.FromArgb(13, 17, 23))) {
-                g.FillPath(b, path);
-            }
-        }
-
-        // Draw the approved geometric glyph scaled with 0.65x proportional margins.
         float s = (float)size / 2048.0f;
         PointF[] poly = new PointF[] {
-            new PointF(x + 547.34f * s, y + 1500.14f * s),
-            new PointF(x + 547.34f * s, y + 547.86f * s),
-            new PointF(x + 1499.62f * s, y + 547.86f * s)
+            new PointF(x + 290.67f * s, y + 1756.53f * s),
+            new PointF(x + 290.67f * s, y + 291.47f * s),
+            new PointF(x + 1755.73f * s, y + 291.47f * s)
         };
-        using (Brush bGlyph = new SolidBrush(Color.White)) {
+        using (Brush bGlyph = new SolidBrush(Color.FromArgb(255, 37, 68))) {
             g.FillPolygon(bGlyph, poly);
-            g.FillRectangle(bGlyph, x + 878.00f * s, y + 871.82f * s, 622.67f * s, 622.67f * s);
+            g.FillRectangle(bGlyph, x + 799.39f * s, y + 789.88f * s, 957.95f * s, 957.95f * s);
         }
-    }
-
-    private GraphicsPath RoundedRect(Rectangle bounds, int radius)
-    {
-        GraphicsPath path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     private void OnTick(object sender, EventArgs e)
@@ -410,34 +390,16 @@ public class UninstallForm : Form
         }
 
         int x = 36, y = 34, size = 42;
-        using (GraphicsPath path = RoundedRect(new Rectangle(x, y, size, size), 10)) {
-            using (Brush b = new SolidBrush(Color.FromArgb(13, 17, 23))) {
-                g.FillPath(b, path);
-            }
-        }
-
         float s = (float)size / 2048.0f;
         PointF[] poly = new PointF[] {
-            new PointF(x + 547.34f * s, y + 1500.14f * s),
-            new PointF(x + 547.34f * s, y + 547.86f * s),
-            new PointF(x + 1499.62f * s, y + 547.86f * s)
+            new PointF(x + 290.67f * s, y + 1756.53f * s),
+            new PointF(x + 290.67f * s, y + 291.47f * s),
+            new PointF(x + 1755.73f * s, y + 291.47f * s)
         };
-        using (Brush bGlyph = new SolidBrush(Color.White)) {
+        using (Brush bGlyph = new SolidBrush(Color.FromArgb(255, 37, 68))) {
             g.FillPolygon(bGlyph, poly);
-            g.FillRectangle(bGlyph, x + 878.00f * s, y + 871.82f * s, 622.67f * s, 622.67f * s);
+            g.FillRectangle(bGlyph, x + 799.39f * s, y + 789.88f * s, 957.95f * s, 957.95f * s);
         }
-    }
-
-    private GraphicsPath RoundedRect(Rectangle bounds, int radius)
-    {
-        GraphicsPath path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 
     private void OnTick(object sender, EventArgs e)

@@ -1,12 +1,12 @@
 # spawnt design guide
 
-Status: the landing, shared marketing shell, signed-in web console, and daemon-served local console use the spawnt direction and canonical tokens in `web/app/spawnt-tokens.css`. Native tray, account/settings and remaining marketing route refinements, icons, and installers remain rollout work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
+Status: the landing, shared marketing shell, signed-in web console, daemon-served local console, and current Windows icon assets use the spawnt direction and canonical tokens in `web/app/spawnt-tokens.css`. `web/public/spawnt-mark.svg` is the canonical solid triangle-and-square mark. Native tray layout, account/settings and remaining marketing route refinements, and installers remain rollout work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
 
 ## Brand and visual language
 
 - Display `spawnt` in lowercase. Keep internal `fleethud` identifiers until a separate migration phase.
 - Keep the Daytona-inspired structure: near-black canvas, thin borders, dense aligned grids, restrained uppercase mono labels, square badges, and the smoothly detaching marketing navbar. Replace the old green and blue accents.
-- Use the landing page's solid triangle-and-square mark in `currentColor`, without a tile behind it. Red identifies primary actions, active state, and attention.
+- Use the solid triangle-and-square mark from `web/public/spawnt-mark.svg` in `currentColor`, without a tile behind it. Red identifies primary actions, active state, and attention. Web and embedded console headers use the same mask asset; generated Windows icon assets and installer marks follow its geometry.
 - No emojis, decorative gradients, oversized pills, or color-only status indicators.
 
 ## Color tokens

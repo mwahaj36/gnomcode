@@ -68,7 +68,7 @@ pub struct HealthResponse {
 const CONSOLE_HTML: &str = include_str!("console.html");
 const SPAWNT_TOKENS: &str = include_str!("../../../web/app/spawnt-tokens.css");
 const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
-const FLEETHUD_SVG: &str = include_str!("../../../web/public/fleethud.svg");
+const SPAWNT_MARK_SVG: &str = include_str!("../../../web/public/spawnt-mark.svg");
 
 /// Builds the axum router for FleetHUD local API and embedded console.
 pub fn build_router(state: AppState) -> Router {
@@ -77,6 +77,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/console", get(console_handler))
         .route("/favicon.ico", get(favicon_handler))
         .route("/fleethud.svg", get(svg_icon_handler))
+        .route("/spawnt-mark.svg", get(svg_icon_handler))
         .route("/spawnt-tokens.css", get(tokens_handler))
         .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
@@ -594,7 +595,7 @@ async fn favicon_handler() -> impl IntoResponse {
 }
 
 async fn svg_icon_handler() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "image/svg+xml")], FLEETHUD_SVG)
+    ([(header::CONTENT_TYPE, "image/svg+xml")], SPAWNT_MARK_SVG)
 }
 
 async fn auth_callback_handler() -> impl IntoResponse {
