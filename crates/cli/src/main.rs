@@ -396,7 +396,7 @@ fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
         .list_active_sessions(limit)
         .context("failed to query active sessions")?;
 
-    println!("=== FLEETHUD ACTIVE SESSIONS ===");
+    println!("=== SPAWNT ACTIVE SESSIONS ===");
     if sessions.is_empty() {
         println!("No active or recent agent sessions found.");
         println!("Run an agent (Claude Code, Codex, Antigravity, Gemini CLI) to populate.");
@@ -436,7 +436,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
             .context("failed to generate timeline report")?;
 
         println!(
-            "=== FLEETHUD USAGE & COST REPORT ({}) ===",
+            "=== SPAWNT USAGE & COST REPORT ({}) ===",
             tl.range_label.to_uppercase()
         );
         if tl.providers.is_empty() {
@@ -464,7 +464,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
         }
         println!("{}", "-".repeat(90));
         println!(
-            "TOTAL: API-Equivalent Spend: ${:.2}  |  Prompt Cache Savings: ${:.2} [EXACT]",
+            "TOTAL: API-Equivalent Spend: ${:.2}  |  Prompt Cache Savings: ${:.2} EXACT",
             tl.total_cost_usd, tl.total_cache_savings_usd
         );
 
@@ -478,7 +478,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
             let eff_plan = price * time_factor;
             let roi = calculate_plan_roi(tl.total_cost_usd, eff_plan);
             println!(
-                "PLAN VALUE ROI: ${:.2}/{} Plan -> {:.1}x Value (Net Value: +${:.2}) [EXACT]",
+                "PLAN VALUE ROI: ${:.2}/{} Plan -> {:.1}x Value (Net Value: +${:.2}) EXACT",
                 eff_plan, period_label, roi.multiplier, roi.net_savings_usd
             );
         }
@@ -517,7 +517,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
         .generate_usage_report()
         .context("failed to generate usage report")?;
 
-    println!("=== FLEETHUD USAGE & COST REPORT ===");
+    println!("=== SPAWNT USAGE & COST REPORT ===");
     if report_rows.is_empty() {
         println!("No usage data recorded yet.");
         return Ok(());
@@ -549,14 +549,14 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
     }
     println!("{}", "-".repeat(110));
     println!(
-        "TOTAL: API-Equivalent Spend: ${:.2}  |  Prompt Cache Savings: ${:.2} [EXACT]",
+        "TOTAL: API-Equivalent Spend: ${:.2}  |  Prompt Cache Savings: ${:.2} EXACT",
         total_cost, total_savings
     );
 
     if let Some(price) = plan_usd {
         let roi = calculate_plan_roi(total_cost, price);
         println!(
-            "PLAN VALUE ROI: ${:.2}/mo Plan -> {:.1}x Value (Net Value: +${:.2}) [EXACT]",
+            "PLAN VALUE ROI: ${:.2}/mo Plan -> {:.1}x Value (Net Value: +${:.2}) EXACT",
             price, roi.multiplier, roi.net_savings_usd
         );
     }
@@ -592,7 +592,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
 }
 
 fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
-    println!("=== FLEETHUD DOCTOR DIAGNOSTICS ===");
+    println!("=== SPAWNT DOCTOR DIAGNOSTICS ===");
     println!("Home Directory: {}", fleethud_home().display());
     println!("Database Path:  {}", db_path.display());
 
@@ -693,7 +693,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
 
     let local_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
     let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
-    println!("=== FLEETHUD DAEMON STARTED ===");
+    println!("=== SPAWNT DAEMON STARTED ===");
     println!("Status: Running");
     println!("Loopback Port: {port}");
     println!("PID: {}", info.pid);

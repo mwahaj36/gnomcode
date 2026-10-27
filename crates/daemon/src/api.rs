@@ -1343,6 +1343,24 @@ mod tests {
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
 
+    #[test]
+    fn embedded_console_uses_the_shared_fleet_heading_and_plain_status() {
+        let html = include_str!("console.html");
+
+        assert!(html.contains("id=\"console-title\">Your agent fleet</h1>"));
+        assert!(html.contains("class=\"console-hero\""));
+        assert!(html.contains("role=\"tablist\""));
+        assert!(html.contains("data-view=\"overview\" role=\"tab\""));
+        assert!(html.contains("id=\"reload-view\""));
+        assert!(html.contains("id=\"resync-data\""));
+        for wrapper in ["[RUN]", "[WAIT]", "[IDLE]", "[READY]", "[LOCAL]"] {
+            assert!(
+                !html.contains(wrapper),
+                "unexpected status wrapper: {wrapper}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn rejects_missing_bearer_token() {
         let db = Database::open_in_memory().expect("in-memory db");
