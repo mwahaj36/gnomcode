@@ -34,8 +34,8 @@
       background: var(--bg);
       color: var(--text);
       font-family: Inter, Arial, sans-serif;
-      padding: 20px 24px;
-      max-width: 1440px;
+      padding: 0 24px;
+      max-width: 1248px;
       margin: 0 auto;
       line-height: 1.5;
     }
@@ -105,6 +105,8 @@
       color: var(--accent);
       border: 1px solid var(--sp-border);
     }
+    .header-links { display: flex; align-items: center; gap: 24px; }
+    .header-links a { color: var(--text-muted); text-decoration: none; font: 600 10px/1.4 var(--font-mono); }
     .header-right {
       display: flex;
       align-items: center;
@@ -364,7 +366,9 @@
       .header-left { width: 100%; flex-wrap: wrap; gap: 12px; }
       .nav-tabs { width: 100%; overflow-x: auto; }
       .tab-btn { min-height: 44px; white-space: nowrap; }
-      .header-right { width: 100%; flex-wrap: wrap; }
+      .header-links { display: flex; align-items: center; gap: 24px; }
+    .header-links a { color: var(--text-muted); text-decoration: none; font: 600 10px/1.4 var(--font-mono); }
+    .header-right { width: 100%; flex-wrap: wrap; }
       .console-hero { align-items: flex-start; flex-direction: column; margin: 40px 0 24px; }
       .console-hero-side { justify-items: start; }
       .console-hero-mark { width: 30px; height: 30px; }
@@ -428,20 +432,12 @@
         <span class="sp-brand-mark" aria-hidden="true"></span>
         <span>spawnt</span>
       </a>
-      <nav class="nav-tabs" role="tablist" aria-label="Console views">
-        <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" onclick="switchTab('overview')">Overview</button>
-        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('sessions')">Sessions</button>
-        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('usage')">Usage</button>
-        <button class="tab-btn" id="tab-btn-limits" data-view="limits" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('limits')">Limits</button>
-        <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" onclick="switchTab('projects')">Projects</button>
-        <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" onclick="switchTab('automations')">Automations</button>
-        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" onclick="switchTab('settings')">Settings</button>
-      </nav>
+<nav class="header-links" aria-label="App navigation"><a href="#overview" onclick="switchTab('overview')">Console</a><a href="#settings" onclick="switchTab('settings')">Settings</a></nav>
     </div>
     <div class="header-right">
       <button class="theme-control" id="theme-control" type="button" onclick="cycleTheme()" aria-label="Theme: system. Switch mode">Theme / system</button>
-      <a href="/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
-      <a href="/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
+      <a href="https://fleethud.vercel.app/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
+      <a href="https://fleethud.vercel.app/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
   </header>
 
@@ -465,6 +461,15 @@
     </div>
   </section>
 
+      <nav class="nav-tabs" role="tablist" aria-label="Console views">
+        <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" onclick="switchTab('overview')">Overview</button>
+        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('sessions')">Sessions</button>
+        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('usage')">Usage</button>
+        <button class="tab-btn" id="tab-btn-limits" data-view="limits" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('limits')">Limits</button>
+        <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" onclick="switchTab('projects')">Projects</button>
+        <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" onclick="switchTab('automations')">Automations</button>
+        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" onclick="switchTab('settings')">Settings</button>
+      </nav>
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
   <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
     <!-- Timeline Filter Bar -->

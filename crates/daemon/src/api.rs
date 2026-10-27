@@ -79,6 +79,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fleethud.svg", get(svg_icon_handler))
         .route("/spawnt-mark.svg", get(svg_icon_handler))
         .route("/spawnt-tokens.css", get(tokens_handler))
+        .route("/fonts/inter-variable.woff2", get(inter_font_handler))
+        .route("/fonts/jetbrains-mono.woff2", get(mono_font_handler))
         .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
@@ -592,6 +594,20 @@ async fn tokens_handler() -> impl IntoResponse {
 
 async fn favicon_handler() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON_ICO)
+}
+
+async fn inter_font_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "font/woff2")],
+        include_bytes!("../../../web/public/fonts/inter-variable.woff2").as_slice(),
+    )
+}
+
+async fn mono_font_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "font/woff2")],
+        include_bytes!("../../../web/public/fonts/jetbrains-mono.woff2").as_slice(),
+    )
 }
 
 async fn svg_icon_handler() -> impl IntoResponse {

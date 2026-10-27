@@ -72,5 +72,7 @@ The landing, shared site shell, pricing, platform-selectable downloads, redesign
 
 ## Command snippets
 
+- Use an integrated 44 px icon target at the right of the code box. The clipboard changes to a checkmark on success; screen readers receive status feedback and copy failures remain visible.
+
 - Every executable command shown in the app has an adjacent square `Copy` button with an accessible name, visible success/failure feedback, and keyboard focus styling.
 - Copy the exact command shown. Keep long commands horizontally scrollable or safely wrapped at narrow widths; the copy control remains visible.
