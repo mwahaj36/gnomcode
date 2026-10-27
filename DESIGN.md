@@ -61,7 +61,7 @@ Status and trust semantics stay separate from the brand palette. Pair every colo
 
 ## Current implementation boundary
 
-The landing, shared site shell, pricing and downloads pages, and both consoles use canonical spawnt tokens. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Docs/auth/settings refinements, tray scripts, and installers are still migration targets.
+The landing, shared site shell, pricing, downloads and documentation pages, and both consoles use canonical spawnt tokens. Documentation uses the same sans-led hierarchy, restrained mono labels, open rows, hairline dividers, and square controls as the marketing surfaces; it should not resemble a raw Markdown export. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups remain explicitly unavailable locally. Auth/settings refinements, tray scripts, and installers are still migration targets.
 
 ## Landing console tour
 
