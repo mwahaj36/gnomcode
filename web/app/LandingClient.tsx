@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
 import ThemeControl from "../components/ThemeControl";
+import { ConsoleTourView } from "./components/ConsoleTourView";
 
 const agents = [
   { name: "Claude Code", icons: ["claudecode"] },
@@ -14,10 +15,10 @@ const agents = [
   { name: "Cursor", icons: ["cursor"] },
 ];
 const tours = [
-  { name: "Overview", title: "Everything happening now.", detail: "See active sessions, spend and the limits that need attention.", kind: "overview", bars: [42, 58, 35, 75, 52, 65, 88], rows: [["Codex", "RUN", "18.4k", "EXACT"], ["Claude Code", "WAIT", "12.8k", "EST"], ["Antigravity", "IDLE", "8.1k", "EST"]] },
-  { name: "Sessions", title: "Every run, in one place.", detail: "Find the agent waiting for you and open its session.", kind: "sessions", bars: [30, 72, 48, 90, 62, 38, 76], rows: [["Claude Code", "WAIT", "repo: api", "UNKNOWN"], ["Codex", "RUN", "repo: web", "EXACT"], ["Gemini CLI", "IDLE", "repo: docs", "EST"]] },
-  { name: "Usage", title: "Know where the tokens went.", detail: "Sample seven-day usage and API-equivalent cost by agent.", kind: "usage", bars: [48, 32, 66, 44, 86, 58, 72], rows: [["Codex · GPT-5", "124.0k tokens", "$1.84", "API"], ["Claude · Sonnet", "98.0k tokens", "$1.42", "EST"], ["Gemini · Flash", "74.0k tokens", "$0.52", "EST"]] },
-  { name: "Limits", title: "See what is left.", detail: "Quota usage, remaining capacity and reset times at a glance.", kind: "limits", bars: [64, 38, 80, 53, 72, 46, 58], rows: [["Codex · 5 hour", "API", "62% left · 2h 14m", "API"], ["Claude · weekly", "EST", "28% left · 3d 6h", "EST"], ["Gemini · daily", "API", "44% left · 8h 20m", "API"]] },
+  { name: "Overview", title: "Everything happening now.", detail: "See active sessions, spend and the limits that need attention.", kind: "overview" },
+  { name: "Sessions", title: "Every run, in one place.", detail: "Find the agent waiting for you and open its session.", kind: "sessions" },
+  { name: "Usage", title: "Know where the tokens went.", detail: "Sample seven-day usage and API-equivalent cost by agent.", kind: "usage" },
+  { name: "Limits", title: "See what is left.", detail: "Quota usage, remaining capacity and reset times at a glance.", kind: "limits" },
 ];
 const features = [
   ["See it live", "Every session, its status and which ones need you, in one list."],
@@ -34,8 +35,7 @@ function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="tr
 
 export default function LandingPage() {
   const [tab, setTab] = useState(0);
-  const [selectedDay, setSelectedDay] = useState(6);
-  const [selectedRow, setSelectedRow] = useState(0);
+  const tourTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const [tourVisible, setTourVisible] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const tourScreenRef = useRef<HTMLDivElement>(null);
@@ -134,10 +134,10 @@ export default function LandingPage() {
 
     <main id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download for Windows <span aria-hidden="true">→</span></Link><Link className="sp-button-outline" href="/docs">View docs <span aria-hidden="true">↗</span></Link></div><small>Local-first. Nothing leaves your machine.</small></div>
+        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download spawnt <span aria-hidden="true">→</span></Link><Link className="sp-button-outline" href="/docs">View docs <span aria-hidden="true">↗</span></Link></div><small>Local-first. Nothing leaves your machine.</small></div>
         <div className="sp-hero-shot" aria-label="Illustrative console preview">
           <div className="sp-shot-head"><span><Mark /> spawnt <b>/</b> overview</span><span className="sp-demo-label">ILLUSTRATIVE PREVIEW</span></div>
-          <div className="sp-shot-body"><div className="sp-shot-top"><div><small>OVERVIEW / LIVE</small><h2>What your agents are doing now.</h2></div><span className="sp-connection">RUN · LOCAL</span></div><div className="sp-kpis"><div><small>SPEND / TODAY</small><strong>$4.86</strong><span>EST</span></div><div><small>TOKENS / TODAY</small><strong>39.3k</strong><span>EST</span></div><div><small>ACTIVE SESSIONS</small><strong>2</strong><span>EXACT</span></div></div><div className="sp-shot-table-title">LIVE SESSIONS <span>VIEW ALL ↗</span></div><div className="sp-shot-table">{tours[0].rows.map((row) => <div key={row[0]}><b>{row[0]}</b><span className={row[1] === "WAIT" ? "sp-wait" : ""}>{row[1]}</span><span>{row[2]} tokens</span><em>{row[3]}</em></div>)}</div></div>
+          <div className="sp-shot-body"><ConsoleTourView kind="overview" compact /></div>
         </div>
       </section>
 
@@ -147,20 +147,19 @@ export default function LandingPage() {
 
       <section className="sp-tour sp-width" aria-labelledby="tour-title" data-reveal>
         <div className="sp-section-head"><div><h2 id="tour-title">A closer look at the console.</h2><p>Find what matters without opening every agent window.</p></div><span>ILLUSTRATIVE PRODUCT TOUR</span></div>
-        <div className="sp-tour-tabs" role="tablist" aria-label="Console views">{tours.map((view, index) => <button type="button" role="tab" aria-selected={tab === index} key={view.name} onClick={() => { setTab(index); setSelectedRow(0); setSelectedDay(6); }}>{view.name}</button>)}</div>
-        <div className="sp-tour-panel" role="tabpanel" key={tab}>
+        <div className="sp-tour-tabs" role="tablist" aria-label="Console views">{tours.map((view, index) => <button type="button" role="tab" id={`tour-tab-${index}`} aria-controls="tour-panel" tabIndex={tab === index ? 0 : -1} ref={node => { tourTabs.current[index] = node; }} aria-selected={tab === index} key={view.name} onClick={() => setTab(index)} onKeyDown={event => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? tours.length - 1 : (index + (event.key === "ArrowRight" ? 1 : tours.length - 1)) % tours.length;
+          setTab(next); tourTabs.current[next]?.focus();
+        }}>{view.name}</button>)}</div>
+        <div className="sp-tour-panel" role="tabpanel" id="tour-panel" aria-labelledby={`tour-tab-${tab}`} tabIndex={0} key={tab}>
           <div className="sp-tour-copy"><span className="sp-label">{tours[tab].name.toUpperCase()} / CONSOLE</span><h3>{tours[tab].title}</h3><p>{tours[tab].detail}</p><Link href="/auth">Open console <span aria-hidden="true">→</span></Link></div>
           <div className="sp-tour-screen" ref={tourScreenRef}>
             <div className="sp-tour-screen-head"><span><Mark /> spawnt / {tours[tab].name.toLowerCase()}</span><span>RUN · LOCAL</span></div>
             <div className={tourVisible ? "sp-tour-screen-body visible" : "sp-tour-screen-body"} key={`${tab}-${tourVisible}`}>
               <small>{tours[tab].name.toUpperCase()} / ILLUSTRATIVE DATA</small><h4>{tours[tab].title}</h4>
-              {tours[tab].kind === "overview" && <div className="sp-tour-kpis"><div><small>ACTIVE SESSIONS</small><div className="sp-tour-kpi-line"><strong>2</strong><em>EXACT</em></div></div><div><small>TOKENS / TODAY</small><div className="sp-tour-kpi-line"><strong>39.3k</strong><em>EST</em></div></div><div><small>COST / TODAY</small><div className="sp-tour-kpi-line"><strong>$4.86</strong><em>API</em></div></div></div>}
-              {tours[tab].kind === "sessions" && <div className="sp-tour-summary"><span>4 RUNS</span><span>1 WAITING</span><span>3 AGENTS</span></div>}
-              {tours[tab].kind === "usage" && <><div className="sp-tour-kpis sp-tour-kpis-usage"><div><small>TOKENS / SAMPLE WEEK</small><div className="sp-tour-kpi-line"><strong>296.0k</strong><em>EST</em></div></div><div><small>API-EQUIVALENT COST</small><div className="sp-tour-kpi-line"><strong>$3.78</strong><em>EST</em></div></div></div><p className="sp-tour-metric-caption">Illustrative seven-day totals. Cost combines API and estimated figures.</p></>}
-              {tours[tab].kind === "limits" && <div className="sp-tour-summary"><span>3 POOLS</span><span>62% MOST REMAINING</span><span>1 ESTIMATE</span></div>}
-              <div className="sp-tour-bars" role="group" aria-label={tours[tab].kind === "limits" ? "Illustrative quota remaining by pool" : "Illustrative daily activity, tokens, or quota by day"}>{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => <button type="button" key={day} style={{ "--bar-height": `${tours[tab].bars[index]}%` } as React.CSSProperties} className={selectedDay === index ? "selected" : ""} onClick={() => setSelectedDay(index)} aria-label={`${day}, sample ${tours[tab].kind === "limits" ? "quota" : "usage"}`} aria-pressed={selectedDay === index} title={`${day}, sample ${tours[tab].kind === "limits" ? "quota" : "usage"}`} />)}</div>
-              {tours[tab].rows.map((row, index) => <button type="button" className={selectedRow === index ? "sp-tour-data selected" : "sp-tour-data"} aria-pressed={selectedRow === index} onClick={() => setSelectedRow(index)} key={row[0]}><b>{row[0]}</b><span>{row[1]}</span><span>{row[2]}</span><em>{row[3]}</em></button>)}
-              <div className="sp-tour-selection" aria-live="polite"><span>{["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"][selectedDay]} / SAMPLE PERIOD</span><strong>{tours[tab].rows[selectedRow][0]}</strong><span>{tours[tab].rows[selectedRow][2]} · {tours[tab].rows[selectedRow][3]}</span></div>
+              <ConsoleTourView kind={tours[tab].kind} visible={tourVisible} />
             </div>
           </div>
         </div>

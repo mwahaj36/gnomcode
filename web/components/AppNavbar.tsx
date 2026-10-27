@@ -9,7 +9,6 @@ import ThemeControl from "./ThemeControl";
 export default function AppNavbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
-  const [daemonLive, setDaemonLive] = useState<boolean | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -20,23 +19,8 @@ export default function AppNavbar() {
       setUser(session?.user ?? null);
     });
 
-    const checkDaemon = async () => {
-      try {
-        const res = await fetch("http://127.0.0.1:41738/api/v1/live?page=1&limit=1", {
-          signal: AbortSignal.timeout(1500),
-        });
-        setDaemonLive(res.ok);
-      } catch {
-        setDaemonLive(false);
-      }
-    };
-
-    checkDaemon();
-    const interval = setInterval(checkDaemon, 5000);
-
     return () => {
       subscription.unsubscribe();
-      clearInterval(interval);
     };
   }, []);
 
@@ -76,9 +60,9 @@ export default function AppNavbar() {
         </div>
 
         <div className="sp-app-actions">
-          <div className={`sp-app-daemon ${daemonLive ? "is-live" : ""}`} aria-live="polite">
+          <div className="sp-app-daemon">
             <span aria-hidden="true" />
-            <span>{daemonLive ? "DAEMON / LIVE" : "DAEMON / STANDBY"}</span>
+            <span>CLOUD VIEW</span>
           </div>
           <ThemeControl className="sp-app-theme" />
 

@@ -79,6 +79,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fleethud.svg", get(svg_icon_handler))
         .route("/spawnt-mark.svg", get(svg_icon_handler))
         .route("/spawnt-tokens.css", get(tokens_handler))
+        .route("/spawnt-console.css", get(console_styles_handler))
+        .route(
+            "/console-presentation.js",
+            get(console_presentation_handler),
+        )
         .route("/fonts/inter-variable.woff2", get(inter_font_handler))
         .route("/fonts/jetbrains-mono.woff2", get(mono_font_handler))
         .route("/auth/callback", get(auth_callback_handler))
@@ -86,6 +91,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
         .route("/api/v1/report", get(report_handler))
+        .route("/api/v1/projects", get(projects_handler))
         .route("/api/v1/quota", get(quota_handler))
         .route(
             "/api/v1/user",
@@ -109,6 +115,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/supabase-config", get(supabase_config_handler))
         .route("/api/v1/live", get(live_snapshot_handler))
         .route("/api/v1/reconcile", post(reconcile_handler))
+        .route("/api/v1/sync/status", get(sync_status_handler))
         .route(
             "/api/v1/rules",
             get(rules_get_handler).post(rules_post_handler),
@@ -162,6 +169,14 @@ async fn reconcile_handler(
             Json(json!({ "status": "in_progress" })),
         )),
     }
+}
+
+async fn sync_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(crate::sync::cloud_sync_status().await))
 }
 
 async fn rules_get_handler(
@@ -592,6 +607,20 @@ async fn tokens_handler() -> impl IntoResponse {
     )
 }
 
+async fn console_styles_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../../../web/app/spawnt-console.css"),
+    )
+}
+
+async fn console_presentation_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../../../web/lib/console-presentation.js"),
+    )
+}
+
 async fn favicon_handler() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON_ICO)
 }
@@ -879,6 +908,31 @@ async fn report_handler(
     }))
 }
 
+async fn projects_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<ReportQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let range = params.range.as_deref().unwrap_or("all");
+    if !matches!(range, "all" | "today" | "7d" | "30d" | "custom")
+        || (range == "custom" && params.from.is_none())
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    for bound in [params.from.as_ref(), params.to.as_ref()]
+        .into_iter()
+        .flatten()
+    {
+        chrono::DateTime::parse_from_rfc3339(bound).map_err(|_| StatusCode::BAD_REQUEST)?;
+    }
+    let db = state.db.lock().await;
+    let projects = db
+        .generate_project_report(range, params.from.as_deref(), params.to.as_deref())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(projects))
+}
+
 async fn user_get_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -924,7 +978,29 @@ async fn quota_handler(
     let quota = db
         .get_latest_quota_snapshots()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(quota))
+    Ok(Json(quota_views(quota)))
+}
+
+#[derive(Serialize)]
+pub(crate) struct QuotaPoolView {
+    #[serde(flatten)]
+    snapshot: fleethud_core::QuotaSnapshot,
+    remaining_pct: Option<f64>,
+}
+
+pub(crate) fn quota_views(snapshots: Vec<fleethud_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
+    snapshots
+        .into_iter()
+        .map(|snapshot| {
+            let remaining_pct = (snapshot.basis != fleethud_core::TrustLevel::Unknown
+                && snapshot.used_pct.is_finite())
+            .then(|| (100.0 - snapshot.used_pct).clamp(0.0, 100.0));
+            QuotaPoolView {
+                snapshot,
+                remaining_pct,
+            }
+        })
+        .collect()
 }
 
 async fn custom_pricing_get_handler(
@@ -1351,10 +1427,11 @@ async fn live_snapshot_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, build_router};
+    use super::{AppState, build_router, quota_views};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use fleethud_store::Database;
+    use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
@@ -1398,6 +1475,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn project_filters_and_sync_status_require_valid_local_requests() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "test-token".to_owned(),
+            orchestrator: None,
+        });
+        for (path, expected) in [
+            ("/api/v1/projects?range=all", StatusCode::OK),
+            ("/api/v1/projects?range=invalid", StatusCode::BAD_REQUEST),
+            ("/api/v1/projects?from=invalid", StatusCode::BAD_REQUEST),
+            ("/api/v1/sync/status", StatusCode::OK),
+        ] {
+            let request = Request::builder()
+                .uri(path)
+                .header("Host", "127.0.0.1:41738")
+                .header("Authorization", "Bearer test-token")
+                .body(Body::empty())
+                .expect("request");
+            assert_eq!(
+                app.clone()
+                    .oneshot(request)
+                    .await
+                    .expect("response")
+                    .status(),
+                expected,
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn quota_view_preserves_unknown_capacity() {
+        let mut quota: fleethud_core::QuotaSnapshot = serde_json::from_value(json!({
+            "provider": "sample", "limit_id": "sample", "window": "weekly", "used_pct": 62.0,
+            "resets_at": null, "plan": null, "basis": "estimated", "observed_at": "2026-10-28T00:00:00Z"
+        })).expect("quota");
+        assert_eq!(
+            quota_views(vec![quota.clone()])[0].remaining_pct,
+            Some(38.0)
+        );
+        quota.basis = fleethud_core::TrustLevel::Unknown;
+        assert_eq!(quota_views(vec![quota])[0].remaining_pct, None);
+    }
+
+    #[tokio::test]
     async fn private_snapshot_and_pairing_require_authentication() {
         let db = Database::open_in_memory().expect("in-memory db");
         let app = build_router(AppState {
@@ -1407,8 +1529,10 @@ mod tests {
         });
         for path in [
             "/api/v1/live",
+            "/api/v1/projects",
             "/api/v1/auth/session",
             "/api/v1/supabase-config",
+            "/api/v1/sync/status",
             "/api/v1/reconcile",
         ] {
             let mut builder = Request::builder();

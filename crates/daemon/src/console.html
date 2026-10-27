@@ -424,6 +424,7 @@
     }
   </style>
 <link rel="stylesheet" href="/spawnt-tokens.css">
+<link rel="stylesheet" href="/spawnt-console.css">
 </head>
 <body>
   <header class="app-header">
@@ -461,7 +462,7 @@
     </div>
   </section>
 
-      <nav class="nav-tabs" role="tablist" aria-label="Console views">
+      <div class="sp-console-workspace"><nav class="nav-tabs sp-console-nav" role="tablist" aria-label="Console views">
         <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" onclick="switchTab('overview')">Overview</button>
         <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('sessions')">Sessions</button>
         <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" onclick="switchTab('usage')">Usage</button>
@@ -469,11 +470,10 @@
         <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" onclick="switchTab('projects')">Projects</button>
         <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" onclick="switchTab('automations')">Automations</button>
         <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" onclick="switchTab('settings')">Settings</button>
-      </nav>
+      </nav><div class="sp-console-content">
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
-  <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
     <!-- Timeline Filter Bar -->
-    <div class="timeline-bar">
+    <div class="timeline-bar" data-local-view="overview,sessions,usage,limits,projects">
       <div class="timeline-label" id="timeline-label">Showing: All Time</div>
       <div class="timeline-buttons">
         <button class="btn-control" onclick="setTimeline('today', this)">Today</button>
@@ -487,32 +487,17 @@
       </div>
     </div>
 
-    <!-- Top Summary Metrics -->
-    <div class="grid" data-local-view="overview">
-      <div class="card">
-        <div class="card-title">API-Equivalent Spend</div>
-        <div class="metric" id="total-spend">Unknown <span class="trust-mark">UNKNOWN</span></div>
-        <div class="metric-sub" id="roi-summary">Plan Value: 0.0x</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Prompt Cache Savings</div>
-        <div class="metric" style="color: var(--green);" id="total-savings">Unknown <span class="trust-mark">UNKNOWN</span></div>
-        <div class="metric-sub" id="savings-pct">0% saved vs full price</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Active Fleet Agents</div>
-        <div class="metric" id="active-count">Unknown <span class="trust-mark">UNKNOWN</span></div>
-        <div class="metric-sub">Active in last 15 min</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Quota Pools Monitored</div>
-        <div class="metric" id="quota-count">Unknown <span class="trust-mark">UNKNOWN</span></div>
-        <div class="metric-sub" id="quota-confirmed">Local quota pools</div>
-      </div>
+  <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
+    <div id="overview-summary" data-local-view="overview">Loading fleet summary...</div>
+    <div id="daily-activity" data-local-view="overview,usage"><p>Loading daily activity...</p></div>
+    <!-- Spend by Agent (Click to View Models) -->
+    <div class="section-title" data-local-view="usage" style="margin-bottom: 12px;">Spend by Agent (Click to View Models)</div>
+    <div class="provider-grid" data-local-view="usage" id="providers-container" style="align-items: start;">
+      <!-- Injected dynamically -->
     </div>
 
     <!-- Multi-Plan ROI Comparison Card -->
-    <div class="card" data-local-view="overview" style="margin-bottom: 20px;">
+    <div class="card" data-local-view="usage" style="margin-bottom: 20px;">
       <div class="card-title">
         <span>Subscription ROI Calculator</span>
         <span style="cursor: pointer; color: var(--accent);" onclick="switchTab('settings')">Edit subscriptions</span>
@@ -522,37 +507,7 @@
       </div>
     </div>
 
-    <!-- Spend by Agent (Click to View Models) -->
-    <div class="section-title" data-local-view="usage" style="margin-bottom: 12px;">Spend by Agent (Click to View Models)</div>
-    <div class="provider-grid" data-local-view="usage" id="providers-container" style="align-items: start;">
-      <!-- Injected dynamically -->
-    </div>
-
-    <!-- Per-Model Quota Pools Table -->
-    <div class="table-container" data-local-view="limits">
-      <div class="table-header-controls">
-        <div class="section-title">Per-Model Quota Pools</div>
-        <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
-          Each pool includes its source basis; unavailable percentages remain unknown.
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Provider</th>
-            <th>Pool ID</th>
-            <th>Window</th>
-            <th>Used %</th>
-            <th>Resets At</th>
-            <th>Basis</th>
-          </tr>
-        </thead>
-        <tbody id="quota-table">
-          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading quota pools...</td></tr>
-        </tbody>
-      </table>
-    </div>
-
+    <div id="quota-table" data-local-view="overview,limits"><p>Loading provider limits...</p></div>
     <!-- Paginated Sessions Table -->
     <div class="table-container" data-local-view="overview,sessions">
       <div class="table-header-controls">
@@ -572,24 +527,7 @@
           </select>
         </div>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Project</th>
-            <th>Agent</th>
-            <th>Surface</th>
-            <th>Model</th>
-            <th>Tokens</th>
-            <th>Context</th>
-            <th>Cost</th>
-            <th>Status</th>
-            <th>Last Active</th>
-          </tr>
-        </thead>
-        <tbody id="sessions-table">
-          <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading sessions...</td></tr>
-        </tbody>
-      </table>
+      <div id="sessions-table" role="region" aria-label="Agent sessions" tabindex="0">Loading sessions...</div><p id="session-action-status" role="status"></p>
       <div class="pagination">
         <span id="pagination-info">Page 1 of 1</span>
         <div>
@@ -601,13 +539,12 @@
   </main>
 
   <main id="view-projects" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-projects">
-    <h2>Projects</h2>
-    <p class="local-view-message">Project-level activity is not available from the current local console API. Session records remain available in Sessions; no project totals are inferred here.</p>
+    <div id="project-rollups">Loading project usage...</div>
   </main>
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <button class="btn-control" type="button" onclick="switchTab('auth')">Account and cloud pairing</button>
+    <button class="btn-control" type="button" onclick="switchTab('auth')">Account and cloud pairing</button><p id="cloud-sync-status" role="status">Cloud publication status unknown.</p>
     <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
@@ -922,6 +859,7 @@
     </div>
   </main>
 
+  </div></div>
   <script>
     function cycleTheme() {
       const current = document.documentElement.dataset.theme || 'system';
@@ -949,11 +887,17 @@
     const pageLimit = 10;
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const summaryState = { activeCount: null, report: null, quotaCount: null };
+    async function refreshSummary() {
+      const presentation = await import('/console-presentation.js');
+      document.getElementById('overview-summary').innerHTML = presentation.renderSummary(summaryState);
+    }
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
     let activeView = 'overview';
 
     function setView(view, updateUrl = true) {
+      document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view[0].toUpperCase() + view.slice(1);
       activeView = view;
       const titles = { overview: 'Your agent fleet', sessions: 'Sessions', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Settings' };
       document.getElementById('console-title').textContent = titles[view] || 'Your agent fleet';
@@ -968,15 +912,15 @@
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
-      if (updateUrl) history.replaceState(null, '', view === 'overview' ? '/' : `/#${view}`);
+      if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', view === 'overview' ? '/' : `/#${view}`);
     }
 
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
       const tabs = [...document.querySelectorAll('.nav-tabs [role="tab"]')];
       const current = tabs.indexOf(document.activeElement);
       let next = current;
-      if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
-      else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
       else if (event.key === 'Home') next = 0;
       else if (event.key === 'End') next = tabs.length - 1;
       else return;
@@ -1000,11 +944,14 @@
       document.getElementById('resync-data').disabled = true;
       button.textContent = 'Refreshing...';
       try {
+        while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
         if (['overview', 'sessions', 'usage', 'limits'].includes(activeView)) {
           const results = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
         } else if (activeView === 'settings') {
           if (!await loadSettingsData()) throw new Error('Settings could not be loaded');
+        } else if (activeView === 'projects') {
+          if (!await loadProjects()) throw new Error('Projects could not be loaded');
         } else if (activeView === 'automations') {
           if (!await loadProData()) throw new Error('Automation data could not be loaded');
         } else if (activeView === 'auth') {
@@ -1025,8 +972,12 @@
       }
     }
 
+    let pollBusy = false;
     async function pollLocalData() {
-      if (refreshBusy || document.hidden) return;
+      if (refreshBusy || pollBusy || document.hidden) return;
+      if (!['overview', 'sessions', 'usage', 'limits'].includes(activeView)) return;
+      pollBusy = true;
+      try {
       const results = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
       const state = document.getElementById('sync-state');
       const updated = document.getElementById('last-updated');
@@ -1039,6 +990,7 @@
         state.textContent = lastSuccessfulUpdate ? 'Local data stale' : 'Local data unavailable';
         state.classList.add('local-status-error');
       }
+      } finally { pollBusy = false; }
     }
 
     async function resyncLocal() {
@@ -1050,6 +1002,7 @@
       button.textContent = 'Reconciling...';
       document.getElementById('sync-state').textContent = 'Reconciling local data';
       try {
+        while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
         const response = await fetch('/api/v1/reconcile', { method: 'POST', headers });
         if (response.status === 409) {
           document.getElementById('sync-state').textContent = 'Reconciliation in progress';
@@ -1088,7 +1041,7 @@
           d.setHours(0, 0, 0, 0);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
-        const res = await fetch(url, { headers });
+        const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
         if (res.status === 402) {
           alert("Exporting analytics requires a Pro license. Activate Pro under the 'Pro & Guardrails' tab.");
           return;
@@ -1113,7 +1066,7 @@
 
     async function loadProData() {
       try {
-        const licRes = await fetch('/api/v1/license', { headers });
+        const licRes = await fetch('/api/v1/license', { headers, signal: AbortSignal.timeout(15000) });
         if (!licRes.ok) throw new Error('License status request failed');
         if (licRes.ok) {
           const lic = await licRes.json();
@@ -1129,7 +1082,7 @@
             details.innerText = 'Free tier active. Pro features unlock with an offline Ed25519-signed license key.';
           }
         }
-        const qRes = await fetch('/api/v1/resume-queue', { headers });
+        const qRes = await fetch('/api/v1/resume-queue', { headers, signal: AbortSignal.timeout(15000) });
         if (!qRes.ok) throw new Error('Resume queue request failed');
         if (qRes.ok) {
           const queue = await qRes.json();
@@ -1151,7 +1104,7 @@
             `).join('');
           }
         }
-        const rulesRes = await fetch('/api/v1/rules', { headers });
+        const rulesRes = await fetch('/api/v1/rules', { headers, signal: AbortSignal.timeout(15000) });
         if (!rulesRes.ok) throw new Error('Guardrail rules request failed');
         if (rulesRes.ok) {
           const rules = await rulesRes.json();
@@ -1171,7 +1124,7 @@
             `).join('');
           }
         }
-        const alertsRes = await fetch('/api/v1/alerts', { headers });
+        const alertsRes = await fetch('/api/v1/alerts', { headers, signal: AbortSignal.timeout(15000) });
         if (!alertsRes.ok) throw new Error('Guardrail alerts request failed');
         if (alertsRes.ok) {
           const alerts = await alertsRes.json();
@@ -1200,7 +1153,7 @@
 
     async function loadRelayData() {
       try {
-        const res = await fetch('/api/v1/pro/relay', { headers });
+        const res = await fetch('/api/v1/pro/relay', { headers, signal: AbortSignal.timeout(15000) });
         if (!res.ok) return false;
         const data = await res.json();
         if (data.config) {
@@ -1406,6 +1359,7 @@
       }
       lastReportJson = '';
       loadReport();
+      if (activeView === 'projects') loadProjects();
     }
 
     function onFilterChange() {
@@ -1430,28 +1384,28 @@
 
     async function loadReport() {
       try {
+        const requestedRange = currentTimeline;
         let url = `/api/v1/report?range=${currentTimeline}`;
         if (currentTimeline === 'today') {
           const d = new Date();
           d.setHours(0, 0, 0, 0);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
-        const response = await fetch(url, { headers });
+        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw new Error('Report request failed');
         const res = await response.json();
         if (!res || !res.timeline) return false;
+        if (requestedRange !== currentTimeline) return true;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastReportJson) return true;
         lastReportJson = jsonStr;
 
         const tl = res.timeline;
-        document.getElementById('total-spend').innerHTML = `$${tl.total_cost_usd.toFixed(2)} <span class="trust-mark">EST</span>`;
-        document.getElementById('total-savings').innerHTML = `$${tl.total_cache_savings_usd.toFixed(2)} <span class="trust-mark">EST</span>`;
+        summaryState.report = tl; await refreshSummary();
+        const presentation = await import("/console-presentation.js");
+        presentation.updateActivity(document.getElementById("daily-activity"), tl);
 
-        const totalInput = tl.total_input_tokens + tl.total_cache_read_tokens;
-        const savingsPct = totalInput > 0 ? ((tl.total_cache_read_tokens / totalInput) * 100).toFixed(1) : 0;
-        document.getElementById('savings-pct').textContent = `${savingsPct}% EST cached (${formatTokens(tl.total_cache_read_tokens)} tokens EXACT)`;
 
         // Date range header
         let dateStr = tl.range_label;
@@ -1462,14 +1416,7 @@
         }
         document.getElementById('timeline-label').textContent = dateStr;
 
-        // ROI display
-        if (res.combined_roi && res.combined_roi.spend_usd > 0) {
-          document.getElementById('roi-summary').textContent = `Plan Value: ${res.combined_roi.multiplier.toFixed(1)}x EST ROI ($${res.combined_roi.net_savings_usd.toFixed(2)} EST net)`;
-        } else {
-          document.getElementById('roi-summary').textContent = 'Plan Value: Configured in Settings';
-        }
-
-        // Render ROI cards
+// Render ROI cards
         const activeRoi = (res.roi_by_provider || []).filter(r => r.spend_usd > 0);
         const roiContainer = document.getElementById('roi-cards-container');
         roiContainer.innerHTML = activeRoi.map(r => `
@@ -1509,87 +1456,67 @@
         return true;
       } catch (e) {
         console.error('Failed to load report', e);
-        document.getElementById('total-spend').innerHTML = 'Unknown <span class="trust-mark">UNKNOWN</span>';
-        document.getElementById('total-savings').innerHTML = 'Unknown <span class="trust-mark">UNKNOWN</span>';
+        summaryState.report = null; await refreshSummary();
         document.getElementById('providers-container').innerHTML = '<p class="local-view-message">Usage data is unavailable. Retry Reload view when the local daemon is reachable.</p>';
         return false;
       }
     }
 
+    async function loadProjects() {
+      const container = document.getElementById('project-rollups');
+      try {
+        const response = await fetch(`/api/v1/projects?range=${encodeURIComponent(currentTimeline)}`, { headers, signal: AbortSignal.timeout(15000) });
+        if (!response.ok) throw new Error('Project query failed');
+        const projects = await response.json();
+        const presentation = await import('/console-presentation.js');
+        container.innerHTML = presentation.renderProjects(projects);
+        return true;
+      } catch (_) {
+        container.textContent = 'Project usage could not be refreshed. Retry Reload view.';
+        return false;
+      }
+    }
+
+    document.getElementById('sessions-table').addEventListener('click', async event => {
+      const button = event.target.closest('[data-session-action="focus"]');
+      if (!button || button.disabled) return;
+      button.disabled = true;
+      const status = document.getElementById('session-action-status');
+      status.textContent = 'Sending focus request...';
+      try {
+        const response = await fetch(`/api/v1/sessions/${encodeURIComponent(button.dataset.sessionId)}/focus`, { method: 'POST', headers });
+        if (!response.ok) throw new Error('Focus failed');
+        status.textContent = 'Focus request sent. Window availability depends on the session host.';
+      } catch (_) { status.textContent = 'Focus request failed. The session may no longer be available.'; }
+      finally { button.disabled = false; }
+    });
     async function loadSessions() {
       try {
+        const requestedPage = currentPage;
         const agent = document.getElementById('agent-filter').value;
         const status = document.getElementById('status-filter').value;
-        const response = await fetch(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers });
+        const response = await fetch(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers, signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw new Error('Sessions request failed');
         const res = await response.json();
         if (!res) return false;
+        if (requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastSessionsJson) return true;
         lastSessionsJson = jsonStr;
 
-        document.getElementById('active-count').innerHTML = `${res.active_count || 0} <span class="trust-mark">EXACT</span>`;
+        summaryState.activeCount = res.active_count ?? null; await refreshSummary();
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
         document.getElementById('prev-btn').disabled = res.page <= 1;
         document.getElementById('next-btn').disabled = res.page >= res.total_pages;
 
-        const table = document.getElementById('sessions-table');
-        if (!res.sessions || res.sessions.length === 0) {
-          table.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No sessions match the selected filter.</td></tr>';
-          return true;
-        }
-
-        table.innerHTML = res.sessions.map(s => {
-          const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
-          const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
-          const cacheBadge = (s.cache_read_tokens && s.cache_read_tokens > 0)
-            ? `<div style="font-size: 10px; color: var(--green); font-weight: 500;">+ ${formatTokens(s.cache_read_tokens)} cache EXACT</div>`
-            : '';
-
-          let contextHtml = '-';
-          if (s.context_window) {
-            const ctxTok = s.context_tokens || 0;
-            const pct = Math.min(100, Math.round((ctxTok / s.context_window) * 100));
-            const barColor = pct > 85 ? 'var(--red)' : (pct > 60 ? '#f59e0b' : 'var(--accent)');
-            contextHtml = `<div>
-              <span style="font-weight: 600;">${formatTokens(ctxTok)} <span class="trust-mark">EXACT</span></span>
-              <span style="font-size: 10px; color: var(--text-muted);">/ ${formatTokens(s.context_window)} (${pct}% EXACT)</span>
-              <div style="background: var(--sp-surface-2); height: 4px; border-radius: 0; overflow: hidden; margin-top: 3px; width: 80px;">
-                <div style="background: ${barColor}; height: 100%; width: ${pct}%;"></div>
-              </div>
-            </div>`;
-          } else if (s.context_tokens) {
-            contextHtml = `<span style="font-weight: 500;">${formatTokens(s.context_tokens)}</span>`;
-          }
-
-          return `<tr>
-            <td>
-              <div style="font-weight: 600; color: var(--text);">${s.project_name}</div>
-              ${s.title ? `<div style="font-size: 11px; color: var(--text-muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${s.title.replace(/"/g, '&quot;')}">${s.title}</div>` : ''}
-            </td>
-            <td>${s.agent}</td>
-            <td>
-              <div style="text-transform: capitalize;">${(s.surface || '').replace('_', ' ')}</div>
-              <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${s.device_name || 'local'}</div>
-            </td>
-            <td>${s.model}</td>
-            <td>
-              <span style="font-weight: 600;">${s.usage_available === false ? "Unknown" : formatTokens(tokCount)} ${s.usage_available === false ? "UNKNOWN" : "EXACT"}</span>
-              <div style="font-size: 10px; color: var(--text-muted);">${s.usage_available === false ? "Presence only" : `${formatTokens(s.input_tokens || 0)} in • ${formatTokens(s.output_tokens || 0)} out`}</div>
-              ${cacheBadge}
-            </td>
-            <td>${contextHtml}</td>
-            <td style="font-weight: 600;">${s.usage_available === false || s.cost_basis === "unknown" ? "Unknown UNKNOWN" : `$${(s.total_cost_usd || 0).toFixed(2)} ${String(s.cost_basis || "unknown").toUpperCase()}`}</td>
-            <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
-            <td>${formatRelativeTime(s.last_event_at)}</td>
-          </tr>`;
-        }).join('');
+        const presentation = await import('/console-presentation.js');
+        presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
         return true;
       } catch (e) {
         console.error('Failed to load sessions', e);
-        document.getElementById('active-count').innerHTML = 'Unknown <span class="trust-mark">UNKNOWN</span>';
-        document.getElementById('sessions-table').innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">Session data is unavailable. Retry Reload view when the local daemon is reachable.</td></tr>';
+        summaryState.activeCount = null; await refreshSummary();
+        document.getElementById('sessions-table').textContent = 'Session data is unavailable. Retry Reload view when the local daemon is reachable.';
         return false;
       }
     }
@@ -1664,9 +1591,13 @@
 
     async function checkAuthSession() {
       try {
-        const response = await fetch('/api/v1/auth/session', { headers });
+        const response = await fetch('/api/v1/auth/session', { headers, signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw new Error('Account status request failed');
         const res = await response.json();
+        const syncResponse = await fetch('/api/v1/sync/status', { headers, signal: AbortSignal.timeout(15000) });
+        const sync = syncResponse.ok ? await syncResponse.json() : null;
+        const syncLabel = document.getElementById('cloud-sync-status');
+        if (syncLabel) syncLabel.textContent = sync ? `${sync.message} Last published: ${sync.last_success_at ? new Date(sync.last_success_at).toLocaleString() : 'not yet'}` : 'Cloud publication status unavailable.';
         const pairedCard = document.getElementById('auth-paired-card');
         const unpairedCard = document.getElementById('auth-unpaired-card');
         const emailEl = document.getElementById('auth-paired-email');
@@ -1704,46 +1635,23 @@
 
     async function loadQuota() {
       try {
-        const response = await fetch('/api/v1/quota', { headers });
+        const response = await fetch('/api/v1/quota', { headers, signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw new Error('Quota request failed');
         const res = await response.json();
-        if (!res) return false;
-
-        const authLink = document.getElementById('auth-signin-link');
-        if (authLink) {
-          authLink.href = `https://fleethud.vercel.app/auth?callback=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
-        }
+        if (!Array.isArray(res)) throw new Error('Invalid quota response');
+        summaryState.quotaCount = res.length; await refreshSummary();
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastQuotaJson) return true;
         lastQuotaJson = jsonStr;
-
-        const table = document.getElementById('quota-table');
-        document.getElementById('quota-count').innerHTML = `${res.length || 0} <span class="trust-mark">EXACT</span>`;
-
-        if (res.length === 0) {
-          table.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No local quota pools detected.</td></tr>';
-          return true;
-        }
-
-        table.innerHTML = res.map(q => `
-          <tr>
-            <td>${q.provider}</td>
-            <td>${q.limit_id}</td>
-            <td>${q.window}</td>
-            <td style="font-weight: 600; color: ${q.used_pct > 80 ? 'var(--red)' : 'var(--green)'};">${typeof q.used_pct === 'number' ? `${q.used_pct.toFixed(1)}%` : 'Unknown'} <span class="trust-mark">${String(q.basis || 'unknown').toUpperCase()}</span></td>
-            <td>${formatResetCountdown(q.resets_at, q.window)} <span class="trust-mark">${q.resets_at ? 'API' : 'UNKNOWN'}</span></td>
-            <td><span class="badge" style="font-size: 10px;">${String(q.basis || 'unknown').toUpperCase()}</span></td>
-          </tr>
-        `).join('');
+        const presentation = await import('/console-presentation.js');
+        document.getElementById('quota-table').innerHTML = presentation.renderQuota(res, new Date().toISOString());
         return true;
-      } catch (e) {
-        console.error('Failed to load quota', e);
-        document.getElementById('quota-count').innerHTML = 'Unknown <span class="trust-mark">UNKNOWN</span>';
-        document.getElementById('quota-table').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Quota data is unavailable. Retry Reload view when the local daemon is reachable.</td></tr>';
+      } catch (_) {
+        summaryState.quotaCount = null; await refreshSummary();
+        document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;
       }
     }
-
     async function loadSettingsData() {
       try {
         const [userResponse, statsResponse] = await Promise.all([
