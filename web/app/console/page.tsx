@@ -127,13 +127,10 @@ export default function ConsolePage() {
   const [activeCount, setActiveCount] = useState<number>(0);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [copyFeedback, setCopyFeedback] = useState("");
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
 
   useEffect(() => {
-    if (sessionStorage.getItem("fleethud_pair_request")) {
-      window.location.replace("/pair" + window.location.search + window.location.hash);
-      return;
-    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthChecked(true);
@@ -151,18 +148,12 @@ export default function ConsolePage() {
   const fetchLiveMetrics = useCallback(async () => {
     if (user) {
       try {
-        const [desktop, cloud] = await Promise.all([
-          supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle(),
-          supabase.from("fleethud_cloud_sessions_live").select("session,updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1000),
-        ]);
-        const snap = desktop.data?.live_snapshot;
-        const cloudSessions: SessionItem[] = (cloud.data || []).map((row) => row.session as SessionItem);
-        const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
-        const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
+        const {data, error} = await supabase.from("fleethud_sync_state").select("*").eq("user_id",user.id).maybeSingle();
+        const snap = data?.live_snapshot;
+        const filtered = (snap?.sessions || []).filter((session: SessionItem) => session.surface !== "cloud" &&
           (agentFilter === "all" || session.agent === agentFilter) &&
-          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
-        );
-        setSessions(filtered.slice((page - 1) * 10, page * 10));
+          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
+        setSessions(filtered.slice((page-1)*10,page*10));
         setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
         setQuota(snap?.quota || []);
         setRoiByProvider(snap?.roi_by_provider || []);
@@ -170,14 +161,9 @@ export default function ConsolePage() {
         setUserProfile(snap?.user_profile || null);
         setActiveCount(snap?.active_count || 0);
         setTotalCount(filtered.length);
-        setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
-        const cloudStatus = cloud.error ? "Cloud sessions unavailable" : `${cloudSessions.length} cloud sessions`;
-        if (snap) {
-          const ageMs = Date.now() - Date.parse(desktop.data.updated_at);
-          setConnectedSource(`${ageMs < 120000 ? "Desktop connected" : "Desktop data stale"} · ${cloudStatus}`);
-        } else {
-          setConnectedSource(desktop.error ? `Desktop unavailable · ${cloudStatus}` : cloudStatus);
-        }
+        setTotalPages(Math.max(1,Math.ceil(filtered.length/10)));
+        const fresh = data && Date.now()-Date.parse(data.updated_at)<120000;
+        setConnectedSource(error ? "Desktop sync unavailable" : !snap ? "No paired desktop data yet" : fresh ? "Desktop connected" : "Desktop data stale");
       } catch {
         setConnectedSource("Offline");
       }
@@ -285,7 +271,7 @@ export default function ConsolePage() {
       {!user ? (
         <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[CLOUD CONSOLE]</span> Sign in to view devices and cloud sessions paired with your account.
+            <span className="text-accent font-semibold">[CLOUD CONSOLE]</span> Sign in to view reports from your paired desktop.
           </div>
           <div className="flex items-center gap-2">
             <Link
@@ -302,7 +288,19 @@ export default function ConsolePage() {
             <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
             <span>Cloud Account: <strong className="text-foreground">{user.email}</strong></span>
           </div>
-          <Link href="/pair" className="text-accent underline">Connect a cloud workspace or device</Link>
+          <button
+            onClick={async () => {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                await navigator.clipboard.writeText(JSON.stringify(session));
+                setCopyFeedback("Pairing token copied! Paste into Desktop App -> Auth tab.");
+                setTimeout(() => setCopyFeedback(""), 4000);
+              }
+            }}
+            className="px-3 py-1 bg-accent/20 border border-accent/40 text-accent font-semibold rounded hover:bg-accent hover:text-bg transition-colors text-xs"
+          >
+            {copyFeedback || "[Copy Pairing Token for Desktop App]"}
+          </button>
         </div>
       )}
 
@@ -310,7 +308,7 @@ export default function ConsolePage() {
       {!report && (
         <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
           <div>
-            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. For cloud sessions, run fleethud pair inside the cloud environment. Desktop summaries upload every minute while the daemon runs.
+            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. Desktop summaries upload every minute while the daemon runs.
           </div>
           <a
             href="/downloads"
@@ -564,7 +562,6 @@ export default function ConsolePage() {
         </div>
       </div>
 
-      <p className="text-xs text-muted mb-3">Cloud usage and estimated cost appear in session rows. Summary charts show desktop reports.</p>
       {/* Live & Historical Agent Sessions */}
       <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
@@ -593,16 +590,16 @@ export default function ConsolePage() {
           </div>
         </div>
 
-        {sessions.some((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+        {sessions.some((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
           <div className="mb-3 px-3 py-2 bg-red/10 border border-red/30 rounded text-xs text-red flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold">[PRO LABS]</span>
               <span>Context saturation reserve active (&gt;=90%). Sessions are eligible for zero-token handoff via <code className="font-mono text-[11px] bg-red/20 px-1 py-0.5 rounded">.fleethud/HANDOFF.md</code>.</span>
             </div>
-            {sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+            {sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
               <button
                 onClick={() => {
-                  const target = sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
+                  const target = sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
                   if (target) handleRemoteRelay(target);
                 }}
                 className="px-2.5 py-1 bg-red text-white text-[11px] font-semibold rounded hover:opacity-90 transition-opacity"
@@ -659,7 +656,7 @@ export default function ConsolePage() {
                         {s.usage_available === false ? "Unknown" : formatTokens(totalTokens)}
                       </span>
                       <span className="text-[10px] text-muted block">
-                        {s.usage_available === false ? "Presence only" : `${formatTokens(s.input_tokens)} in · ${formatTokens(s.output_tokens)} out`}
+                        {s.usage_available === false ? "No measured usage" : `${formatTokens(s.input_tokens)} in · ${formatTokens(s.output_tokens)} out`}
                       </span>
                       {s.cache_read_tokens && s.cache_read_tokens > 0 ? (
                         <span className="text-[10px] text-green block font-semibold">
@@ -678,7 +675,7 @@ export default function ConsolePage() {
                           <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
                             <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
                           </div>
-                          {s.surface !== "cloud" && fillPct >= 90 ? (
+                          {fillPct >= 90 ? (
                             <button
                               onClick={() => handleRemoteRelay(s)}
                               className="mt-1 text-[10px] font-semibold text-accent hover:underline block"

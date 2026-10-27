@@ -1,3 +1,5 @@
+> Withdrawn in v1.4.1 at the owner’s request. Retained as a historical decision record.
+
 # 0005: Browser device pairing
 
 Status: Accepted. Date: 2026-10-27.
