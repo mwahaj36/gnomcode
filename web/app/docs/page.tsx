@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CopyCommand } from "../components/CopyCommand";
 
 export const metadata: Metadata = {
   title: "Documentation — Setup, Agents & API Reference",
@@ -81,12 +82,12 @@ export default function DocsPage() {
             <div className="sp-docs-install-list font-mono text-xs">
               <div className="sp-docs-install">
                 <header><strong>Windows</strong><span>AVAILABLE · x64</span></header>
-                <code>irm https://fleethud.vercel.app/win | iex</code>
+                <CopyCommand command="irm https://fleethud.vercel.app/win | iex" />
                 <p>Downloads the v1.3.0 installer and creates Start menu and desktop shortcuts. Updates preserve recorded sessions and account pairing.</p>
               </div>
               <div className="sp-docs-install">
                 <header><strong>Linux</strong><span>AVAILABLE · x86_64 / ARM64</span></header>
-                <code>curl -fsSL https://fleethud.vercel.app/sh | bash</code>
+                <CopyCommand command="curl -fsSL https://fleethud.vercel.app/sh | bash" />
                 <p>Downloads the verified tarball, checks its SHA-256 digest, and installs the CLI. WSL2 is supported.</p>
               </div>
               <div className="sp-docs-install sp-docs-install-pending">
@@ -99,9 +100,7 @@ export default function DocsPage() {
             <p className="text-muted text-xs mt-4">
               Once installed, verify the installation by running:
             </p>
-            <div className="bg-card p-3 rounded border border-border font-mono text-xs text-foreground mt-2">
-              fleethud status
-            </div>
+            <CopyCommand command="fleethud status" />
           </section>
 
           {/* Section 2: Supported Agents */}
@@ -227,36 +226,28 @@ export default function DocsPage() {
 
             <div className="space-y-4 font-mono text-xs">
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="font-semibold text-accent mb-1">fleethud status</div>
+                <CopyCommand command="fleethud status" />
                 <div className="text-muted text-[11px] mb-2">
                   Inspect currently active and idle agent sessions across all installed tools.
                 </div>
-                <div className="bg-bg p-2.5 rounded border border-border text-foreground">
-                  $ fleethud status<br />
-                  Shows current session states and activity metadata.
-                </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="font-semibold text-accent mb-1">fleethud report [--range today|7d|30d|all]</div>
+                <CopyCommand command="fleethud report --range 7d" />
                 <div className="text-muted text-[11px] mb-2">
-                  Outputs complete API spend breakdown, prompt cache savings, and ROI multiplier against flat subscription plans.
-                </div>
-                <div className="bg-bg p-2.5 rounded border border-border text-foreground">
-                  $ fleethud report --range 7d<br />
-                  Values include the trust level supplied by the local engine.
+                  Shows a seven-day API-equivalent usage report with trust levels supplied by the local engine.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="font-semibold text-accent mb-1">fleethud daemon</div>
+                <CopyCommand command="fleethud daemon" />
                 <div className="text-muted text-[11px] mb-2">
                   Starts the local HTTP and WebSocket service on port 41738 for tray app and web console polling.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="font-semibold text-accent mb-1">fleethud install</div>
+                <CopyCommand command="fleethud install" />
                 <div className="text-muted text-[11px] mb-2">
                   Configures autostart, system tray, shortcuts, and background execution on Windows, macOS, or Linux.
                 </div>
