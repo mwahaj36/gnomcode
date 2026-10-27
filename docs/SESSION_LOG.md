@@ -543,3 +543,9 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Goal: replace the crowded three-column installer instructions with the platform-tab interaction shown in the console tour and default to the visitor's platform.
 - Outcome: added Windows, macOS, and Linux tabs with browser-platform detection, arrow/Home/End keyboard navigation, focus states, a single focused release panel, and reduced-motion behavior. Kept published URLs and marked macOS unavailable until a verified package exists.
 - Verification: production Next.js build and `git diff --check` passed. Chromium accessibility tree confirmed tab roles, selected state, Windows release links, and the macOS unavailable state after selection; desktop light and dark styling were inspected. Narrow viewport and non-Windows platform default require additional review.
+
+## 2026-10-28 — settings route presentation
+
+- Goal: bring Settings into the shared spawnt layout and remove the remaining bracketed cloud-sync navbar control.
+- Outcome: replaced nested cards with three open, divided sections; aligned account state, password, subscription costs, and custom rates to square controls and shared typography. Missing price values now show `UNKNOWN` rather than `$0.00`; configured rates are identified as user-entered. The pricing table scrolls horizontally and can receive keyboard focus. Removed the `[Connect Cloud Sync]` header link; account connection remains available in Settings and Auth.
+- Verification: Next.js production build and `git diff --check` passed. Chromium review confirmed the route renders, sections and form controls are exposed accessibly, and the theme is applied. The local daemon is offline in this browser so live settings saves/password updates were not exercised; narrow viewport and keyboard-only review remain pending.
