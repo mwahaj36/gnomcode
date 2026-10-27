@@ -556,3 +556,18 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Goal: align Auth with the spawnt visual language while retaining GitHub and email sign-in, account creation, password reset, and local-console access.
 - Outcome: added keyboard-friendly native mode toggles, clear field labels and focus states, responsive square forms, readable GitHub sign-in, and accessible status/error messaging. OAuth now prevents duplicate clicks and reports a provider-start failure. Existing Supabase calls and callback handling remain in place.
 - Verification: Next.js production build and `git diff --check` passed. Chromium review covered light/dark themes, the sign-in/create/reset content states, accessible control names, and the visible GitHub action. No credentials were entered and no external sign-in was submitted; narrow viewport and end-to-end Supabase flows remain pending.
+
+## 2026-10-28 — web console refresh and trust states
+
+- Goal: make manual cloud-view reload status truthful and prevent missing metrics from appearing as exact zero.
+- Outcome: reload now reports success only when both cloud reads succeed, prevents duplicate manual refreshes, waits safely for an in-flight poll, and keeps the last successful refresh time on failures. Signed-out users see the control disabled with a sign-in explanation. Missing session token/cost/context values render UNKNOWN; relative times and rounded context percentages show estimated trust. Added keyboard support to expandable provider spend rows and focusable, named table scroll regions.
+- Verification: Next.js production build and `git diff --check` passed. Chromium review confirmed the disconnected/signed-out state, disabled reload, unknown KPI state, table region names, and accessible session filters. A signed-in cloud fixture, narrow viewport, and keyboard-only interaction check remain pending.
+
+## 2026-10-28 — web console visual alignment
+
+- Goal: make the signed-in console feel like part of the spawnt marketing product rather than a separate card-heavy interface.
+- Outcome: aligned the app navbar to the shared brand mark and token system, replaced boxed data widgets with open divided sections, used the marketing sans-led page hierarchy, and unified theme-aware button/link treatments. Removed square-bracket wrappers from status labels in the console and landing tour.
+- Decision: preserve the separate local and cloud data/auth paths and the console's existing view navigation, filters, and refresh semantics.
+- Follow-up: enlarged and top-aligned the mark with the title, then combined the disconnected-account and missing-desktop notices into one contextual connection row beneath the heading.
+- Follow-up: the connection row is now signed-out only. Shared action buttons across marketing, downloads, Auth, Settings, and console use a consistent square 44 px treatment.
+- Verification: `npm run build --prefix web` passed, `git diff --check` was clean, and Chromium desktop renders were reviewed in dark and light themes with the accessibility tree. Narrow viewport, keyboard-only, and reduced-motion checks remain pending; signed-in data was unavailable for this visual review.
