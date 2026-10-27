@@ -53,7 +53,7 @@ export default function LandingPage() {
       <div className="text-center max-w-3xl mx-auto mb-16">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent font-mono text-xs mb-6">
           <span className="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-          <span>FleetHUD v1.4.0 Production Release</span>
+          <span>FleetHUD v1.4.1 Production Release</span>
         </div>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground mb-5 leading-tight">
           Live Mission Control for AI Coding Agents

@@ -405,7 +405,6 @@
     </div>
 
     <!-- Multi-Plan ROI Comparison Card -->
-    <p id="cloud-session-status" role="status" style="font-size:12px;color:var(--text-muted);margin:12px 0"></p>
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-title">
         <span>Subscription ROI Calculator</span>
@@ -554,7 +553,7 @@
       </p>
 
       <p id="auth-cloud-status" role="status" style="font-size:12px;color:var(--text-muted)">Checking account status…</p>
-      <p style="font-size:12px;line-height:1.7;color:var(--text-muted)">Connect this device once. For a cloud workspace, run <code>fleethud pair</code> inside that workspace and approve its browser link using the same FleetHUD account. Keep the daemon or collector running. Cloud presence updates every 30 seconds; desktop summaries update every minute. Connected does not mean the agent is actively working. Tokens and estimated API cost require readable usage data.</p>
+      <p style="font-size:12px;line-height:1.7;color:var(--text-muted)">Pair this desktop with your FleetHUD account to view its local reports from the web console. Desktop summaries update every minute while the daemon runs. Hosted cloud-session tracking is not available.</p>
       <a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-pill" style="display:inline-block;margin-top:12px">Open Web Cloud Console</a>
 
       <!-- Paired Account Status Card -->
@@ -579,16 +578,28 @@
         </div>
       </div>
 
-      <div id="auth-unpaired-card" style="border:1px solid var(--border);border-radius:6px;padding:16px;margin-top:20px">
-        <h3 style="margin-bottom:10px">Connect this device</h3>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Open an approval link in your browser, compare the verification code, then sign in. You do not need to copy login tokens or session files.</p>
-        <button onclick="startBrowserPairing()" class="btn-primary">Connect Account</button>
-        <div id="browser-pair-details" hidden style="margin-top:16px">
-          <p>Verification code: <strong id="browser-pair-code" style="font-family:var(--font-mono)"></strong></p>
-          <a id="browser-pair-link" target="_blank" rel="noopener noreferrer" style="color:var(--accent);display:inline-block;margin-top:10px">Open approval screen</a>
-          <button onclick="cancelBrowserPairing()" class="btn-pill" style="margin-left:12px">Cancel</button>
+      <!-- Quick Account Pairing / Token Paste Card -->
+      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
+        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+          Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to instantly pair this desktop cockpit.
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <input
+            type="password"
+            id="auth-token-input"
+            placeholder="Paste pairing token or session JSON here..."
+            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
+          >
+          <button
+            onclick="pairTokenDirectly()"
+            class="btn-primary"
+            style="padding: 8px 16px; white-space: nowrap; font-size: 11px;"
+          >
+            Connect Account
+          </button>
         </div>
-        <p id="browser-pair-status" role="status" style="font-size:12px;margin-top:12px"></p>
+        <div id="auth-pair-status" style="margin-top: 10px; font-size: 11px; font-family: var(--font-mono); display: none;"></div>
       </div>
     </div>
   </main>
@@ -1237,7 +1248,6 @@
         lastSessionsJson = jsonStr;
 
         document.getElementById('active-count').textContent = res.active_count || 0;
-        document.getElementById('cloud-session-status').textContent = res.cloud_status || '';
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
         document.getElementById('prev-btn').disabled = res.page <= 1;
         document.getElementById('next-btn').disabled = res.page >= res.total_pages;
@@ -1286,7 +1296,7 @@
             <td>${s.model}</td>
             <td>
               <span style="font-weight: 600;">${s.usage_available === false ? "Unknown" : formatTokens(tokCount)}</span>
-              <div style="font-size: 10px; color: var(--text-muted);">${s.usage_available === false ? "Presence only" : `${formatTokens(s.input_tokens || 0)} in • ${formatTokens(s.output_tokens || 0)} out`}</div>
+              <div style="font-size: 10px; color: var(--text-muted);">${s.usage_available === false ? "No measured usage" : `${formatTokens(s.input_tokens || 0)} in • ${formatTokens(s.output_tokens || 0)} out`}</div>
               ${cacheBadge}
             </td>
             <td>${contextHtml}</td>
@@ -1325,28 +1335,48 @@
       }
     }
 
-    async function startBrowserPairing() {
-      const status = document.getElementById('browser-pair-status');
+    async function pairTokenDirectly() {
+      const input = document.getElementById('auth-token-input');
+      const status = document.getElementById('auth-pair-status');
+      if (!input || !status) return;
+      const val = input.value.trim();
+      if (!val) return;
+
+      status.style.display = 'block';
+      status.style.color = 'var(--text-muted)';
+      status.textContent = 'Verifying and saving session...';
+
       try {
-        const res = await fetch('/api/v1/auth/pair', { method: 'POST', headers });
-        if (!res.ok) throw new Error('Cannot start pairing. Reopen the console using the tray or FleetHUD shortcut.');
-        showBrowserPairing(await res.json());
-      } catch (error) { status.textContent = error.message; }
-    }
+        let sessionData = null;
+        try {
+          sessionData = JSON.parse(val);
+        } catch {
+          try {
+            sessionData = JSON.parse(atob(val));
+          } catch {
+            sessionData = { access_token: val, token_type: 'bearer' };
+          }
+        }
 
-    function showBrowserPairing(flow) {
-      if (!flow) return;
-      document.getElementById('browser-pair-status').textContent = flow.message;
-      document.getElementById('browser-pair-details').hidden = flow.status !== 'pending';
-      document.getElementById('browser-pair-code').textContent = flow.code;
-      const link = document.getElementById('browser-pair-link');
-      if (flow.url) link.href = flow.url; else link.removeAttribute('href');
-    }
+        const res = await fetch('/api/v1/auth/session', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(sessionData)
+        });
 
-    async function cancelBrowserPairing() {
-      await fetch('/api/v1/auth/pair', { method: 'DELETE', headers });
-      document.getElementById('browser-pair-details').hidden = true;
-      document.getElementById('browser-pair-status').textContent = 'Pairing cancelled.';
+        if (res.ok) {
+          status.style.color = 'var(--green)';
+          status.textContent = 'Account successfully paired! Roaming enabled.';
+          input.value = '';
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          status.style.color = 'var(--red)';
+          status.textContent = 'Failed to save session. Check token and try again.';
+        }
+      } catch (err) {
+        status.style.color = 'var(--red)';
+        status.textContent = 'Error: ' + err.message;
+      }
     }
 
     async function checkAuthSession() {
@@ -1355,9 +1385,7 @@
         const pairedCard = document.getElementById('auth-paired-card');
         const unpairedCard = document.getElementById('auth-unpaired-card');
         const emailEl = document.getElementById('auth-paired-email');
-        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Account paired on this device. Cloud session sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
-        const flow = await fetch('/api/v1/auth/pair', { headers }).then(r => r.ok ? r.json() : null);
-        showBrowserPairing(flow);
+        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Desktop account paired. Desktop summary sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
         if (res && res.paired) {
           if (pairedCard) pairedCard.style.display = 'block';
           if (unpairedCard) unpairedCard.style.display = 'none';
