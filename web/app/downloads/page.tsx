@@ -2,121 +2,98 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Download FleetHUD — Native Installers & Binaries",
-  description:
-    "Download FleetHUD for Windows 10/11, macOS (Apple Silicon & Intel), Linux, and npm. Features silent system tray mode, zero black console windows, and autostart.",
-  alternates: {
-    canonical: "https://fleethud.vercel.app/downloads",
-  },
+  title: "Downloads — spawnt",
+  description: "Download the verified Windows or Linux release of spawnt.",
+  alternates: { canonical: "https://fleethud.vercel.app/downloads" },
 };
+
+const platforms = [
+  {
+    name: "Windows",
+    availability: "AVAILABLE",
+    detail: "Windows 10 / 11 · x64",
+    body: "Install the tray app and local daemon. The standalone installer and zip contain the same v1.3.0 release.",
+    actions: [
+      { label: "Download installer", href: "/downloads/FleetHUD-Setup.exe", detail: ".exe" },
+      { label: "Download archive", href: "/downloads/FleetHUD-v1.3.0-windows-x64.zip", detail: ".zip" },
+    ],
+    command: "irm https://fleethud.vercel.app/win | iex",
+    note: "Updates preserve the account and recorded sessions.",
+  },
+  {
+    name: "Linux",
+    availability: "AVAILABLE",
+    detail: "x86_64 / ARM64 · glibc 2.35+",
+    body: "Install the CLI and local web daemon from the verified v1.3.0 tarball. WSL2 is supported.",
+    actions: [
+      { label: "Install script", href: "/sh", detail: "SHA-256 verified" },
+      { label: "Release checksums", href: "/downloads/SHA256SUMS-v1.3.0.txt", detail: "SHA256SUMS" },
+    ],
+    command: "curl -fsSL https://fleethud.vercel.app/sh | bash",
+    note: "Updates preserve local user data and account pairing.",
+  },
+  {
+    name: "macOS",
+    availability: "NOT PUBLISHED",
+    detail: "Apple Silicon / Intel",
+    body: "A verified macOS release is not available yet. We will publish an installer after native builds and signing are ready.",
+    actions: [],
+    command: null,
+    note: "No download path is enabled for macOS today.",
+  },
+];
 
 export default function DownloadsPage() {
   return (
-    <div className="sp-console-shell max-w-7xl mx-auto px-6 py-14 font-sans">
-      <div className="flex justify-between items-center pb-6 border-b border-border mb-10 flex-wrap gap-4">
+    <div className="sp-console-shell sp-downloads-page mx-auto max-w-7xl px-6 py-16 font-sans">
+      <header className="sp-downloads-header">
         <div>
-          <p className="font-mono text-xs text-green mb-2">PRODUCTION RELEASE / v1.3.0</p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Download spawnt
-          </h1>
-          <p className="text-sm text-muted mt-1">
-            Native installers, background services, and CLI packages for Windows, macOS, and Linux
-          </p>
+          <h1>Download spawnt</h1>
+          <p>Verified local releases for Windows and Linux. Your agent logs stay on your machine.</p>
         </div>
-        <Link
-          href="/console"
-          className="px-4 py-2 border border-border rounded text-xs font-mono text-foreground hover:border-accent transition-colors"
-        >
-          Launch Console &rarr;
-        </Link>
-      </div>
+        <span className="sp-download-release">CURRENT RELEASE · v1.3.0</span>
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-14 font-mono">
-        {/* Windows Card */}
-        <div className="bg-card border-2 border-accent/40 rounded-xl p-6 flex flex-col justify-between shadow-lg shadow-accent/5">
-          <div>
-            <div className="text-xs text-accent uppercase tracking-wider mb-2 font-semibold">
-              [WINDOWS 10 / 11]
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Windows</h2>
-            <p className="text-xs text-muted leading-relaxed mb-6">
-              Standalone native <code className="text-foreground">Installer.exe</code> with System Tray daemon, autostart registry configuration, and zero black command prompt windows.
-            </p>
-          </div>
-          <div>
-            <a
-              href="/downloads/FleetHUD-Setup.exe"
-              download="FleetHUD-Setup.exe"
-              className="sp-on-primary-text w-full block text-center py-3 px-4 bg-accent font-bold rounded-lg text-xs hover:opacity-90 transition-opacity shadow-sm shadow-accent/20 mb-2"
-            >
-              Download Windows (.exe) &darr;
-            </a>
-            <div className="flex justify-between items-center text-[11px] text-muted mb-2 px-1">
-              <span>Standalone Installer (x64)</span>
-              <a href="/downloads/FleetHUD-v1.3.0-windows-x64.zip" download className="text-accent hover:underline">
-                Zip (.zip)
-              </a>
-            </div>
-            <div className="text-[11px] text-muted text-center pt-2 border-t border-border/60">
-              PowerShell 1-Liner: <code className="text-accent select-all">irm fleethud.vercel.app/win | iex</code>
-            </div>
-          </div>
-        </div>
+      <section className="sp-platform-list" aria-label="Platform downloads">
+        {platforms.map((platform) => (
+          <article className="sp-platform" key={platform.name}>
+            <header>
+              <h2>{platform.name}</h2>
+              <span className={platform.actions.length ? "sp-platform-state" : "sp-platform-state sp-platform-pending"}>
+                {platform.availability}
+              </span>
+            </header>
+            <p className="sp-platform-detail">{platform.detail}</p>
+            <p className="sp-platform-body">{platform.body}</p>
+            {platform.command && (
+              <div className="sp-install-command">
+                <span>QUICK INSTALL</span>
+                <code>{platform.command}</code>
+              </div>
+            )}
+            {platform.actions.length > 0 ? (
+              <div className="sp-download-actions">
+                {platform.actions.map((action, index) => (
+                  <a className={index === 0 ? "sp-download-action sp-download-primary" : "sp-download-action"} href={action.href} key={action.href}>
+                    <span>{action.label}</span><small>{action.detail}</small>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="sp-download-unavailable">There is no verified installer to download yet.</p>
+            )}
+            <p className="sp-platform-note">{platform.note}</p>
+          </article>
+        ))}
+      </section>
 
-        {/* macOS Card */}
-        <div className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="text-xs text-muted uppercase tracking-wider mb-2 font-semibold">
-              [MACOS 12+]
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Mac</h2>
-            <p className="text-xs text-muted leading-relaxed mb-6">
-              macOS builds for Apple Silicon and Intel are pending a working macOS build runner. No verified v1.3.0 macOS package is available yet.
-            </p>
-          </div>
-          <div>
-            <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              macOS packages pending
-            </div>
-            <div className="text-[11px] text-muted text-center">Native macOS packages pending</div>
-          </div>
+      <section className="sp-download-help" aria-label="Release verification">
+        <div>
+          <h2>Verify the release</h2>
+          <p>Release archives include a SHA-256 manifest. The Windows updater and Linux install script verify downloads before replacing an existing install.</p>
         </div>
-
-        {/* Linux Card */}
-        <div className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="text-xs text-muted uppercase tracking-wider mb-2 font-semibold">
-              [LINUX & WSL2]
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Linux</h2>
-            <p className="text-xs text-muted leading-relaxed mb-6">
-              CLI and local web daemon for Linux x86_64 and ARM64 (glibc 2.35+), including WSL2. Existing sessions and account pairing are preserved during updates.
-            </p>
-          </div>
-          <div>
-            <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              curl -fsSL https://fleethud.vercel.app/sh | bash
-            </div>
-            <div className="text-[11px] text-muted text-center">Verified tarball installation; .deb, RPM and AppImage packages are not published</div>
-          </div>
-        </div>
-      </div>
-
-      {/* CLI Quickstart */}
-      <div className="bg-card border border-border rounded-xl p-6 font-mono">
-        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-            Install Globally via npm
-          </h3>
-          <span className="text-xs text-green font-semibold">[CROSS-PLATFORM]</span>
-        </div>
-        <p className="text-xs text-muted mb-4">
-          The v1.3.0 npm package has not been published. Use the verified native installer or Linux installation command above.
-        </p>
-        <div className="bg-bg border border-border rounded-lg p-3.5 text-xs text-accent select-all">
-          Native downloads above include v1.3.0
-        </div>
-      </div>
+        <Link href="/docs#quickstart">Read installation guide <span aria-hidden="true">→</span></Link>
+      </section>
     </div>
   );
 }

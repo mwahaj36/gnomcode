@@ -506,3 +506,17 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Replaced user-facing FleetHUD product-name copy with spawnt across web metadata, pricing, auth, docs, signed-in console, and the daemon console, including Pro license prompts and exported report filenames.
 - Kept the existing domain, installer filenames, CLI command, database/schema names, callback key, and `.fleethud` data paths unchanged for compatibility; those are technical identifiers rather than visible product branding.
 - Verification: production web build, `git diff --check`, full Rust quality gate (cargo-deny unavailable), and app-source search passed. Desktop theme screenshots confirmed route surfaces follow Light/Dark; narrow and keyboard review remain pending.
+
+## 2026-10-28 — downloads route and platform availability
+
+- Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
+- Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
+- Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
+- Verification: Next.js production build, `git diff --check`, and desktop Chromium review in dark and light passed; the accessibility tree exposes the platform sections and exact download links. Narrow viewport and full keyboard review remain pending.
+## 2026-10-28 — downloads route and platform availability
+
+- Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
+- Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
+- Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
+- Verification: pending production build, desktop/narrow theme review, and keyboard review.
+>>>>>>> 1ab7670 (feat(web): redesign downloads route)
