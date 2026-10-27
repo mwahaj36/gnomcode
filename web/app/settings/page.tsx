@@ -200,11 +200,11 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 font-mono">
+    <div className="sp-console-shell max-w-4xl mx-auto px-6 py-10 font-mono">
       <div className="flex justify-between items-center mb-8 border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">
-            FleetHUD Settings & Configuration
+            spawnt / settings
           </h1>
           <p className="text-xs text-muted mt-1 font-sans">
             Manage your subscription tiers, custom model rate overrides, and sync connection.

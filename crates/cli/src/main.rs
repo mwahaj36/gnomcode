@@ -16,6 +16,7 @@ use fleethud_platform::{
 };
 use fleethud_store::Database;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -681,6 +682,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
     let state = fleethud_daemon::api::AppState {
         db: orchestrator.db(),
         bearer_token: info.token.clone(),
+        orchestrator: Some(Arc::new(orchestrator)),
     };
 
     let router = fleethud_daemon::api::build_router(state);

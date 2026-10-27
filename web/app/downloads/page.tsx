@@ -12,14 +12,14 @@ export const metadata: Metadata = {
 
 export default function DownloadsPage() {
   return (
-    <div className="max-w-7xl mx-auto px-6 py-14 font-sans">
+    <div className="sp-console-shell max-w-7xl mx-auto px-6 py-14 font-sans">
       <div className="flex justify-between items-center pb-6 border-b border-border mb-10 flex-wrap gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-green/15 border border-green/30 text-green font-mono text-xs mb-2">
             <span>Production Release &bull; v1.3.0</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Download FleetHUD
+            Download spawnt
           </h1>
           <p className="text-sm text-muted mt-1">
             Native installers, background services, and CLI packages for Windows, macOS, and Linux

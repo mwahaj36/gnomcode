@@ -6,17 +6,18 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg: '#0d1117',
-        card: '#161b22',
-        border: '#30363d',
-        accent: '#58a6ff',
-        green: '#3fb950',
+        bg: 'var(--sp-bg)',
+        card: 'var(--sp-surface)',
+        border: 'var(--sp-border)',
+        accent: 'var(--sp-primary)',
+        green: '#16835d',
         yellow: '#d29922',
-        red: '#f85149',
-        muted: '#8b949e',
+        red: 'var(--sp-primary)',
+        muted: 'var(--sp-text-3)',
       },
       fontFamily: {
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        sans: ['var(--sp-font-sans)'],
+        mono: ['var(--sp-font-mono)'],
       },
     },
   },

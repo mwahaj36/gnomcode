@@ -3,29 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FleetHUD — Desktop Cockpit</title>
+  <title>spawnt — Local Console</title>
   <link rel="icon" type="image/svg+xml" href="/fleethud.svg">
   <link rel="alternate icon" href="/favicon.ico">
   <style>
+    @import url("/spawnt-tokens.css");
+
     :root {
-      --bg: #0d1117;
-      --card-bg: #161b22;
-      --card-hover: #1c2129;
-      --border: #30363d;
-      --text: #c9d1d9;
-      --text-muted: #8b949e;
-      --accent: #58a6ff;
-      --green: #3fb950;
+      --bg: var(--sp-bg);
+      --card-bg: var(--sp-surface);
+      --card-hover: var(--sp-surface-2);
+      --border: var(--sp-border);
+      --text: var(--sp-text);
+      --text-muted: var(--sp-text-2);
+      --accent: var(--sp-primary);
+      --green: #becbd8;
       --yellow: #d29922;
-      --red: #f85149;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --red: var(--sp-primary-text);
+      --font-mono: var(--sp-font-mono);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
+      color-scheme: dark;
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-family: Inter, Arial, sans-serif;
       padding: 20px 24px;
+      max-width: 1440px;
+      margin: 0 auto;
       line-height: 1.5;
     }
     header {
@@ -56,6 +61,7 @@
       border-radius: 6px;
       border: 1px solid var(--border);
     }
+    .nav-tabs .tab-btn { text-transform: uppercase; letter-spacing: .04em; }
     .tab-btn {
       background: transparent;
       border: none;
@@ -73,6 +79,7 @@
     }
     .tab-btn.active {
       background: var(--bg);
+      color-scheme: dark;
       color: var(--accent);
       border: 1px solid var(--border);
       font-weight: 600;
@@ -244,6 +251,7 @@
     }
     select, input {
       background: var(--bg);
+      color-scheme: dark;
       border: 1px solid var(--border);
       color: var(--text);
       padding: 6px 12px;
@@ -300,6 +308,20 @@
     }
     .view-content.active {
       display: block;
+      animation: view-in .22s cubic-bezier(.16,1,.3,1) both;
+    }
+    @keyframes view-in { from { opacity: .5; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+    @media (max-width: 760px) {
+      body { padding: 12px; }
+      header { align-items: flex-start; }
+      .header-left { width: 100%; flex-wrap: wrap; }
+      .nav-tabs { width: 100%; overflow-x: auto; }
+      .tab-btn { min-height: 44px; white-space: nowrap; }
+      .header-right { width: 100%; flex-wrap: wrap; }
+      .grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+      .table-container { overflow-x: auto; }
+      table { min-width: 760px; }
     }
     /* Settings Form Styling */
     .settings-grid {
@@ -338,6 +360,7 @@
       opacity: 0.9;
     }
   </style>
+<link rel="stylesheet" href="/spawnt-tokens.css">
 </head>
 <body>
   <header>
@@ -348,18 +371,25 @@
           <rect x="878" y="871.82" width="622.67" height="622.67" fill="#ffffff" />
         </svg>
       </div>
-      <h1>FleetHUD</h1>
-      <div class="nav-tabs">
-        <button class="tab-btn active" id="tab-btn-console" onclick="switchTab('console')">Console</button>
-        <button class="tab-btn" id="tab-btn-pro" onclick="switchTab('pro')">Pro & Guardrails</button>
+      <h1>spawnt</h1>
+      <nav class="nav-tabs" aria-label="Console views">
+        <button class="tab-btn active" id="tab-btn-console" onclick="navigateView('console')">Overview</button>
+        <button class="tab-btn" id="tab-btn-sessions" onclick="navigateView('sessions')">Sessions</button>
+        <button class="tab-btn" id="tab-btn-usage" onclick="navigateView('usage')">Usage</button>
+        <button class="tab-btn" id="tab-btn-limits" onclick="navigateView('limits')">Limits</button>
+        <button class="tab-btn" id="tab-btn-projects" onclick="navigateView('projects')">Projects</button>
+        <button class="tab-btn" id="tab-btn-pro" onclick="navigateView('pro')">Automations</button>
         <button class="tab-btn" id="tab-btn-settings" onclick="switchTab('settings')">Settings</button>
-        <button class="tab-btn" id="tab-btn-auth" onclick="switchTab('auth')">Auth & Cloud Sync</button>
-      </div>
+        <button class="tab-btn" id="tab-btn-auth" onclick="switchTab('auth')">Account</button>
+      </nav>
     </div>
     <div class="header-right">
-      <span class="badge">[LOCAL DAEMON] 127.0.0.1:41738</span>
-      <a href="https://fleethud.vercel.app/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
-      <a href="https://fleethud.vercel.app/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
+      <span class="badge" id="sync-state" aria-live="polite">[LOCAL] CONNECTED</span>
+      <span class="metric-sub" id="last-updated" aria-live="polite">Last updated: loading</span>
+      <button class="btn-pill" id="reload-view" type="button" onclick="refreshCurrentView()">Reload view</button>
+      <button class="btn-pill" id="resync-data" type="button" onclick="resyncLocal()">Resync local data</button>
+      <a href="/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
+      <a href="/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
   </header>
 
@@ -815,8 +845,74 @@
     const pageLimit = 10;
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    let refreshBusy = false;
+    let lastSuccessfulUpdate = null;
+    let activeView = 'console';
+
+    function navigateView(view) {
+      activeView = view;
+      document.querySelectorAll('.tab-btn').forEach(button => button.classList.toggle('active', button.id === `tab-btn-${view}`));
+      const target = view === 'console' ? '/' : `/#${view}`;
+      history.replaceState(null, '', target);
+      refreshCurrentView();
+    }
+
+    window.addEventListener('hashchange', () => {
+      const view = window.location.hash.slice(1);
+      if (['sessions', 'usage', 'limits', 'projects', 'pro'].includes(view)) navigateView(view);
+    });
+
+    async function refreshCurrentView() {
+      if (refreshBusy) return;
+      refreshBusy = true;
+      const button = document.getElementById('reload-view');
+      button.disabled = true;
+      button.textContent = 'Refreshing...';
+      try {
+        if (activeView === 'console' || activeView === 'overview' || activeView === 'sessions' || activeView === 'usage' || activeView === 'limits' || activeView === 'projects') { await Promise.all([loadReport(), loadSessions(), loadQuota()]); }
+        else if (activeView === 'settings') await loadSettingsData();
+        else if (activeView === 'pro') await loadProData();
+        else if (activeView === 'auth') await checkAuthSession();
+        else { await Promise.all([loadReport(), loadSessions(), loadQuota()]); }
+        lastSuccessfulUpdate = new Date();
+        document.getElementById('last-updated').textContent = `Last updated: ${lastSuccessfulUpdate.toLocaleTimeString()}`;
+        document.getElementById('sync-state').textContent = '[LOCAL] VIEW REFRESHED';
+      } catch {
+        document.getElementById('sync-state').textContent = '[ERR] REFRESH FAILED';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Reload view';
+        refreshBusy = false;
+      }
+    }
+
+    async function resyncLocal() {
+      if (refreshBusy) return;
+      refreshBusy = true;
+      const button = document.getElementById('resync-data');
+      button.disabled = true;
+      button.textContent = 'Reconciling...';
+      document.getElementById('sync-state').textContent = '[RUN] LOCAL RECONCILIATION';
+      try {
+        const response = await fetch('/api/v1/reconcile', { method: 'POST', headers });
+        if (response.status === 409) {
+          document.getElementById('sync-state').textContent = '[RUN] RECONCILIATION IN PROGRESS';
+        } else if (!response.ok) throw new Error('Reconciliation failed');
+        await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+        lastSuccessfulUpdate = new Date();
+        document.getElementById('last-updated').textContent = `Last successful update: ${lastSuccessfulUpdate.toLocaleTimeString()}`;
+        document.getElementById('sync-state').textContent = response.status === 409 ? '[RUN] RECONCILIATION IN PROGRESS' : '[LOCAL] RECONCILED';
+      } catch {
+        document.getElementById('sync-state').textContent = '[ERR] RECONCILIATION FAILED';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Resync local data';
+        refreshBusy = false;
+      }
+    }
 
     function switchTab(tabName) {
+      activeView = tabName;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.view-content').forEach(v => v.classList.remove('active'));
 
@@ -1189,8 +1285,8 @@
         lastReportJson = jsonStr;
 
         const tl = res.timeline;
-        document.getElementById('total-spend').textContent = `$${tl.total_cost_usd.toFixed(2)}`;
-        document.getElementById('total-savings').textContent = `$${tl.total_cache_savings_usd.toFixed(2)}`;
+        document.getElementById('total-spend').textContent = `$${tl.total_cost_usd.toFixed(2)} API`;
+        document.getElementById('total-savings').textContent = `$${tl.total_cache_savings_usd.toFixed(2)} EST`;
 
         const totalInput = tl.total_input_tokens + tl.total_cache_read_tokens;
         const savingsPct = totalInput > 0 ? ((tl.total_cache_read_tokens / totalInput) * 100).toFixed(1) : 0;
@@ -1265,7 +1361,7 @@
         if (jsonStr === lastSessionsJson) return;
         lastSessionsJson = jsonStr;
 
-        document.getElementById('active-count').textContent = res.active_count || 0;
+        document.getElementById('active-count').textContent = `${res.active_count || 0} EXACT`;
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
         document.getElementById('prev-btn').disabled = res.page <= 1;
         document.getElementById('next-btn').disabled = res.page >= res.total_pages;
@@ -1311,12 +1407,12 @@
             </td>
             <td>${s.model}</td>
             <td>
-              <span style="font-weight: 600;">${s.usage_available === false ? "Unknown" : formatTokens(tokCount)}</span>
+              <span style="font-weight: 600;">${s.usage_available === false ? "Unknown" : formatTokens(tokCount)} ${s.usage_available === false ? "UNKNOWN" : "EXACT"}</span>
               <div style="font-size: 10px; color: var(--text-muted);">${s.usage_available === false ? "Presence only" : `${formatTokens(s.input_tokens || 0)} in • ${formatTokens(s.output_tokens || 0)} out`}</div>
               ${cacheBadge}
             </td>
             <td>${contextHtml}</td>
-            <td style="font-weight: 600;">${s.usage_available === false || s.cost_basis === "unknown" ? "Unknown" : `$${(s.total_cost_usd || 0).toFixed(2)} EST`}</td>
+            <td style="font-weight: 600;">${s.usage_available === false || s.cost_basis === "unknown" ? "Unknown UNKNOWN" : `$${(s.total_cost_usd || 0).toFixed(2)} ${String(s.cost_basis || "unknown").toUpperCase()}`}</td>
             <td><span class="status-dot ${dotClass}"></span>${s.state}</td>
             <td>${formatRelativeTime(s.last_event_at)}</td>
           </tr>`;
@@ -1460,7 +1556,7 @@
             <td>${q.window}</td>
             <td style="font-weight: 600; color: ${q.used_pct > 80 ? 'var(--red)' : 'var(--green)'};">${q.used_pct.toFixed(1)}%</td>
             <td>${formatResetCountdown(q.resets_at, q.window)}</td>
-            <td><span class="badge" style="font-size: 10px;">${q.basis === 'estimated' ? 'EST' : 'EXACT'}</span></td>
+            <td><span class="badge" style="font-size: 10px;">${String(q.basis || 'unknown').toUpperCase()}</span></td>
           </tr>
         `).join('');
       } catch (e) {
