@@ -259,3 +259,62 @@ body {
 @media (max-width: 640px) { .sp-console-shell { width: calc(100% - 32px); padding-left: 0; padding-right: 0; } }
 @media (max-width: 640px) { .sp-usage-bar-row { grid-template-columns: 1fr auto; gap: 6px 12px; } .sp-usage-bar-row>div { grid-column: 1 / -1; grid-row: 2; } .sp-limit-row { grid-template-columns: 1fr auto; gap: 8px; } .sp-limit-meter { grid-column: 1 / -1; grid-row: 2; } }
 @media (prefers-reduced-motion: reduce) { .sp-console-shell *, .sp-console-shell *::before, .sp-console-shell *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+.sp-settings-page { width: min(920px, calc(100% - 48px)); padding-top: 64px; padding-bottom: 88px; }
+.sp-settings-header { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--sp-border); }
+.sp-settings-header h1 { margin: 0; font-size: clamp(30px, 4vw, 42px); line-height: 1.1; letter-spacing: -.035em; font-weight: 600; }
+.sp-settings-header p { max-width: 64ch; margin: 10px 0 0; color: var(--sp-text-2); font: 13px/1.6 var(--sp-font-sans); }
+.sp-settings-back { flex: none; color: var(--sp-primary-text); font: 600 10px/1.4 var(--sp-font-mono); text-decoration: none; }
+.sp-settings-section { padding: 28px 0 32px; border-bottom: 1px solid var(--sp-border); }
+.sp-settings-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.sp-settings-section-heading h2 { margin: 0; color: var(--sp-text); font-size: 17px; font-weight: 600; }
+.sp-settings-section-heading > span { color: var(--sp-text-3); font: 10px/1.5 var(--sp-font-mono); text-align: right; }
+.sp-settings-stack-heading { display: block; }
+.sp-settings-stack-heading p { max-width: 70ch; margin: 8px 0 18px; color: var(--sp-text-2); font: 12px/1.6 var(--sp-font-sans); }
+.sp-settings-facts { margin: 0; }
+.sp-settings-facts > div { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(0, 1.3fr); gap: 20px; padding: 12px 0; border-bottom: 1px solid var(--sp-border); font-size: 12px; }
+.sp-settings-facts > div:last-child { border-bottom: 0; }
+.sp-settings-facts dt { color: var(--sp-text-3); }
+.sp-settings-facts dd { margin: 0; color: var(--sp-text); text-align: right; overflow-wrap: anywhere; }
+.sp-settings-action { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; border: 1px solid var(--sp-border-strong); background: transparent; color: var(--sp-text); font: 600 10px/1.4 var(--sp-font-mono); cursor: pointer; text-decoration: none; }
+.sp-settings-action:hover { border-color: var(--sp-primary); }
+.sp-settings-primary { border-color: var(--sp-primary); background: var(--sp-primary); color: var(--sp-on-primary); }
+.sp-settings-primary:hover { color: var(--sp-on-primary); opacity: .9; }
+.sp-settings-add { margin: 12px 0 20px; }
+.sp-settings-delete { border: 0; background: none; color: var(--sp-primary-text); font: 600 10px/1.4 var(--sp-font-mono); cursor: pointer; }
+.sp-settings-message { margin: 16px 0 0; padding: 12px 0; border-block: 1px solid var(--sp-border); color: var(--sp-text-2); font: 11px/1.5 var(--sp-font-mono); }
+.sp-settings-password { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--sp-border); }
+.sp-settings-password h3 { margin: 0 0 12px; color: var(--sp-text-3); font: 600 10px/1.5 var(--sp-font-mono); text-transform: uppercase; }
+.sp-settings-form-row { display: flex; align-items: center; gap: 12px; }
+.sp-settings-plans-form { display: grid; gap: 18px; }
+.sp-settings-plans-form > div:first-child { max-width: 420px; }
+.sp-settings-plans-form label { display: block; margin-bottom: 7px; color: var(--sp-text-3); font: 10px/1.4 var(--sp-font-mono); }
+.sp-settings-input { width: 100%; min-width: 0; min-height: 42px; padding: 0 11px; border: 1px solid var(--sp-border); border-radius: 0; background: var(--sp-surface); color: var(--sp-text); font: 12px/1.5 var(--sp-font-mono); }
+.sp-settings-input:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
+.sp-settings-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; }
+.sp-settings-hint { display: block; margin-top: 6px; color: var(--sp-text-3); font: 9px/1.5 var(--sp-font-mono); }
+.sp-settings-submit { display: flex; justify-content: flex-end; }
+.sp-settings-pricing-form { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(100px,1fr)); gap: 8px; }
+.sp-settings-table-scroll { overflow-x: auto; border-top: 1px solid var(--sp-border); border-bottom: 1px solid var(--sp-border); }
+.sp-settings-table-scroll:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 3px; }
+.sp-settings-table-scroll table { width: 100%; min-width: 640px; text-align: left; font: 11px/1.5 var(--sp-font-mono); }
+.sp-settings-table-scroll th { padding: 11px 12px; border-bottom: 1px solid var(--sp-border); color: var(--sp-text-3); text-transform: uppercase; }
+.sp-settings-table-scroll td { padding: 12px; border-bottom: 1px solid var(--sp-border); color: var(--sp-text-2); white-space: nowrap; }
+.sp-settings-table-scroll tr:last-child td { border-bottom: 0; }
+.sp-settings-table-scroll td:first-child { color: var(--sp-text); font-weight: 600; }
+.sp-settings-empty { padding: 18px 12px !important; color: var(--sp-text-3) !important; white-space: normal !important; }
+.sp-trust-exact, .sp-trust-unknown { margin-left: 4px; color: var(--sp-primary-text); font: 600 8px/1.4 var(--sp-font-mono); }
+.sp-trust-unknown { color: var(--sp-text-3); }
+@media (max-width: 680px) {
+  .sp-settings-page { width: calc(100% - 32px); padding-top: 44px; padding-bottom: 64px; }
+  .sp-settings-header { align-items: start; flex-direction: column; }
+  .sp-settings-header p { font-size: 12px; }
+  .sp-settings-section-heading { align-items: start; flex-direction: column; }
+  .sp-settings-section-heading > span { text-align: left; }
+  .sp-settings-plan-grid { grid-template-columns: 1fr; gap: 14px; }
+  .sp-settings-pricing-form { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .sp-settings-pattern { grid-column: 1 / -1; }
+  .sp-settings-form-row { align-items: stretch; flex-direction: column; }
+  .sp-settings-form-row .sp-settings-action { align-self: start; }
+  .sp-settings-facts > div { grid-template-columns: 1fr; gap: 5px; }
+  .sp-settings-facts dd { text-align: left; }
+}
