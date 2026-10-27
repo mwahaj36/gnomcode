@@ -1750,7 +1750,9 @@ impl Database {
                 COALESCE(SUM(u.cost_usd), 0.0),
                 COALESCE(SUM(u.cache_read_tokens), 0),
                 COALESCE(
-                    (SELECT u2.context_tokens FROM usage_record u2 WHERE u2.session_id = s.id ORDER BY u2.rowid DESC LIMIT 1),
+                    -- Codex rows written before the adapter fix stored cumulative context here.
+                    (SELECT CASE WHEN s.agent = 'codex' THEN u2.input_tokens + u2.output_tokens ELSE u2.context_tokens END
+                     FROM usage_record u2 WHERE u2.session_id = s.id ORDER BY u2.rowid DESC LIMIT 1),
                     0
                 ),
                 COALESCE(
@@ -2411,6 +2413,59 @@ mod tests {
             .expect("get checkpoint")
             .expect("checkpoint exists");
         assert_eq!(saved_cp.last_read_offset, 1234);
+    }
+
+    #[test]
+    fn codex_session_context_uses_latest_turn_for_previously_stored_rows() {
+        let mut db = Database::open_in_memory().expect("in-memory db");
+        let project = Project::from_origin(None, "/workspace/sample", None);
+        let session = Session {
+            id: "codex:synthetic".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::DesktopApp,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gpt-6-luna".to_owned()),
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+        let usage = UsageRecord {
+            dedup_key: "synthetic:1".to_owned(),
+            session_id: session.id.clone(),
+            timestamp: Utc::now(),
+            model: "gpt-6-luna".to_owned(),
+            input_tokens: 189_000,
+            output_tokens: 1_000,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 313_700_000,
+            context_window: Some(258_000),
+            cost_usd: 0.0,
+            cache_savings_usd: 0.0,
+            cost_basis: TrustLevel::Exact,
+            pricing_version: "test".to_owned(),
+        };
+        let checkpoint = SourceCheckpoint {
+            file_path: "/synthetic/rollout.jsonl".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "synthetic".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch(&[project], &[session], &[usage], &[], &[], &checkpoint)
+            .expect("commit synthetic Codex usage");
+
+        let (sessions, count) = db
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("query Codex session");
+        assert_eq!(count, 1);
+        assert_eq!(sessions[0].context_tokens, 190_000);
+        assert_eq!(sessions[0].context_window, Some(258_000));
     }
 
     #[test]
