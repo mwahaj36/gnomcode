@@ -92,30 +92,6 @@ enum Commands {
         #[command(subcommand)]
         action: LicenseCommands,
     },
-    /// Pair this device or cloud environment through a browser (no session file copying).
-    Pair {
-        /// Name shown on the approval screen.
-        #[arg(long)]
-        name: Option<String>,
-    },
-    /// Register a cloud session and send presence heartbeats (no inferred usage).
-    CloudSession {
-        /// Provider; omitted only when Codex cloud metadata is available.
-        #[arg(long, value_parser = ["codex", "claude-code", "cursor", "antigravity", "gemini-cli", "cline", "aider"])]
-        agent: Option<String>,
-        /// Opaque provider session ID. Required except for detected Codex cloud threads.
-        #[arg(long)]
-        session_id: Option<String>,
-        /// Existing Supabase session JSON file; defaults to FleetHUD home/session.json.
-        #[arg(long)]
-        pairing_file: Option<PathBuf>,
-        /// Append-only metadata JSONL with per-invocation usage deltas (see docs/CLOUD_SESSIONS.md).
-        #[arg(long)]
-        usage_file: Option<PathBuf>,
-        /// Register and attempt one sync, then exit.
-        #[arg(long)]
-        once: bool,
-    },
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
@@ -166,46 +142,6 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
-        Commands::Pair { name } => {
-            let name = name.unwrap_or_else(fleethud_platform::hostname);
-            let request = fleethud_daemon::pairing::PairingRequest::new(&name)
-                .map_err(|error| anyhow::anyhow!("{error}"))?;
-            println!(
-                "Pair this environment with the same FleetHUD account you use on your other devices."
-            );
-            println!(
-                "Open this link in your browser (keep it private):\n{}",
-                request.url
-            );
-            println!(
-                "Verify code: {}. Approve within ten minutes. Waiting...",
-                request.code
-            );
-            let session_path = fleethud_home().join("session.json");
-            tokio::select! {
-                result = request.complete(&session_path) => {
-                    result.map_err(|error| anyhow::anyhow!("{error}"))?;
-                    let mut daemon = std::process::Command::new(std::env::current_exe()?);
-                    daemon.arg("daemon").stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-                    #[cfg(target_os = "windows")]
-                    {
-                        use std::os::windows::process::CommandExt as _;
-                        daemon.creation_flags(0x0800_0000);
-                    }
-                    daemon.spawn().context("Account paired, but the daemon could not start. Run fleethud daemon.")?;
-                    println!("Account paired. FleetHUD daemon started or already running. Allow up to 60 seconds for sync.");
-                }
-                _ = tokio::signal::ctrl_c() => println!("Pairing cancelled."),
-            }
-            Ok(())
-        }
-        Commands::CloudSession {
-            agent,
-            session_id,
-            pairing_file,
-            usage_file,
-            once,
-        } => cmd_cloud_session(db_path, agent, session_id, pairing_file, usage_file, once).await,
     }
 }
 
@@ -713,12 +649,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         fleethud_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
-    let _cloud_sync_handle = fleethud_platform::cloud_session_identity()
-        .is_none()
-        .then(|| fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db()));
-    let _cloud_reader_handle = fleethud_daemon::cloud::spawn_cloud_reader();
-    let _cloud_presence_handle =
-        fleethud_daemon::cloud::spawn_auto_collector(db_path.to_path_buf());
+    let _cloud_sync_handle = fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db());
 
     let state = fleethud_daemon::api::AppState {
         db: orchestrator.db(),
@@ -923,97 +854,4 @@ Add-Type -AssemblyName System.Windows.Forms
     }
 
     Ok(())
-}
-
-async fn cmd_cloud_session(
-    db_path: PathBuf,
-    agent: Option<String>,
-    session_id: Option<String>,
-    pairing_file: Option<PathBuf>,
-    usage_file: Option<PathBuf>,
-    once: bool,
-) -> Result<()> {
-    use fleethud_core::AgentId;
-    let detected = fleethud_platform::cloud_session_identity();
-    let agent_name = agent
-        .as_deref()
-        .or_else(|| detected.as_ref().map(|(provider, _)| provider.as_str()))
-        .unwrap_or("codex");
-    let agent_id = match agent_name {
-        "codex" => AgentId::Codex,
-        "claude-code" => AgentId::ClaudeCode,
-        "cursor" => AgentId::Cursor,
-        "antigravity" => AgentId::Antigravity,
-        "gemini-cli" => AgentId::GeminiCli,
-        "cline" => AgentId::Cline,
-        "aider" => AgentId::Aider,
-        _ => anyhow::bail!("unsupported agent"),
-    };
-    let native_id = session_id
-        .or_else(|| {
-            detected
-                .as_ref()
-                .filter(|(provider, _)| *provider == agent_id)
-                .map(|(_, id)| id.clone())
-        })
-        .context(
-            "No cloud session detected. Supply --agent and --session-id from the provider runtime.",
-        )?;
-    anyhow::ensure!(
-        fleethud_daemon::cloud::valid_session_id(&native_id),
-        "Session ID must contain 1-200 ASCII letters, digits, dots, underscores or hyphens"
-    );
-    let pairing_file = pairing_file.unwrap_or_else(|| fleethud_home().join("session.json"));
-    let client = fleethud_daemon::cloud::client().context("failed to initialize cloud client")?;
-    println!(
-        "Cloud collector: {agent_name}. Activity is unknown; usage and cost require measured events."
-    );
-    if !pairing_file.exists() {
-        println!("Local registration only: pair a FleetHUD account to publish to the web console.");
-    }
-    loop {
-        let path = db_path.clone();
-        let id = native_id.clone();
-        let usage_path = usage_file.clone();
-        let (session, import_failed) = tokio::task::spawn_blocking(move || {
-            let mut db = Database::open(&path)?;
-            // Existing adapters supply measured usage when native logs are available.
-            // A bad or missing log must not block collector presence.
-            if usage_path.is_none() { let _ = ingest_all(&mut db); }
-            fleethud_daemon::cloud::heartbeat(&mut db, agent_id, &id)?;
-            let mut import_failed = false;
-            if let Some(path) = usage_path {
-                if fleethud_daemon::cloud::ingest_usage_file(&mut db, agent_id, &id, &path).is_err() {
-                    import_failed = true;
-                    eprintln!("Usage import failed; check the metadata JSONL format. Agent execution is unaffected.");
-                }
-            }
-            fleethud_daemon::cloud::heartbeat(&mut db, agent_id, &id).map(|session| (session, import_failed))
-        })
-        .await
-        .context("heartbeat task failed")?
-        .context("failed to save heartbeat")?;
-        if once && import_failed {
-            anyhow::bail!(
-                "Presence saved locally; usage import failed. No usage batch was committed."
-            );
-        }
-        match fleethud_daemon::cloud::publish(&client, &pairing_file, &session).await {
-            Ok(true) => println!("Cloud presence synchronized."),
-            Ok(false) => println!("Cloud sync is unpaired; data remains local."),
-            Err(_) if once => anyhow::bail!(
-                "Presence saved locally; cloud sync failed. Check pairing, network and the cloud-session migration."
-            ),
-            Err(_) => {
-                eprintln!("Cloud sync unavailable; retrying in 30 seconds. Presence remains local.")
-            }
-        }
-        if once {
-            return Ok(());
-        }
-        tokio::select! {
-            result = tokio::signal::ctrl_c() => { result.context("shutdown signal failed")?; return Ok(()); }
-            () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
-        }
-    }
 }

@@ -3,6 +3,14 @@
 All notable changes to FleetHUD are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-10-27
+
+- Withdraw hosted cloud-session tracking, provider runtime detection, automatic collectors, usage-file imports and the new browser pairing flow.
+- Remove cloud-presence fetching, session merging, tray sections and the /pair screen. Preserve older desktop sign-in, manual desktop pairing and desktop summary sync.
+- Preserve console loading/error fixes, pricing fixes, private credential handling, daemon locks and verified installers.
+- Ignore legacy local cloud-presence rows without deleting local history. Include a repeatable SQL cleanup for retired backend endpoints and tables that preserves desktop sync and Auth.
+- Publish replacement Windows x64 and Linux x86_64/ARM64 downloads.
+
 ## [1.4.0] - 2026-10-27
 
 - Add explanatory browser pairing for cloud workspaces and desktop devices with an independent, encrypted, single-use account login.

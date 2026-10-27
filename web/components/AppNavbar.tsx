@@ -63,7 +63,6 @@ export default function AppNavbar() {
             >
               Settings
             </Link>
-            <Link href="/pair" className="px-3 py-1 rounded text-muted hover:text-foreground">Pair device</Link>
             <Link
               href="/docs"
               className="px-3 py-1 rounded text-muted hover:text-foreground transition-colors"
