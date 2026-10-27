@@ -3,10 +3,6 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-function Mark() {
-  return <svg viewBox="0 0 2048 2048" aria-hidden="true"><polygon points="290.67 1756.53 290.67 291.47 1755.73 291.47" /><rect x="799.39" y="789.88" width="957.95" height="957.95" /></svg>;
-}
-
 export default function MarketingNavbar() {
   const header = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -31,7 +27,7 @@ export default function MarketingNavbar() {
 
   return <header className="sp-site-header" ref={header}>
     <div className="sp-site-nav">
-      <Link className="sp-site-brand" href="/"><Mark /><span>spawnt</span></Link>
+      <Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>spawnt</span></Link>
       <span className="sp-site-divider" aria-hidden="true">/</span>
       <nav className={menuOpen ? "sp-site-links open" : "sp-site-links"} aria-label="Main navigation">
         <Link href="/#features" onClick={() => setMenuOpen(false)}>Product</Link>

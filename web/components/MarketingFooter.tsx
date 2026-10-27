@@ -5,10 +5,6 @@ import { useEffect, useState } from "react";
 
 type Theme = "system" | "light" | "dark";
 
-function Mark() {
-  return <svg viewBox="0 0 2048 2048" aria-hidden="true"><polygon points="290.67 1756.53 290.67 291.47 1755.73 291.47" /><rect x="799.39" y="789.88" width="957.95" height="957.95" /></svg>;
-}
-
 export default function MarketingFooter() {
   const [theme, setTheme] = useState<Theme>("system");
   useEffect(() => {
@@ -27,7 +23,7 @@ export default function MarketingFooter() {
 
   return <footer className="sp-site-footer" id="site-footer">
     <div className="sp-site-footer-grid">
-      <div className="sp-site-footer-intro"><Link className="sp-site-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores metadata only. Prompts, code and output are never saved or sent.</p></div>
+      <div className="sp-site-footer-intro"><Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores metadata only. Prompts, code and output are never saved or sent.</p></div>
       <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
       <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs#privacy">Privacy</Link></div>
       <div><span>MORE</span><Link href="/auth">Account</Link><button className="sp-site-theme" type="button" onClick={cycleTheme} aria-label={`Theme: ${theme}. Switch mode`}>Theme / {theme}</button></div>

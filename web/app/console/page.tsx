@@ -458,9 +458,7 @@ export default function ConsolePage() {
       {/* Header Controls */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono sp-console-heading">
         <div className="flex items-center gap-3">
-          <div className="sp-console-mark" aria-hidden="true">
-            <svg viewBox="0 0 2048 2048"><polygon points="290.67 1756.53 290.67 291.47 1755.73 291.47" /><rect x="799.39" y="789.88" width="957.95" height="957.95" /></svg>
-          </div>
+          <span className="sp-console-mark sp-brand-mark" aria-hidden="true" />
           <div>
             <div className="text-xl font-bold text-foreground">spawnt / {activeView}</div>
             <div className="text-xs text-muted flex items-center gap-2 mt-0.5">

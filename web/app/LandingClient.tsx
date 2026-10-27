@@ -29,9 +29,7 @@ const plans = [
   { name: "Teams", price: "$12", term: "/ seat / month", promise: "Shared visibility for a team.", points: ["Team dashboard", "Shared caps", "Team alerts"], href: "/pricing", action: "View Teams" },
 ];
 
-function Mark() {
-  return <svg className="sp-mark" viewBox="0 0 2048 2048" fill="currentColor" aria-hidden="true"><polygon points="290.67 1756.53 290.67 291.47 1755.73 291.47" /><rect x="799.39" y="789.88" width="957.95" height="957.95" /></svg>;
-}
+function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="true" />; }
 
 export default function LandingPage() {
   const [tab, setTab] = useState(0);
