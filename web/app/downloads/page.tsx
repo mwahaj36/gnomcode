@@ -16,7 +16,7 @@ export default function DownloadsPage() {
       <div className="flex justify-between items-center pb-6 border-b border-border mb-10 flex-wrap gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-green/15 border border-green/30 text-green font-mono text-xs mb-2">
-            <span>Production Release &bull; v1.3.0</span>
+            <span>Production Release &bull; v1.4.1</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
             Download spawnt
@@ -55,7 +55,7 @@ export default function DownloadsPage() {
             </a>
             <div className="flex justify-between items-center text-[11px] text-muted mb-2 px-1">
               <span>Standalone Installer (x64)</span>
-              <a href="/downloads/FleetHUD-v1.3.0-windows-x64.zip" download className="text-accent hover:underline">
+              <a href="/downloads/FleetHUD-v1.4.1-windows-x64.zip" download className="text-accent hover:underline">
                 Zip (.zip)
               </a>
             </div>
@@ -73,7 +73,7 @@ export default function DownloadsPage() {
             </div>
             <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Mac</h2>
             <p className="text-xs text-muted leading-relaxed mb-6">
-              macOS builds for Apple Silicon and Intel are pending a working macOS build runner. No verified v1.3.0 macOS package is available yet.
+              macOS builds for Apple Silicon and Intel are pending a working macOS build runner. No verified v1.4.1 macOS package is available yet.
             </p>
           </div>
           <div>
@@ -113,10 +113,10 @@ export default function DownloadsPage() {
           <span className="text-xs text-green font-semibold">[CROSS-PLATFORM]</span>
         </div>
         <p className="text-xs text-muted mb-4">
-          The v1.3.0 npm package has not been published. Use the verified native installer or Linux installation command above.
+          The v1.4.1 npm package has not been published. Use the verified native installer or Linux installation command above.
         </p>
         <div className="bg-bg border border-border rounded-lg p-3.5 text-xs text-accent select-all">
-          Native downloads above include v1.3.0
+          Native downloads above include v1.4.1
         </div>
       </div>
     </div>

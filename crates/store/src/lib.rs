@@ -153,7 +153,7 @@ pub struct SessionListItem {
     /// Originating device name (e.g. hostname or "local").
     #[serde(default)]
     pub device_name: Option<String>,
-    /// False for presence-only collectors: zero counters do not mean measured zero usage.
+    /// Whether this session has a native usage source.
     pub usage_available: bool,
     /// Trust level of the API-equivalent cost; unknown when pricing or usage is missing.
     pub cost_basis: TrustLevel,
@@ -1098,18 +1098,6 @@ impl Database {
         }
     }
 
-    /// Marks an explicitly registered session as cloud-hosted, including sessions first seen in native logs.
-    ///
-    /// # Errors
-    /// Returns an error if SQLite cannot update the session.
-    pub fn mark_cloud_session(&self, id: &str) -> Result<(), Error> {
-        self.conn.execute(
-            obfstr::obfstr!("UPDATE session SET surface = 'cloud', model = coalesce((SELECT model FROM usage_record WHERE session_id = ?1 ORDER BY timestamp DESC LIMIT 1), model) WHERE id = ?1"),
-            [id],
-        )?;
-        Ok(())
-    }
-
     /// Queries live and recent active agent sessions, ordered by `last_event_at DESC`.
     ///
     /// # Errors
@@ -1119,6 +1107,7 @@ impl Database {
             r#"
             SELECT id, agent, surface, project_id, parent_session_id, model, title, state, pid, started_at, last_event_at
             FROM session
+            WHERE surface <> 'cloud'
             ORDER BY last_event_at DESC
             LIMIT ?1
             "#,
@@ -1141,7 +1130,6 @@ impl Database {
             let surface = match surface_str.as_str() {
                 "ide" => Surface::Ide,
                 "desktop_app" => Surface::DesktopApp,
-                "cloud" => Surface::Cloud,
                 _ => Surface::Cli,
             };
             let state_str: String = row.get(7)?;
@@ -1151,7 +1139,6 @@ impl Database {
                 "awaiting_approval" => SessionState::AwaitingApproval,
                 "error" => SessionState::Error,
                 "ended" => SessionState::Ended,
-                "connected" => SessionState::Connected,
                 _ => SessionState::Idle,
             };
             let s_at_str: String = row.get(9)?;
@@ -1165,11 +1152,7 @@ impl Database {
 
             let now = Utc::now();
             let is_stale = (now - last_event_at).num_minutes() > 15;
-            let state = if raw_state == SessionState::Connected
-                && (now - last_event_at).num_seconds() > 90
-            {
-                SessionState::Ended
-            } else if is_stale
+            let state = if is_stale
                 && (raw_state == SessionState::Tool || raw_state == SessionState::Thinking)
             {
                 SessionState::Idle
@@ -1723,7 +1706,7 @@ impl Database {
             .unwrap_or("all");
         let total_count: i64 = self.conn.query_row(
             r#"SELECT COUNT(*) FROM session s
-               WHERE (?1 = 'all' OR s.agent = ?1)
+               WHERE s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
                    OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))"#,
@@ -1736,7 +1719,7 @@ impl Database {
                 SELECT s.*, p.name AS project_name,
                     CASE WHEN s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3 THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
-                WHERE (?1 = 'all' OR s.agent = ?1)
+                WHERE s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
                     OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))
@@ -1800,14 +1783,7 @@ impl Database {
                         state_str.as_str(),
                         "thinking" | "tool" | "awaiting_approval"
                     );
-                let state = if surface == "cloud" {
-                    if (now - last_event_at).num_seconds() <= 90 {
-                        "connected"
-                    } else {
-                        "disconnected"
-                    }
-                    .to_owned()
-                } else if is_active {
+                let state = if is_active {
                     state_str
                 } else {
                     "idle".to_owned()
@@ -1839,7 +1815,7 @@ impl Database {
                     total_cost_usd,
                     title,
                     device_name: None,
-                    usage_available: surface != "cloud" || usage_count > 0,
+                    usage_available: true,
                     cost_basis: if usage_count == 0 || unknown_pricing.unwrap_or(0) > 0 {
                         TrustLevel::Unknown
                     } else {
@@ -2193,6 +2169,62 @@ mod tests {
         ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
         SessionState, Surface, TrustLevel, UsageRecord,
     };
+
+    #[test]
+    fn retired_cloud_rows_stay_hidden_without_deleting_history() {
+        let mut db = Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, "fixture", None);
+        let now = Utc::now();
+        let session = Session {
+            id: "codex:retired".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        db.commit_batch(
+            &[project],
+            &[session],
+            &[],
+            &[],
+            &[],
+            &SourceCheckpoint {
+                file_path: "fixture".to_owned(),
+                last_read_offset: 0,
+                file_size: 0,
+                fingerprint: "fixture".to_owned(),
+                last_ingested_at: now,
+            },
+        )
+        .expect("commit");
+        db.conn
+            .execute(
+                "UPDATE session SET surface='cloud' WHERE id='codex:retired'",
+                [],
+            )
+            .expect("legacy row");
+        assert!(
+            db.list_active_sessions(10)
+                .expect("CLI sessions")
+                .is_empty()
+        );
+        let (rows, total) = db
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("UI sessions");
+        assert!(rows.is_empty());
+        assert_eq!(total, 0);
+        let count: i64 = db
+            .conn
+            .query_row("SELECT count(*) FROM session", [], |row| row.get(0))
+            .expect("history");
+        assert_eq!(count, 1);
+    }
 
     #[test]
     fn guardrail_rules_and_alerts_persist_without_duplicates() {
