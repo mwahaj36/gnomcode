@@ -12,3 +12,9 @@ const decoded=jsArg(attack).replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace
 assert.equal(JSON.parse(decoded),attack);
 assert.doesNotMatch(html,/onclick="(?:executeRelay|dismissRelay|deleteRule|disarmResume|deleteCustomPricing)\('\$\{/);
 console.log('PASS: local inline script syntax, metadata escaping and action argument roundtrip');
+
+for(const id of ['overview-summary','providers-container','auth-cloud-status','connection-status','cloud-sync-status']) assert.ok(html.includes('id=' + String.fromCharCode(34) + id + String.fromCharCode(34)), 'required runtime status target: '+id);
+
+const markup=html.replace(/<script[^>]*>[\s\S]*?<\/script>/g,'');
+const declaredIds=new Set([...markup.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));
+for(const match of html.matchAll(/getElementById\('([^']+)'\)\./g)) assert.ok(declaredIds.has(match[1]),'native runtime target: '+match[1]);

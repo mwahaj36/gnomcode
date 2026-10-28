@@ -33,3 +33,7 @@ updateSummary(element,{activeCount:1});
 assert.equal(writes,1);assert.equal(values.some(value=>value.changed),false);
 updateSummary(element,{activeCount:1});assert.equal(writes,1,'unchanged polling must not rewrite markup');
 updateSummary(element,{activeCount:2});assert.equal(writes,2);assert.equal(values.filter(value=>value.changed).length,1,'only changed values animate');
+
+const webConsole = await readFile(new URL('../web/app/console/page.tsx', import.meta.url), 'utf8');
+assert.doesNotMatch(webConsole, /fleethud_cloud_sessions_live/, 'retired hosted sessions must not be queried');
+assert.match(webConsole, /fleethud_sync_state/, 'desktop summary sync remains available');

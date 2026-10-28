@@ -153,8 +153,6 @@ export default function ConsolePage() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [quickTokenInput, setQuickTokenInput] = useState("");
-  const [showTokenModal, setShowTokenModal] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState("");
 
   // Live Metrics
@@ -179,10 +177,9 @@ export default function ConsolePage() {
   const [activeView, setActiveView] = useState("overview");
   const [viewError, setViewError] = useState("");
   const lastDesktopSnapshot = useRef<any>(null);
-  const lastCloudSessions = useRef<SessionItem[]>([]);
 
   useEffect(() => {
-    lastDesktopSnapshot.current = null; lastCloudSessions.current = [];
+    lastDesktopSnapshot.current = null;
     setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
     setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
@@ -208,13 +205,7 @@ export default function ConsolePage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthChecked(true);
-      if (session && typeof window !== "undefined") {
-        const cb = localStorage.getItem("fleethud_auth_callback");
-        if (cb) {
-          localStorage.removeItem("fleethud_auth_callback");
-          window.location.href = `${cb}?session=${encodeURIComponent(JSON.stringify(session))}`;
-        }
-      }
+
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -239,24 +230,18 @@ export default function ConsolePage() {
     try {
     if (user) {
       try {
-        const [desktop, cloud] = await Promise.all([
-          supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle(),
-          supabase.from("fleethud_cloud_sessions_live").select("session,updated_at").eq("user_id", user.id).order("updated_at", { ascending: false }).limit(1000),
-        ]);
+        const desktop = await supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle();
         if (generation !== metricsGeneration.current) return false;
         if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
-        if (!cloud.error) lastCloudSessions.current = (cloud.data || []).map(row => row.session as SessionItem);
         const snap = lastDesktopSnapshot.current;
-        if (desktop.error || cloud.error) setViewError("Some cloud data is unavailable. Last received data remains visible where available.");
-        refreshed = !desktop.error && !cloud.error;
+        if (desktop.error) setViewError("Desktop snapshot unavailable. Last received data remains visible.");
+        refreshed = !desktop.error;
         if (refreshed) setLastSuccessfulUpdate(new Date());
-        const cloudSessions = lastCloudSessions.current;
-        const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
+        const allSessions: SessionItem[] = [...(snap?.sessions || [])];
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
           (agentFilter === "all" || session.agent === agentFilter) &&
-          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
-        );
-        setSessions(filtered.slice((page - 1) * 10, page * 10));
+          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
+        setSessions(filtered.slice((page-1)*10,page*10));
         setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
         setQuota(snap?.quota || []);
         setSnapshotGeneratedAt(snap?.generated_at || null);
@@ -267,13 +252,10 @@ export default function ConsolePage() {
         setActiveCount(snap?.active_count ?? null);
         setTotalCount(filtered.length);
         setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
-        const cloudStatus = cloud.error ? "Cloud sessions unavailable" : `${cloudSessions.length} cloud sessions · EXACT`;
         if (snap) {
           const ageMs = snap.generated_at ? Date.now() - Date.parse(snap.generated_at) : Infinity;
-          setConnectedSource(`${ageMs < 120000 ? "Desktop connected" : "Desktop data stale"} · ${cloudStatus}`);
-        } else {
-          setConnectedSource(desktop.error ? `Desktop unavailable · ${cloudStatus}` : cloudStatus);
-        }
+          setConnectedSource(ageMs < 120000 ? "Desktop connected" : "Desktop data stale");
+        } else setConnectedSource(desktop.error ? "Desktop unavailable" : "No paired desktop snapshot received");
       } catch {
         if (generation !== metricsGeneration.current) return false;
         setConnectedSource("Offline");
@@ -361,19 +343,6 @@ export default function ConsolePage() {
     }
   };
 
-  const applyQuickToken = async () => {
-    try {
-      const raw = atob(quickTokenInput.trim());
-      const session = JSON.parse(raw);
-      await supabase.auth.setSession(session);
-      setUser(session.user);
-      setShowTokenModal(false);
-      setQuickTokenInput("");
-    } catch {
-      alert("Invalid pairing token format. Please copy fresh from your web browser session.");
-    }
-  };
-
   const relayBusy = useRef(false);
   const handleRemoteRelay = async (session: SessionItem) => {
     if (relayBusy.current || !window.confirm("Request a clean session on the paired desktop? The daemon applies your existing permissions.")) return;
@@ -436,39 +405,6 @@ export default function ConsolePage() {
 
   return (
     <main className="sp-console-shell sp-console-app mx-auto py-10 font-sans">
-      {/* Quick Token Pairing Modal */}
-      {showTokenModal && (
-        <div className="fixed inset-0 z-50 bg-bg/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md w-full font-mono text-xs shadow-2xl">
-            <div className="text-sm font-bold text-foreground mb-1">Quick Pair Desktop App</div>
-            <p className="text-muted mb-3 text-[11px]">
-              If you signed into GitHub in your browser, choose <strong>Copy desktop token</strong> there and paste it here to authenticate without typing your password.
-            </p>
-            <textarea
-              rows={4}
-              value={quickTokenInput}
-              onChange={(e) => setQuickTokenInput(e.target.value)}
-              placeholder="Paste pairing token here..."
-              className="w-full bg-bg border border-border rounded p-2 text-foreground mb-3 focus:outline-none focus:border-accent"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowTokenModal(false)}
-                className="px-3 py-1.5 bg-card border border-border rounded text-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={applyQuickToken}
-                className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90"
-              >
-                Connect Session
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Header Controls */}
       <header className="sp-console-heading">
         <div className="sp-console-brand-lockup">
@@ -483,18 +419,19 @@ export default function ConsolePage() {
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={refreshCloudSnapshot} disabled={refreshing || !user || activeView === "settings"} title={activeView === "settings" ? "Use Reload preferences in Settings" : "Read the latest received cloud snapshot"} className="sp-console-action" aria-busy={refreshing}>{refreshing ? "Refreshing…" : "Reload view"}</button>
+          {user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}
           <button type="button" className="sp-console-action" onClick={() => changeConsoleView("settings")}>Settings</button>
         </div>
       </header>
 
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
-        <p>Sign in to view synced desktop data, or pair a desktop app with an existing browser account.</p>
+        <p>Sign in to view your paired desktop snapshots. Hosted cloud-session tracking is unavailable.</p>
         <div className="sp-console-connect-actions">
-          <button onClick={() => setShowTokenModal(true)} className="sp-console-link">Pair desktop</button>
           <Link href="/auth" className="sp-console-link sp-console-link-primary">Sign in</Link>
         </div>
       </section>}
 
+      {copyFeedback && <p role="status" className="sp-console-notice">{copyFeedback}</p>}
       <div className="sp-console-refresh-state" aria-live="polite">
         <span>{refreshMessage || connectedSource}</span>
         <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
@@ -596,7 +533,7 @@ export default function ConsolePage() {
 
       {(activeView === "overview" || activeView === "limits") && <div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} />}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
-      <p className="text-xs text-muted mb-3">Cloud usage and estimated cost appear in session rows. Summary charts show desktop reports.</p>
+      <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
       {/* Live & Historical Agent Sessions */}
       {(activeView === "overview" || activeView === "sessions") && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
