@@ -167,6 +167,12 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/repos/file", get(repo_file_get_handler))
         .route("/api/v1/repos/diff", get(repo_diff_get_handler))
+        .route("/api/v1/sessions/{id}/switch", post(switch_session_handler))
+        .route("/api/v1/sessions/{id}/resume", post(resume_session_handler))
+        .route(
+            "/api/v1/routing/policy",
+            get(routing_policy_get_handler).post(routing_policy_post_handler),
+        )
         .with_state(state)
 }
 
@@ -1170,6 +1176,149 @@ async fn repo_diff_get_handler(
         "diff": diff_str,
         "status": status_str
     })))
+}
+
+/// Request payload to switch a session to a target model with zero-token handoff.
+#[derive(Debug, Deserialize)]
+pub struct SwitchSessionRequest {
+    /// Target model to switch to.
+    pub target_model: String,
+    /// Optional agent surface identifier.
+    pub agent: Option<String>,
+}
+
+async fn switch_session_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<SwitchSessionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+
+    let history = db.get_session_chat(&id, Some(50)).unwrap_or_default();
+    let turn_count = history.len() as u32;
+
+    let mut user_prompts = Vec::new();
+    for evt in &history {
+        if evt.role == spawnt_core::ChatRole::User {
+            user_prompts.push(evt.content.clone());
+        }
+    }
+    let summary = if user_prompts.is_empty() {
+        format!("Continuation of session {id}")
+    } else {
+        user_prompts.join("; ")
+    };
+    let redacted_summary = spawnt_core::redact::redact_chat_content(&summary);
+
+    // Compile zero-token handoff packet
+    let packet = spawnt_core::HandoffPacket {
+        session_id: id.clone(),
+        source_model: "previous".to_owned(),
+        target_model: payload.target_model.clone(),
+        prompt_summary: redacted_summary,
+        touched_files: Vec::new(),
+        turn_count,
+        created_at: chrono::Utc::now(),
+    };
+
+    // Record system chat event documenting switch
+    let handoff_evt = spawnt_core::ChatEvent {
+        event_id: format!(
+            "switch-{}-{}",
+            id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ),
+        session_id: id.clone(),
+        turn_index: (turn_count + 1) as i64,
+        role: spawnt_core::ChatRole::System,
+        content: format!("Model switched to {}", payload.target_model),
+        tool_name: None,
+        status: Some("switched".to_owned()),
+        created_at: chrono::Utc::now(),
+    };
+    let _ = db.insert_chat_event(&handoff_evt);
+
+    Ok(Json(packet))
+}
+
+/// Request payload to resume an idle or suspended session.
+#[derive(Debug, Deserialize, Default)]
+pub struct ResumeSessionRequest {
+    /// Optional resume prompt instruction.
+    pub prompt: Option<String>,
+    /// Optional maximum run count.
+    pub max_runs: Option<u32>,
+}
+
+async fn resume_session_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<ResumeSessionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+
+    let prompt = payload.prompt.unwrap_or_else(|| "continue".to_owned());
+    let entry = spawnt_core::rules::ResumeQueueEntry {
+        session_id: id.clone(),
+        agent: spawnt_core::AgentId::ClaudeCode,
+        cwd: ".".to_owned(),
+        resume_prompt: prompt,
+        max_runs: payload.max_runs.unwrap_or(1),
+        runs_completed: 0,
+        eligible_after: chrono::Utc::now(),
+    };
+
+    db.arm_resume_queue(&entry)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "ok": true,
+        "session_id": id,
+        "status": "armed"
+    })))
+}
+
+async fn routing_policy_get_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let policy = db
+        .get_routing_policy()
+        .unwrap_or(spawnt_core::RoutingPolicy::AskFirst);
+    Ok(Json(json!({ "policy": policy.as_str() })))
+}
+
+/// Payload for updating global routing policy.
+#[derive(Debug, Deserialize)]
+pub struct UpdateRoutingPolicyRequest {
+    /// Policy string: `ask_first`, `automatic`, `deny_cross_provider`.
+    pub policy: String,
+}
+
+async fn routing_policy_post_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateRoutingPolicyRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let Some(policy) = spawnt_core::RoutingPolicy::parse_policy(&payload.policy) else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    let db = state.db.lock().await;
+    db.save_routing_policy(policy)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({ "ok": true, "policy": policy.as_str() })))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -2627,6 +2776,97 @@ mod tests {
             .header("Authorization", "Bearer perm-token")
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"action":"escalate_permissions"}"#))
+            .expect("request");
+        let res_bad = app.oneshot(req_bad).await.expect("res");
+        assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn switch_session_endpoint_compiles_handoff_packet() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "switch-token".to_owned(),
+            orchestrator: None,
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/switch-test-s1/switch")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer switch-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"target_model":"o3"}"#))
+            .expect("request");
+
+        let res = app.oneshot(req).await.expect("res");
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 16384)
+            .await
+            .expect("body");
+        let packet: spawnt_core::HandoffPacket = serde_json::from_slice(&body).expect("json");
+        assert_eq!(packet.target_model, "o3");
+        assert_eq!(packet.session_id, "switch-test-s1");
+    }
+
+    #[tokio::test]
+    async fn resume_session_endpoint_arms_queue() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "resume-token".to_owned(),
+            orchestrator: None,
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/resume-test-s1/resume")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer resume-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"prompt":"continue work","max_runs":2}"#))
+            .expect("request");
+
+        let res = app.oneshot(req).await.expect("res");
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn routing_policy_endpoints_get_and_set() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "policy-token".to_owned(),
+            orchestrator: None,
+        });
+
+        // 1. GET default policy
+        let req_get = Request::builder()
+            .uri("/api/v1/routing/policy")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer policy-token")
+            .body(Body::empty())
+            .expect("request");
+        let res_get = app.clone().oneshot(req_get).await.expect("res");
+        assert_eq!(res_get.status(), StatusCode::OK);
+
+        // 2. POST update policy
+        let req_post = Request::builder()
+            .method("POST")
+            .uri("/api/v1/routing/policy")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer policy-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"policy":"automatic"}"#))
+            .expect("request");
+        let res_post = app.clone().oneshot(req_post).await.expect("res");
+        assert_eq!(res_post.status(), StatusCode::OK);
+
+        // 3. POST invalid policy -> 400 Bad Request
+        let req_bad = Request::builder()
+            .method("POST")
+            .uri("/api/v1/routing/policy")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer policy-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"policy":"invalid_policy_name"}"#))
             .expect("request");
         let res_bad = app.oneshot(req_bad).await.expect("res");
         assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
