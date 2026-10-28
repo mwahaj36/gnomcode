@@ -3,7 +3,7 @@
 All notable changes to FleetHUD are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
-## [1.4.0] — prepared 2026-10-28
+## [1.5.0] — prepared 2026-10-28
 
 ### Changed
 - Applied spawnt branding, theme tokens, self-hosted fonts, canonical icons and balanced square controls across marketing, account, settings, both consoles and Windows setup/tray.

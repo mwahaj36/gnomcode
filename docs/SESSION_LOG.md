@@ -2,6 +2,11 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — release version collision correction
+
+- Verification of the new draft exposed pre-existing published v1.4.0 and v1.4.1 tags, despite this checkout's original 1.3.0 workspace version. The initial assumption of 1.4.0 was incorrect.
+- Corrected the redesign release to 1.5.0, rebuilding every available platform artifact and renaming only the draft created in this session. Existing published releases/tags remain untouched. Removed session-generated 1.4.0 archive files so they cannot be mistaken for those older tags.
+
 ## 2026-10-28 — release verification and external blockers
 
 - Rebuilt Windows x64 setup/zip and Linux x64/ARM64 archives from final shared-console sources. Linux ARM64 executes under QEMU; Linux x64 clippy and workspace tests pass. Windows Rust gate includes installed cargo-deny; Rust 1.87 workspace check and production Next build pass. Windows setup dark render inspected without installation.
