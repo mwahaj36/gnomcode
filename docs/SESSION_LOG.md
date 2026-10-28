@@ -1,3 +1,16 @@
+## 2026-10-28 — Phase 5: M9 Remote access, E2EE pairing, Cloudflare relay, and phone companion
+
+- Completed ADR 0019 and security threat model (`docs/security/0001-remote-threat-model.md`).
+- Domain types (`crates/core`): Added `RemotePairingSession` and `EncryptedRemoteFrame`. Verified 6-digit SAS verification code derivation (`derive_verify_code`) with SHA-256 and salt.
+- Cloudflare Relay Worker (`workers/remote-relay`): Implemented zero-knowledge WebSocket Durable Object (`RelayRoom`) in TypeScript. Relays forward authenticated end-to-end encrypted frames without inspecting payloads or terminating encryption. Verified with automated mock tests (`workers/remote-relay/test/relay.test.mjs`).
+- Daemon API (`crates/daemon`):
+  - `GET /api/v1/remote/pairing`: generates ephemeral X25519 room and pairing parameters.
+  - `GET /api/v1/remote/status`: inspects active remote pairing and relay state.
+  - `POST /api/v1/remote/revoke`: revokes remote session tokens and breaks peer relay connections.
+  - Added unit test `remote_pairing_status_and_revoke_endpoints` in `crates/daemon/src/api.rs`.
+- Phone Companion Web App (`web/app/remote/page.tsx`): Built responsive mobile PWA interface with room code/QR input, 6-digit confirmation code verification, live session status inspection, and panic disconnect switch.
+- Quality gate checks passing across workspace: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo deny`, web/desktop/npm/worker test suites.
+
 ## 2026-10-28 — Phase 4: M8 router, zero-token handoff, switch/resume, and policy controls
 
 - Implemented ADR 0018: model router, zero-token handoff compilation, switch/resume orchestration, and CLI policy controls.
