@@ -1,4 +1,4 @@
-# spawnt Windows system tray — https://fleethud.pro
+# spawnt Windows system tray - https://fleethud.pro
 $trayMutex = New-Object System.Threading.Mutex($false, "Local\FleetHUDTray")
 try {
     $ownsTray = $trayMutex.WaitOne(0)
@@ -392,10 +392,10 @@ $timer.Add_Tick({
         if (-not $live) { throw "Daemon unavailable" }
         $idleSessionItem.Text = "  Fleet Idle (no active local agents)"
         $count = $live.active_count
-        $hasSpend = $null -ne $live.timeline -and $null -ne $live.timeline.total_cost_usd
+        $hasSpend = $null -ne $live.timeline -and ($live.timeline.priced_turns -gt 0 -or $live.timeline.cost_basis -in @('estimated','exact','api')) -and $null -ne $live.timeline.total_cost_usd
         if ($hasSpend) {
             $spend = [double]$live.timeline.total_cost_usd
-            $spendItem.Text = "Today: `$$($spend.ToString('0.00')) EST"
+            $coverage = if ($live.timeline.unpriced_turns -gt 0) { "partial estimate" } else { "estimate" }; $spendItem.Text = "Today: `$$($spend.ToString('0.00')) $coverage"
         } else {
             $spendItem.Text = "Today: Unknown UNKNOWN"
         }
@@ -404,9 +404,9 @@ $timer.Add_Tick({
         Update-TrayIconBadge $count
 
         if ($count -gt 0) {
-            $notifyIcon.Text = "spawnt · $count active EXACT"
+            $notifyIcon.Text = "spawnt | $count active EXACT"
         } else {
-            $notifyIcon.Text = "spawnt · IDLE"
+            $notifyIcon.Text = "spawnt | IDLE"
         }
 
         # The live response already includes the first five sessions, active first.
@@ -425,7 +425,7 @@ $timer.Add_Tick({
                     $badge = if ($s.state -eq "awaiting_approval") { "WAIT" } else { "RUN" }
                     $proj = if ($s.project_name -and $s.project_name -ne "unknown") { $s.project_name } else { "fleet" }
                     $stateText = $s.state
-                    $menuText = "  $badge · $proj | $($s.agent) · $stateText"
+                    $menuText = "  $badge | $proj | $($s.agent) | $stateText"
 
                     $sessionMenuItems[$i].Text = $menuText
                     $sessionMenuItems[$i].Visible = $true
@@ -464,7 +464,7 @@ $timer.Add_Tick({
             }
         }
     } catch {
-        $notifyIcon.Text = "FleetHUD: daemon unavailable - click to restart"
+        $notifyIcon.Text = "spawnt: daemon unavailable - click to restart"
         $sessionsHeader.Text = "Local sessions unavailable"
         $idleSessionItem.Text = "  Open Mission Control to reconnect"
         $idleSessionItem.Visible = $true
