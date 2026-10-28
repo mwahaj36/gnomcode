@@ -9,6 +9,8 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Renumbered redesign ADRs to 0006–0008 to preserve main's withdrawn ADR 0005 and avoid duplicate identities. Historical published release archives are retained from main; the current release remains 1.5.0.
 - Windows full Rust gate including cargo-deny, Linux clippy/tests, Rust 1.87 check, production web build and source-matching Windows/Linux packaging passed. Native asset MIME/body tests and embedded syntax/runtime-target checks passed before authorized merge/publication. macOS remains deferred; browser visual checks remain unavailable.
 
+- GitGuardian on the integration PR flags two historical occurrences of the same invalid mock JWT in main commits 0d4f190/5c2df63. PR 45 documents its synthetic signature and remediation; the fixture file is absent from current source after PR 46. No scanner configuration or exemptions were changed.
+
 ## 2026-10-28 — final website version audit and release authorization
 
 - The user deferred macOS builds and explicitly authorized final testing as far as available tools permit, followed by merge. Browser visual checks remain unavailable and live cloud publication still awaits re-pairing; these limits are disclosed rather than treated as passes.
