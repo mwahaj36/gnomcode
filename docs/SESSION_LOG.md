@@ -2,6 +2,11 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — final v1.5.2 Account package rebuild
+
+- Rebuilt all Windows x64 and Linux x64/ARM64 release files again after the Account panel refinement so embedded HTML/CSS match the final source. Updated combined manifests and retained the existing 1.5.2 version while the release is unpublished.
+- Final source passed the Windows Rust gate, Linux clippy/workspace tests, ARM64 smoke, production web build, source/version audit, native JavaScript/navigation/account-state/icon tests and shared console/settings/tour regressions. Windows payload/updater and Unix corrupted-manifest preservation checks passed against the final files. macOS and browser screenshot checks remain explicitly deferred/unavailable.
+
 ## 2026-10-28 — desktop Account panel refinement
 
 - Replaced the oversized technical cloud-roaming card with a connection summary, concise privacy explanation, numbered pairing steps and a masked, labeled token form. Retained the current domain, manual pairing API and private credential handling.
