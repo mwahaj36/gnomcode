@@ -11,6 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 - Show Today as hourly usage since local midnight, add calendar month, and label the period next to token totals.
 - Add project-card navigation and a native project filter before pagination; web session names remain scoped to their signed-in account.
 - Reduce repeated trust tags and tidy Account, active-license and export controls.
+- Rebuild the desktop Account screen with clear connection/publication states, a numbered pairing flow and duplicate-write protection without page reloads.
 - Rebuild Windows x64 and Linux x64/ARM64 artifacts. macOS remains deferred.
 
 ## [1.5.1] — 2026-10-28
