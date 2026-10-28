@@ -3,6 +3,21 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': 
 const tokens = value => Number.isFinite(value) ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value) : 'Unknown';
 const trust = value => ({ exact: 'EXACT', estimated: 'EST', api: 'API' }[value] || 'UNKNOWN');
 
+export function renderProviders(report) {
+  if (!Array.isArray(report?.providers)) return '<section class="sp-activity"><h2>Agent and model usage</h2><p>Usage breakdown is unavailable from this source.</p></section>';
+  const priced = report.cost_basis && report.cost_basis !== 'unknown';
+  const money = value => priced && Number.isFinite(value) ? '$' + value.toFixed(2) + ' · EST' : 'Unknown · UNKNOWN';
+  return `<section class="sp-activity"><h2>Agent and model usage</h2><p>Expand an agent to inspect its measured model breakdown.</p><div class="sp-provider-list">${report.providers.length ? report.providers.map(provider => `<details data-key="${escape(provider.provider)}"><summary><strong>${escape(provider.provider)}</strong><span>${money(provider.total_cost_usd)}</span></summary><p>${money(provider.total_cache_savings_usd)} cache savings</p>${provider.models.map(model => `<div><strong>${escape(model.model)}</strong><span>Input ${escape(tokens(model.input_tokens))} · EXACT</span><span>Output ${escape(tokens(model.output_tokens))} · EXACT</span><span>${money(model.cost_usd)}</span></div>`).join('')}</details>`).join('') : '<p>No recorded agent usage in this period.</p>'}</div></section>`;
+}
+
+export function updateProviders(element, report) {
+  updateMarkup(element, renderProviders(report));
+}
+
+export function updateSummary(element, data) {
+  updateMarkup(element, renderSummary(data));
+}
+
 export function renderSummary({ activeCount = null, report = null, quotaCount = null } = {}) {
   const priced = report?.cost_basis && report.cost_basis !== 'unknown';
   const money = value => priced && Number.isFinite(value) ? '$' + value.toFixed(2) : 'Unknown';
@@ -28,7 +43,8 @@ export function renderSessions(sessions, { focus = false, rotate = false, illust
     const fill = Number.isFinite(session.context_fill_pct) ? session.context_fill_pct : null;
     const knownCost = session.cost_basis && session.cost_basis !== 'unknown' && Number.isFinite(session.total_cost_usd);
     const activeAt = new Date(session.last_event_at);
-    return `<tr><td><details data-key="${escape(session.id)}"><summary><strong>${escape(session.project_name || 'Private project')}</strong><span>${escape(session.model || 'Model unknown')}</span></summary><dl><dt>Session</dt><dd>${escape(session.id)}</dd><dt>Source</dt><dd>${escape(session.surface || 'unknown')} · ${escape(session.device_name || 'local')}</dd><dt>Started</dt><dd>${escape(session.started_at || 'Unknown')}</dd>${session.title ? `<dt>Title</dt><dd>${escape(session.title)}</dd>` : ''}<dt>Input / EXACT</dt><dd>${escape(tokens(session.input_tokens))}</dd><dt>Output / EXACT</dt><dd>${escape(tokens(session.output_tokens))}</dd><dt>Cache read / EXACT</dt><dd>${escape(tokens(session.cache_read_tokens))}</dd></dl>${focus ? `<button type="button" data-session-action="focus" data-session-id="${escape(session.id)}">Focus session</button>` : ''}${rotate && session.surface !== 'cloud' ? `<button type="button" data-session-action="rotate" data-session-id="${escape(session.id)}">Rotate session</button>` : ''}</details></td><td><strong>${escape(session.agent)}</strong><span>${escape((session.state || 'unknown').replaceAll('_', ' '))} · EST</span><small>Last reported ${illustrative ? "sample" : Number.isFinite(activeAt.getTime()) ? escape(activeAt.toLocaleString()) : 'unknown'}</small></td><td><strong>${measured ? escape(tokens(session.total_tokens)) : 'Unknown'}</strong>${!measured ? '<span class="sp-data-trust">UNKNOWN</span>' : ''}</td><td><strong>${context ? escape(tokens(session.context_tokens)) : 'Unknown'}</strong><span class="sp-data-trust">${context ? 'EXACT observed' : 'UNKNOWN'}</span><small>Window ${escape(tokens(session.context_window))} · EST</small>${fill !== null ? `<div class="sp-quota-track"><i style="width:${Math.min(100, Math.max(0, fill))}%"></i></div><small>${fill.toFixed(0)}% · EST</small>` : ''}</td><td><strong>${knownCost ? '$' + session.total_cost_usd.toFixed(2) : 'Unknown'}</strong><span class="sp-data-trust">${knownCost ? trust(session.cost_basis) : 'UNKNOWN'}</span></td></tr>`;
+    const detail = value => session.usage_available !== false && Number.isFinite(value) ? escape(tokens(value)) + ' · EXACT' : 'Unknown · UNKNOWN';
+    return `<tr><td><details data-key="${escape(session.id)}"><summary><strong>${escape(session.project_name || 'Private project')}</strong><span>${escape(session.model || 'Model unknown')}</span></summary><dl><dt>Session</dt><dd>${escape(session.id)}</dd><dt>Source</dt><dd>${escape(session.surface || 'unknown')} · ${escape(session.device_name || 'local')}</dd><dt>Started</dt><dd>${escape(session.started_at || 'Unknown')}</dd>${session.title ? `<dt>Title</dt><dd>${escape(session.title)}</dd>` : ''}<dt>Input</dt><dd>${detail(session.input_tokens)}</dd><dt>Output</dt><dd>${detail(session.output_tokens)}</dd><dt>Cache read</dt><dd>${detail(session.cache_read_tokens)}</dd></dl>${focus ? `<button type="button" data-session-action="focus" data-session-id="${escape(session.id)}">Focus session</button>` : ''}${rotate && session.surface !== 'cloud' ? `<button type="button" data-session-action="rotate" data-session-id="${escape(session.id)}">Rotate session</button>` : ''}</details></td><td><strong>${escape(session.agent)}</strong><span>${escape((session.state || 'unknown').replaceAll('_', ' '))} · EST</span><small>Last reported ${illustrative ? "sample" : Number.isFinite(activeAt.getTime()) ? escape(activeAt.toLocaleString()) : 'unknown'}</small></td><td><strong>${measured ? escape(tokens(session.total_tokens)) : 'Unknown'}</strong>${!measured ? '<span class="sp-data-trust">UNKNOWN</span>' : ''}</td><td><strong>${context ? escape(tokens(session.context_tokens)) : 'Unknown'}</strong><span class="sp-data-trust">${context ? 'EXACT observed' : 'UNKNOWN'}</span><small>Window ${escape(tokens(session.context_window))} · ${Number.isFinite(session.context_window) ? 'EST' : 'UNKNOWN'}</small>${fill !== null ? `<div class="sp-quota-track"><i style="width:${Math.min(100, Math.max(0, fill))}%"></i></div><small>${fill.toFixed(0)}% · EST</small>` : ''}</td><td><strong>${knownCost ? '$' + session.total_cost_usd.toFixed(2) : 'Unknown'}</strong><span class="sp-data-trust">${knownCost ? trust(session.cost_basis) : 'UNKNOWN'}</span></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -38,7 +54,7 @@ export function renderActivity(report) {
   const days = report.daily.slice(-84);
   return `<section class="sp-activity" aria-label="Daily token activity">
     <div class="sp-activity-heading"><div><h2>Daily activity</h2><p>Recorded days · UTC · expand a day for details</p></div><div class="sp-activity-totals"><div><strong>${escape(tokens(report.total_tokens))}</strong><span class="sp-data-trust">EXACT tokens</span></div>${report.total_cost_usd !== undefined ? `<div><strong>${report.cost_basis && report.cost_basis !== 'unknown' && Number.isFinite(report.total_cost_usd) ? '$' + report.total_cost_usd.toFixed(2) : 'Unknown'}</strong><span class="sp-data-trust">${report.cost_basis && report.cost_basis !== 'unknown' ? 'EST API equivalent' : 'UNKNOWN cost'}</span></div>` : ''}</div></div>
-    <div class="sp-activity-bars" role="img" aria-label="Daily token volumes; individual measurements are available below">${days.map(day => `<i style="--day-height:${Number.isFinite(day.chart_pct) ? Math.min(100, Math.max(0, day.chart_pct)) : 0}%" title="${escape(day.date)}: ${escape(tokens(day.total_tokens))} tokens"></i>`).join('')}</div>
+    <div class="sp-activity-bars" role="img" aria-label="Daily token volumes; individual measurements are available below">${days.map((day, index) => `<i style="--day-delay:${Math.min(index, 20) * 25}ms;--day-height:${Number.isFinite(day.chart_pct) ? Math.min(100, Math.max(0, day.chart_pct)) : 0}%" title="${escape(day.date)}: ${escape(tokens(day.total_tokens))} tokens"></i>`).join('')}</div>
     <div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(day.date.slice(5))}</time><strong>${escape(tokens(day.total_tokens))}</strong><span class="sp-data-trust">EXACT tokens</span></summary><div><span>API equivalent</span><strong>${day.cost_basis === 'unknown' ? 'Unknown' : '$' + Number(day.cost_usd).toFixed(2)}</strong><span class="sp-data-trust">${day.cost_basis === 'unknown' ? 'UNKNOWN' : 'EST'}</span><span>${escape(day.turns)} invocations · EXACT</span></div></details>`).join('')}</div>
     <p class="sp-activity-caption">${days.length < report.daily.length ? 'Most recent 84 recorded days. ' : ''}Cache is counted once. No activity content is stored.</p>
   </section>`;
@@ -56,12 +72,16 @@ export function updateSessions(element, sessions, options) {
 
 function updateMarkup(element, markup) {
   if (activityMarkup.get(element) === markup) return;
+  const previousValues = [...element.querySelectorAll('strong')].map(value => value.textContent);
   const key = day => day.dataset.key || day.dataset.date;
   const open = new Set([...element.querySelectorAll('details[open]')].map(key));
   const focused = element.contains(document.activeElement) ? key(document.activeElement.closest('details') || { dataset: {} }) : null;
   const focusedAction = element.contains(document.activeElement) ? document.activeElement.dataset.sessionAction : null;
   const entering = !element.querySelector('.sp-activity-bars');
   element.innerHTML = markup;
+  element.querySelectorAll('strong').forEach((value, index) => {
+    if (previousValues[index] !== undefined && previousValues[index] !== value.textContent) value.classList.add('sp-value-changed');
+  });
   if (entering) element.querySelector('.sp-activity')?.setAttribute('data-enter', '');
   for (const day of element.querySelectorAll('details')) {
     day.open = open.has(key(day));
