@@ -189,6 +189,7 @@ export default function ConsolePage() {
 
   useEffect(() => {
     lastDesktopSnapshot.current = null;
+    setProjectNames([]); setProjectFilter('all');
     setOngoing(null); setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
     setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
