@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { renderQuota, renderSessions, updateActivity } from "../../lib/console-presentation.js";
 
 // Illustrative measurements, precomputed for the tour; no live provider data or pricing runs here.
@@ -34,8 +34,16 @@ export function ConsoleTourView({ kind, visible = true, compact = false }: { kin
     {kind === "overview" && <div className="sp-tour-kpis"><div><small>ACTIVE SESSIONS</small><div className="sp-tour-kpi-line"><strong>2</strong><em>EXACT</em></div></div><div><small>TOKENS / SAMPLE DAY</small><div className="sp-tour-kpi-line"><strong>39.3k</strong><em>EXACT</em></div></div><div><small>COST / SAMPLE DAY</small><div className="sp-tour-kpi-line"><strong>$0.86</strong><em>EST</em></div></div></div>}
     {kind === "sessions" && <div className="sp-tour-summary"><span>3 RUNS · EXACT</span><span>1 WAITING · EXACT</span><span>3 AGENTS · EXACT</span></div>}
     {kind === "usage" && <div className="sp-tour-kpis sp-tour-kpis-usage"><div><small>TOKENS / SAMPLE WEEK</small><div className="sp-tour-kpi-line"><strong>296.0k</strong><em>EXACT</em></div></div><div><small>API-EQUIVALENT COST</small><div className="sp-tour-kpi-line"><strong>$3.78</strong><em>EST</em></div></div></div>}
-    {!compact && (kind === "overview" || kind === "usage") && <div ref={activity} />}
-    {(kind === "overview" || kind === "sessions") && <div className="sp-tour-real-table" role="region" aria-label="Illustrative sessions; expand for details" tabIndex={0} dangerouslySetInnerHTML={{ __html: renderSessions(sessions, { illustrative: true }) }} />}
+    {kind === "overview" && <>
+      {!compact && <figure className="sp-tour-overview-chart">
+        <figcaption>Daily tokens · illustrative week · EXACT</figcaption>
+        <ol aria-label="Seven recorded sample days">{report.daily.map((day, index) => <li key={day.date} data-sample-day={day.date} aria-label={`${day.date}: ${day.total_tokens.toLocaleString()} tokens, exact`} style={{ "--day-height": `${day.chart_pct}%`, "--day-delay": `${index * 35}ms` } as CSSProperties}><i aria-hidden="true" /></li>)}</ol>
+      </figure>}
+      <div className="sp-tour-overview-columns"><span>Agent</span><span>State / EST</span><span>Tokens / EXACT</span></div>
+      <ul className="sp-tour-overview-list">{sessions.map(session => <li className="sp-tour-overview-row" key={session.id}><strong>{session.agent}</strong><span>{session.state === "thinking" ? "RUN" : session.state === "awaiting_approval" ? "WAIT" : "IDLE"}</span><span>{new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(session.total_tokens)}</span></li>)}</ul>
+    </>}
+    {!compact && kind === "usage" && <div ref={activity} />}
+    {kind === "sessions" && <div className="sp-tour-real-table" role="region" aria-label="Illustrative sessions; expand for details" tabIndex={0} dangerouslySetInnerHTML={{ __html: renderSessions(sessions, { illustrative: true }) }} />}
     {kind === "usage" && <div className="sp-tour-provider-breakdown">{[["Codex", "124.0k", "$1.84"], ["Claude", "98.0k", "$1.42"], ["Gemini", "74.0k", "$0.52"]].map(([provider, tokens, cost]) => <div key={provider}><strong>{provider}</strong><span>{tokens} tokens · EXACT</span><span>{cost} · EST</span></div>)}</div>}
     {kind === "limits" && <div dangerouslySetInnerHTML={{ __html: renderQuota(pools, null, { illustrative: true }) }} />}
   </div>;
