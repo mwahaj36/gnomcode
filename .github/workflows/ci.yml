@@ -4,6 +4,11 @@ on:
   # Manual trigger only while conserving private-repo GitHub Actions minutes.
   # All commits and PRs are verified locally via `.agents/skills/rust-quality-gate/scripts/check.ps1`.
   workflow_dispatch:
+    inputs:
+      package:
+        description: Build verified native release archives
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -59,3 +64,46 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           arguments: advisories bans sources
+
+  package:
+    if: inputs.package
+    name: native archive (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            argument: linux-x86-64
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            argument: linux-aarch64
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            argument: darwin-x86-64
+          - os: macos-15
+            target: aarch64-apple-darwin
+            argument: darwin-aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: cargo build --locked --release -p fleethud
+      - run: ./target/release/fleethud --version
+      - run: python scripts/package-artifacts.py --${{ matrix.argument }} target/release/fleethud
+      - run: python scripts/check-unix-installer.py
+      - name: Stage current target only
+        shell: bash
+        run: |
+          version=$(./target/release/fleethud --version | cut -d ' ' -f 2)
+          mkdir -p target/release-assets
+          cp web/public/downloads/fleethud-v${version}-*.tar.gz target/release-assets/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.target }}
+          path: target/release-assets/*.tar.gz
+          if-no-files-found: error

@@ -3,6 +3,7 @@
 import hashlib
 import http.server
 import os
+import platform
 import subprocess
 import tempfile
 import threading
@@ -11,6 +12,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 assets = root / 'web/public/downloads'
+os_name = 'darwin' if platform.system() == 'Darwin' else 'linux'
+arch = 'aarch64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
 version = tomllib.loads((root / 'Cargo.toml').read_text())['workspace']['package']['version']
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -21,7 +24,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
     def do_GET(self):
         if self.corrupt and self.path.startswith('/SHA256SUMS-'):
-            payload = b'0' * 64 + f'  fleethud-v{version}-linux-x86_64.tar.gz\n'.encode()
+            payload = b'0' * 64 + f'  fleethud-v{version}-{os_name}-{arch}.tar.gz\n'.encode()
             self.send_response(200)
             self.send_header('Content-Length', str(len(payload)))
             self.end_headers()
@@ -39,7 +42,10 @@ try:
         script = stage / 'install.sh'
         script.write_text((root / 'scripts/install.sh').read_text().replace(
             'https://fleethud.vercel.app/downloads', f'http://127.0.0.1:{server.server_port}'))
-        env = dict(os.environ, FLEETHUD_INSTALL_DIR=str(install_dir))
+        env = dict(os.environ, FLEETHUD_INSTALL_DIR=str(install_dir), HOME=str(stage))
+        (stage / '.fleethud').mkdir()
+        sentinel = stage / '.fleethud/preserved-test'
+        sentinel.write_text('existing-user-data')
         subprocess.run(['bash', str(script)], env=env, check=True, capture_output=True, timeout=30)
         binary = install_dir / 'fleethud'
         assert subprocess.check_output([str(binary), '--version'], text=True).strip() == f'fleethud {version}'
@@ -51,6 +57,7 @@ try:
         assert b'checksum verification failed' in rejected.stderr
         assert hashlib.sha256(binary.read_bytes()).digest() == before
         assert not list(install_dir.glob('.fleethud-update.*'))
+        assert sentinel.read_text() == 'existing-user-data'
         print('PASS: verified Unix installation; corrupt manifest rejected; existing install preserved')
 finally:
     server.shutdown()

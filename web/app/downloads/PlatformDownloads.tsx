@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CopyCommand } from "../components/CopyCommand";
-import { version } from "../../package.json";
+import packageInfo from "../../package.json";
+const { version } = packageInfo;
 
 const platforms = [
   {
