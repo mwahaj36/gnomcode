@@ -1,45 +1,80 @@
-# DESIGN.md — FleetHUD Design System (Daytona Aesthetic)
+# spawnt design guide
 
-## 1. Visual World & Philosophy
-FleetHUD adheres to an uncompromising, high-density developer infrastructure aesthetic modeled after Daytona (`daytona.io`). The interface rejects generic "AI slop" (cluttered gradients, oversized padding, generic cards, pastel cards) in favor of high-contrast engineering restraint, crisp 1px borders, and zero-bounce spring physics.
+Status: the landing, shared marketing shell, pricing, platform-selectable downloads, redesigned docs and Auth, signed-in web console, daemon-served local console, and current Windows icon assets use the spawnt direction and canonical tokens in `web/app/spawnt-tokens.css`. `web/public/spawnt-mark.svg` is the canonical solid triangle-and-square mark. Settings uses the open, divided layout and shared square controls. The local console and Windows tray script now use the spawnt hierarchy, palette, and plain status labels; macOS/Linux use the same browser console through explicit launchers; native tray integration remains future work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
 
-## 2. Color Tokens
-- **Canvas Base**: `#070708` with Daytona's authentic `68x68` dot-matrix background texture (`data:image/svg+xml` micro-dots) masked with a radial gradient.
-- **Elevated Surfaces**:
-  - `Surface 1`: `#0d0d0f` (cards, containers, window chrome)
-  - `Surface 2`: `#091a11` (active states, green hover overlays)
-  - `Surface 3`: `#141416` (secondary controls, icon tiles)
-- **Borders & Dividers**:
-  - `Border Subtle`: `rgba(255, 255, 255, 0.08)` (hairline structural grid)
-  - `Border Bright`: `rgba(255, 255, 255, 0.18)` (hovered cells, floating navbar border)
-  - `Border Green`: `rgba(46, 204, 113, 0.40)` (hovered logo cells, active agent state)
-- **Typography Tokens**:
-  - `Text Primary`: `#ffffff` (headings, active labels)
-  - `Text Secondary`: `#8e8e93` / `#a1a1aa` (subtitles, body copy, inactive tabs)
-  - `Text Muted`: `#55555c` (grid labels, timestamps, line numbers)
-- **Functional Accents (Strict Unified Green Theme — No Blue)**:
-  - `Accent Emerald Green`: `#2ecc71` / `#4ade80` (primary CTA buttons, links, active indicators, live telemetry)
-  - `Accent Green Hover`: `#091a11` surface tint with `rgba(46, 204, 113, 0.25)` ambient glow
-  - `Accent Amber Warning`: `#f59e0b` (quota approaching reset, approval required `[WAIT]`)
-  - `Accent Rose Error`: `#f43f5e` (parse failure, agent crash, runaway loop)
+## Brand and visual language
 
-## 3. Motion & Micro-Animation Specifications
-- **Animating Floating Island Navbar**:
-  - Flush at top of viewport (`top: 0`, `width: 100%`, `border-radius: 0`).
-  - On scroll down (`scrollY > 35px`), it animates with spring physics into a floating island (`top: 14px`, `width: min(1240px, calc(100% - 2rem))`, `border-radius: 6px`, `box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.85)`).
-  - On scroll back to top, smoothly rejoins the viewport header.
-- **Physics Engine**: Zero-bounce stiff springs (`cubic-bezier(0.16, 1, 0.3, 1)`, duration `0.3s` for navbar, `0.18s` for buttons/cards).
-- **Zero Pills Rule**: Strictly no oval pills (`border-radius: 9999px`). All badges, tags, buttons, and status bars use crisp rectangular geometry with subtle 3px–6px radius.
+- Display `spawnt` in lowercase. Keep internal `fleethud` identifiers until a separate migration phase.
+- Keep the Daytona-inspired structure: near-black canvas, thin borders, aligned grids, restrained uppercase mono labels, square controls, and the smoothly detaching marketing navbar. Use the marketing sans-led type hierarchy and open, divided sections in the console too.
+- Use the solid triangle-and-square mark from `web/public/spawnt-mark.svg` in `currentColor`, without a tile behind it. Red identifies primary actions, active state, and attention. Web and embedded console headers use the same mask asset; generated Windows icon assets and installer marks follow its geometry.
+- No emojis, decorative gradients, oversized pills, or color-only status indicators.
 
-## 5. Component Implementations
-- **Web App**:
-  - `MarketingNavbar.tsx`: Sticky glassmorphism header with logo monogram, `/` separator, uppercase monospace nav links, and high-contrast actions.
-  - `Hero`: Asymmetric 2-column layout with bold headline, quickstart command bar, and interactive multi-language/multi-agent telemetry switcher.
-  - `Status Pill`: Rounded dark oval with glowing neon blue dot, clean label, and chevron (`>`).
-  - `Grid Rows`: Crisp 1px border-collapse layout for agent support logos and features.
-  - `Computer Use`: Mock multi-window desktop interface showing live agent cursors.
-  - `FAQ Accordion`: Clean monospace toggle list with square `[+]` / `[-]` indicator boxes.
-  - `Footer`: 3-column navigation, Startup/Pro banner, popular topics, and round compliance seals (`100% LOCAL`, `FAIL OPEN`, `NO TELEMETRY`).
-- **Native Tray App**:
-  - Compact acrylic/mica dark window matching `#070708`.
-  - High-density list of active agent sessions with plain-text status badges (`[WAIT]`, `[RUN]`, `[IDLE]`).
+## Color tokens
+
+The brand colors are primary red `#FF2544`, pale neutral `#BECBD8`, deep blue secondary accent `#252E99`, light canvas `#F6F7F8`, and near-black dark canvas `#070708`. The dark canvas replaces the attached plan's `#0C1119` at the user's request. `#0C1119` remains the light theme's text color and the text color on red buttons.
+
+These values match the current landing CSS. Derived surfaces, borders, and text colors may be tuned after contrast review.
+
+| Role | Dark | Light |
+| :--- | :--- | :--- |
+| Canvas `--bg` | `#070708` | `#F6F7F8` |
+| Surface `--surface` | `#0D0D0F` | `#FFFFFF` |
+| Second surface `--surface-2` | `#141416` | `#EDF0F3` |
+| Hairline `--border` | `#242428` | `#D9DFE6` |
+| Strong hairline `--border-strong` | `#38383E` | `#BECBD8` |
+| Main text `--text` | `#F6F7F8` | `#0C1119` |
+| Secondary text `--text-2` | `#A9B4C2` | `#4A5565` |
+| Muted text `--text-3` | `#8D99AA` | `#657184` |
+| Primary fill `--primary` | `#FF2544` | `#FF2544` |
+| Small red text `--primary-text` | `#FF6177` | `#D4102E` |
+| Secondary accent `--accent` | `#BECBD8` | `#252E99` |
+| Text on red `--on-primary` | `#0C1119` | `#0C1119` |
+
+Contrast ratios calculated from these hex values: primary on dark 5.37:1; primary on light 3.50:1; small red text on light 5.00:1; small red text on dark 6.93:1; dark text on primary 5.05:1. Use `--primary-text` for small red text on light backgrounds. Recheck contrast wherever a surface changes.
+
+Status and trust semantics stay separate from the brand palette. Use plain status labels such as `RUN`, `WAIT`, `IDLE`, `LIMIT`, and `ERR`, without square-bracket wrappers. Number trust labels are `EXACT`, `EST`, `API`, or `UNKNOWN`. A quota warning may use amber, but amber is not a brand accent. Never imply an estimate is exact.
+
+## Type, shape, and layout
+
+- Inter for headings and body; JetBrains Mono for labels, numbers, IDs, and commands. Self-host fonts in shipped surfaces; make no remote font requests. Use tabular numerals.
+- Body type is generally 14/20 or 16/24; section headings 28/36 or 40/44; marketing hero up to 56/60. Prefer weights 400 and 600.
+- Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64 px. Controls need at least a 44 px touch target.
+- Radius: 4 px for controls and square badges, 6 px for panels and the floating navbar, 0 for grid cells and full-bleed regions. Do not use pill-shaped controls or badges. Borders are 1 px. Shadows belong only on floating layers.
+- Shared action buttons use a 44 px target, square corners, the same mono label style, and consistent outline or red primary treatment. Tabs, theme cycling, and icon-only mobile controls keep their distinct interaction patterns.
+- Console content uses a compact hairline grid: KPIs share borders and tables use row separators. Avoid floating dashboard cards.
+- Use geometric SVG icons and self-hosted agent marks in `web/public/agents/`. Labels remain readable without icons.
+
+## Motion and interaction
+
+- Default easing: `cubic-bezier(0.16, 1, 0.3, 1)`; controls about 180 ms, panels about 320 ms. No bounce.
+- Marketing navbar is flush at the top and progressively detaches into a 6 px radius island as the page scrolls. Its movement follows scroll position. The console has its own app shell.
+- Reveal sections and charts on viewport entry. Chart bars rise in sequence and rows may stagger slightly. Hover effects must not shift surrounding layout.
+- The supported-agent strip moves continuously and eases to a pause on hover or keyboard focus. Reduced-motion users get a static list.
+- Tour tabs, chart bars, and rows are real controls with clear selected states. Motion cannot be the only way to understand a change.
+- Respect `prefers-reduced-motion`: remove nonessential travel and looping motion while preserving visible state changes.
+
+## Navigation, theme, and surfaces
+
+- Marketing header: mark and `spawnt`, Product, Agents, Docs, Pricing, `Log in`, and primary Download. `Log in` goes to `/auth`; the landing's console links also pass through `/auth`, which redirects signed-in users to `/console`.
+- Theme selection is shared across all web routes and both consoles. The marketing footer keeps its minimal `Theme / system` control; the signed-in console, auth page, and daemon-served local console expose the same cycle. It cycles System, Light, Dark. System follows `prefers-color-scheme` and is the default. Stored overrides apply before first paint.
+- The signed-in web console and local daemon console use the marketing site's sans-led hierarchy, open divided sections, and shared theme tokens, while keeping distinct data and auth paths. Share presentation code as described in the rollout plan.
+- Native console window uses the same large sans-led page heading, canonical mark, compact status line, and full-width hairline divider. Native actions and data remain local.
+- The Windows tray script echoes these tokens and plain status labels. Other platform tray surfaces retain their current implementation until the cross-platform native rollout.
+
+## Current implementation boundary
+
+The navigation rail, daily chart/token grid, quota panels, session table/details, and project rollup presentation now share `web/app/spawnt-console.css` and `web/lib/console-presentation.js` across the Next and embedded consoles. These presenters contain formatting only. Rust supplies totals, context percentages, remaining capacity, chart proportions, and trust. Polling preserves expanded details and keyboard focus. Cloud-only unavailable states occupy the same sections without inventing local data.
+
+The landing, shared site shell, pricing, platform-selectable downloads, redesigned documentation and Auth, Settings, and both consoles use canonical spawnt tokens. Documentation uses the same sans-led hierarchy, restrained mono labels, open rows, hairline dividers, and square controls as the marketing surfaces; it should not resemble a raw Markdown export. Settings uses open sections, labels local/cloud state distinctly, and marks user-configured and unknown rates accurately. Auth keeps its Supabase and callback flows while using accessible mode controls, clear pending/error states, and theme-aware account forms. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. Both use matching headings, status hierarchy, divided sections, and control treatment. The local console uses the shared large heading, mark, status line, and divider with local actions and data. The web console distinguishes unknown values from zero and reports reload success only after both cloud reads succeed. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups are computed locally in Rust and remain unavailable in cloud snapshots. The Windows tray menu now uses the shared palette, square activity badge, and plain status labels; macOS/Linux use the same browser console through explicit launchers; native tray integration remains future work.
+
+## Landing console tour
+
+- Keep overview KPI labels separate from values and trust markers, with shared alignment across all three metrics.
+- Use consistent grid tracks for every row in a tour table so agent, state, value, and trust columns remain aligned. On narrow screens, hide the value column uniformly rather than allowing content-driven track widths.
+
+## Command snippets
+
+- Use an integrated 44 px icon target at the right of the code box. The clipboard changes to a checkmark on success; screen readers receive status feedback and copy failures remain visible.
+
+- Every executable command shown in the app has an integrated clipboard icon control with an accessible name, visible success/failure feedback, and keyboard focus styling.
+- Copy the exact command shown. Keep long commands horizontally scrollable or safely wrapped at narrow widths; the copy control remains visible.

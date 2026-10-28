@@ -55,9 +55,9 @@ pub fn notify_context_saturation(
     fill_pct: u32,
 ) -> NotificationPayload {
     NotificationPayload {
-        title: format!("[WAIT] {} Context Saturation", agent.as_str()),
+        title: format!("{} context saturation", agent.as_str()),
         body: format!(
-            "Session in `{project}` reached {fill_pct}% context load. Safety reserve active."
+            "Session in `{project}` reached {fill_pct}% estimated context load. Safety reserve active."
         ),
         agent: Some(agent),
         session_id: None,
@@ -74,8 +74,8 @@ mod tests {
     #[test]
     fn context_saturation_notification_formats_cleanly_without_emojis() {
         let n = notify_context_saturation(AgentId::ClaudeCode, "my-repo", 92);
-        assert_eq!(n.title, "[WAIT] claude-code Context Saturation");
-        assert!(n.body.contains("92%"));
+        assert_eq!(n.title, "claude-code context saturation");
+        assert!(n.body.contains("92% estimated"));
     }
 
     #[test]

@@ -125,6 +125,7 @@ pub struct DaemonOrchestrator {
     db: Arc<Mutex<Database>>,
     db_path: PathBuf,
     poll_interval: Duration,
+    reconcile_lock: Arc<Mutex<()>>,
 }
 
 impl DaemonOrchestrator {
@@ -138,6 +139,7 @@ impl DaemonOrchestrator {
             db: Arc::new(Mutex::new(db)),
             db_path: db_path.to_path_buf(),
             poll_interval,
+            reconcile_lock: Arc::new(Mutex::new(())),
         })
     }
 
@@ -187,6 +189,35 @@ impl DaemonOrchestrator {
     #[must_use]
     pub fn db(&self) -> Arc<Mutex<Database>> {
         Arc::clone(&self.db)
+    }
+
+    /// Runs one immediate reconciliation pass, returning whether it started.
+    ///
+    /// # Errors
+    /// Returns an error if database access or reconciliation fails.
+    pub async fn reconcile_now(&self) -> Result<bool, Error> {
+        let Ok(_guard) = self.reconcile_lock.clone().try_lock_owned() else {
+            return Ok(false);
+        };
+        let db_path = self.db_path.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut db = Database::open(&db_path).map_err(Error::Store)?;
+            ingest_all(&mut db)?;
+            db.reconcile_antigravity_projects().map_err(Error::Store)?;
+            if let Err(error) = pro::run_guardrails(&db) {
+                tracing::warn!("guardrail evaluation failed: {error}");
+            }
+            if let Err(error) = pro::run_resume_queue(&db) {
+                tracing::warn!("resume queue evaluation failed: {error}");
+            }
+            if let Err(error) = pro::run_context_relay(&db) {
+                tracing::warn!("context relay evaluation failed: {error}");
+            }
+            Ok::<(), Error>(())
+        })
+        .await
+        .map_err(std::io::Error::other)??;
+        Ok(true)
     }
 }
 

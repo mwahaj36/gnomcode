@@ -21,23 +21,28 @@ $NativeExe = Join-Path $RepoRoot "target/release/fleethud.exe"
 if ((& $NativeExe --version) -ne "fleethud $Version") { throw "Binary version mismatch" }
 & $Cargo about generate about.hbs --output-file "$Out/THIRD_PARTY_NOTICES.html"
 if ($LASTEXITCODE -ne 0) { throw "Third-party notices generation failed; install cargo-about --features cli --locked" }
+$FontNotices = Get-ChildItem "$RepoRoot/web/public/fonts/*-LICENSE.txt" | ForEach-Object { "<h2>$($_.BaseName)</h2><pre>$([System.Net.WebUtility]::HtmlEncode((([IO.File]::ReadAllText($_.FullName) -split "`n" | ForEach-Object { $_.TrimEnd() }) -join "`n")))</pre>" }
+[IO.File]::AppendAllText("$Out/THIRD_PARTY_NOTICES.html", ($FontNotices -join "`n"), [Text.Encoding]::UTF8)
 Copy-Item $NativeExe "$Out/fleethud.exe" -Force
 Copy-Item "LICENSE" "$Out/LICENSE" -Force
 $CompilerArgs = @(
-    "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:scripts/fleethud.ico",
+    "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/fleethud.ico",
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
-    "/resource:target/release/fleethud.exe,fleethud.exe",
-    "/resource:scripts/tray.ps1,tray.ps1", "/resource:scripts/fleethud.ico,fleethud.ico",
-    "/resource:scripts/run-tray.vbs,run-tray.vbs", "/resource:scripts/open-console.vbs,open-console.vbs",
-    "/resource:scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:LICENSE,LICENSE",
-    "/resource:web/public/downloads/THIRD_PARTY_NOTICES.html,THIRD_PARTY_NOTICES.html",
-    "/out:web/public/downloads/FleetHUD-Setup.exe", "scripts/Setup.cs"
+    "/resource:$RepoRoot/target/release/fleethud.exe,fleethud.exe",
+    "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/fleethud.ico,fleethud.ico",
+    "/resource:$RepoRoot/web/public/icons/spawnt-512.png,spawnt-mark.png",
+    "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
+    "/resource:$RepoRoot/scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:$RepoRoot/LICENSE,LICENSE",
+    "/resource:$RepoRoot/web/public/downloads/THIRD_PARTY_NOTICES.html,THIRD_PARTY_NOTICES.html",
+    "/out:$Out/FleetHUD-Setup.exe", "$RepoRoot/scripts/Setup.cs"
 )
+# Framework csc parses forward slashes in source paths as compiler switches.
+$CompilerArgs = @($CompilerArgs | ForEach-Object { if ($_.StartsWith('/')) { '/' + $_.Substring(1).Replace('/', '\') } else { $_.Replace('/', '\') } })
 & $Csc $CompilerArgs
 if ($LASTEXITCODE -ne 0) { throw "Native installer compilation failed" }
 $Checker = Join-Path ([IO.Path]::GetTempPath()) ("fleethud-check-" + [Guid]::NewGuid().ToString("N") + ".exe")
 try {
-    & $Csc "/out:$Checker" "scripts/check-installer-payload.cs"
+    & $Csc "/out:$Checker" (Resolve-Path "$RepoRoot/scripts/check-installer-payload.cs").Path
     if ($LASTEXITCODE -ne 0) { throw "Installer verification helper compilation failed" }
     & $Checker "$Out/FleetHUD-Setup.exe" $NativeExe "$Out/THIRD_PARTY_NOTICES.html" "$Version.0"
     if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
@@ -56,4 +61,4 @@ $Manifest = ($Rows -join "`n") + "`n"
 [IO.File]::WriteAllText("$Out/SHA256SUMS", $Manifest, [Text.Encoding]::ASCII)
 & npm run build --prefix web
 if ($LASTEXITCODE -ne 0) { throw "Web production build failed" }
-Write-Output "FleetHUD v$Version release packaged with verified installer payload and SHA-256 manifests."
+Write-Output "spawnt v$Version release packaged with verified installer payload and SHA-256 manifests."

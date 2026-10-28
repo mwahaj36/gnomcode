@@ -2,7 +2,83 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — reconcile final redesign with current main
+
+- Final fetch found main had advanced through PRs 44–46, including the owner's withdrawal of hosted cloud sessions/browser device pairing. Integrated that main history before merge, retaining private desktop credential handling, desktop summary sync and the existing manual account-token flow while removing hosted-session reads/collectors from the redesigned web UI.
+- Retained shared presenters, truthful freshness and reload behavior. Fixed merge-time missing status targets and a test AppState initializer. A regression reproduced retired hosted usage leaking into reports; all current report/daily/project queries now exclude those rows without deleting history.
+- Renumbered redesign ADRs to 0006–0008 to preserve main's withdrawn ADR 0005 and avoid duplicate identities. Historical published release archives are retained from main; the current release remains 1.5.0.
+- Windows full Rust gate including cargo-deny, Linux clippy/tests, Rust 1.87 check, production web build and source-matching Windows/Linux packaging passed. Native asset MIME/body tests and embedded syntax/runtime-target checks passed before authorized merge/publication. macOS remains deferred; browser visual checks remain unavailable.
+
+- GitGuardian on the integration PR flags two historical occurrences of the same invalid mock JWT in main commits 0d4f190/5c2df63. PR 45 documents its synthetic signature and remediation; the fixture file is absent from current source after PR 46. No scanner configuration or exemptions were changed.
+
+## 2026-10-28 — final website version audit and release authorization
+
+- The user deferred macOS builds and explicitly authorized final testing as far as available tools permit, followed by merge. Browser visual checks remain unavailable and live cloud publication still awaits re-pairing; these limits are disclosed rather than treated as passes.
+- Audited every displayed website release version and versioned archive/checksum link. Downloads and Docs read package metadata; both render 1.5.0. Added a permanent synchronization check for website output, workspace/npm versions, installer metadata/mirrors and release files.
+- Removed the obsolete root/public Daytona prototype after the completed presenters replaced it. Preserved current domain and download paths, canonical branding and the marketing navbar.
+- Windows/Linux verification passed; ready stack and v1.5.0 draft are being finalized for authorized merge/publication. Existing 1.4.0/1.4.1 tags remain unchanged.
+
+## 2026-10-28 — release version collision correction
+
+- Verification of the new draft exposed pre-existing published v1.4.0 and v1.4.1 tags, despite this checkout's original 1.3.0 workspace version. The initial assumption of 1.4.0 was incorrect.
+- Corrected the redesign release to 1.5.0, rebuilding every available platform artifact and renaming only the draft created in this session. Existing published releases/tags remain untouched. Removed session-generated 1.4.0 archive files so they cannot be mistaken for those older tags.
+
+## 2026-10-28 — release verification and external blockers
+
+- Rebuilt Windows x64 setup/zip and Linux x64/ARM64 archives from final shared-console sources. Linux ARM64 executes under QEMU; Linux x64 clippy and workspace tests pass. Windows Rust gate includes installed cargo-deny; Rust 1.87 workspace check and production Next build pass. Windows setup dark render inspected without installation.
+- Native GitHub CI run 40635697474 never started any job: account payments/spending limits blocked execution. Browser inventory still reports local browser use disabled after the user's enable attempt. Live desktop pairing renewal is rejected; the user chose to reconnect later.
+- Prepared v1.4.0 as a draft only. Merge/publication remain held because macOS artifacts and final visual parity cannot be verified. Existing distribution paths and user data stay compatible; no public repository or new domain was created.
+- Packaging now works with Ubuntu 22.04 Python 3.10 using the standard library. Regression checks cover architecture headers, executable launcher permissions, canonical app icons, bundled font notices and combined checksum preservation. Generated Python bytecode is ignored rather than committed.
+
+## 2026-10-28 — final console parity and safety review
+
+- Kept Settings inside the shared console rail and heading; the existing `/settings` URL forwards to its console destination. Extracted the settings panel without changing its independent account data path.
+- Replaced separate web/local provider breakdowns with one keyboard-accessible presenter that preserves expanded rows on polling. Removed boxed trust treatments, made chart entry sequential, and labeled missing session details unknown.
+- Escaped local automation, relay and pricing metadata, including safe inline action arguments; added a persistent regression check. Moved report and project SQLite queries to blocking tasks. Local project date filters now reject obsolete responses and use the same local-day boundary as reports.
+- Verification: presenter/settings/local-script checks and full Windows Rust gate passed. Production web build and Rust 1.87 minimum-version check passed. Source-matching Windows/Linux artifacts are rebuilt; macOS and visual checks remain externally blocked. Browser visual parity cannot be asserted while browser tools remain disabled.
+
+## 2026-10-28 — v1.4 platform packaging
+
+- Assumption: use minor version 1.4.0 for the redesign. Keep binary/package/data identifiers and published domain/download paths compatible.
+- Added native Intel/Apple Silicon macOS and x86_64/ARM64 Linux packaging, canonical app/launcher icons, font notices and cross-platform executable archive modes. Unix upgrades retain user data and verify the replacement before atomic installation. macOS browser-console app is unsigned; native Unix trays and notarization remain future work under ADR 0007.
+- Windows setup uses absolute compiler inputs, version-checked embedded payloads, device-theme colors and canonical assets. Restricted upgrade/uninstall process cleanup to the installed executable/profile/tray, replacing broad process-name kills. Shortcuts display spawnt while installation/registry identities remain compatible.
+- Added release architecture/permission/manifest regression checks and native CI packaging/updater verification on four Unix targets. Windows/Linux release builds passed; macOS CI is blocked before execution by account billing.
+
+## 2026-10-28 — truthful cloud settings writes
+
+- Removed unauthenticated loopback reads/writes from signed-in Settings. Cloud preferences and local desktop configuration have separate authority, matching the console boundary.
+- Rejected saves now display errors, signed-out saves are blocked, duplicate saves are prevented, and pricing rows update only after persistence succeeds. Missing rates stay unknown; zero-valued plan preferences no longer revert to defaults. Added explicit field names and nonnegative plan constraints.
+- Verification: mocked component regression exercises successful/rejected/signed-out writes; production web build and diff checks passed. Live account mutation was not performed.
+## 2026-10-28 — shared console activity, sessions and quota freshness
+
+- Added shared framework-neutral presenters and a common navigation rail, daily chart/token grid, quota panels, compact expandable session table, and project rollup presentation. Local project totals are computed in Rust and do not enter cloud snapshots.
+- Added Rust daily/session/project token totals that count cached tokens once, source-generated snapshot times, remaining quota capacity, and an authenticated cloud publication-status endpoint. Fixed stored estimated quota provenance being returned as exact. Fixed web deep links that previously produced nonexistent console subroutes; query-based navigation supports Back/Forward.
+- Live polling preserves expanded day/session details and focus, pauses in hidden web tabs, and does not replay chart entrance motion. Removed the cloud navbar's unauthenticated loopback probe and removed misleading immediate-completion messages for queued rotation. Rotation requires explicit confirmation and prevents concurrent clicks.
+- Replaced the landing's generic console mock tables with the completed shared session/activity/quota presenters. The illustrative week totals 296k tokens and $3.78, with 39.3k tokens and $0.86 on its final day; the three daily sessions reconcile to those day totals. Added keyboard navigation to tour tabs and reused the platform selector in documentation. Shared summary cells now have identical order and layout in both consoles; missing pricing stays unknown.
+- Live diagnosis: the installed desktop pairing token is expired and its refresh grant is rejected. The user elected to re-pair later. No credentials or activity content were printed or added to the repository.
+- Verification: Rust regression tests reproduced quota trust and project/report omissions before fixes. Production web builds, embedded script parsing, shared presenter trust/escaping checks, and the full Rust gate including cargo-deny passed. Visual inspection remains blocked by the browser tool reporting disabled after the user enabled access. No merge or release has been claimed yet.
+
+## 2026-10-28 — platform brand assets and font parity
+
+- Added a reproducible generator using the canonical spawnt SVG for ICO, ICNS, Apple, and Linux PNG sizes. Windows setup now uses that generated image, the approved canvas/text palette, plain spawnt branding, and a red progress track. Installation paths and registry identity remain compatible with existing installs.
+- Bundled Inter and JetBrains Mono with their licenses for the web and embedded local console, avoiding platform-dependent font substitution and external runtime requests. Moved local view navigation below the heading to match the web console's hierarchy; corrected local help URLs.
+- Verification: Windows installer source compiles with embedded canonical mark. Full Rust gate (including cargo-deny) and production web build passed. Platform packages will be recreated after console completion.
+
+## 2026-10-28 — tour usage metric layout
+
+- Replaced the unstyled inline Usage summary with the same divided label/value/trust grid as Overview. Trust labels are small upright mono text; the explanatory caption has its own row. Mixed API and estimated costs now declare EST.
+- Verification: Next.js production build passed. Browser visual review could not run because local browser use is disabled in Work settings.
+- Follow-up: moved command-copy actions inside their code boxes with a clipboard/check icon and accessible feedback; corrected the remaining CLI prose to spawnt. Installed cargo-deny 0.20.2 and verified advisories, bans, licenses, and sources pass (duplicate-version warnings only).
+
 ---
+
+## 2026-10-28 — Codex context compaction accounting
+
+- Provider-wide follow-up: audited all seven adapters; the other adapters already use request snapshots. Added shared-store regression coverage for Claude, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor, and Aider proving a newer 20k context replaces a previous 190k snapshot. Context remains last-observed until the provider emits new usage; compaction content is never stored.
+
+- Goal: keep Codex's displayed context-window usage aligned with the active context after compaction.
+- Outcome: Codex usage records now take `context_tokens` from `last_token_usage.total_tokens`, while cumulative `total_token_usage` remains reserved for session-wide accounting. Existing persisted Codex rows are corrected at query time from their latest turn input/output counts, without a database rewrite. Added an anonymized synthetic rollout fixture demonstrating context dropping from 190k to 20k after `context_compacted` even while cumulative tokens increase.
+- Verification: adapter and store regression tests each reproduced the cumulative-token bug before their fixes and passed after. Full Rust quality gate passed with the store compatibility correction; `cargo-deny` was skipped because it is not installed.
 
 ## 2026-10-26 — Session 1: Architecture Validation, Repo Initialization & M0 Foundation
 
@@ -444,6 +520,140 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Native Windows Installer: `FleetHUD-Setup.exe` compiled and verified with `check-installer-payload.cs`.
 - Local Daemon: Restarted with hardened binary; live session context correctly shows `200.5k / 1,000,000 (20.0%)` with healthy green progress bar.
 
+## 2026-10-28 — spawnt landing preview
+
+- Goal: build and show a local landing page using the attached `spawnt_redesign_plan.md`, while preserving the Daytona reference navbar behavior.
+- Outcome: replaced the Next.js home route with a spawnt landing preview, including the supported-agent strip, feature cells, interactive console tour, privacy facts, and Free/Pro/Teams teaser. Kept other routes intact.
+- Decision: console figures and tour screens are labeled illustrative until the redesigned console exists. Current downloads and pricing routes still carry FleetHUD branding and need their planned redesign in a later phase. Removed a duplicate favicon asset that caused a route conflict.
+- Verification: Next.js production build passed; local server and browser review performed in dark and light themes, including scroll navbar, tour tabs, selectable bars and rows, scroll-triggered graph motion, self-hosted agent logos, a tighter final CTA, a typographic footer inspired by footer.design, and device-default theme control moved to the footer.
+- Added a Log in nav action (in the mobile menu on narrow screens) and routed the landing's console links through web authentication, since the web console requires a signed-in account to be useful.
+- Preserved the user-provided `spawnt_redesign_plan.md` verbatim under `docs/`, rewrote `DESIGN.md` for the current red and near-black palette, and added `docs/spawnt_rollout_plan.md` to reconcile the draft with the repo's separate local and signed-in web consoles. No console implementation was changed in this documentation pass.
+
+## 2026-10-28 — spawnt foundation and local refresh slice
+
+- Goal: establish one token source, record the local/cloud presentation boundary, improve the illustrative landing tour, and add an accurate local console refresh/reconciliation action.
+- Outcome: added ADR 0005; Next.js and daemon now consume `web/app/spawnt-tokens.css`. Updated local console palette, responsive overflow, focus treatment, and reduced-motion behavior. Added POST `/api/v1/reconcile`, secured by the existing bearer/Host/Origin validation, with duplicate reconciliation suppression. Added separate local view reload and reconcile controls with progress/result/time labels. The signed-in web console now has a view reload action that refetches existing cloud snapshot/session APIs and explicitly does not claim to trigger daemon synchronization. Improved trust labels where source values are available. Replaced landing hero copy with the requested approved text and made tour screens distinct by view.
+- Decision: current native delivery is Rust tray control plus OS scripts and installer; Tauri window migration is a separate scope decision. SPEC now reflects the actual state and marks that migration pending.
+- Follow-up: both consoles now expose Overview, Sessions, Usage, Limits, Projects, Automations, and Settings destinations with separate transports. Web route selection updates its URL; local selection uses the page hash. Web Project/Automations unavailable data are stated plainly. Landing hero now uses the requested WINDOWS · MACOS · LINUX eyebrow and message.
+- Verification: `npm run build --prefix web` passed; full Rust quality gate passed (cargo-deny unavailable and skipped); 16 daemon tests include missing bearer and DNS-rebinding rejection for reconcile. Browser accessibility tree confirms the updated landing hero, navigation and distinct illustrative view content. Visual desktop/narrow screenshots and installer/native cross-platform verification remain pending. This is a foundation slice, not redesign completion.
+
+## 2026-10-28 — spawnt marketing shell and web console
+
+- Goal: bring the signed-in web console and shared marketing header/footer into the approved spawnt design while retaining the existing cloud data/auth path.
+- Outcome: added seven console destinations, dedicated Usage and Limits views, a responsive console shell, updated trust badges, and a system/light/dark footer control. Rebuilt the shared marketing and account headers and footer to match the spawnt visual language. API-equivalent pricing is labeled estimated.
+- Verification: `npm run build --prefix web` passed and `git diff --check` was clean. Desktop/narrow browser and keyboard/reduced-motion checks remain pending. This phase does not complete local console, native, icon, or installer redesign.
+
+## 2026-10-28 — spawnt local console destinations
+
+- Goal: align the daemon-served local console navigation and refresh states with the signed-in console while keeping its local API and bearer-token boundary.
+- Outcome: regrouped existing report, session, quota, account, settings, and Pro guardrail/relay features into Overview, Sessions, Usage, Limits, Projects, Automations, and Settings. Project rollups are explicitly unavailable because the local console API has no rollup view. Added focus and touch-target styling, local trust badges, connection/error states, and successful-update reporting. Reload now reflects failed data requests; Resync retains its authenticated reconcile call and reports an existing operation as in progress. Fixed a duplicate `url` declaration that prevented the embedded JavaScript from parsing.
+- Decision: keep the local HTML renderer and existing Rust data path; no new API or aggregation logic was needed. This PR stacks on the signed-in-console PR.
+- Verification: embedded JavaScript syntax and `git diff --check` passed. Rust quality gate, browser keyboard/reduced-motion review, and desktop/narrow two-theme visual review are pending. Native tray, icon assets, and installer redesign are outside this phase and remain required before the rollout is complete.
+
+## 2026-10-28 — canonical spawnt mark correction
+
+- Goal: remove the incorrect outlined bracket mark and align every current web/local console and Windows icon use with the approved solid triangle-and-square geometry.
+- Outcome: added `web/public/spawnt-mark.svg` as the web/local console mark source; both console headers and marketing header/footer/tour now use that asset. Removed the incorrect SVG copies, updated browser and local-console icon references, regenerated the website, tray, and download ICOs from the canonical asset, and corrected both Windows installer screen marks.
+- Decision: keep `/fleethud.svg` as a daemon compatibility alias that serves the canonical mark; `/spawnt-mark.svg` is the preferred path. No data, auth, or business rules changed.
+- Verification: `npm run build --prefix web`, full Rust quality gate, and `git diff --check` passed; cargo-deny is not installed. Inspected the generated mark and desktop landing/local-console headers in Chromium. The updated installer source was reviewed but its native runtime preview and macOS/Linux installer paths are outside this icon-only correction; native tray window design remains rollout work.
+
+## 2026-10-28 — account contrast and square controls
+
+- Goal: make the GitHub sign-in action readable, remove the cloud-sync tag, and remove pill-shaped UI treatments across current web and local console views.
+- Outcome: removed the Cloud Sync badge, gave OAuth a bordered surface with theme-aware foreground color, changed marketing release/reference labels to plain mono text, made pricing billing controls square, placed tier labels in their headers, and changed local console button naming to match its existing square shape. Connection indicators are square markers without pill containers.
+- Verification: `npm run build --prefix web`, embedded local-console JavaScript parsing, `git diff --check`, and a source search for pill styles passed. The full account and pricing route visual review will be recorded with the consolidated theme check.
+
+## 2026-10-28 — app-wide theme preference
+
+- Goal: make System, Light, and Dark preferences apply consistently to the landing page, marketing/account routes, signed-in console, and local daemon console.
+- Outcome: centralized web preference read/apply/cycle behavior, applied the saved choice before paint, exposed the same control in web app navigation and the auth header, kept the landing/footer controls in sync, and added an origin-local control to the daemon console. Replaced hard-coded dark console colors and native-control color-scheme overrides with shared theme tokens.
+- Decision: retain separate browser-local preferences for the signed-in site origin and loopback console origin; no preference or agent data leaves its origin.
+- Verification: `npm run build --prefix web`, embedded local-console JavaScript parsing, `git diff --check`, pill-source search, and full Rust quality gate passed; cargo-deny is not installed. Chromium visual review confirmed theme cycling on the landing, auth, signed-in console, and local console in light/dark/system modes. Narrow viewport review remains pending; native tray palette remains later rollout work.
+
+## 2026-10-28 — pricing route and plan accuracy
+
+- Goal: bring pricing into the shared spawnt system and align plan cadence and Teams availability with SPEC.
+- Outcome: removed the unsupported monthly/annual toggle and false $49 Teams price, displayed the $19 one-time Pro license and planned $12/seat/month Teams tier, replaced the legacy cards with a responsive hairline comparison, and removed literal `&check;` strings. Updated the route metadata and rollout/design status.
+- Decision: keep the existing download and sign-in destinations; Teams has no active contact or purchase flow, so its planned tier is presented as unavailable.
+- Verification: Next.js production build, `git diff --check`, and desktop Chromium review in dark and light passed; the accessibility tree exposes plan sections, links, and native disclosure controls. Narrow viewport and full keyboard pass remain pending.
+
+### Visible brand copy correction
+
+- Replaced user-facing FleetHUD product-name copy with spawnt across web metadata, pricing, auth, docs, signed-in console, and the daemon console, including Pro license prompts and exported report filenames.
+- Kept the existing domain, installer filenames, CLI command, database/schema names, callback key, and `.fleethud` data paths unchanged for compatibility; those are technical identifiers rather than visible product branding.
+- Verification: production web build, `git diff --check`, full Rust quality gate (cargo-deny unavailable), and app-source search passed. Desktop theme screenshots confirmed route surfaces follow Light/Dark; narrow and keyboard review remain pending.
+
+## 2026-10-28 — downloads route and platform availability
+
+- Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
+- Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
+- Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
+- Verification: Next.js production build, `git diff --check`, and desktop Chromium review in dark and light passed; the accessibility tree exposes the platform sections and exact download links. Narrow viewport and full keyboard review remain pending.
+## 2026-10-28 — downloads route and platform availability
+
+- Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
+- Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
+- Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
+
+## 2026-10-28 — landing tour alignment
+
+- Goal: fix crowded KPI labels and inconsistent tour table columns reported in the landing page screenshots.
+- Outcome: split each overview metric into a label and value/trust row; set shared table tracks so agent, state, usage, and trust columns line up. Narrow layouts consistently hide the usage value column.
+- Verification: Next.js production build and `git diff --check` passed. Desktop landing preview screenshot and accessibility tree reviewed; the tour section still needs a fresh browser visual review after restarting the stale dev server, plus narrow viewport and keyboard review.
+
+## 2026-10-28 — documentation visual system and pricing labels
+
+- Goal: bring the documentation route into the marketing design system and clarify model-family and pricing-basis labels.
+- Outcome: removed literal Markdown heading markers, replaced the sidebar/card-heavy monospace presentation with the shared sans-led hierarchy and open rows, and added definitions for Frontier, Tiered, and Exact. Explicitly identified Claude Fable 5/5.1 as Anthropic models, linked to the provider, and added one current provider-sourced Fable 5.1 API rate example.
+- Decision: keep rate and quota calculations in Rust; the docs explain trust and catalog terms without reproducing the unverified full pricing table. Distinguish catalog rate basis from live-value trust labels.
+- Verification: Next.js production build and `git diff --check` passed. Desktop dark and light renders and the accessibility tree were reviewed, including the corrected labels and Anthropic attribution. Narrow viewport, keyboard, and reduced-motion checks remain pending. `npm run lint --prefix web` could not run because the existing `next lint` script opens an interactive first-time configuration prompt; no lint config was added.
+
+## 2026-10-28 — copyable command snippets
+
+- Goal: make every executable command shown in the app easy to copy without selecting text manually.
+- Outcome: added a shared accessible copy control to Windows/Linux install commands, verification and CLI commands in docs, and the download page. The existing standalone Daytona preview already has copy controls.
+- Verification: Next.js production build and `git diff --check` passed. Desktop browser review confirmed the buttons and layout in docs/downloads, the accessibility tree names each copy action, and clicking a docs command displayed “Copied”. Narrow viewport and keyboard-only review remain pending.
+
+## 2026-10-28 — platform-selectable downloads
+
+- Goal: replace the crowded three-column installer instructions with the platform-tab interaction shown in the console tour and default to the visitor's platform.
+- Outcome: added Windows, macOS, and Linux tabs with browser-platform detection, arrow/Home/End keyboard navigation, focus states, a single focused release panel, and reduced-motion behavior. Kept published URLs and marked macOS unavailable until a verified package exists.
+- Verification: production Next.js build and `git diff --check` passed. Chromium accessibility tree confirmed tab roles, selected state, Windows release links, and the macOS unavailable state after selection; desktop light and dark styling were inspected. Narrow viewport and non-Windows platform default require additional review.
+
+## 2026-10-28 — settings route presentation
+
+- Goal: bring Settings into the shared spawnt layout and remove the remaining bracketed cloud-sync navbar control.
+- Outcome: replaced nested cards with three open, divided sections; aligned account state, password, subscription costs, and custom rates to square controls and shared typography. Missing price values now show `UNKNOWN` rather than `$0.00`; configured rates are identified as user-entered. The pricing table scrolls horizontally and can receive keyboard focus. Removed the `[Connect Cloud Sync]` header link; account connection remains available in Settings and Auth.
+- Follow-up: replaced the filled Connect account button with a restrained text link after visual review.
+- Verification: Next.js production build and `git diff --check` passed. Chromium review confirmed the route renders, sections and form controls are exposed accessibly, and the theme is applied. The local daemon is offline in this browser so live settings saves/password updates were not exercised; narrow viewport and keyboard-only review remain pending.
+
+## 2026-10-28 — account route presentation
+
+- Goal: align Auth with the spawnt visual language while retaining GitHub and email sign-in, account creation, password reset, and local-console access.
+- Outcome: added keyboard-friendly native mode toggles, clear field labels and focus states, responsive square forms, readable GitHub sign-in, and accessible status/error messaging. OAuth now prevents duplicate clicks and reports a provider-start failure. Existing Supabase calls and callback handling remain in place.
+- Verification: Next.js production build and `git diff --check` passed. Chromium review covered light/dark themes, the sign-in/create/reset content states, accessible control names, and the visible GitHub action. No credentials were entered and no external sign-in was submitted; narrow viewport and end-to-end Supabase flows remain pending.
+
+## 2026-10-28 — web console refresh and trust states
+
+- Goal: make manual cloud-view reload status truthful and prevent missing metrics from appearing as exact zero.
+- Outcome: reload now reports success only when both cloud reads succeed, prevents duplicate manual refreshes, waits safely for an in-flight poll, and keeps the last successful refresh time on failures. Signed-out users see the control disabled with a sign-in explanation. Missing session token/cost/context values render UNKNOWN; relative times and rounded context percentages show estimated trust. Added keyboard support to expandable provider spend rows and focusable, named table scroll regions.
+- Verification: Next.js production build and `git diff --check` passed. Chromium review confirmed the disconnected/signed-out state, disabled reload, unknown KPI state, table region names, and accessible session filters. A signed-in cloud fixture, narrow viewport, and keyboard-only interaction check remain pending.
+
+## 2026-10-28 — web console visual alignment
+
+- Goal: make the signed-in console feel like part of the spawnt marketing product rather than a separate card-heavy interface.
+- Outcome: aligned the app navbar to the shared brand mark and token system, replaced boxed data widgets with open divided sections, used the marketing sans-led page hierarchy, and unified theme-aware button/link treatments. Removed square-bracket wrappers from status labels in the console and landing tour.
+- Decision: preserve the separate local and cloud data/auth paths and the console's existing view navigation, filters, and refresh semantics.
+- Follow-up: enlarged and top-aligned the mark with the title, then combined the disconnected-account and missing-desktop notices into one contextual connection row beneath the heading.
+- Follow-up: the connection row is now signed-out only. Shared action buttons across marketing, downloads, Auth, Settings, and console use a consistent square 44 px treatment.
+- Verification: `npm run build --prefix web` passed, `git diff --check` was clean, and Chromium desktop renders were reviewed in dark and light themes with the accessibility tree. Narrow viewport, keyboard-only, and reduced-motion checks remain pending; signed-in data was unavailable for this visual review.
+
+## 2026-10-28 — native/local console alignment
+
+- Goal: carry the spawnt console hierarchy into the daemon-served local console and current Windows tray without changing local data or authentication paths.
+- Outcome: added the aligned “Your agent fleet” heading, canonical mark, connection status line, local reload/resync actions, arrow-key accessible tab navigation, divided metric sections, and square controls to the daemon console. Removed visible bracket wrappers from local status copy and made the local console’s remaining bordered surfaces square. Updated the Windows tray menu palette, labels, estimated-cost trust marker, and square red session badge; retained the existing data profile and compatibility window detection. Rust tray status and notification strings now use plain labels, and CLI reports use spawnt headings and plain trust labels.
+- Decision: do not create a Tauri window during this redesign. The current implementation is daemon HTML plus platform scripts; only the Windows tray script exists here. macOS/Linux tray UI remains future work.
+- Verification: full Rust quality gate, PowerShell parser validation, embedded JavaScript syntax check, and `git diff --check` passed; `cargo-deny` is not installed. A temporary loopback-only preview confirmed the desktop layout in dark and light themes, the disconnected `UNKNOWN` state, and keyboard arrow navigation. Narrow visual review remains pending.
 ## 2026-10-27 — Browser cloud pairing and v1.4.0 recovery
 
 - Goal: remove manual session-file copying, repair the Windows console loading failure, expose cloud presence on native clients and publish working update downloads.

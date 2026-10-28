@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import ThemeControl from "./ThemeControl";
 
 export default function AppNavbar() {
   const pathname = usePathname();
@@ -18,7 +19,9 @@ export default function AppNavbar() {
       setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSignOut = async () => {
@@ -26,83 +29,51 @@ export default function AppNavbar() {
     setUser(null);
   };
 
+  const onConsole = pathname.startsWith("/console");
+  const onSettings = pathname.startsWith("/settings");
+
   return (
-    <header className="border-b border-border bg-[#161b22] sticky top-0 z-50 font-mono text-xs">
-      <div className="max-w-7xl mx-auto px-6 h-13 flex items-center justify-between">
-        {/* Left: Cockpit Brand & Tabs */}
-        <div className="flex items-center gap-6">
-          <Link href="/console" className="flex items-center gap-2.5">
-            <span className="font-bold text-sm tracking-tight text-foreground font-sans">
-              FleetHUD
-            </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
-              COCKPIT
-            </span>
+    <header className="sp-app-header">
+      <div className="sp-app-header-inner">
+        <div className="sp-app-brand-nav">
+          <Link href="/console" className="sp-app-brand" aria-label="spawnt console">
+            <span className="sp-brand-mark" aria-hidden="true" />
+            <span>spawnt</span>
           </Link>
-
-          <div className="h-4 w-px bg-border"></div>
-
-          <nav className="flex items-center gap-1">
+          <nav className="sp-app-nav" aria-label="App navigation">
             <Link
               href="/console"
-              className={`px-3 py-1 rounded transition-colors ${
-                pathname === "/console"
-                  ? "bg-[#0d1117] text-foreground border border-border font-semibold"
-                  : "text-muted hover:text-foreground"
-              }`}
+              aria-current={onConsole ? "page" : undefined}
+              className={onConsole ? "selected" : ""}
             >
               Console
             </Link>
             <Link
               href="/settings"
-              className={`px-3 py-1 rounded transition-colors ${
-                pathname === "/settings"
-                  ? "bg-[#0d1117] text-foreground border border-border font-semibold"
-                  : "text-muted hover:text-foreground"
-              }`}
+              aria-current={onSettings ? "page" : undefined}
+              className={onSettings ? "selected" : ""}
             >
               Settings
             </Link>
-            <Link
-              href="/docs"
-              className="px-3 py-1 rounded text-muted hover:text-foreground transition-colors"
-            >
-              Docs &rarr;
-            </Link>
+            <Link href="/docs">Docs</Link>
           </nav>
         </div>
 
-        {/* Right: Live Sync Status Beacon & Account */}
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-[#0d1117] border border-border text-[11px]">
-            <span className="text-muted">Cloud console</span>
+        <div className="sp-app-actions">
+          <div className="sp-app-daemon">
+            <span aria-hidden="true" />
+            <span>CLOUD VIEW</span>
           </div>
+          <ThemeControl className="sp-app-theme" />
 
           {user ? (
-            <div className="flex items-center gap-3">
-              <Link
-                href="/settings"
-                className="px-2.5 py-1 rounded bg-green/15 text-green border border-green/30 hover:bg-green/25 font-semibold text-[11px]"
-              >
-                {user.email?.split("@")[0] || "User"}
+            <div className="sp-app-account">
+              <Link href="/settings" title={user.email || "Account"}>
+                {user.email?.split("@")[0] || "Account"}
               </Link>
-              <button
-                onClick={handleSignOut}
-                className="text-red hover:underline text-[11px]"
-              >
-                Sign Out
-              </button>
+              <button type="button" onClick={handleSignOut}>Sign out</button>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/auth"
-                className="px-2.5 py-1 rounded bg-accent/20 text-accent border border-accent/40 hover:bg-accent/30 font-semibold text-[11px]"
-              >
-                [Connect Cloud Sync]
-              </Link>
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     </header>

@@ -230,10 +230,6 @@ impl SourceAdapter for CodexAdapter {
                                     .unwrap_or("gpt-codex");
                                 let context_win =
                                     info.get("model_context_window").and_then(Value::as_u64);
-                                let total_ctx = info
-                                    .get("total_token_usage")
-                                    .and_then(|t| t.get("total_tokens"))
-                                    .and_then(Value::as_u64);
                                 let record = build_codex_usage(
                                     dedup_key,
                                     session_id.clone(),
@@ -241,7 +237,6 @@ impl SourceAdapter for CodexAdapter {
                                     model,
                                     last,
                                     context_win,
-                                    total_ctx,
                                 );
                                 batch.usage_records.push(record);
                             }
@@ -280,7 +275,6 @@ fn build_codex_usage(
     model: &str,
     last: &serde_json::Map<String, Value>,
     explicit_context_window: Option<u64>,
-    cumulative_context_tokens: Option<u64>,
 ) -> UsageRecord {
     let total_input = last
         .get("input_tokens")
@@ -325,7 +319,13 @@ fn build_codex_usage(
         cache_read_tokens: cache_read,
         cache_write_5m_tokens: cache_write,
         cache_write_1h_tokens: 0,
-        context_tokens: cumulative_context_tokens.unwrap_or(total_input),
+        // `total_token_usage` is cumulative across the rollout, including
+        // context that has since been compacted. `last_token_usage` is the
+        // current request's context snapshot and resets after compaction.
+        context_tokens: last
+            .get("total_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(total_input),
         context_window: explicit_context_window.or(eval.context_window),
         cost_usd: eval.cost_usd,
         cache_savings_usd: eval.cache_savings_usd,
