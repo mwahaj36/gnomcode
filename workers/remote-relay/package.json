@@ -2,7 +2,7 @@
   "name": "spawnt-remote-relay",
   "version": "0.9.0",
   "description": "Zero-knowledge end-to-end encrypted relay for Spawnt remote companion.",
-  "main": "src/index.ts",
+  "main": "src/index.mjs",
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },

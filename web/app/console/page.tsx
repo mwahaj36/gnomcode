@@ -36,14 +36,10 @@ function ProvidersPanel({ report }: { report: unknown }) {
   return <div ref={element} />;
 }
 
-function SessionsPanel({ sessions, onRotate }: { sessions: SessionItem[]; onRotate: (session: SessionItem) => Promise<void> }) {
+function SessionsPanel({ sessions }: { sessions: SessionItem[] }) {
   const element = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (element.current) updateSessions(element.current, sessions, { rotate: true }); }, [sessions]);
-  return <div ref={element} className="overflow-x-auto" role="region" aria-label="Agent sessions" tabIndex={0} onClick={event => {
-    const button = (event.target as Element).closest<HTMLButtonElement>('[data-session-action="rotate"]');
-    const session = sessions.find(session => session.id === button?.dataset.sessionId);
-    if (session) void onRotate(session);
-  }} />;
+  useEffect(() => { if (element.current) updateSessions(element.current, sessions, { rotate: false }); }, [sessions]);
+  return <div ref={element} className="overflow-x-auto" role="region" aria-label="Agent sessions" tabIndex={0} />;
 }
 
 interface SessionItem {
@@ -363,56 +359,6 @@ export default function ConsolePage() {
     }
   };
 
-  const relayBusy = useRef(false);
-  const handleRemoteRelay = async (session: SessionItem) => {
-    if (relayBusy.current || !window.confirm("Request a clean session on the paired desktop? The daemon applies your existing permissions.")) return;
-    relayBusy.current = true;
-    // 2. If remote (away from laptop), communicate via Supabase sync state to local daemon
-    if (!user) {
-      setRefreshMessage("Sign in to request a session rotation.");
-      relayBusy.current = false;
-      return;
-    }
-
-    try {
-      const { data: syncRow } = await supabase
-        .from("spawnt_sync_state")
-        .select("live_snapshot")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      const existingSnap = (syncRow?.live_snapshot as any) || {};
-      const pendingCmds = existingSnap.relay_commands || [];
-      const updatedSnap = {
-        ...existingSnap,
-        relay_commands: [
-          ...pendingCmds,
-          {
-            id: `relay-${session.id}`,
-            action: "execute",
-            session_id: session.id,
-            requested_at: new Date().toISOString(),
-          },
-        ],
-      };
-
-      const { error } = await supabase
-        .from("spawnt_sync_state")
-        .update({
-          live_snapshot: updatedSnap,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-      setRefreshMessage("Rotation requested. Awaiting execution by the paired desktop.");
-    } catch (err: any) {
-      setRefreshMessage("Rotation request failed. Check account connectivity and try again.");
-    } finally {
-      relayBusy.current = false;
-    }
-  };
-
   const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
 
   if (!authChecked) {
@@ -546,7 +492,7 @@ export default function ConsolePage() {
       {/* Session history */}
       {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
-          <div className="text-xs text-muted uppercase font-semibold">Session history</div>
+          <div className="text-xs text-muted uppercase font-semibold">Session history <Link href="/remote" className="ml-3 underline normal-case">Open encrypted Remote</Link></div>
           <div className="flex gap-2">
             <select aria-label="Project" value={projectFilter} onChange={event => { setProjectFilter(event.target.value); setPage(1); }}><option value="all">All projects</option>{projectNames.map(project => <option key={project} value={project}>{project}</option>)}</select>
             <select aria-label="Agent"
@@ -572,7 +518,7 @@ export default function ConsolePage() {
           </div>
         </div>
 
-        <SessionsPanel sessions={sessions} onRotate={handleRemoteRelay} />
+        <SessionsPanel sessions={sessions} />
         {/* Pagination Controls */}
         <div className="flex justify-between items-center mt-4 pt-3 border-t border-border text-xs text-muted">
           <div>

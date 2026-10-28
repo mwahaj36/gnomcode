@@ -836,6 +836,7 @@ function cycleTheme() {
             `Local Storage: ${stats.total_turns} turns EXACT across ${stats.total_projects} projects EXACT (${(stats.db_size_bytes / 1024 / 1024).toFixed(2)} MB EXACT)`;
         }
         await loadCustomPricingSettings();
+        await loadRemoteStatus();
         return true;
       } catch (e) {
         console.error(e);
@@ -926,6 +927,43 @@ function cycleTheme() {
     }
 
 
+    function showRemoteStatus(status) {
+      const output = document.getElementById('remote-status');
+      const link = document.getElementById('remote-link');
+      if (!output || !link) return;
+      output.textContent = !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? `Compare code ${status.verify_code} with your phone, then confirm on both devices.` : 'Waiting for phone to open the pairing link.';
+      if (status.room_id && status.public_key && status.relay_url) {
+        const fragment = new URLSearchParams({ room: status.room_id, key: status.public_key, relay: status.relay_url });
+        const productOrigin = new URL(document.querySelector('.sp-settings-resources a').href).origin;
+        const pairingUrl = `${productOrigin}/remote#${fragment}`;
+        link.innerHTML = `<a href="${escapeHtml(pairingUrl)}" target="_blank" rel="noopener noreferrer">Open pairing link on your phone</a><p>Copy this link to your phone: <code>${escapeHtml(pairingUrl)}</code></p>`;
+      } else link.textContent = '';
+    }
+
+    async function loadRemoteStatus() {
+      try { showRemoteStatus(await apiJson('/api/v1/remote/status', { headers })); }
+      catch { document.getElementById('remote-status').textContent = 'Remote status unavailable.'; }
+    }
+
+    async function startRemote() {
+      try { showRemoteStatus(await apiJson('/api/v1/remote/pairing', { headers })); }
+      catch { document.getElementById('remote-status').textContent = 'Could not start pairing. Check your Pro account and relay configuration.'; }
+    }
+
+    async function confirmRemote() {
+      const code = document.getElementById('remote-code').value.trim();
+      if (!/^\d{6}$/.test(code)) { document.getElementById('remote-status').textContent = 'Enter the six-digit code shown on both devices.'; return; }
+      try {
+        showRemoteStatus(await apiJson('/api/v1/remote/confirm', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }));
+        document.getElementById('remote-code').value = '';
+      } catch { document.getElementById('remote-status').textContent = 'Codes did not match or pairing expired.'; }
+    }
+
+    async function revokeRemote() {
+      try { await apiJson('/api/v1/remote/revoke', { method: 'POST', headers }); await loadRemoteStatus(); }
+      catch { document.getElementById('remote-status').textContent = 'Could not revoke remote connection.'; }
+    }
+
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-action]');
       if (!target) return;
@@ -973,7 +1011,8 @@ function cycleTheme() {
         'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
-        'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing };
+        'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
+        'remote-start': startRemote, 'remote-confirm': confirmRemote, 'remote-revoke': revokeRemote };
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
@@ -995,4 +1034,5 @@ function cycleTheme() {
     pollLocalData();
     setInterval(() => {
       pollLocalData();
+      if (activeView === 'settings') loadRemoteStatus();
     }, 2000);

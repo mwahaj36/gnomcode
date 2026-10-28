@@ -9,6 +9,10 @@
 > Launch official agent CLIs; never read, store or forward their subscription tokens. Permission escalation is prohibited. Agents must survive a Spawnt crash; PTY ownership and reattachment require a cross-platform design spike before this can be promised. Local HTTP remains loopback-only with authentication and Host/Origin validation.
 >
 > **Planned phases:** Phase 0 audit and plan, followed by owner review; Phase 1 dedicated rename, Electron shell and standalone npm distribution; Phase 2 M6 launcher and terminal; Phase 3 M7 structured chat, file viewer and diff review; Phase 4 M8 routing and handoff; Phase 5 M9 Remote only after explicit owner confirmation, a threat model and independent security review. Stop for owner review after each phase. Five separate ADRs will document Electron, structured drivers and terminal fallback, Remote encryption, the free local core and the rename.
+
+> **Implementation status:** The local model-switch path launches a fresh supported agent session and submits a redacted handoff prompt; live vendor-agent validation remains pending. Remote has an opt-in encrypted relay, two-device code confirmation, chat history paging and bounded prompting for idle Spawnt-hosted sessions. Pairing requires a signed license or a live validated Pro account; the legacy unencrypted cloud command intake is retired. Live cross-device validation and the independent security review remain pending before Remote is offered as a production feature.
+
+> **Remote chat:** A paired device must be able to view the complete available conversation history, submit prompts to the active agent, and receive subsequent responses as they arrive. Conversation traffic must use the end-to-end encrypted Remote channel and must never enter the existing unencrypted metadata sync. Preserve agent-owned history and enforce the same permission boundaries as local interaction.
 >
 > **Rename target:** `spawnt`, `SPAWNT_HOME`, `~/.spawnt`, renamed IPC, app IDs, repositories and documentation, without a legacy executable, home-directory migration, or compatibility shim; no users require migration. Centralize branding and base URLs. The source and releases repositories are to be renamed in place, preserving redirects.
 >
@@ -422,8 +426,8 @@ When an AI coding agent approaches context window saturation (>=90%), token cost
    - `disabled`: Manual operation only.
    - Strategy: `same_agent` (homogeneous rotation) or `failover` (cross-vendor failover when one provider quota is exhausted).
 5. **Remote & Mobile Web Console Execution:**
-   - When away from the primary workstation, users can trigger `[Handoff & Rotate]` from the Web Console (desktop or mobile).
-   - If outside local loopback, the command is transmitted via Supabase (`spawnt_sync_state`) and executed by the desktop daemon on the workstation.
+   - When away from the primary workstation, users can request an eligible handoff through the end-to-end encrypted Remote channel after pairing and confirmation.
+   - The legacy Supabase `spawnt_sync_state` command intake is retired. Metadata sync cannot carry commands, conversation content, or handoff prompts.
 
 ### 3.15 Cloud Sync, Multi-Device & Organizations (Supabase)
 

@@ -105,14 +105,7 @@ pub fn is_resume_eligible(
         return false;
     }
 
-    // If quota snapshot is provided, confirm it is no longer locked at 100%
-    if let Some(q) = quota_snapshot {
-        if q.used_pct >= 100.0 {
-            return false;
-        }
-    }
-
-    true
+    quota_snapshot.is_some_and(|q| q.used_pct.is_finite() && q.used_pct < 100.0)
 }
 
 #[cfg(test)]
@@ -173,6 +166,7 @@ mod tests {
 
         // Eligible past reset time with quota available
         let reset_now = now + Duration::seconds(120);
+        assert!(!is_resume_eligible(&entry, reset_now, None));
         let q = QuotaSnapshot {
             provider: "openai".to_owned(),
             limit_id: "codex".to_owned(),

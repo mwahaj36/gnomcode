@@ -17,6 +17,9 @@ obfstr = { workspace = true }
 ed25519-dalek = { workspace = true }
 sha2 = { workspace = true }
 hmac = { workspace = true }
+x25519-dalek = { workspace = true }
+aes-gcm = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
