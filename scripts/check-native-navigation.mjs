@@ -21,4 +21,16 @@ const load=new Function('document','fetch',`const headers={};const currentTimeli
 assert.equal(await load(),false);
 assert.doesNotMatch(nodes.get('daily-activity')?.textContent||'Loading',/Loading/,'failed requests must resolve the loading state');
 assert.match(nodes.get('connection-status')?.textContent||'',/authoriz|reopen|tray/i,'missing authorization needs an actionable message');
-console.log('PASS: native navigation preserves authorization and failed reports resolve loading with recovery guidance');
+const cacheDeclarations=file.statements.filter(ts.isVariableStatement).filter(node=>node.declarationList.declarations.some(declaration=>/^last(Report|Sessions|Quota)Json$/.test(declaration.name.getText(file)))).map(node=>node.getText(file)).join('\n');
+let failQuota=false;
+const quotaNodes=new Map();
+const quotaDocument={getElementById(id){if(!quotaNodes.has(id))quotaNodes.set(id,{set textContent(value){this.innerHTML=value;}});return quotaNodes.get(id);}};
+const quotaLoad=new Function('document','fetch',`const headers={};const summaryState={};const refreshSummary=async()=>{};${cacheDeclarations}\n${fn('apiJson')}\n${fn('loadQuota').replace("import('/console-presentation.js')", "Promise.resolve({renderQuota:()=>'<div>quota loaded</div>'})")}\nreturn loadQuota;`)(quotaDocument,async()=>({ok:!failQuota,status:failQuota?503:200,json:async()=>[]}));
+assert.equal(await quotaLoad(),true,'a healthy quota response must not fail on undeclared render caches');
+failQuota=true;
+assert.equal(await quotaLoad(),false);
+failQuota=false;
+assert.equal(await quotaLoad(),true);
+assert.equal(quotaNodes.get('quota-table').innerHTML,'<div>quota loaded</div>');
+for(const name of ['lastReportJson','lastSessionsJson','lastQuotaJson']) assert.match(cacheDeclarations,new RegExp(`\\b${name}\\b`),`${name} needs an initialized render cache`);
+console.log('PASS: native authorization, loading recovery, initialized caches and successful quota retry');
