@@ -141,9 +141,6 @@ export default function ConsolePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
-  const [quickTokenInput, setQuickTokenInput] = useState("");
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState("");
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
@@ -157,6 +154,7 @@ export default function ConsolePage() {
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [copyFeedback, setCopyFeedback] = useState("");
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
   const [refreshing, setRefreshing] = useState(false);
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState<Date | null>(null);
@@ -196,13 +194,7 @@ export default function ConsolePage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthChecked(true);
-      if (session && typeof window !== "undefined") {
-        const cb = localStorage.getItem("fleethud_auth_callback");
-        if (cb) {
-          localStorage.removeItem("fleethud_auth_callback");
-          window.location.href = `${cb}?session=${encodeURIComponent(JSON.stringify(session))}`;
-        }
-      }
+
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -242,9 +234,8 @@ export default function ConsolePage() {
         const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
           (agentFilter === "all" || session.agent === agentFilter) &&
-          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
-        );
-        setSessions(filtered.slice((page - 1) * 10, page * 10));
+          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
+        setSessions(filtered.slice((page-1)*10,page*10));
         setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
         setQuota(snap?.quota || []);
         setSnapshotGeneratedAt(snap?.generated_at || null);
