@@ -2,12 +2,25 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateSessions, renderQuota, renderProjects, renderSummary } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary } from "../../lib/console-presentation.js";
+
+function SummaryPanel({ activeCount, report, quotaCount }: { activeCount: number | null; report: unknown; quotaCount: number | null }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateSummary(element.current, { activeCount, report, quotaCount }); }, [activeCount, report, quotaCount]);
+  return <div ref={element} />;
+}
 
 function ActivityPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
   useEffect(() => { if (element.current) updateActivity(element.current, report); }, [report]);
+  return <div ref={element} />;
+}
+
+function ProvidersPanel({ report }: { report: unknown }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateProviders(element.current, report); }, [report]);
   return <div ref={element} />;
 }
 
@@ -140,7 +153,6 @@ export default function ConsolePage() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
   const [quickTokenInput, setQuickTokenInput] = useState("");
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState("");
@@ -180,7 +192,7 @@ export default function ConsolePage() {
   useEffect(() => {
     const restore = () => {
       const view = new URLSearchParams(window.location.search).get("view") || "overview";
-      if (["overview", "sessions", "usage", "limits", "projects", "automations"].includes(view)) setActiveView(view);
+      if (["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].includes(view)) setActiveView(view);
     };
     restore();
     window.addEventListener("popstate", restore);
@@ -412,10 +424,6 @@ export default function ConsolePage() {
     }
   };
 
-  const activeAgents = (report?.providers || []).filter(
-    (p) => (p.total_cost_usd > 0) || (p.models && p.models.some((m) => (m.input_tokens ?? 0) > 0 || (m.cost_usd ?? 0) > 0))
-  );
-
   const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
 
   if (!authChecked) {
@@ -474,13 +482,8 @@ export default function ConsolePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={refreshCloudSnapshot} disabled={refreshing || !user} className="sp-console-action" aria-busy={refreshing}>{refreshing ? "Refreshing…" : "Reload view"}</button>
-          <Link
-            href="/settings"
-            className="sp-console-action"
-          >
-            Settings
-          </Link>
+          <button type="button" onClick={refreshCloudSnapshot} disabled={refreshing || !user || activeView === "settings"} title={activeView === "settings" ? "Use Reload preferences in Settings" : "Read the latest received cloud snapshot"} className="sp-console-action" aria-busy={refreshing}>{refreshing ? "Refreshing…" : "Reload view"}</button>
+          <button type="button" className="sp-console-action" onClick={() => changeConsoleView("settings")}>Settings</button>
         </div>
       </header>
 
@@ -499,14 +502,15 @@ export default function ConsolePage() {
 
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
-        {["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => view === "settings" ? window.location.assign("/settings") : changeConsoleView(view)}>{view}</button>)}
+        {["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}>{view}</button>)}
       </nav>
       <div className="sp-console-content">
+      {activeView === "settings" && <SettingsPanel embedded />}
       {activeView === "projects" && <div dangerouslySetInnerHTML={{ __html: renderProjects(undefined) }} />}
       {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
 
       {/* Timeline Filter Bar */}
-      <div className="sp-console-timeline-filter">
+      {!["settings", "automations"].includes(activeView) && <div className="sp-console-timeline-filter">
         <div className="text-xs text-muted">
           Scope: <span className="text-foreground uppercase">{timeline}</span>
           {report?.earliest_at && report?.latest_at && (
@@ -537,74 +541,19 @@ export default function ConsolePage() {
         </div>
       </div>
 
-      {activeView === "overview" && <div dangerouslySetInnerHTML={{ __html: renderSummary({ activeCount, report, quotaCount: snapshotLoaded ? quota.length : null }) }} />}
+      }
+      {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
       {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
 
-      {/* Spend By Agent (Click to View Models) */}
-      {activeView === "usage" && <div className="mb-6 font-mono">
-        <div className="text-xs text-muted uppercase mb-3 font-semibold">
-          Spend by Agent (Click to View Models)
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-          {activeAgents.map((prov) => {
-            const isExpanded = !!expandedAgents[prov.provider];
-            const savingsUsd = prov.total_cache_savings_usd ?? prov.cache_savings_usd;
-            return (
-              <div
-                key={prov.provider}
-                onClick={() => setExpandedAgents(prev => ({ ...prev, [prov.provider]: !prev[prov.provider] }))}
-                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setExpandedAgents(prev => ({ ...prev, [prov.provider]: !prev[prov.provider] })); } }}
-                role="button"
-                tabIndex={0}
-                aria-expanded={isExpanded}
-                aria-label={`${prov.provider} spend details`}
-                className={`bg-card border rounded-lg p-4 cursor-pointer transition-colors ${
-                  isExpanded ? "border-accent" : "border-border hover:border-accent/60"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <div className="text-sm font-semibold">{prov.provider}</div>
-                  <div className="text-sm font-bold text-foreground">
-                    {typeof prov.total_cost_usd === "number" ? `$${prov.total_cost_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof prov.total_cost_usd === "number" ? "EST" : "UNKNOWN"}</span>
-                  </div>
-                </div>
-                <div className="text-[11px] text-muted">
-                  {prov.models?.length ?? 0} model(s) <span className="sp-trust">EXACT</span> · {typeof savingsUsd === "number" ? `$${savingsUsd.toFixed(2)}` : "Unknown"} cached <span className="sp-trust">{typeof savingsUsd === "number" ? "EST" : "UNKNOWN"}</span>
-                </div>
-
-                {isExpanded && (
-                  <div className="mt-3 pt-3 border-t border-border space-y-2">
-                    {prov.models?.map((m) => (
-                      <div key={m.model} className="text-[11px] flex justify-between items-center bg-bg p-2 rounded">
-                        <div>
-                          <div className="font-semibold text-foreground">{m.model}</div>
-                          <div className="text-muted text-[10px]">
-                            In: {formatTokens(m.input_tokens)} | Out: {formatTokens(m.output_tokens)} <span className="sp-trust">EXACT</span>
-                          </div>
-                        </div>
-                        <div className="font-bold text-foreground">{typeof m.cost_usd === "number" ? `$${m.cost_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof m.cost_usd === "number" ? "EST" : "UNKNOWN"}</span></div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {activeAgents.length === 0 && (
-            <div className="col-span-3 bg-card border border-border rounded-lg p-6 text-center text-xs text-muted">
-              No agent spending recorded for the selected scope ({timeline.toUpperCase()}).
-            </div>
-          )}
-        </div>
-      </div>}
+      {activeView === "usage" && <ProvidersPanel report={report} />}
 
       {/* Subscription ROI Breakdown */}
       {activeView === "usage" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
         <div className="flex justify-between items-center mb-3">
           <div className="text-xs text-muted uppercase font-semibold">Subscription ROI Breakdown</div>
-          <Link href="/settings" className="text-xs text-accent hover:underline">
+          <button type="button" onClick={() => changeConsoleView("settings")} className="text-xs text-accent hover:underline">
             Edit plans
-          </Link>
+          </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
           {activeRoi.map((roi) => (

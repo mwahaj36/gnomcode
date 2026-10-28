@@ -772,15 +772,19 @@ async fn report_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let range = params.range.as_deref().unwrap_or("all");
-    let db = state.db.lock().await;
-
-    let report = db
-        .generate_usage_report_timeline(range, params.from.as_deref(), params.to.as_deref())
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let user_profile = db
-        .get_user_profile()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let query_range = range.to_owned();
+    let from = params.from.clone();
+    let to = params.to.clone();
+    let (report, user_profile) = tokio::task::spawn_blocking(move || {
+        let db = state.db.blocking_lock();
+        Ok::<_, fleethud_store::Error>((
+            db.generate_usage_report_timeline(&query_range, from.as_deref(), to.as_deref())?,
+            db.get_user_profile()?,
+        ))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     #[derive(Serialize)]
     struct PlanRoiInfo {
@@ -926,10 +930,17 @@ async fn projects_handler(
     {
         chrono::DateTime::parse_from_rfc3339(bound).map_err(|_| StatusCode::BAD_REQUEST)?;
     }
-    let db = state.db.lock().await;
-    let projects = db
-        .generate_project_report(range, params.from.as_deref(), params.to.as_deref())
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let range = range.to_owned();
+    let projects = tokio::task::spawn_blocking(move || {
+        state.db.blocking_lock().generate_project_report(
+            &range,
+            params.from.as_deref(),
+            params.to.as_deref(),
+        )
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(projects))
 }
 

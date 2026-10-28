@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 const require = createRequire(new URL('../web/package.json', import.meta.url));
 const ts = require('typescript');
-const source = readFileSync(new URL('../web/app/settings/page.tsx', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../web/components/SettingsPanel.tsx', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 async function scenario(error, signedIn = true) {
   let index = 0, message = '', writes = 0;

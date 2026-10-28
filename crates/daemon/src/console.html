@@ -99,11 +99,11 @@
     .badge {
       font-family: var(--font-mono);
       font-size: 11px;
-      padding: 2px 8px;
+      padding: 0;
       border-radius: 0;
-      background: var(--sp-surface-2);
+      background: transparent;
       color: var(--accent);
-      border: 1px solid var(--sp-border);
+      border: 0;
     }
     .header-links { display: flex; align-items: center; gap: 24px; }
     .header-links a { color: var(--text-muted); text-decoration: none; font: 600 10px/1.4 var(--font-mono); }
@@ -383,7 +383,7 @@
     [hidden] { display: none !important; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .local-view-message { max-width: 760px; padding: 24px 0; color: var(--text-muted); line-height: 1.7; }
-    .trust-mark { display: inline-block; padding: 1px 5px; border: 1px solid var(--border); color: var(--text-muted); font: 10px var(--font-mono); vertical-align: 2px; }
+    .trust-mark { display: inline-block; padding: 0; border: 0; color: var(--text-muted); font: 10px var(--font-mono); vertical-align: 2px; }
     .local-status-error { color: var(--red) !important; }
     /* Settings Form Styling */
     .settings-grid {
@@ -491,8 +491,7 @@
     <div id="overview-summary" data-local-view="overview">Loading fleet summary...</div>
     <div id="daily-activity" data-local-view="overview,usage"><p>Loading daily activity...</p></div>
     <!-- Spend by Agent (Click to View Models) -->
-    <div class="section-title" data-local-view="usage" style="margin-bottom: 12px;">Spend by Agent (Click to View Models)</div>
-    <div class="provider-grid" data-local-view="usage" id="providers-container" style="align-items: start;">
+    <div data-local-view="usage" id="providers-container" style="align-items: start;">
       <!-- Injected dynamically -->
     </div>
 
@@ -882,6 +881,11 @@
       themeButton.setAttribute('aria-label', `Theme: ${savedTheme}. Switch mode`);
     }
 
+    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
+    function jsArg(value) { return escapeHtml(JSON.stringify(String(value ?? ''))); }
+    const consoleNavigation = document.querySelector('.sp-console-nav');
+    const updateNavOrientation = () => consoleNavigation.setAttribute('aria-orientation', matchMedia('(min-width: 761px)').matches ? 'vertical' : 'horizontal');
+    updateNavOrientation(); window.addEventListener('resize', updateNavOrientation);
     let currentTimeline = 'all';
     let currentPage = 1;
     const pageLimit = 10;
@@ -890,7 +894,7 @@
     const summaryState = { activeCount: null, report: null, quotaCount: null };
     async function refreshSummary() {
       const presentation = await import('/console-presentation.js');
-      document.getElementById('overview-summary').innerHTML = presentation.renderSummary(summaryState);
+      presentation.updateSummary(document.getElementById('overview-summary'), summaryState);
     }
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
@@ -1092,14 +1096,14 @@
           } else {
             qTable.innerHTML = queue.map(e => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 11px;">${e.session_id}</td>
-                <td><span class="badge">${e.agent}</span></td>
-                <td style="color: var(--text-muted); font-size: 11px;">${e.cwd}</td>
-                <td>${e.resume_prompt}</td>
+                <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(e.session_id)}</td>
+                <td><span class="badge">${escapeHtml(e.agent)}</span></td>
+                <td style="color: var(--text-muted); font-size: 11px;">${escapeHtml(e.cwd)}</td>
+                <td>${escapeHtml(e.resume_prompt)}</td>
                 <td>${e.max_runs} <span class="trust-mark">EXACT</span></td>
                 <td>${e.runs_completed} <span class="trust-mark">EXACT</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(e.eligible_after)}</td>
-                <td><button class="btn-control" onclick="disarmResume('${e.session_id}')">Disarm</button></td>
+                <td><button class="btn-control" onclick="disarmResume(${jsArg(e.session_id)})">Disarm</button></td>
               </tr>
             `).join('');
           }
@@ -1114,12 +1118,12 @@
           } else {
             rTable.innerHTML = rules.map(r => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">${r.id}</td>
-                <td>${r.agent || 'All Agents'}</td>
+                <td style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">${escapeHtml(r.id)}</td>
+                <td>${escapeHtml(r.agent || 'All Agents')}</td>
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) + ' EXACT' : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns + ' EXACT' : 'None'}</td>
-                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${r.action}</span></td>
-                <td><button class="btn-control" onclick="deleteRule('${r.id}')">Delete</button></td>
+                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${escapeHtml(r.action)}</span></td>
+                <td><button class="btn-control" onclick="deleteRule(${jsArg(r.id)})">Delete</button></td>
               </tr>
             `).join('');
           }
@@ -1134,9 +1138,9 @@
           } else {
             aTable.innerHTML = alerts.map(a => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 11px;">${a.session_id}</td>
-                <td style="font-weight: 600;">${a.rule_id}</td>
-                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${a.action}</span></td>
+                <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(a.session_id)}</td>
+                <td style="font-weight: 600;">${escapeHtml(a.rule_id)}</td>
+                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${escapeHtml(a.action)}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(a.created_at)}</td>
               </tr>
             `).join('');
@@ -1172,13 +1176,13 @@
             table.innerHTML = data.relays.map(r => {
               const statusColor = r.status === 'executed' ? 'var(--green)' : (r.status === 'pending' ? 'var(--yellow)' : 'var(--text-muted)');
               const actionBtn = r.status === 'pending'
-                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-right: 6px;" onclick="executeRelay('${r.id}')">Handoff & Rotate</button><button class="btn-control" style="padding: 4px 8px; font-size: 11px;" onclick="dismissRelay('${r.id}')">Dismiss</button>`
-                : `<span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${r.status}</span>`;
+                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-right: 6px;" onclick="executeRelay(${jsArg(r.id)})">Handoff & Rotate</button><button class="btn-control" style="padding: 4px 8px; font-size: 11px;" onclick="dismissRelay(${jsArg(r.id)})">Dismiss</button>`
+                : `<span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(r.status)}</span>`;
               return `<tr>
-                <td style="font-family: var(--font-mono); font-size: 11px;">${r.session_id}</td>
-                <td style="font-weight: 600;">${r.project_name}</td>
-                <td>${r.source_agent} &rarr; ${r.target_agent}</td>
-                <td style="font-weight: 600; color: ${r.fill_pct >= 90 ? 'var(--red)' : 'var(--yellow)'};">${r.fill_pct}% <span class="trust-mark">EXACT</span></td>
+                <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(r.session_id)}</td>
+                <td style="font-weight: 600;">${escapeHtml(r.project_name)}</td>
+                <td>${escapeHtml(r.source_agent)} &rarr; ${escapeHtml(r.target_agent)}</td>
+                <td style="font-weight: 600; color: ${r.fill_pct >= 90 ? 'var(--red)' : 'var(--yellow)'};">${r.fill_pct}% <span class="trust-mark">EST</span></td>
                 <td><span class="badge" style="color: ${statusColor}; border-color: ${statusColor};">${r.status.toUpperCase()}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(r.created_at)}</td>
                 <td>${actionBtn}</td>
@@ -1333,21 +1337,6 @@
       return n.toString();
     }
 
-    const openModels = new Set();
-    let lastReportJson = '';
-    let lastSessionsJson = '';
-    let lastQuotaJson = '';
-
-    function toggleModelList(prov) {
-      if (openModels.has(prov)) {
-        openModels.delete(prov);
-      } else {
-        openModels.add(prov);
-      }
-      const el = document.getElementById(`models-${prov}`);
-      if (el) el.classList.toggle('open');
-    }
-
     function setTimeline(range, btn) {
       currentTimeline = range;
       document.querySelectorAll('.timeline-buttons .btn-control').forEach(b => b.classList.remove('active'));
@@ -1421,7 +1410,7 @@
         const roiContainer = document.getElementById('roi-cards-container');
         roiContainer.innerHTML = activeRoi.map(r => `
           <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px; font-family: var(--font-mono);">
-            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${r.provider}</div>
+            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${escapeHtml(r.provider)}</div>
             <div style="font-size: 18px; font-weight: 600; margin: 4px 0;">${r.multiplier.toFixed(1)}x Return <span class="trust-mark">EST</span></div>
             <div style="font-size: 11px; color: ${r.net_savings_usd >= 0 ? 'var(--green)' : 'var(--red)'};">
               ${r.net_savings_usd >= 0 ? '+' : ''}$${r.net_savings_usd.toFixed(2)} <span class="trust-mark">EST</span>
@@ -1430,29 +1419,8 @@
           </div>
         `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No active subscription usage for this timeframe.</div>';
 
-        // Render Provider Breakdown cards
-        const provContainer = document.getElementById('providers-container');
-        provContainer.innerHTML = (tl.providers || []).map(p => {
-          const isOpen = openModels.has(p.provider) ? 'open' : '';
-          return `
-          <div class="provider-card" onclick="toggleModelList('${p.provider}')">
-            <div class="provider-header">
-              <span class="provider-name">${p.provider}</span>
-              <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 600;">$${p.total_cost_usd.toFixed(2)} <span class="trust-mark">EST</span> <span style="font-size: 11px; color: var(--text-muted);">(${p.pct_of_spend.toFixed(0)}% EST)</span></span>
-            </div>
-            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
-              ${p.models.length} models <span class="trust-mark">EXACT</span> • $${p.total_cache_savings_usd.toFixed(2)} saved via caching <span class="trust-mark">EST</span>
-            </div>
-            <div class="model-list ${isOpen}" id="models-${p.provider}">
-              ${p.models.map(m => `
-                <div class="model-item">
-                  <span>${m.model}</span>
-                  <span>$${m.cost_usd.toFixed(2)} <span style="color: var(--text-muted);">(${formatTokens(m.input_tokens + m.output_tokens)} tok)</span></span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `}).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No agent spending recorded for this timeframe.</div>';
+        // Render the shared provider breakdown.
+        presentation.updateProviders(document.getElementById('providers-container'), tl);
         return true;
       } catch (e) {
         console.error('Failed to load report', e);
@@ -1464,10 +1432,14 @@
 
     async function loadProjects() {
       const container = document.getElementById('project-rollups');
+      const range = currentTimeline;
       try {
-        const response = await fetch(`/api/v1/projects?range=${encodeURIComponent(currentTimeline)}`, { headers, signal: AbortSignal.timeout(15000) });
+        let url = `/api/v1/projects?range=${encodeURIComponent(range)}`;
+        if (range === 'today') { const start = new Date(); start.setHours(0, 0, 0, 0); url += `&from=${encodeURIComponent(start.toISOString())}`; }
+        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
         if (!response.ok) throw new Error('Project query failed');
         const projects = await response.json();
+        if (range !== currentTimeline) return true;
         const presentation = await import('/console-presentation.js');
         container.innerHTML = presentation.renderProjects(projects);
         return true;
@@ -1691,8 +1663,8 @@
         for (const cp of res.custom_pricing) {
           html += `
             <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 0;">
-              <span><strong>${cp.model_pattern}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
-              <button class="btn-control" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing('${cp.model_pattern}')">Remove</button>
+              <span><strong>${escapeHtml(cp.model_pattern)}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
+              <button class="btn-control" style="padding: 2px 6px; font-size: 10px; color: var(--red);" onclick="deleteCustomPricing(${jsArg(cp.model_pattern)})">Remove</button>
             </div>`;
         }
         html += '</div>';
