@@ -1,5 +1,0 @@
-55cc23eb8ab123902292ecc2ddf11f999f03ac5296d3648d228b723b83c3a289  FleetHUD-Setup.exe
-04e5de2f8b8828dedf751bcff5fadfe602dfb1bc60ffe5cae30ce00f8b7df8a5  FleetHUD-v1.4.0-windows-x64.zip
-31ca84b85468174d2f16efc207043773bbb53775332d04a02a76c56c114269dc  fleethud-v1.4.0-linux-aarch64.tar.gz
-8c6f6a54687c7e75c84c2e673eecde8758461db91ed13b3865759feae3b18453  fleethud-v1.4.0-linux-x86_64.tar.gz
-29eb865faf0c7a7f7e50a2082e80e5de562e42995327893da1979bca1e70696d  fleethud.exe
