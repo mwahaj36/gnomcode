@@ -855,6 +855,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0008](./adr/0008-platform-release-fallbacks.md) | Versioned native archives and browser-console launchers; retain existing Windows tray and unsigned cross-platform fallbacks | Accepted |
 | [0009](./adr/0009-console-pricing-coverage-and-periods.md) | Rust pricing coverage, local-midnight hourly Today, source calendar month, ongoing-first Overview and project filtering | Accepted |
 | [0010](./adr/0010-session-presence-and-focus.md) | Shared two-minute presence rules, truthful window focus and separate app/tray icon scales | Accepted |
+| [0016](./adr/0016-pty-launcher.md) | Independent PTY owner, ConPTY and POSIX terminal sessions, loopback API, and authenticated reattachment | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

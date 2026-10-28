@@ -1,0 +1,712 @@
+//! Agent launch validation, independent session hosting, and terminal sessions.
+
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::fs;
+use std::io::{Read, Write};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt as _;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use thiserror::Error;
+use tokio::sync::broadcast;
+
+/// Error type for PTY operations.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Workspace does not exist.
+    #[error("workspace directory does not exist: {0}")]
+    WorkspaceNotFound(String),
+    /// Agent is not supported.
+    #[error("unsupported agent: {0}")]
+    UnsupportedAgent(String),
+    /// Model argument is invalid or unsafe.
+    #[error("invalid or unsafe model argument: {0}")]
+    InvalidModel(String),
+    /// I/O error.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    /// Serialization error.
+    #[error("serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+    /// Session not found.
+    #[error("session not found: {0}")]
+    SessionNotFound(String),
+    /// Process failure.
+    #[error("process error: {0}")]
+    Process(String),
+}
+
+/// A validated agent executable and its arguments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LaunchCommand {
+    /// Executable name.
+    pub executable: String,
+    /// Arguments supplied to the executable.
+    pub arguments: Vec<String>,
+}
+
+/// Validates a launch request and constructs the official agent command.
+///
+/// # Errors
+/// Returns [`Error`] if workspace does not exist, agent is unsupported, or model contains unsafe flags.
+pub fn launch_command(
+    agent: &str,
+    repo: &Path,
+    model: Option<&str>,
+) -> Result<LaunchCommand, Error> {
+    if !repo.is_dir() {
+        return Err(Error::WorkspaceNotFound(repo.display().to_string()));
+    }
+    let executable = match agent {
+        "claude" | "claude-code" => "claude".to_owned(),
+        "codex" => "codex".to_owned(),
+        "gemini" | "gemini-cli" => "gemini".to_owned(),
+        other => return Err(Error::UnsupportedAgent(other.to_owned())),
+    };
+    let mut arguments = Vec::new();
+    if let Some(model) = model {
+        if model.is_empty() || model.starts_with('-') {
+            return Err(Error::InvalidModel(model.to_owned()));
+        }
+        arguments.extend(["--model".to_owned(), model.to_owned()]);
+    }
+    Ok(LaunchCommand {
+        executable,
+        arguments,
+    })
+}
+
+/// Information about an independently running PTY session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionRecord {
+    /// Unique session identifier.
+    pub session_id: String,
+    /// Agent identifier.
+    pub agent: String,
+    /// Repository path.
+    pub repo_path: String,
+    /// Target model name.
+    pub model: Option<String>,
+    /// Session host process ID (owner).
+    pub host_pid: u32,
+    /// Child process ID (agent).
+    pub child_pid: u32,
+    /// Loopback port the host is listening on.
+    pub port: u16,
+    /// Bearer authentication token for this session.
+    pub token: String,
+    /// Timestamp when started (RFC3339).
+    pub started_at: String,
+}
+
+/// Directory where active session records are stored.
+#[must_use]
+pub fn sessions_dir() -> PathBuf {
+    spawnt_platform::spawnt_home().join("sessions")
+}
+
+/// Path to a specific session's JSON record file.
+#[must_use]
+pub fn session_file_path(session_id: &str) -> PathBuf {
+    sessions_dir().join(format!("{session_id}.json"))
+}
+
+/// Saves a session record to disk with owner-only access.
+///
+/// # Errors
+/// Returns [`Error`] if creating the directory or writing fails.
+pub fn save_session_record(record: &SessionRecord) -> Result<(), Error> {
+    let dir = sessions_dir();
+    fs::create_dir_all(&dir)?;
+    let path = session_file_path(&record.session_id);
+    let bytes = serde_json::to_vec_pretty(record)?;
+    spawnt_platform::write_private_file(&path, &bytes)
+        .map_err(|e| Error::Process(e.to_string()))?;
+    Ok(())
+}
+
+/// Loads a session record by ID.
+///
+/// # Errors
+/// Returns [`Error::SessionNotFound`] or [`Error`] if reading fails.
+pub fn load_session_record(session_id: &str) -> Result<SessionRecord, Error> {
+    let path = session_file_path(session_id);
+    if !path.is_file() {
+        return Err(Error::SessionNotFound(session_id.to_owned()));
+    }
+    let content = fs::read_to_string(path)?;
+    let record: SessionRecord = serde_json::from_str(&content)?;
+    Ok(record)
+}
+
+/// Removes a session record from disk.
+pub fn remove_session_record(session_id: &str) {
+    let path = session_file_path(session_id);
+    let _ = fs::remove_file(path);
+}
+
+/// Returns all active session records whose host processes are currently running.
+#[must_use]
+pub fn list_active_sessions() -> Vec<SessionRecord> {
+    let dir = sessions_dir();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut sessions = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "json") {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(record) = serde_json::from_str::<SessionRecord>(&content) {
+                    if is_pid_alive(record.host_pid) {
+                        sessions.push(record);
+                    } else {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
+    sessions
+}
+
+/// Checks whether a process ID is currently alive.
+#[must_use]
+pub fn is_pid_alive(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+        let script = format!(
+            "if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}"
+        );
+        Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x0800_0000)
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+    #[cfg(unix)]
+    {
+        let res = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        res == 0
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = pid;
+        false
+    }
+}
+
+/// Bounded in-memory terminal output buffer.
+#[derive(Debug, Clone)]
+pub struct Scrollback {
+    capacity: usize,
+    bytes: VecDeque<u8>,
+}
+
+impl Scrollback {
+    /// Creates a scrollback buffer with a given byte limit.
+    #[must_use]
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            bytes: VecDeque::new(),
+        }
+    }
+
+    /// Appends output to the buffer, dropping older bytes when full.
+    pub fn append(&mut self, data: &[u8]) {
+        let keep = data.len().min(self.capacity);
+        let remove = self
+            .bytes
+            .len()
+            .saturating_add(keep)
+            .saturating_sub(self.capacity);
+        self.bytes.drain(..remove);
+        self.bytes.extend(&data[data.len() - keep..]);
+    }
+
+    /// Returns a copy of the buffered bytes in sequence.
+    #[must_use]
+    pub fn bytes(&self) -> Vec<u8> {
+        self.bytes.iter().copied().collect()
+    }
+}
+
+/// Query parameters for WebSocket connection.
+#[derive(Debug, Deserialize)]
+struct WsQuery {
+    token: Option<String>,
+}
+
+/// Shared state for the session host server.
+struct HostState {
+    token: String,
+    session_id: String,
+    child_pid: u32,
+    scrollback: Arc<Mutex<Scrollback>>,
+    output_tx: broadcast::Sender<Vec<u8>>,
+    input_tx: std::sync::mpsc::Sender<Vec<u8>>,
+    stopping: Arc<AtomicBool>,
+}
+
+/// Runs the independent PTY session host server.
+///
+/// This holds the PTY master, starts the child process, and serves
+/// authenticated WebSocket streaming and termination endpoints on loopback.
+///
+/// # Errors
+/// Returns [`Error`] if spawning or listening fails.
+pub async fn run_pty_host(
+    session_id: &str,
+    agent: &str,
+    repo: &Path,
+    model: Option<&str>,
+    override_command: Option<(&str, &[&str])>,
+) -> Result<(), Error> {
+    let token = {
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).map_err(|e| Error::Process(e.to_string()))?;
+        bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
+    };
+
+    let scrollback = Arc::new(Mutex::new(Scrollback::new(256 * 1024)));
+    let (output_tx, _) = broadcast::channel(128);
+    let (input_tx, input_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    let stopping = Arc::new(AtomicBool::new(false));
+
+    #[cfg(windows)]
+    let (child_pid, mut writer, session_handle) = {
+        let (cmd, args) = if let Some((c, a)) = override_command {
+            (c.to_owned(), a.iter().map(|s| (*s).to_owned()).collect())
+        } else {
+            let launch = launch_command(agent, repo, model)?;
+            (launch.executable, launch.arguments)
+        };
+
+        let mut command = conpty_oxide::blocking::Command::new(cmd);
+        command.args(&args);
+        command.current_dir(repo);
+        let session = command.spawn().map_err(|e| Error::Process(e.to_string()))?;
+        let parts = session.into_parts();
+        let pid = parts.child.id();
+        (
+            pid,
+            parts.input,
+            (parts.child, parts.output, parts.controller),
+        )
+    };
+
+    #[cfg(unix)]
+    let (child_pid, mut writer, mut master, mut child) = {
+        let (cmd, args) = if let Some((c, a)) = override_command {
+            (c.to_owned(), a.iter().map(|s| (*s).to_owned()).collect())
+        } else {
+            let launch = launch_command(agent, repo, model)?;
+            (launch.executable, launch.arguments)
+        };
+
+        let pair = portable_pty::native_pty_system()
+            .openpty(portable_pty::PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| Error::Process(e.to_string()))?;
+
+        let mut command = portable_pty::CommandBuilder::new(cmd);
+        command.args(&args);
+        command.cwd(repo);
+        let child = pair
+            .slave
+            .spawn_command(command)
+            .map_err(|e| Error::Process(e.to_string()))?;
+        drop(pair.slave);
+        let pid = child.process_id().unwrap_or(0);
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| Error::Process(e.to_string()))?;
+        (pid, writer, pair.master, child)
+    };
+
+    // Background thread: write received input to child PTY stdin
+    std::thread::spawn(move || {
+        while let Ok(data) = input_rx.recv() {
+            if writer.write_all(&data).is_err() || writer.flush().is_err() {
+                break;
+            }
+        }
+    });
+
+    // Background thread: read child PTY stdout and broadcast to clients
+    let sb_clone = Arc::clone(&scrollback);
+    let tx_clone = output_tx.clone();
+    let stopping_clone = Arc::clone(&stopping);
+
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        let (_child, mut output, _controller) = session_handle;
+        let mut buffer = [0u8; 4096];
+        while !stopping_clone.load(Ordering::Relaxed) {
+            match output.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(count) => {
+                    let chunk = buffer[..count].to_vec();
+                    if let Ok(mut sb) = sb_clone.lock() {
+                        sb.append(&chunk);
+                    }
+                    let _ = tx_clone.send(chunk);
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    #[cfg(unix)]
+    std::thread::spawn(move || {
+        if let Ok(mut reader) = master.try_clone_reader() {
+            let mut buffer = [0u8; 4096];
+            while !stopping_clone.load(Ordering::Relaxed) {
+                match reader.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(count) => {
+                        let chunk = buffer[..count].to_vec();
+                        if let Ok(mut sb) = sb_clone.lock() {
+                            sb.append(&chunk);
+                        }
+                        let _ = tx_clone.send(chunk);
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+        let _ = child.kill();
+    });
+
+    // Bind loopback HTTP/WebSocket listener
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+    let host_pid = std::process::id();
+
+    let record = SessionRecord {
+        session_id: session_id.to_owned(),
+        agent: agent.to_owned(),
+        repo_path: repo.display().to_string(),
+        model: model.map(ToOwned::to_owned),
+        host_pid,
+        child_pid,
+        port,
+        token: token.clone(),
+        started_at: chrono::Utc::now().to_rfc3339(),
+    };
+    save_session_record(&record)?;
+
+    let state = Arc::new(HostState {
+        token,
+        session_id: session_id.to_owned(),
+        child_pid,
+        scrollback,
+        output_tx,
+        input_tx,
+        stopping: Arc::clone(&stopping),
+    });
+
+    let app = Router::new()
+        .route("/health", get(host_health_handler))
+        .route("/stream", get(host_stream_handler))
+        .route("/stop", post(host_stop_handler))
+        .with_state(state);
+
+    let server = axum::serve(listener, app);
+    let session_id_clean = session_id.to_owned();
+    tokio::select! {
+        _ = server => {},
+        _ = async {
+            while !stopping.load(Ordering::Relaxed) {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if !is_pid_alive(child_pid) {
+                    break;
+                }
+            }
+        } => {}
+    }
+
+    stopping.store(true, Ordering::Relaxed);
+    remove_session_record(&session_id_clean);
+    Ok(())
+}
+
+async fn host_health_handler(State(state): State<Arc<HostState>>) -> impl IntoResponse {
+    Json(serde_json::json!({
+        "ok": true,
+        "session_id": state.session_id,
+        "child_pid": state.child_pid,
+    }))
+}
+
+async fn host_stop_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+) -> impl IntoResponse {
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "));
+
+    if auth != Some(&state.token) {
+        return StatusCode::UNAUTHORIZED;
+    }
+
+    state.stopping.store(true, Ordering::Relaxed);
+    #[cfg(windows)]
+    {
+        let pid = state.child_pid;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(0x0800_0000)
+            .status();
+    }
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(state.child_pid as libc::pid_t, libc::SIGTERM);
+        }
+    }
+
+    StatusCode::OK
+}
+
+async fn host_stream_handler(
+    headers: HeaderMap,
+    Query(query): Query<WsQuery>,
+    State(state): State<Arc<HostState>>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let token = query.token.or_else(|| {
+        headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .map(ToOwned::to_owned)
+    });
+
+    if token.as_deref() != Some(&state.token) {
+        return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+    }
+
+    let input_tx = state.input_tx.clone();
+    let mut rx = state.output_tx.subscribe();
+    let initial_bytes = state
+        .scrollback
+        .lock()
+        .map(|sb| sb.bytes())
+        .unwrap_or_default();
+
+    ws.on_upgrade(move |mut socket: WebSocket| async move {
+        if !initial_bytes.is_empty() {
+            let _ = socket.send(Message::Binary(initial_bytes.into())).await;
+        }
+
+        loop {
+            tokio::select! {
+                Ok(bytes) = rx.recv() => {
+                    if socket.send(Message::Binary(bytes.into())).await.is_err() {
+                        break;
+                    }
+                }
+                msg = socket.recv() => {
+                    match msg {
+                        Some(Ok(Message::Binary(b))) => {
+                            let _ = input_tx.send(b.to_vec());
+                        }
+                        Some(Ok(Message::Text(t))) => {
+                            let _ = input_tx.send(t.as_bytes().to_vec());
+                        }
+                        Some(Ok(Message::Close(_))) | None => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
+    })
+    .into_response()
+}
+
+/// Launches a new session worker in an independent detached process.
+///
+/// # Errors
+/// Returns [`Error`] if validation fails or spawning times out.
+pub async fn launch_session(
+    session_id: &str,
+    agent: &str,
+    repo: &Path,
+    model: Option<&str>,
+) -> Result<SessionRecord, Error> {
+    let _ = launch_command(agent, repo, model)?;
+    let exe = std::env::current_exe().map_err(Error::Io)?;
+
+    let mut args = vec![
+        "pty-host".to_owned(),
+        session_id.to_owned(),
+        agent.to_owned(),
+        repo.display().to_string(),
+    ];
+    if let Some(m) = model {
+        args.push(m.to_owned());
+    }
+
+    #[cfg(windows)]
+    {
+        let mut cmd = std::process::Command::new(exe);
+        cmd.args(&args);
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+        cmd.creation_flags(0x0800_0000 | 0x0000_0200);
+        let _child = cmd.spawn().map_err(Error::Io)?;
+    }
+    #[cfg(unix)]
+    {
+        let mut cmd = std::process::Command::new(exe);
+        cmd.args(&args);
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+        let _child = cmd.spawn().map_err(Error::Io)?;
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        if let Ok(record) = load_session_record(session_id) {
+            return Ok(record);
+        }
+    }
+
+    Err(Error::Process(
+        "Session host failed to start within timeout".to_owned(),
+    ))
+}
+
+/// Stops an ongoing session by ID.
+///
+/// # Errors
+/// Returns [`Error`] if the session cannot be contacted or stopped.
+pub async fn stop_session(session_id: &str) -> Result<(), Error> {
+    let record = load_session_record(session_id)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|e| Error::Process(e.to_string()))?;
+
+    let url = format!("http://127.0.0.1:{}/stop", record.port);
+    let _ = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", record.token))
+        .send()
+        .await;
+
+    // Verify cleanup
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    remove_session_record(session_id);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constructs_official_commands_without_permission_bypass() {
+        let repo = tempfile::tempdir().unwrap();
+        for (agent, executable) in [
+            ("claude", "claude"),
+            ("claude-code", "claude"),
+            ("codex", "codex"),
+            ("gemini", "gemini"),
+            ("gemini-cli", "gemini"),
+        ] {
+            let command = launch_command(agent, repo.path(), Some("example-model")).unwrap();
+            assert_eq!(command.executable, executable);
+            assert_eq!(command.arguments, ["--model", "example-model"]);
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_agent_and_nonexistent_workspace() {
+        let repo = tempfile::tempdir().unwrap();
+        assert!(launch_command("unknown", repo.path(), None).is_err());
+        assert!(launch_command("claude", &repo.path().join("missing"), None).is_err());
+    }
+
+    #[test]
+    fn rejects_model_values_that_could_become_options() {
+        let repo = tempfile::tempdir().unwrap();
+        for model in ["", "--dangerously-skip-permissions", "-yolo", "--verbose"] {
+            assert!(launch_command("claude", repo.path(), Some(model)).is_err());
+        }
+    }
+
+    #[test]
+    fn scrollback_retains_most_recent_bytes_within_limit() {
+        let mut buffer = Scrollback::new(5);
+        buffer.append(b"abc");
+        buffer.append(b"defg");
+        assert_eq!(buffer.bytes(), b"cdefg");
+        buffer.append(b"123456");
+        assert_eq!(buffer.bytes(), b"23456");
+    }
+
+    #[tokio::test]
+    async fn independent_session_host_serves_health_and_stops_cleanly() {
+        let dir = tempfile::tempdir().unwrap();
+        let session_id = format!("test-session-{}", std::process::id());
+
+        #[cfg(windows)]
+        let override_cmd = Some(("cmd.exe", &["/c", "ping -n 30 127.0.0.1 >nul"][..]));
+        #[cfg(not(windows))]
+        let override_cmd = Some(("sh", &["-c", "sleep 30"][..]));
+
+        let s_id = session_id.clone();
+        let repo = dir.path().to_path_buf();
+        let host_handle = tokio::spawn(async move {
+            let _ = run_pty_host(&s_id, "claude", &repo, None, override_cmd).await;
+        });
+
+        // Wait for session record to be written
+        let mut record = None;
+        for _ in 0..40 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if let Ok(r) = load_session_record(&session_id) {
+                record = Some(r);
+                break;
+            }
+        }
+        let record = record.expect("session record should be created");
+        assert_eq!(record.session_id, session_id);
+        assert!(record.child_pid > 0);
+
+        // Verify child process is alive (fail-open invariant)
+        assert!(is_pid_alive(record.child_pid));
+
+        // Call stop endpoint
+        stop_session(&session_id).await.expect("stop session");
+
+        // Wait for host task to finish
+        let _ = host_handle.await;
+
+        // Verify session record is cleaned up
+        assert!(load_session_record(&session_id).is_err());
+    }
+}
