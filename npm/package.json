@@ -1,6 +1,6 @@
 {
   "name": "fleethud",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Live mission control for AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI)",
   "bin": {
     "fleethud": "./bin/fleethud"
