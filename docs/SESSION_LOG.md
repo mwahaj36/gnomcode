@@ -1,3 +1,20 @@
+## 2026-10-28 — Phase 4: M8 router, zero-token handoff, switch/resume, and policy controls
+
+- Implemented ADR 0018: model router, zero-token handoff compilation, switch/resume orchestration, and CLI policy controls.
+- Domain types (`crates/core`): Added `RoutingPolicy` (`ask_first`, `automatic`, `deny_cross_provider`), `HandoffPacket` compiling prompt summaries, touched files, and turn counts for model transitions without raw log token replay. Added unit tests for serialization and parsing.
+- Storage layer (`crates/store`): Added `get_routing_policy` and `save_routing_policy` persisting to SQLite `context_relay_config` with unit tests.
+- Daemon API (`crates/daemon`):
+  - `POST /api/v1/sessions/{id}/switch`: compiles `HandoffPacket` from session history and records a `System` chat event documenting the switch.
+  - `POST /api/v1/sessions/{id}/resume`: arms session in `ResumeQueue` for automatic execution on quota reset.
+  - `GET /api/v1/routing/policy` & `POST /api/v1/routing/policy`: inspects and updates the active failover policy.
+  - Unit tests in `crates/daemon/src/api.rs`.
+- CLI commands (`crates/cli`):
+  - `spawnt switch <session-id> --model <model>`: executes zero-token handoff.
+  - `spawnt resume <session-id> [--prompt <prompt>]`: arms session in Resume Queue.
+  - `spawnt policy [--set <policy>]`: reads or updates active routing policy.
+  - Integration tests in `crates/cli/tests/launch_lifecycle.rs` for `policy`, `switch`, and `resume`.
+- Full quality gate verified across all crates and frontend packages.
+
 ## 2026-10-28 — Phase 3: M7 structured chat, local redacted history, file viewer, and diff review
 
 - Implemented ADR 0017: structured chat events, local redacted conversation history in SQLite, user-controlled retention and hard deletion, permission approval handling, and read-only file/diff inspection.
