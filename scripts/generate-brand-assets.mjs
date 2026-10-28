@@ -59,7 +59,7 @@ return Buffer.concat([header, ...iconSizes.map(size => frames.get(size))]);
 const ico = await windowsIcon(0.65);
 const trayIco = await windowsIcon(1);
 for (const path of ['scripts/spawnt-tray.ico', 'web/public/downloads/spawnt-tray.ico']) await writeFile(new URL(path, root), trayIco);
-for (const path of ['scripts/fleethud.ico', 'web/app/favicon.ico', 'web/public/downloads/fleethud.ico']) {
+for (const path of ['scripts/spawnt.ico', 'web/app/favicon.ico', 'web/public/downloads/spawnt.ico']) {
   await writeFile(new URL(path, root), ico);
 }
 await writeFile(new URL('web/app/apple-icon.png', root), await sharp(source).resize(180, 180).flatten({ background: '#070708' }).png().toBuffer());

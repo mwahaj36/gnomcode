@@ -6,7 +6,7 @@ import ThemeControl from "./ThemeControl";
 export default function MarketingFooter() {
   return <footer className="sp-site-footer" id="site-footer">
     <div className="sp-site-footer-grid">
-      <div className="sp-site-footer-intro"><Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores metadata only. Prompts, code and output are never saved or sent.</p></div>
+      <div className="sp-site-footer-intro"><Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores redacted monitoring metadata. Local chat history is planned.</p></div>
       <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
       <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs#privacy">Privacy</Link></div>
       <div><span>MORE</span><Link href="/auth">Account</Link><ThemeControl className="sp-site-theme" /></div>

@@ -9,7 +9,7 @@ Status: Accepted. Date: 2026-10-27.
 A cloud workspace cannot receive a browser callback on the user’s Windows
 loopback interface. Copying a desktop session shares rotating refresh tokens and
 requires handling raw account credentials. Provider runtime identity does not
-prove FleetHUD account ownership.
+prove Spawnt account ownership.
 
 ## Decision
 

@@ -9,7 +9,7 @@ const nextConfig = {
       },
       {
         source: "/download",
-        destination: "/downloads/FleetHUD-Setup.exe",
+        destination: "/downloads/Spawnt-Setup.exe",
       },
       {
         source: "/sh",

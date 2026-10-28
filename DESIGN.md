@@ -4,7 +4,7 @@ Status: the landing, shared marketing shell, pricing, platform-selectable downlo
 
 ## Brand and visual language
 
-- Display `spawnt` in lowercase. Keep internal `fleethud` identifiers until a separate migration phase.
+- Display `spawnt` in lowercase. Keep internal `spawnt` identifiers until a separate migration phase.
 - Keep the Daytona-inspired structure: near-black canvas, thin borders, aligned grids, restrained uppercase mono labels, square controls, and the smoothly detaching marketing navbar. Use the marketing sans-led type hierarchy and open, divided sections in the console too.
 - Use the solid triangle-and-square mark from `web/public/spawnt-mark.svg` in `currentColor`, without a tile behind it. Red identifies primary actions, active state, and attention. Web and embedded console headers use the same mask asset; generated Windows icon assets and installer marks follow its geometry.
 - No emojis, decorative gradients, oversized pills, or color-only status indicators.

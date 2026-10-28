@@ -26,9 +26,9 @@ const features = [
   ["Stay under limits", "Track what is left in each plan and pick up where you stopped when it resets."],
 ];
 const plans = [
-  { name: "Free", price: "$0", term: "forever", promise: "See your agents on one machine.", points: ["Local session view", "Usage and cost", "Quota tracking"], href: "/downloads", action: "Download" },
-  { name: "Pro", price: "$19", term: "one-time", promise: "More control for your own work.", points: ["Everything in Free", "Resume queue", "Guardrails and export"], href: "/pricing", action: "View Pro" },
-  { name: "Teams", price: "$12", term: "/ seat / month", promise: "Shared visibility for a team.", points: ["Team dashboard", "Shared caps", "Team alerts"], href: "/pricing", action: "View Teams" },
+  { name: "Local", price: "$0", term: "forever", promise: "Run locally without an account.", points: ["Session and quota view", "Guardrails and resume", "Analytics and export"], href: "/downloads", action: "Download" },
+  { name: "Remote", price: "Planned", term: "paid feature", promise: "Connect to your sessions from your phone.", points: ["Encrypted access planned", "Device pairing", "Session controls"], href: "/pricing", action: "Learn more" },
+  { name: "Teams", price: "Planned", term: "paid feature", promise: "Shared visibility for a team.", points: ["Team dashboard", "Shared budgets", "Team alerts"], href: "/pricing", action: "Learn more" },
 ];
 
 function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="true" />; }
@@ -134,7 +134,7 @@ export default function LandingPage() {
 
     <main id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download spawnt <span aria-hidden="true">→</span></Link><Link className="sp-button-outline" href="/docs">View docs <span aria-hidden="true">↗</span></Link></div><small>Local-first. Nothing leaves your machine.</small></div>
+        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download spawnt <span aria-hidden="true">→</span></Link><Link className="sp-button-outline" href="/docs">View docs <span aria-hidden="true">↗</span></Link></div><small>Local-first. Cloud sync is optional.</small></div>
         <div className="sp-hero-shot" aria-label="Illustrative console preview">
           <div className="sp-shot-head"><span><Mark /> spawnt <b>/</b> overview</span><span className="sp-demo-label">ILLUSTRATIVE PREVIEW</span></div>
           <div className="sp-shot-body"><ConsoleTourView kind="overview" compact /></div>
@@ -165,15 +165,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Your logs never leave your machine.</h2><span>PRIVACY / BY DESIGN</span></div><div className="sp-privacy-grid">{[["Local only", "Reads logs on your machine."], ["Metadata only", "No prompts, code or output stored."], ["No telemetry", "Nothing phones home."], ["Loopback", "Only your machine can reach it."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
+      <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Your logs stay on your machine.</h2><span>PRIVACY / BY DESIGN</span></div><div className="sp-privacy-grid">{[["Local only", "Reads logs on your machine."], ["Metadata only", "Activity metadata is redacted before storage."], ["No telemetry", "No product telemetry. Optional services are disclosed."], ["Loopback", "Only your machine can reach it."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
 
-      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">Start free. Add control when you need it.</h2><p>Plans from the current product specification.</p></div><Link href="/pricing">Compare plans <span aria-hidden="true">↗</span></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <span aria-hidden="true">→</span></Link></article>)}</div></section>
+      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote and Teams are planned paid features.</p></div><Link href="/pricing">Compare plans <span aria-hidden="true">↗</span></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <span aria-hidden="true">→</span></Link></article>)}</div></section>
 
       <section className="sp-final sp-width" data-reveal><h2>Start in a minute.</h2><p>Download spawnt and open your first session.</p><Link className="sp-button-primary" href="/downloads">Download <span aria-hidden="true">→</span></Link></section>
     </main>
     <footer className="sp-footer" data-reveal>
       <div className="sp-width sp-footer-grid">
-        <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores metadata only. Prompts, code and output are never saved or sent.</p></div>
+        <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores redacted monitoring metadata. Local chat history is planned.</p></div>
         <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
         <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs#privacy">Privacy</Link></div>
         <div><span>MORE</span><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>

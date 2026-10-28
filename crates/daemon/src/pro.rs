@@ -1,11 +1,11 @@
 //! Local Pro license checks, guardrails execution, and Resume Queue.
 
-use fleethud_core::AgentId;
-use fleethud_core::license::{FLEETHUD_LICENSE_PUBKEY_HEX, LicenseFile, Tier, verify_license};
-use fleethud_core::rules::{RuleAction, evaluate_guardrails, is_resume_eligible};
-use fleethud_platform::fleethud_home;
-use fleethud_store::Database;
 use serde::{Deserialize, Serialize};
+use spawnt_core::AgentId;
+use spawnt_core::license::{LicenseFile, SPAWNT_LICENSE_PUBKEY_HEX, Tier, verify_license};
+use spawnt_core::rules::{RuleAction, evaluate_guardrails, is_resume_eligible};
+use spawnt_platform::spawnt_home;
+use spawnt_store::Database;
 use std::fs;
 use std::process::Command;
 use std::time::{Duration, SystemTime};
@@ -30,19 +30,19 @@ pub struct LicenseStatus {
 #[inline(always)]
 pub fn has_pro_license() -> bool {
     // 1. Check if authenticated cloud account session is paired
-    if fleethud_home().join("session.json").exists() {
+    if spawnt_home().join("session.json").exists() {
         return true;
     }
 
     // 2. Fall back to offline signed license key
-    let Ok(bytes) = fs::read(fleethud_home().join("license.key")) else {
+    let Ok(bytes) = fs::read(spawnt_home().join("license.key")) else {
         return false;
     };
     let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) else {
         return false;
     };
     matches!(
-        verify_license(&license, FLEETHUD_LICENSE_PUBKEY_HEX),
+        verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX),
         Ok(Tier::Pro | Tier::Team)
     )
 }
@@ -51,9 +51,9 @@ pub fn has_pro_license() -> bool {
 #[must_use]
 pub fn get_license_status() -> LicenseStatus {
     // 1. First check offline signed license key
-    if let Ok(bytes) = fs::read(fleethud_home().join("license.key")) {
+    if let Ok(bytes) = fs::read(spawnt_home().join("license.key")) {
         if let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) {
-            if let Ok(tier) = verify_license(&license, FLEETHUD_LICENSE_PUBKEY_HEX) {
+            if let Ok(tier) = verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX) {
                 let (tier_str, is_lic) = match tier {
                     Tier::Pro => ("pro", true),
                     Tier::Team => ("team", true),
@@ -74,7 +74,7 @@ pub fn get_license_status() -> LicenseStatus {
     }
 
     // 2. Check if linked via cloud account pairing token
-    if let Ok(raw) = fs::read_to_string(fleethud_home().join("session.json")) {
+    if let Ok(raw) = fs::read_to_string(spawnt_home().join("session.json")) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
             let email = val
                 .pointer("/user/email")
@@ -109,16 +109,15 @@ pub fn activate_license(raw_input: &str) -> Result<LicenseStatus, String> {
     let license: LicenseFile =
         serde_json::from_str(trimmed).map_err(|e| format!("Invalid license JSON format: {e}"))?;
 
-    let tier = verify_license(&license, FLEETHUD_LICENSE_PUBKEY_HEX)
+    let tier = verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX)
         .map_err(|e| format!("License verification failed: {e}"))?;
 
     if tier == Tier::Free {
         return Err("License payload specifies Free tier; Pro or Team required.".to_owned());
     }
 
-    let key_path = fleethud_home().join("license.key");
-    fs::create_dir_all(fleethud_home())
-        .map_err(|e| format!("Failed to create fleethud home: {e}"))?;
+    let key_path = spawnt_home().join("license.key");
+    fs::create_dir_all(spawnt_home()).map_err(|e| format!("Failed to create spawnt home: {e}"))?;
     fs::write(
         &key_path,
         serde_json::to_vec_pretty(&license).map_err(|e| e.to_string())?,
@@ -130,7 +129,7 @@ pub fn activate_license(raw_input: &str) -> Result<LicenseStatus, String> {
 
 /// Deletes the local license key, reverting to Free tier.
 pub fn remove_license() -> Result<(), std::io::Error> {
-    let key_path = fleethud_home().join("license.key");
+    let key_path = spawnt_home().join("license.key");
     if key_path.exists() {
         fs::remove_file(key_path)?;
     }
@@ -140,11 +139,7 @@ pub fn remove_license() -> Result<(), std::io::Error> {
 /// Evaluates persisted rules after ingestion and records alerts.
 /// Claude hard stops are read by the fail-open PreToolUse hook.
 pub fn run_guardrails(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let block_path = fleethud_home().join("blocked-sessions.json");
-    if !has_pro_license() {
-        let _ = fs::remove_file(block_path);
-        return Ok(());
-    }
+    let block_path = spawnt_home().join("blocked-sessions.json");
     let rules = db.list_rules()?;
     let sessions = db.list_active_sessions(500)?;
     let mut blocked = Vec::new();
@@ -182,10 +177,6 @@ pub fn run_guardrails(db: &Database) -> Result<(), Box<dyn std::error::Error + S
 
 /// Evaluates armed Resume Queue entries and auto-resumes eligible sessions.
 pub fn run_resume_queue(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if !has_pro_license() {
-        return Ok(());
-    }
-
     let entries = db.list_resume_queue()?;
     if entries.is_empty() {
         return Ok(());
@@ -254,10 +245,6 @@ pub fn run_resume_queue(db: &Database) -> Result<(), Box<dyn std::error::Error +
 /// Scans active sessions for context window saturation >= threshold,
 /// records pending relay events or auto-executes handoff based on policy.
 pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if !has_pro_license() {
-        return Ok(());
-    }
-
     let config = db.get_context_relay_config()?;
     if config.policy == "disabled" {
         return Ok(());
@@ -309,7 +296,7 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
                         .unwrap_or_else(|_| ".".to_owned())
                 });
 
-            let entry = fleethud_store::ContextRelayEntry {
+            let entry = spawnt_store::ContextRelayEntry {
                 id: relay_id,
                 session_id: s.id.clone(),
                 source_agent: s.agent.clone(),
@@ -338,7 +325,7 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
                 "Session in {} reached {}% context. Relay checkpoint prepared for {}.",
                 s.project_name, fill_pct, target_agent
             );
-            let _ = fleethud_platform::send_desktop_notification(&title, &body);
+            let _ = spawnt_platform::send_desktop_notification(&title, &body);
 
             if config.policy == "auto" {
                 let _ = execute_relay_handoff(&entry);
@@ -350,25 +337,25 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
 }
 
 /// Executes a Context Relay handoff:
-/// 1. Writes zero-knowledge .fleethud/HANDOFF.md checkpoint in project directory.
+/// 1. Writes zero-knowledge .spawnt/HANDOFF.md checkpoint in project directory.
 /// 2. Spawns fresh agent session in an interactive terminal window without permission escalation.
 pub fn execute_relay_handoff(
-    entry: &fleethud_store::ContextRelayEntry,
+    entry: &spawnt_store::ContextRelayEntry,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let repo_dir = std::path::Path::new(&entry.cwd);
-    let fleethud_dir = repo_dir.join(".fleethud");
-    let _ = std::fs::create_dir_all(&fleethud_dir);
+    let spawnt_dir = repo_dir.join(".spawnt");
+    let _ = std::fs::create_dir_all(&spawnt_dir);
 
-    let handoff_path = fleethud_dir.join("HANDOFF.md");
+    let handoff_path = spawnt_dir.join("HANDOFF.md");
     let content = format!(
-        "# FleetHUD Context Relay Checkpoint\n\n\
+        "# Spawnt Context Relay Checkpoint\n\n\
         - **Source Agent:** {}\n\
         - **Target Agent:** {}\n\
         - **Project:** {}\n\
         - **Saturation:** {}% context consumed (Safety reserve active)\n\
         - **Timestamp:** {}\n\n\
         ## Continuity Instructions for Fresh Session\n\
-        This workspace was handed off by FleetHUD Context Relay because the previous session reached the context saturation limit.\n\
+        This workspace was handed off by Spawnt Context Relay because the previous session reached the context saturation limit.\n\
         1. Inspect modified workspace files and recent git status (`git status`).\n\
         2. Verify existing test suites (`cargo test` / `npm test`).\n\
         3. Continue the task from this clean context window without repeating saturated tokens.\n",
@@ -381,14 +368,14 @@ pub fn execute_relay_handoff(
     std::fs::write(&handoff_path, content)?;
 
     // Spawn the fresh target agent session in an interactive terminal or focus editor
-    let _ = fleethud_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd);
+    let _ = spawnt_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd);
 
     let title = format!("[RELAY] Handoff Complete: {}", entry.target_agent);
     let body = format!(
-        "Checkpoint created in .fleethud/HANDOFF.md for {}. Clean session initialized.",
+        "Checkpoint created in .spawnt/HANDOFF.md for {}. Clean session initialized.",
         entry.project_name
     );
-    let _ = fleethud_platform::send_desktop_notification(&title, &body);
+    let _ = spawnt_platform::send_desktop_notification(&title, &body);
 
     Ok(())
 }
@@ -396,7 +383,7 @@ pub fn execute_relay_handoff(
 /// Checks whether a session is currently blocked by a guardrail rule.
 /// Used for 50ms loopback IPC query.
 pub fn is_session_blocked(session_id: &str) -> bool {
-    let block_path = fleethud_home().join("blocked-sessions.json");
+    let block_path = spawnt_home().join("blocked-sessions.json");
     let Ok(meta) = fs::metadata(&block_path) else {
         return false;
     };
