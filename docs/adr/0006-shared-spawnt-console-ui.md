@@ -1,4 +1,4 @@
-# 0005 — Shared spawnt Console Presentation
+# 0006 — Shared spawnt Console Presentation
 
 - **Status:** Accepted
 - **Date:** 2026-10-28

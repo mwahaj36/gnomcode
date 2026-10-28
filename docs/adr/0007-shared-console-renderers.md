@@ -1,4 +1,4 @@
-# 0006 — Shared console renderers and daily measurements
+# 0007 — Shared console renderers and daily measurements
 
 - **Status:** Accepted
 - **Date:** 2026-10-28
