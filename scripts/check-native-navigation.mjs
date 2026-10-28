@@ -34,3 +34,16 @@ assert.equal(await quotaLoad(),true);
 assert.equal(quotaNodes.get('quota-table').innerHTML,'<div>quota loaded</div>');
 for(const name of ['lastReportJson','lastSessionsJson','lastQuotaJson']) assert.match(cacheDeclarations,new RegExp(`\\b${name}\\b`),`${name} needs an initialized render cache`);
 console.log('PASS: native authorization, loading recovery, initialized caches and successful quota retry');
+
+const accountNodes=new Map();
+const accountDocument={getElementById(id){if(!accountNodes.has(id))accountNodes.set(id,{hidden:false,style:{},value:'unit-local-pairing',focus(){}});return accountNodes.get(id);}};
+let accountPaired=true,accountFailed=false;
+const checkAccount=new Function('document','apiJson',`const headers={};${fn('checkAuthSession')}return checkAuthSession;`)(accountDocument,async url=>{if(accountFailed)throw new Error('offline');return url.includes('auth/session')?{paired:accountPaired,email:'unit@example.invalid'}:{message:'Ready',last_success_at:null};});
+assert.equal(await checkAccount(),true);assert.equal(accountNodes.get('auth-unpaired-card').hidden,true);
+accountPaired=false;assert.equal(await checkAccount(),true);assert.equal(accountNodes.get('auth-paired-card').hidden,true);
+accountFailed=true;assert.equal(await checkAccount(),false);assert.doesNotMatch(accountNodes.get('auth-cloud-status').textContent,/Checking/);
+let requests=0,finishPair;
+const pair=new Function('document','fetch','checkAuthSession',`const headers={};let accountWriteBusy=false;${fn('pairTokenDirectly')}return pairTokenDirectly;`)(accountDocument,()=>{requests++;return new Promise(resolve=>finishPair=resolve);},async()=>true);
+const pendingPair=pair();await pair();assert.equal(requests,1,'concurrent pairing must be ignored');
+finishPair({ok:true});await pendingPair;assert.equal(accountNodes.get('auth-token-input').value,'');assert.equal(accountNodes.get('auth-pair-button').disabled,false);
+console.log('PASS: account connected/disconnected/error states and duplicate pairing prevention without reload');
