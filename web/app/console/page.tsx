@@ -492,9 +492,9 @@ export default function ConsolePage() {
       </div>
 
       }
-      {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
-      {activeView === "overview" && <div className="sp-overview-live"><OngoingPanel sessions={ongoing} /><details className="sp-overview-limits" open><summary>Provider limits</summary><div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} /></details></div>}
       {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
+      {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
+      {activeView === "overview" && <div className="sp-overview-live"><details className="sp-overview-limits" open><summary>Provider limits</summary><div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} /></details><OngoingPanel sessions={ongoing} /></div>}
 
       {activeView === "usage" && <ProvidersPanel report={report} />}
 

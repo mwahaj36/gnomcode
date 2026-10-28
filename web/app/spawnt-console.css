@@ -79,7 +79,7 @@
 .sp-provider-list details>div span{color:var(--sp-text-2)}
 @media(max-width:600px){.sp-provider-list details>div{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-.sp-overview-live{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:28px;margin:28px 0}
+.sp-overview-live{display:grid;grid-template-columns:minmax(260px,1fr) minmax(0,2fr);gap:28px;margin:28px 0}
 .sp-ongoing h2,.sp-account-row h2{font:600 22px/1.3 var(--sp-font-sans);margin:0 0 12px}
 .sp-ongoing>p,.sp-account-row p{color:var(--sp-text-2);font:14px/1.5 var(--sp-font-sans)}
 .sp-ongoing details{border-block-start:1px solid var(--sp-border);padding:16px 0}
