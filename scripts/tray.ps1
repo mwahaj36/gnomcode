@@ -21,7 +21,8 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $Port = 41738
-$DaemonInfoPath = "$env:USERPROFILE\.fleethud\daemon.json"
+$FleetHudHome = if ($env:FLEETHUD_HOME) { $env:FLEETHUD_HOME } else { Join-Path $env:USERPROFILE ".fleethud" }
+$DaemonInfoPath = Join-Path $FleetHudHome "daemon.json"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $IconPath = Join-Path $ScriptDir "fleethud.ico"
 if (-not (Test-Path $IconPath)) {
@@ -80,8 +81,15 @@ function Find-FleetHUDWindow {
 }
 
 function Open-Console {
+    try {
+        $engine = Join-Path $ScriptDir "fleethud.exe"
+        Start-Process -FilePath $engine -ArgumentList "daemon" -WindowStyle Hidden -ErrorAction Stop
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("FleetHUD could not start. Reinstall the latest build from fleethud.vercel.app/downloads.", "FleetHUD") | Out-Null
+        return
+    }
     $existingHwnd = Find-FleetHUDWindow
-    if ($existingHwnd -ne [IntPtr]::Zero) {
+    if ($existingHwnd -ne [IntPtr]::Zero -and $script:lastConsoleUrl -eq (Get-ConsoleUrl)) {
         if ([Win32]::IsIconic($existingHwnd)) {
             [Win32]::ShowWindow($existingHwnd, 9) | Out-Null # SW_RESTORE
         }
@@ -91,15 +99,16 @@ function Open-Console {
     }
 
     $url = Get-ConsoleUrl
+    $script:lastConsoleUrl = $url
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
     $profileArg = "--user-data-dir=`"$localAppData\FleetHUD\AppProfile`""
     $windowArg = "--window-name=spawnt"
     $candidateExes = @(
-        "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe",
+        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
         "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
         "msedge.exe",
         "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-        "$env:ProgramFiles (x86)\Google\Chrome\Application\chrome.exe",
+        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
         "chrome.exe"
     )
 
@@ -373,14 +382,15 @@ $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 3000
 $timer.Add_Tick({
     try {
-        if (-not (Test-Path $DaemonInfoPath)) { return }
+        if (-not (Test-Path $DaemonInfoPath)) { throw "Daemon unavailable" }
         $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
         $headers = @{ "Authorization" = "Bearer $($info.token)" }
 
         # Query live metrics & active sessions
-        $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&status=active&page=1&limit=5" -Headers $headers -TimeoutSec 1 -ErrorAction SilentlyContinue
-        if (-not $live) { return }
-
+        $from = [uri]::EscapeDataString([DateTime]::Today.ToUniversalTime().ToString("o"))
+        $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&from=$from&status=active&page=1&limit=5" -Headers $headers -TimeoutSec 3 -ErrorAction Stop
+        if (-not $live) { throw "Daemon unavailable" }
+        $idleSessionItem.Text = "  Fleet Idle (no active local agents)"
         $count = $live.active_count
         $hasSpend = $null -ne $live.timeline -and $null -ne $live.timeline.total_cost_usd
         if ($hasSpend) {
@@ -453,7 +463,13 @@ $timer.Add_Tick({
                 }
             }
         }
-    } catch {}
+    } catch {
+        $notifyIcon.Text = "FleetHUD: daemon unavailable - click to restart"
+        $sessionsHeader.Text = "Local sessions unavailable"
+        $idleSessionItem.Text = "  Open Mission Control to reconnect"
+        $idleSessionItem.Visible = $true
+        foreach ($item in $sessionMenuItems) { $item.Visible = $false }
+    }
 })
 $timer.Start()
 
