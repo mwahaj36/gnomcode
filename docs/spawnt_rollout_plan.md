@@ -6,7 +6,7 @@ Status: proposed implementation sequence, updated 2026-10-28 for the current rep
 
 The native GitHub stack #66 contains the redesign phases. Marketing, Docs, Auth and Settings use shared tokens and controls. Both consoles share neutral summary/activity/quota/session/project presenters and the same rail/content layout, with independent authenticated data adapters. The landing tour uses those completed presenters with explicit illustrative data. Rust provides daily/project/session totals, chart proportions and quota provenance/freshness.
 
-Windows retains its script tray and authenticated browser app window. Linux/macOS use the same local console through browser launchers (ADR 0007); a Tauri migration remains separate. Canonical generated PNG/ICO/ICNS assets and self-hosted fonts are present. v1.4 native packaging and final review are in progress. Browser visual QA remains unavailable because the tool reports disabled. Live cloud quota publication requires the user's deferred desktop re-pairing. Do not call pending visual/platform checks passed.
+Windows retains its script tray and authenticated browser app window. Linux/macOS use the same local console through browser launchers (ADR 0007); a Tauri migration remains separate. Canonical generated PNG/ICO/ICNS assets and self-hosted fonts are present. v1.4 Windows/Linux artifacts are rebuilt and verified. macOS native jobs cannot start because of GitHub account billing; merge and publication remain held. Browser visual QA remains unavailable because the tool reports disabled. Live cloud quota publication requires the user's deferred desktop re-pairing. Do not call pending visual/platform checks passed.
 
 ## Rollout order
 

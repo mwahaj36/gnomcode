@@ -2,19 +2,26 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — release verification and external blockers
+
+- Rebuilt Windows x64 setup/zip and Linux x64/ARM64 archives from final shared-console sources. Linux ARM64 executes under QEMU; Linux x64 clippy and workspace tests pass. Windows Rust gate includes installed cargo-deny; Rust 1.87 workspace check and production Next build pass. Windows setup dark render inspected without installation.
+- Native GitHub CI run 40635697474 never started any job: account payments/spending limits blocked execution. Browser inventory still reports local browser use disabled after the user's enable attempt. Live desktop pairing renewal is rejected; the user chose to reconnect later.
+- Prepared v1.4.0 as a draft only. Merge/publication remain held because macOS artifacts and final visual parity cannot be verified. Existing distribution paths and user data stay compatible; no public repository or new domain was created.
+- Packaging now works with Ubuntu 22.04 Python 3.10 using the standard library. Regression checks cover architecture headers, executable launcher permissions, canonical app icons, bundled font notices and combined checksum preservation. Generated Python bytecode is ignored rather than committed.
+
 ## 2026-10-28 — final console parity and safety review
 
 - Kept Settings inside the shared console rail and heading; the existing `/settings` URL forwards to its console destination. Extracted the settings panel without changing its independent account data path.
 - Replaced separate web/local provider breakdowns with one keyboard-accessible presenter that preserves expanded rows on polling. Removed boxed trust treatments, made chart entry sequential, and labeled missing session details unknown.
 - Escaped local automation, relay and pricing metadata, including safe inline action arguments; added a persistent regression check. Moved report and project SQLite queries to blocking tasks. Local project date filters now reject obsolete responses and use the same local-day boundary as reports.
-- Verification: presenter/settings/local-script checks and full Windows Rust gate passed. Production web build and Rust 1.87 minimum-version check passed. Source-matching native artifact rebuilds are being finalized. Browser visual parity cannot be asserted while browser tools remain disabled.
+- Verification: presenter/settings/local-script checks and full Windows Rust gate passed. Production web build and Rust 1.87 minimum-version check passed. Source-matching Windows/Linux artifacts are rebuilt; macOS and visual checks remain externally blocked. Browser visual parity cannot be asserted while browser tools remain disabled.
 
 ## 2026-10-28 — v1.4 platform packaging
 
 - Assumption: use minor version 1.4.0 for the redesign. Keep binary/package/data identifiers and published domain/download paths compatible.
 - Added native Intel/Apple Silicon macOS and x86_64/ARM64 Linux packaging, canonical app/launcher icons, font notices and cross-platform executable archive modes. Unix upgrades retain user data and verify the replacement before atomic installation. macOS browser-console app is unsigned; native Unix trays and notarization remain future work under ADR 0007.
 - Windows setup uses absolute compiler inputs, version-checked embedded payloads, device-theme colors and canonical assets. Restricted upgrade/uninstall process cleanup to the installed executable/profile/tray, replacing broad process-name kills. Shortcuts display spawnt while installation/registry identities remain compatible.
-- Added release architecture/permission/manifest regression checks and native CI packaging/updater verification on four Unix targets. Release builds and cross-platform CI pending before publication.
+- Added release architecture/permission/manifest regression checks and native CI packaging/updater verification on four Unix targets. Windows/Linux release builds passed; macOS CI is blocked before execution by account billing.
 
 ## 2026-10-28 — truthful cloud settings writes
 

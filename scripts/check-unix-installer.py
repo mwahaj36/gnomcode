@@ -7,14 +7,14 @@ import platform
 import subprocess
 import tempfile
 import threading
-import tomllib
+import re
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 assets = root / 'web/public/downloads'
 os_name = 'darwin' if platform.system() == 'Darwin' else 'linux'
 arch = 'aarch64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
-version = tomllib.loads((root / 'Cargo.toml').read_text())['workspace']['package']['version']
+version = re.search(r'\[workspace\.package\][\s\S]*?\nversion\s*=\s*"([^"]+)"', (root / 'Cargo.toml').read_text()).group(1)
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     corrupt = False

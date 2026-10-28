@@ -1,7 +1,7 @@
-# FleetHUD (`fleethud.pro`)
+# spawnt
 
-> **Live Mission Control for AI Coding Agents**  
-> Track live agent state, per-model quota pools, and ground-truth token cost across Claude Code, Codex, Google Antigravity, Gemini CLI, Cline/Roo, and Cursor on Windows, macOS, and Linux. Zero config. 100% local.
+> **See, stop, and control your agents.**
+> Track live agent state, per-model quota pools, and measured usage and estimated API-equivalent cost across Claude Code, Codex, Google Antigravity, Gemini CLI, Cline/Roo, and Cursor on Windows, macOS, and Linux. Local-first, with optional account pairing for metadata snapshots.
 
 [![npm version](https://img.shields.io/npm/v/fleethud.svg)](https://www.npmjs.com/package/fleethud)
 
