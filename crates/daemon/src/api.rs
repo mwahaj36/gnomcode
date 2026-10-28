@@ -675,7 +675,7 @@ async fn list_sessions_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let page = params.page.unwrap_or(1).max(1);
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
-    let offset = (page - 1) * limit;
+    let offset = (page - 1).saturating_mul(limit);
 
     let db = state.db.lock().await;
     let (mut sessions, total_count) = db
@@ -1088,19 +1088,25 @@ async fn auth_session_get_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
-    let paired = path.exists();
-    let email = if paired {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-            .and_then(|v| {
-                v.pointer("/user/email")
-                    .and_then(Value::as_str)
-                    .map(ToOwned::to_owned)
-            })
-    } else {
-        None
-    };
+    let session = std::fs::read(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<Value>(&raw).ok());
+    let paired = session.as_ref().is_some_and(|session| {
+        session
+            .pointer("/user/id")
+            .and_then(Value::as_str)
+            .is_some()
+            && session["access_token"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+            && session["refresh_token"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+    });
+    let email = session
+        .as_ref()
+        .and_then(|session| session.pointer("/user/email"))
+        .and_then(Value::as_str);
     Ok((
         cors_headers(),
         Json(json!({ "paired": paired, "email": email })),
@@ -1113,34 +1119,18 @@ async fn auth_session_post_handler(
     Json(payload): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if payload
-        .get("access_token")
-        .and_then(Value::as_str)
-        .is_none()
-        || payload
-            .get("refresh_token")
-            .and_then(Value::as_str)
-            .is_none()
-        || payload
-            .pointer("/user/id")
-            .and_then(Value::as_str)
-            .is_none()
-    {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    let path = session_file_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let content =
-        serde_json::to_string_pretty(&payload).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    std::fs::write(&path, content).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    }
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let (base, key) = crate::sync::cloud_config();
+    crate::sync::validate_session(&client, &base, &key, &payload)
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    crate::sync::save_cloud_session(&session_file_path(), &payload)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok((cors_headers(), Json(json!({ "success": true }))))
 }
@@ -1151,7 +1141,9 @@ async fn auth_session_delete_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
-    let _ = std::fs::remove_file(path);
+    crate::sync::remove_cloud_session(&path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((cors_headers(), Json(json!({ "success": true }))))
 }
 
@@ -1175,7 +1167,7 @@ async fn live_snapshot_handler(
     let range = params.range.as_deref().unwrap_or("all");
     let page = params.page.unwrap_or(1).max(1);
     let limit = params.limit.unwrap_or(10).clamp(1, 100);
-    let offset = (page - 1) * limit;
+    let offset = (page - 1).saturating_mul(limit);
 
     let db = state.db.lock().await;
 
@@ -1342,6 +1334,32 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn retired_browser_pairing_endpoint_cannot_start_a_collector() {
+        let db = Database::open_in_memory().expect("database");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(db)),
+            bearer_token: "local-test-token".to_owned(),
+        });
+        for method in ["GET", "POST", "DELETE"] {
+            let request = Request::builder()
+                .method(method)
+                .uri("/api/v1/auth/pair")
+                .header("Host", "127.0.0.1:41738")
+                .header("Authorization", "Bearer local-test-token")
+                .body(Body::empty())
+                .expect("request");
+            assert_eq!(
+                app.clone()
+                    .oneshot(request)
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::NOT_FOUND
+            );
+        }
+    }
 
     #[tokio::test]
     async fn rejects_missing_bearer_token() {
