@@ -24,9 +24,10 @@ $Port = 41738
 $FleetHudHome = if ($env:FLEETHUD_HOME) { $env:FLEETHUD_HOME } else { Join-Path $env:USERPROFILE ".fleethud" }
 $DaemonInfoPath = Join-Path $FleetHudHome "daemon.json"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$IconPath = Join-Path $ScriptDir "fleethud.ico"
+$IconPath = Join-Path $ScriptDir "spawnt-tray.ico"
 if (-not (Test-Path $IconPath)) {
-    $IconPath = "$env:LOCALAPPDATA\FleetHUD\fleethud.ico"
+    $IconPath = "$env:LOCALAPPDATA\FleetHUD\spawnt-tray.ico"
+    if (-not (Test-Path $IconPath)) { $IconPath = Join-Path $ScriptDir "fleethud.ico" }
 }
 
 Add-Type @"
@@ -260,7 +261,7 @@ for ($i = 0; $i -lt 5; $i++) {
 $contextMenu.Items.Add("-") | Out-Null
 
 # Metrics
-$spendItem = $contextMenu.Items.Add("Today: Unknown UNKNOWN")
+$spendItem = $contextMenu.Items.Add("Today: Price unavailable")
 $spendItem.Enabled = $false
 $spendItem.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
 $spendItem.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
@@ -281,59 +282,32 @@ $exitItem.Add_Click({
     [System.Windows.Forms.Application]::Exit()
 })
 
-function Focus-AgentApp([string]$agent, [string]$projectName) {
+function Focus-AgentApp([string]$agent, [string]$projectName, [string]$surface) {
     try {
-        $wshell = New-Object -ComObject Wscript.Shell
-        
-        # 1. Target window titles
-        $titles = @()
-        if ($projectName -and $projectName -ne "unknown" -and $projectName -ne "fleet") {
-            $titles += $projectName
+        $names = switch -Regex ($agent) {
+            "^codex$" { if ($surface -eq 'desktop_app') { @('ChatGPT','Codex') } else { @('WindowsTerminal','cmd','powershell','pwsh') } }
+            "^claude" { if ($surface -eq 'desktop_app') { @('Claude') } else { @('WindowsTerminal','cmd','powershell','pwsh') } }
+            "antigravity" { @('Antigravity') }
+            "cursor" { @('Cursor') }
+            "cline|roo" { @('Code') }
+            "gemini" { @('WindowsTerminal','cmd','powershell','pwsh') }
+            default { @() }
         }
-        switch -Regex ($agent) {
-            "antigravity" {
-                $titles += @("Antigravity", "Google Antigravity")
-            }
-            "cursor" {
-                $titles += @("Cursor")
-            }
-            "cline|roo" {
-                $titles += @("Visual Studio Code", "Code")
-            }
-            "claude|codex|gemini" {
-                $titles += @("Terminal", "PowerShell", "Command Prompt", "Windows Terminal", "cmd", "pwsh")
-            }
-            default {
-                if ($agent) { $titles += $agent }
-            }
-        }
-
-        foreach ($title in $titles) {
-            if ($wshell.AppActivate($title)) {
-                return $true
-            }
-        }
-
-        # 2. Target process names
-        $pNames = switch -Regex ($agent) {
-            "antigravity" { @("Antigravity") }
-            "cursor"      { @("Cursor") }
-            "cline|roo"   { @("Code") }
-            "claude|codex|gemini" { @("WindowsTerminal", "cmd", "powershell", "pwsh") }
-            default       { @() }
-        }
-
-        foreach ($pName in $pNames) {
-            $procs = Get-Process -Name $pName -ErrorAction SilentlyContinue
-            foreach ($p in $procs) {
-                if ($wshell.AppActivate($p.Id)) {
-                    return $true
-                }
-            }
+        $shell = New-Object -ComObject WScript.Shell
+        $windows = @(Get-Process -Name $names -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })
+        $windows = $windows | Sort-Object @{Expression={ if ($projectName -and $_.MainWindowTitle.IndexOf($projectName,[StringComparison]::OrdinalIgnoreCase) -ge 0) {0} else {1} }}
+        foreach ($window in $windows) {
+            if ([Win32]::IsIconic($window.MainWindowHandle)) { [Win32]::ShowWindow($window.MainWindowHandle,9) | Out-Null }
+            if ($shell.AppActivate($window.Id)) { [Win32]::SetForegroundWindow($window.MainWindowHandle) | Out-Null; return $true }
         }
     } catch {}
     return $false
 }
+
+$copyWorkspaceItem = New-Object System.Windows.Forms.ToolStripMenuItem("Copy workspace path")
+$contextMenu.Items.Insert([Math]::Max(0,$contextMenu.Items.Count-1),$copyWorkspaceItem)
+$copyWorkspaceItem.Visible = $false
+$copyWorkspaceItem.Add_Click({ if ($copyWorkspaceItem.Tag) { [System.Windows.Forms.Clipboard]::SetText([string]$copyWorkspaceItem.Tag) } })
 
 $notifyIcon.ContextMenuStrip = $contextMenu
 foreach ($item in $sessionMenuItems) {
@@ -343,25 +317,31 @@ foreach ($item in $sessionMenuItems) {
         $sid = ""
         $agent = ""
         $proj = ""
+        $surface = ""
         if ($tag -is [hashtable]) {
             $sid = [string]$tag.Id
             $agent = [string]$tag.Agent
             $proj = [string]$tag.Project
+            $surface = [string]$tag.Surface
         } elseif ($tag -is [string]) {
             $sid = $tag
         }
 
+        $focusResult = $null
+        $copyWorkspaceItem.Visible = $false
         if ($sid) {
             try {
                 $info = Get-Content $DaemonInfoPath -Raw | ConvertFrom-Json
                 $escSid = [uri]::EscapeDataString($sid)
-                Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($info.port)/api/v1/sessions/$escSid/focus" -Headers @{ "Authorization" = "Bearer $($info.token)" } -TimeoutSec 1 -ErrorAction SilentlyContinue | Out-Null
+                $focusResult = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($info.port)/api/v1/sessions/$escSid/focus" -Headers @{ "Authorization" = "Bearer $($info.token)" } -TimeoutSec 5 -ErrorAction Stop
+                if ($focusResult.focused) { return }
             } catch {}
         }
 
-        $focused = Focus-AgentApp $agent $proj
+        $focused = Focus-AgentApp $agent $proj $surface
         if (-not $focused) {
-            Open-Console
+            if ($focusResult.repo_path) { $copyWorkspaceItem.Tag = $focusResult.repo_path; $copyWorkspaceItem.Visible = $true }
+            $notifyIcon.ShowBalloonTip(4000,"Session window unavailable","Open the agent app to continue this session.",[System.Windows.Forms.ToolTipIcon]::Info)
         }
     })
 }
@@ -388,29 +368,29 @@ $timer.Add_Tick({
 
         # Query live metrics & active sessions
         $from = [uri]::EscapeDataString([DateTime]::Today.ToUniversalTime().ToString("o"))
-        $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&from=$from&status=active&page=1&limit=5" -Headers $headers -TimeoutSec 3 -ErrorAction Stop
+        $live = Invoke-RestMethod -Uri "http://127.0.0.1:$($info.port)/api/v1/live?range=today&from=$from&status=ongoing&page=1&limit=5" -Headers $headers -TimeoutSec 3 -ErrorAction Stop
         if (-not $live) { throw "Daemon unavailable" }
-        $idleSessionItem.Text = "  Fleet Idle (no active local agents)"
-        $count = $live.active_count
+        $idleSessionItem.Text = "  No ongoing local sessions"
+        $count = if ($null -ne $live.ongoing_count) { $live.ongoing_count } else { $live.active_count }
         $hasSpend = $null -ne $live.timeline -and ($live.timeline.priced_turns -gt 0 -or $live.timeline.cost_basis -in @('estimated','exact','api')) -and $null -ne $live.timeline.total_cost_usd
         if ($hasSpend) {
             $spend = [double]$live.timeline.total_cost_usd
             $coverage = if ($live.timeline.unpriced_turns -gt 0) { "partial estimate" } else { "estimate" }; $spendItem.Text = "Today: `$$($spend.ToString('0.00')) $coverage"
         } else {
-            $spendItem.Text = "Today: Unknown UNKNOWN"
+            $spendItem.Text = "Today: Price unavailable"
         }
-        $sessionsHeader.Text = "Active sessions: $count EXACT"
+        $sessionsHeader.Text = "Ongoing sessions: $count"
 
         Update-TrayIconBadge $count
 
         if ($count -gt 0) {
-            $notifyIcon.Text = "spawnt | $count active EXACT"
+            $notifyIcon.Text = if ($count -eq 1) { "1 active session" } else { "$count active sessions" }
         } else {
-            $notifyIcon.Text = "spawnt | IDLE"
+            $notifyIcon.Text = "No active sessions"
         }
 
         # The live response already includes the first five sessions, active first.
-        $activeList = @($live.sessions | Where-Object { $_.is_active })
+        $activeList = @($live.sessions | Where-Object { $_.is_ongoing -or $_.is_active })
 
         if ($activeList.Count -eq 0) {
             $idleSessionItem.Visible = $true
@@ -422,14 +402,14 @@ $timer.Add_Tick({
             for ($i = 0; $i -lt 5; $i++) {
                 if ($i -lt $activeList.Count) {
                     $s = $activeList[$i]
-                    $badge = if ($s.state -eq "awaiting_approval") { "WAIT" } else { "RUN" }
+                    $badge = if ($s.state -eq "awaiting_approval") { "WAIT" } elseif ($s.state -eq "idle") { "IDLE" } else { "RUN" }
                     $proj = if ($s.project_name -and $s.project_name -ne "unknown") { $s.project_name } else { "fleet" }
                     $stateText = $s.state
                     $menuText = "  $badge | $proj | $($s.agent) | $stateText"
 
                     $sessionMenuItems[$i].Text = $menuText
                     $sessionMenuItems[$i].Visible = $true
-                    $sessionMenuItems[$i].Tag = @{ Id = $s.id; Agent = $s.agent; Project = $proj }
+                    $sessionMenuItems[$i].Tag = @{ Id = $s.id; Agent = $s.agent; Surface = $s.surface; Project = $proj }
 
                     # Trigger approval notification once
                     if ($s.state -eq "awaiting_approval" -and -not $lastNotifiedApprovals.ContainsKey($s.id)) {

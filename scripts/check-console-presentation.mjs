@@ -28,7 +28,7 @@ assert.match(providers,/Unknown · Price unavailable/);
 
 let writes=0, values=[];
 globalThis.document={activeElement:null};
-const element={ contains:()=>false, querySelector:()=>null, querySelectorAll:selector=>selector==='strong'?values:[], set innerHTML(markup){writes++;values=[...markup.matchAll(/<strong>([\s\S]*?)<\/strong>/g)].map(match=>({textContent:match[1],changed:false,classList:{add(){this.owner.changed=true;}}}));values.forEach(value=>value.classList.owner=value);} };
+const element={ contains:()=>false, querySelector:()=>null, querySelectorAll:selector=>selector==='strong'?values:[], set innerHTML(markup){writes++;values=[...markup.matchAll(/<strong(?:\s[^>]*)?>([\s\S]*?)<\/strong>/g)].map(match=>({textContent:match[1],changed:false,classList:{add(){this.owner.changed=true;}}}));values.forEach(value=>value.classList.owner=value);} };
 updateSummary(element,{activeCount:1});
 assert.equal(writes,1);assert.equal(values.some(value=>value.changed),false);
 updateSummary(element,{activeCount:1});assert.equal(writes,1,'unchanged polling must not rewrite markup');
@@ -57,3 +57,9 @@ assert.match(projectPartial,/\$12.00/);assert.match(projectPartial,/Partial esti
 
 const sharedCss=await readFile(new URL('../web/app/spawnt-console.css',import.meta.url),'utf8');
 assert.doesNotMatch(sharedCss,/var\(--(?:text(?:-\d)?|border|primary-text|surface|bg)\)/,'shared console styles must use shared tokens, not marketing-only aliases');
+
+const recentIdle=renderOngoing([{id:'idle-grace',title:'Recent idle',is_active:false,is_ongoing:true,presence:'recently_idle',state:'idle',last_event_at:new Date().toISOString()}]);
+assert.match(recentIdle,/Recent idle/);assert.match(recentIdle,/Recently idle/);assert.match(recentIdle,/Last activity/);
+const windows=renderQuota([{provider:'codex',window:'five_hour',used_pct:50,remaining_pct:50,basis:'exact'},{provider:'codex',window:'weekly',used_pct:8,remaining_pct:92,basis:'exact'}],new Date().toISOString());
+assert.equal((windows.match(/class="sp-limit-windows"/g)||[]).length,1,'one compact row groups both provider windows');
+assert.match(windows,/50.0%/);assert.match(windows,/8.0%/);

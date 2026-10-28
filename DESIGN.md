@@ -87,7 +87,7 @@ Windows app, tray and installer ICOs use the canonical red mark on an opaque #07
 
 Overview shows activity first, then the spend summary, then a two-column region with provider limits on the left and ongoing sessions on the right. Narrow layouts stack these regions in that order. The activity header shows tokens; total cost appears once in the spend summary, while expanded intervals retain their cost. Declare data provenance at the section or column level and reserve repeated inline warnings for missing or partial data. Today uses hourly local-clock labels; longer periods name the reporting period beside the token total. Account is a settings row; active licenses show replacement/removal actions instead of an activation prompt.
 
-Windows ICO generation centers the canonical asset at 0.65x on its opaque black canvas, retaining the existing SVG's intrinsic padding. Web header marks and platform PNGs retain their existing scale.
+Windows app ICO generation centers the canonical asset at 0.65x on black. A separate full-size tray ICO preserves the approved badge appearance. Both come from the same SVG. Provider rows group quota windows, Overview panel headings share alignment, and the compact summary keeps coverage in accessible descriptions. Console navigation retains Settings; Docs and Pricing live inside Settings.
 
 Desktop Account uses a connection summary above a two-column explanation and pairing flow. Pairing instructions name the exact web control, token entry is masked and labeled, and connected devices show a separate Disconnect action. Publication status is independent of account status; loading must resolve to a status or retry message.
 

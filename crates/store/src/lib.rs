@@ -138,8 +138,14 @@ pub struct SessionListItem {
     pub model: String,
     /// State (tool, thinking, awaiting_approval, idle, ended).
     pub state: String,
-    /// Whether actively executing in the last 15 minutes.
+    /// Whether execution or an approval wait is established by source observations.
     pub is_active: bool,
+    /// Running, approval-waiting, or idle within the two-minute grace period.
+    #[serde(default)]
+    pub is_ongoing: bool,
+    /// Source-independent presence classification.
+    #[serde(default)]
+    pub presence: fleethud_core::presence::SessionPresence,
     /// Started at timestamp.
     pub started_at: String,
     /// Last event timestamp.
@@ -401,6 +407,10 @@ pub struct Database {
 /// Target process or repository path for session window focus (`SPEC §3.13`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionFocusTarget {
+    /// Agent identifier for application targeting.
+    pub agent: String,
+    /// Recorded session surface; distinguishes desktop apps from terminals.
+    pub surface: String,
     /// Agent OS process ID, if tracked.
     pub pid: Option<u32>,
     /// Associated repository root path, if known.
@@ -1190,7 +1200,8 @@ impl Database {
         }
     }
 
-    /// Queries live and recent active agent sessions, ordered by `last_event_at DESC`.
+    /// Lists recorded sessions with source state, ordered by latest activity.
+    /// Use the paginated ongoing projection for live presence and badge counts.
     ///
     /// # Errors
     /// Returns [`Error`] if query execution fails.
@@ -1242,19 +1253,10 @@ impl Database {
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
 
-            let now = Utc::now();
-            let is_stale = (now - last_event_at).num_minutes() > 15;
-            let state = if is_stale
-                && (raw_state == SessionState::Tool || raw_state == SessionState::Thinking)
-            {
-                SessionState::Idle
-            } else {
-                raw_state
-            };
-
+            let state = raw_state;
             let raw_model: Option<String> = row.get(5)?;
             let model = match raw_model {
-                Some(ref m) if m.contains("MODEL_PLACEHOLDER") => {
+                Some(ref model) if model.contains("MODEL_PLACEHOLDER") => {
                     Some("Gemini 3.8 Flash (Default)".to_owned())
                 }
                 other => other,
@@ -1810,7 +1812,9 @@ impl Database {
         limit: usize,
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let now = Utc::now();
-        let cutoff = (now - chrono::Duration::minutes(15)).to_rfc3339();
+        let cutoff = (now
+            - chrono::Duration::milliseconds(fleethud_core::presence::RECENT_ACTIVITY_GRACE_MS))
+        .to_rfc3339();
         let agent = agent_filter
             .filter(|value| !value.is_empty())
             .unwrap_or("all");
@@ -1821,8 +1825,11 @@ impl Database {
             r#"SELECT COUNT(*) FROM session s
                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
-                   OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
-                   OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))"#,
+                   OR (?2 = 'ended' AND s.state = 'ended')
+                   OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval')
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))))
+                   OR (?2 = 'idle' AND s.state = 'idle'))"#,
             params![agent, status, cutoff, project_filter],
             |row| row.get(0),
         )?;
@@ -1830,12 +1837,15 @@ impl Database {
             r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3 THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN (s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
-                    OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
-                    OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))
+                    OR (?2 = 'ended' AND s.state = 'ended')
+                   OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval')
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))))
+                    OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
             )
@@ -1859,7 +1869,8 @@ impl Database {
                 COUNT(u.dedup_key),
                 SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END),
                 COALESCE(SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
-                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END), 0)
+                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END), 0),
+                (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1)
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -1895,22 +1906,24 @@ impl Database {
                 let usage_count: i64 = row.get(15)?;
                 let unknown_pricing: Option<i64> = row.get(16)?;
 
-                let last_event_at = DateTime::parse_from_rfc3339(&last_event_at_str)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or(now);
-
-                let diff_mins = (now - last_event_at).num_minutes();
-                let is_recent = diff_mins <= 15;
-
-                let is_active = is_recent
-                    && matches!(
-                        state_str.as_str(),
-                        "thinking" | "tool" | "awaiting_approval"
-                    );
-                let state = if is_active {
-                    state_str
+                let age = DateTime::parse_from_rfc3339(&last_event_at_str)
+                    .ok()
+                    .map(|date| (now - date.with_timezone(&Utc)).num_milliseconds());
+                let latest_kind: Option<String> = row.get(18)?;
+                let open_execution = matches!(
+                    (state_str.as_str(), latest_kind.as_deref()),
+                    ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
+                );
+                let presence =
+                    fleethud_core::presence::classify_presence(&state_str, age, open_execution);
+                let is_ongoing = presence.is_ongoing();
+                let is_active = presence.is_active();
+                let state = if presence == fleethud_core::presence::SessionPresence::Inactive
+                    && matches!(state_str.as_str(), "thinking" | "tool")
+                {
+                    "unknown".to_owned()
                 } else {
-                    "idle".to_owned()
+                    state_str
                 };
 
                 let model = match raw_model {
@@ -1942,6 +1955,8 @@ impl Database {
                     model,
                     state,
                     is_active,
+                    is_ongoing,
+                    presence,
                     started_at,
                     last_event_at: last_event_at_str,
                     input_tokens: input_tokens.max(0) as u64,
@@ -2364,7 +2379,7 @@ impl Database {
     ) -> Result<Option<SessionFocusTarget>, Error> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT s.pid, p.repo_root
+            SELECT s.pid, p.repo_root, s.agent, s.surface
             FROM session s
             LEFT JOIN project p ON s.project_id = p.id
             WHERE s.id = ?1
@@ -2376,6 +2391,8 @@ impl Database {
                 let pid: Option<i64> = r.get(0)?;
                 let repo_root: Option<String> = r.get(1)?;
                 Ok(SessionFocusTarget {
+                    agent: r.get(2)?,
+                    surface: r.get(3)?,
                     pid: pid.map(|p| p as u32),
                     repo_root,
                 })
@@ -2685,6 +2702,93 @@ mod tests {
             .list_sessions_paginated(None, None, 0, 10)
             .expect("list all sessions paginated");
         assert_eq!(total_recent, 1);
+        let (ongoing, ongoing_count) = db
+            .list_sessions_paginated(None, Some("ongoing"), 0, 10)
+            .expect("ongoing idle session");
+        assert_eq!(ongoing_count, 1, "recent idle sessions remain ongoing");
+        assert_eq!(ongoing[0].state, "idle");
+        assert!(!ongoing[0].is_active);
+        let old = (Utc::now() - chrono::Duration::seconds(121)).to_rfc3339();
+        db.conn
+            .execute(
+                "UPDATE session SET last_event_at = ?1 WHERE id = 'claude-code:s1'",
+                rusqlite::params![old],
+            )
+            .expect("age idle");
+        assert_eq!(
+            db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
+                .expect("stale idle")
+                .1,
+            0
+        );
+        db.conn
+            .execute(
+                "UPDATE session SET state = 'awaiting_approval' WHERE id = 'claude-code:s1'",
+                [],
+            )
+            .expect("approval wait");
+        assert_eq!(
+            db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
+                .expect("old approval")
+                .1,
+            1
+        );
+        db.conn
+            .execute(
+                "UPDATE session SET state = 'ended' WHERE id = 'claude-code:s1'",
+                [],
+            )
+            .expect("explicit end");
+        assert_eq!(
+            db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
+                .expect("ended excluded")
+                .1,
+            0
+        );
+        assert_eq!(
+            db.list_sessions_paginated(None, None, 0, 10)
+                .expect("ended history")
+                .0[0]
+                .state,
+            "ended"
+        );
+        db.conn
+            .execute(
+                "UPDATE session SET state = 'tool' WHERE id = 'claude-code:s1'",
+                [],
+            )
+            .expect("open tool");
+        assert_eq!(
+            db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
+                .expect("long tool")
+                .1,
+            1
+        );
+        db.conn
+            .execute(
+                "UPDATE activity_event SET kind = 'tool_end' WHERE session_id = 'claude-code:s1'",
+                [],
+            )
+            .expect("closed tool evidence");
+        assert_eq!(
+            db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
+                .expect("no execution evidence")
+                .1,
+            0
+        );
+        db.conn
+            .execute(
+                "UPDATE activity_event SET kind = 'tool_start' WHERE session_id = 'claude-code:s1'",
+                [],
+            )
+            .expect("restore activity");
+        db.conn
+            .execute(
+                "UPDATE session SET state = 'idle', last_event_at = ?1 WHERE id = 'claude-code:s1'",
+                rusqlite::params![Utc::now().to_rfc3339()],
+            )
+            .expect("restore idle");
+
         assert_eq!(all_recent[0].title.as_deref(), Some("Implement M1"));
 
         let report = db.generate_usage_report().expect("report");
