@@ -15,6 +15,25 @@ for (const size of sizes) {
   await writeFile(new URL(`spawnt-${size}.png`, directory), png);
 }
 const iconSizes = sizes.filter(size => size <= 256);
+// Legacy Windows tray/GDI+ cannot draw PNG-compressed small ICO frames.
+// Keep the large frame compressed, and encode small frames as Windows DIBs.
+const frames = new Map();
+for (const size of iconSizes) {
+  if (size === 256) { frames.set(size, await sharp(images.get(size)).flatten({ background: '#070708' }).png().toBuffer()); continue; }
+  const pixels = await sharp(images.get(size)).flatten({ background: '#070708' }).ensureAlpha().raw().toBuffer();
+  const maskStride = Math.ceil(size / 32) * 4;
+  const dib = Buffer.alloc(40 + size * size * 4 + maskStride * size);
+  dib.writeUInt32LE(40, 0); dib.writeInt32LE(size, 4); dib.writeInt32LE(size * 2, 8);
+  dib.writeUInt16LE(1, 12); dib.writeUInt16LE(32, 14);
+  dib.writeUInt32LE(size * size * 4, 20);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const input = (y * size + x) * 4, output = 40 + ((size - 1 - y) * size + x) * 4;
+    dib[output] = pixels[input + 2]; dib[output + 1] = pixels[input + 1];
+    dib[output + 2] = pixels[input]; dib[output + 3] = pixels[input + 3];
+    if (!pixels[input + 3]) dib[40 + size * size * 4 + (size - 1 - y) * maskStride + (x >> 3)] |= 128 >> (x % 8);
+  }
+  frames.set(size, dib);
+}
 const header = Buffer.alloc(6 + iconSizes.length * 16);
 header.writeUInt16LE(1, 2);
 header.writeUInt16LE(iconSizes.length, 4);
@@ -24,11 +43,11 @@ for (const [index, size] of iconSizes.entries()) {
   header[entry] = header[entry + 1] = size === 256 ? 0 : size;
   header.writeUInt16LE(1, entry + 4);
   header.writeUInt16LE(32, entry + 6);
-  header.writeUInt32LE(images.get(size).length, entry + 8);
+  header.writeUInt32LE(frames.get(size).length, entry + 8);
   header.writeUInt32LE(offset, entry + 12);
-  offset += images.get(size).length;
+  offset += frames.get(size).length;
 }
-const ico = Buffer.concat([header, ...iconSizes.map(size => images.get(size))]);
+const ico = Buffer.concat([header, ...iconSizes.map(size => frames.get(size))]);
 for (const path of ['scripts/fleethud.ico', 'web/app/favicon.ico', 'web/public/downloads/fleethud.ico']) {
   await writeFile(new URL(path, root), ico);
 }
