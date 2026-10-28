@@ -3,13 +3,13 @@
 
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
-use fleethud_core::{
+use serde_json::Value;
+use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, TrustLevel,
     UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::redact_summary,
 };
-use serde_json::Value;
 use std::collections::HashSet;
 use std::path::Path;
 

@@ -1,12 +1,12 @@
-# FleetHUD Windows updater: use the same native installer as the download page.
+# Spawnt Windows updater: use the same native installer as the download page.
 $ErrorActionPreference = "Stop"
-$Version = "1.5.3"
-$BaseUrl = "https://fleethud.vercel.app/downloads"
+$Version = "0.9.0"
+$BaseUrl = "https://spawntv.vercel.app/downloads"
 if (-not [Environment]::Is64BitOperatingSystem) {
     throw "spawnt requires 64-bit Windows. The existing installation was not changed."
 }
-$Asset = "FleetHUD-v1.5.3-windows-x64.zip"
-$Stage = Join-Path ([IO.Path]::GetTempPath()) ("fleethud-update-" + [Guid]::NewGuid().ToString("N"))
+$Asset = "Spawnt-v0.9.0-windows-x64.zip"
+$Stage = Join-Path ([IO.Path]::GetTempPath()) ("spawnt-update-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $Stage | Out-Null
 try {
     $Archive = Join-Path $Stage $Asset
@@ -18,7 +18,7 @@ try {
     $Actual = (Get-FileHash -Path $Archive -Algorithm SHA256).Hash
     if ($Actual -ine $Expected) { throw "Release checksum verification failed. Existing install preserved." }
     Expand-Archive -Path $Archive -DestinationPath $Stage -Force
-    $Setup = Join-Path $Stage "FleetHUD-Setup.exe"
+    $Setup = Join-Path $Stage "Spawnt-Setup.exe"
     if (-not (Test-Path $Setup)) { throw "Release archive has no native installer." }
     $SetupVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Setup).FileVersion
     if ($SetupVersion -ne "$Version.0") { throw "Installer version does not match the requested release." }

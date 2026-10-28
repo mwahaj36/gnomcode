@@ -1,3 +1,4 @@
+import branding from "../branding.json";
 import type { Metadata } from "next";
 import "./globals.css";
 import "./spawnt-console.css";
@@ -5,7 +6,7 @@ import Navbar from "../components/Navbar";
 import FooterWrapper from "../components/FooterWrapper";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://fleethud.vercel.app"),
+  metadataBase: new URL(branding.baseUrl),
   title: {
     default: "spawnt — Mission Control for AI Coding Agents",
     template: "%s | spawnt",
@@ -39,20 +40,20 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://fleethud.vercel.app",
+    url: branding.baseUrl,
     title: "spawnt — Live Mission Control for AI Coding Agents",
     description:
-      "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with zero content storage.",
+      "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with local-first data handling.",
     siteName: "spawnt",
   },
   twitter: {
     card: "summary_large_image",
     title: "spawnt — Live Mission Control for AI Coding Agents",
     description:
-      "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with zero content storage.",
+      "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with local-first data handling.",
   },
   alternates: {
-    canonical: "https://fleethud.vercel.app",
+    canonical: branding.baseUrl,
   },
   icons: {
     icon: "/spawnt-mark.svg",
@@ -73,12 +74,12 @@ const jsonLd = {
         priceCurrency: "USD",
       },
       description:
-        "Live mission control, token spend attribution, and per-model quota monitoring for AI coding agents with zero content storage.",
+        "Live mission control, token spend attribution, and per-model quota monitoring for AI coding agents with local-first data handling.",
     },
     {
       "@type": "Organization",
       name: "spawnt",
-      url: "https://fleethud.vercel.app",
+      url: branding.baseUrl,
     },
     {
       "@type": "FAQPage",
@@ -88,7 +89,7 @@ const jsonLd = {
           name: "Does spawnt store my source code or prompt contents?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "No. spawnt enforces a non-negotiable invariant: zero content storage. Prompts, code, and tool outputs never touch disk or network.",
+            text: "The current monitoring features store redacted metadata. Local conversation history is planned for model switching; existing optional metadata sync is not end-to-end encrypted.",
           },
         },
         {

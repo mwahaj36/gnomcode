@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * FleetHUD Version Synchronizer & Release Bumper
+ * Spawnt Version Synchronizer & Release Bumper
  * Usage:
  *   node .agents/skills/cut-release/scripts/bump-version.mjs <version | patch | minor | major>
  * Examples:
@@ -76,7 +76,7 @@ if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
   process.exit(1);
 }
 
-console.log(`[fleethud:release] Updating version: ${currentVersion} -> ${newVersion}\n`);
+console.log(`[spawnt:release] Updating version: ${currentVersion} -> ${newVersion}\n`);
 
 const results = [];
 
@@ -123,8 +123,8 @@ if (npmPkg) {
   results.push({ file: npmPkgPath, detail: `"version": "${newVersion}"` });
 }
 
-// 5. npm/fleethud/package.json
-const npmFleetPath = "npm/fleethud/package.json";
+// 5. npm/spawnt/package.json
+const npmFleetPath = "npm/spawnt/package.json";
 let npmFleet = read(npmFleetPath);
 if (npmFleet) {
   npmFleet = npmFleet.replace(/("version":\s*")[^"]+(")/, `$1${newVersion}$2`);
@@ -132,14 +132,24 @@ if (npmFleet) {
   results.push({ file: npmFleetPath, detail: `"version": "${newVersion}"` });
 }
 
+// Keep the desktop, platform packages and optional dependency versions together.
+for (const rel of ['apps/desktop/package.json', ...fs.readdirSync(path.join(ROOT, 'npm/platform')).map(target => `npm/platform/${target}/package.json`)]) {
+  const manifest = JSON.parse(read(rel));
+  manifest.version = newVersion;
+  write(rel, JSON.stringify(manifest, null, 2) + '\n');
+}
+const shimManifest = JSON.parse(read(npmFleetPath));
+for (const name of Object.keys(shimManifest.optionalDependencies || {})) shimManifest.optionalDependencies[name] = newVersion;
+write(npmFleetPath, JSON.stringify(shimManifest, null, 2) + '\n');
+
 // 6. scripts/install.ps1
 const installPs1Path = "scripts/install.ps1";
 let installPs1 = read(installPs1Path);
 if (installPs1) {
   installPs1 = installPs1
     .replace(/(\$Version\s*=\s*")[^"]+(";?)/, `$1${newVersion}$2`)
-    .replace(/FleetHUD-v[0-9.]+-windows-(?:\$Arch|x64)\.zip/g, `FleetHUD-v${newVersion}-windows-x64.zip`)
-    .replace(/FleetHUD v[0-9.]+ installation complete/g, `FleetHUD v${newVersion} installation complete`);
+    .replace(/Spawnt-v[0-9.]+-windows-(?:\$Arch|x64)\.zip/g, `Spawnt-v${newVersion}-windows-x64.zip`)
+    .replace(/Spawnt v[0-9.]+ installation complete/g, `Spawnt v${newVersion} installation complete`);
   write(installPs1Path, installPs1);
   results.push({ file: installPs1Path, detail: `Archive URL & Banner -> v${newVersion}` });
 
@@ -159,7 +169,7 @@ if (unixInstaller) {
 
 // Keep the public landing badge and npm lock root metadata synchronized.
 let landing = read("web/app/page.tsx");
-if (landing) write("web/app/page.tsx", landing.replace(/FleetHUD v[0-9.]+ Production Release/g, `FleetHUD v${newVersion} Production Release`));
+if (landing) write("web/app/page.tsx", landing.replace(/Spawnt v[0-9.]+ Production Release/g, `Spawnt v${newVersion} Production Release`));
 let lockText = read("web/package-lock.json");
 if (lockText) {
   const lock = JSON.parse(lockText);
@@ -174,18 +184,9 @@ let downloadsPage = read(downloadsPagePath);
 if (downloadsPage) {
   downloadsPage = downloadsPage
     .replace(/v[0-9]+\.[0-9]+\.[0-9]+/g, `v${newVersion}`)
-    .replace(/\/downloads\/FleetHUD-v[0-9.]+-windows-x64\.zip/g, `/downloads/FleetHUD-v${newVersion}-windows-x64.zip`);
+    .replace(/\/downloads\/Spawnt-v[0-9.]+-windows-x64\.zip/g, `/downloads/Spawnt-v${newVersion}-windows-x64.zip`);
   write(downloadsPagePath, downloadsPage);
   results.push({ file: downloadsPagePath, detail: `UI Badge & Download Link -> v${newVersion}` });
-}
-
-// 8. Tauri config if present
-const tauriConfigPath = "apps/tray/src-tauri/tauri.conf.json";
-let tauriConfig = read(tauriConfigPath);
-if (tauriConfig) {
-  tauriConfig = tauriConfig.replace(/("version":\s*")[^"]+(")/, `$1${newVersion}$2`);
-  write(tauriConfigPath, tauriConfig);
-  results.push({ file: tauriConfigPath, detail: `"version": "${newVersion}"` });
 }
 
 console.log("Touched files:");
@@ -193,4 +194,4 @@ for (const res of results) {
   console.log(`  - ${res.file.padEnd(35)} : ${res.detail}`);
 }
 
-console.log(`\n[fleethud:release] Version successfully synchronized across all ${results.length} files to v${newVersion}`);
+console.log(`\n[spawnt:release] Version successfully synchronized across all ${results.length} files to v${newVersion}`);

@@ -1,26 +1,24 @@
-//! FleetHUD CLI entry point (`SPEC §3.6`, `§4.6`).
+//! Spawnt CLI entry point (`SPEC §3.6`, `§4.6`).
 //!
 //! Provides read-only CLI commands:
-//! - `fleethud status`: live & recent agent sessions, state, model, surface.
-//! - `fleethud report`: usage & cost breakdown by project/agent/model + quota pools + Plan Value ROI.
-//! - `fleethud doctor`: environment diagnostics, detected agent roots, and network requirements.
+//! - `spawnt status`: live & recent agent sessions, state, model, surface.
+//! - `spawnt report`: usage & cost breakdown by project/agent/model + quota pools + Plan Value ROI.
+//! - `spawnt doctor`: environment diagnostics, detected agent roots, and network requirements.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use fleethud_core::pricing::calculate_plan_roi;
-use fleethud_ingest::ingest_all;
-use fleethud_platform::{
-    attach_parent_console, default_db_path, discover_agent_roots, fleethud_home,
-};
-use fleethud_store::Database;
+use spawnt_core::pricing::calculate_plan_roi;
+use spawnt_ingest::ingest_all;
+use spawnt_platform::{attach_parent_console, default_db_path, discover_agent_roots, spawnt_home};
+use spawnt_store::Database;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "fleethud",
+    name = "spawnt",
     version,
     about = "Live mission control for AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI)"
 )]
@@ -71,7 +69,13 @@ enum Commands {
         #[arg(long, default_value_t = 41738)]
         port: u16,
     },
-    /// Backwards compatible alias for `fleethud console`.
+    /// Open the local console, starting the daemon when needed.
+    Open {
+        /// Port to bind the local HTTP server to.
+        #[arg(long, default_value_t = 41738)]
+        port: u16,
+    },
+    /// Backwards compatible alias for `spawnt console`.
     #[command(hide = true)]
     Dashboard {
         /// Port to bind the local HTTP server to.
@@ -107,7 +111,7 @@ enum LicenseCommands {
         /// File path or raw JSON string of the license key.
         key: String,
     },
-    /// Remove the active license and revert to Free tier.
+    /// Remove the saved offline license. Local features remain free.
     Remove,
 }
 
@@ -138,6 +142,7 @@ async fn main() -> Result<()> {
         Commands::Doctor { network } => cmd_doctor(&db_path, network),
         Commands::Daemon { port, open } => cmd_daemon(&db_path, port, open).await,
         Commands::Console { port } => cmd_daemon(&db_path, port, true).await,
+        Commands::Open { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Dashboard { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Install => cmd_install(&db_path),
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
@@ -149,28 +154,28 @@ async fn main() -> Result<()> {
 fn cmd_license(action: LicenseCommands) -> Result<()> {
     match action {
         LicenseCommands::Status => {
-            let key_path = fleethud_home().join("license.key");
+            let key_path = spawnt_home().join("license.key");
             if !key_path.exists() {
                 println!("Tier: Free (freeware, forever)");
-                println!("Pro features (guardrails, Resume Queue, CSV export) are locked.");
                 println!(
-                    "Run `fleethud license activate <path>` or visit the Console to activate Pro."
+                    "All local features are free, including guardrails, Resume Queue, and export."
                 );
+                println!("No local license is required.");
                 return Ok(());
             }
             let bytes = std::fs::read(&key_path)?;
-            let license: fleethud_core::license::LicenseFile = serde_json::from_slice(&bytes)?;
-            match fleethud_core::license::verify_license(
+            let license: spawnt_core::license::LicenseFile = serde_json::from_slice(&bytes)?;
+            match spawnt_core::license::verify_license(
                 &license,
-                fleethud_core::license::FLEETHUD_LICENSE_PUBKEY_HEX,
+                spawnt_core::license::SPAWNT_LICENSE_PUBKEY_HEX,
             ) {
                 Ok(tier) => {
                     println!(
                         "Tier: {}",
                         match tier {
-                            fleethud_core::license::Tier::Pro => "Pro ($19 perpetual)",
-                            fleethud_core::license::Tier::Team => "Team",
-                            fleethud_core::license::Tier::Free => "Free",
+                            spawnt_core::license::Tier::Pro => "Pro ($19 perpetual)",
+                            spawnt_core::license::Tier::Team => "Team",
+                            spawnt_core::license::Tier::Free => "Free",
                         }
                     );
                     println!("Licensee: {}", license.payload.licensee);
@@ -193,23 +198,23 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
             } else {
                 key
             };
-            let license: fleethud_core::license::LicenseFile =
+            let license: spawnt_core::license::LicenseFile =
                 serde_json::from_str(content.trim()).context("invalid license JSON format")?;
-            let tier = fleethud_core::license::verify_license(
+            let tier = spawnt_core::license::verify_license(
                 &license,
-                fleethud_core::license::FLEETHUD_LICENSE_PUBKEY_HEX,
+                spawnt_core::license::SPAWNT_LICENSE_PUBKEY_HEX,
             )
             .context("license cryptographic verification failed")?;
             anyhow::ensure!(
                 matches!(
                     tier,
-                    fleethud_core::license::Tier::Pro | fleethud_core::license::Tier::Team
+                    spawnt_core::license::Tier::Pro | spawnt_core::license::Tier::Team
                 ),
                 "License is for Free tier; Pro or Team required."
             );
-            std::fs::create_dir_all(fleethud_home())?;
+            std::fs::create_dir_all(spawnt_home())?;
             std::fs::write(
-                fleethud_home().join("license.key"),
+                spawnt_home().join("license.key"),
                 serde_json::to_vec_pretty(&license)?,
             )?;
             println!(
@@ -219,7 +224,7 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
             Ok(())
         }
         LicenseCommands::Remove => {
-            let key_path = fleethud_home().join("license.key");
+            let key_path = spawnt_home().join("license.key");
             if key_path.exists() {
                 std::fs::remove_file(key_path)?;
             }
@@ -254,7 +259,7 @@ fn cmd_hook() -> Result<()> {
     let session_key = format!("claude-code:{id}");
 
     // Invariant 3: Fail open. Check whether daemon is alive and blocked-sessions.json is fresh (< 30s)
-    let block_file = fleethud_home().join("blocked-sessions.json");
+    let block_file = spawnt_home().join("blocked-sessions.json");
     let is_stale = match std::fs::metadata(&block_file) {
         Ok(meta) => match meta.modified() {
             Ok(mtime) => match std::time::SystemTime::now().duration_since(mtime) {
@@ -292,7 +297,7 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
         .ok()
         .filter(|s| !s.trim().is_empty())
         .map_or_else(
-            || fleethud_platform::user_home_dir().join(".claude"),
+            || spawnt_platform::user_home_dir().join(".claude"),
             PathBuf::from,
         );
     std::fs::create_dir_all(&config_dir)?;
@@ -323,10 +328,12 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
                             .get("command")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
-                        let is_fleethud = cmd == exe
-                            || cmd.ends_with("fleethud")
-                            || cmd.ends_with("fleethud.exe");
-                        is_fleethud && handler.get("args") == Some(&serde_json::json!(["hook"]))
+                        let is_spawnt_hook = cmd == exe
+                            || std::path::Path::new(cmd)
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .is_some_and(|name| ["spawnt", "spawnt.exe"].contains(&name));
+                        is_spawnt_hook && handler.get("args") == Some(&serde_json::json!(["hook"]))
                     })
                 })
         });
@@ -343,15 +350,9 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
             .as_array_mut()
             .context("Claude PreToolUse hooks must be an array")?
             .push(entry);
-
-        let license_path = fleethud_home().join("license.key");
-        if !license_path.exists() {
-            println!("spawnt: Guardrails require an active Pro or Team license to enforce limits.");
-            println!("Run `fleethud license activate <key>` or activate via the Console.");
-        }
     }
     if path.exists() {
-        std::fs::copy(&path, config_dir.join("settings.json.fleethud.bak"))?;
+        std::fs::copy(&path, config_dir.join("settings.json.spawnt.bak"))?;
     }
     std::fs::write(&path, serde_json::to_vec_pretty(&settings)?)?;
     println!(
@@ -468,9 +469,9 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
             println!("{}", "-".repeat(78));
             for q in quota {
                 let win_str = match q.window {
-                    fleethud_core::QuotaWindow::FiveHour => "5-hour",
-                    fleethud_core::QuotaWindow::Weekly => "weekly",
-                    fleethud_core::QuotaWindow::Monthly => "monthly",
+                    spawnt_core::QuotaWindow::FiveHour => "5-hour",
+                    spawnt_core::QuotaWindow::Weekly => "weekly",
+                    spawnt_core::QuotaWindow::Monthly => "monthly",
                 };
                 let reset_str = q.resets_at.map_or_else(
                     || "N/A".to_owned(),
@@ -546,9 +547,9 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
         println!("{}", "-".repeat(78));
         for q in quota {
             let win_str = match q.window {
-                fleethud_core::QuotaWindow::FiveHour => "5-hour",
-                fleethud_core::QuotaWindow::Weekly => "weekly",
-                fleethud_core::QuotaWindow::Monthly => "monthly",
+                spawnt_core::QuotaWindow::FiveHour => "5-hour",
+                spawnt_core::QuotaWindow::Weekly => "weekly",
+                spawnt_core::QuotaWindow::Monthly => "monthly",
             };
             let reset_str = q.resets_at.map_or_else(
                 || "N/A".to_owned(),
@@ -566,7 +567,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
 
 fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
     println!("=== SPAWNT DOCTOR DIAGNOSTICS ===");
-    println!("Home Directory: {}", fleethud_home().display());
+    println!("Home Directory: {}", spawnt_home().display());
     println!("Database Path:  {}", db_path.display());
 
     let db_status = if db_path.exists() {
@@ -591,7 +592,6 @@ fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
     if network {
         println!("\nNetwork Endpoints (All Loopback or Outbound Opt-in):");
         println!("  127.0.0.1:41738           Local Webhook / IPC Loopback Server");
-        println!("  https://api.fleethud.pro  Opt-in Pricing Catalog & License Check");
         println!("  https://*.supabase.co     Opt-in Multi-Device Cloud Sync (M6)");
     }
 
@@ -620,20 +620,20 @@ fn truncate_str(s: &str, max_len: usize) -> String {
 }
 
 async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<()> {
-    let (lock, info) = match fleethud_daemon::DaemonLock::acquire(port) {
+    let (lock, info) = match spawnt_daemon::DaemonLock::acquire(port) {
         Ok(res) => res,
-        Err(fleethud_daemon::Error::AlreadyRunning) => {
-            if let Some(existing) = fleethud_daemon::read_daemon_info() {
+        Err(spawnt_daemon::Error::AlreadyRunning) => {
+            if let Some(existing) = spawnt_daemon::read_daemon_info() {
                 let local_url = format!(
                     "http://127.0.0.1:{}/?token={}",
                     existing.port, existing.token
                 );
                 let console_url =
-                    std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
+                    std::env::var("SPAWNT_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
                 println!("spawnt is already active (PID {}).", existing.pid);
-                println!("Opened Native Mission Control Console: {console_url}");
                 if open {
                     open_browser(&console_url);
+                    println!("Opened the local console.");
                 }
                 return Ok(());
             }
@@ -645,30 +645,30 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
     };
 
     let orchestrator =
-        fleethud_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
+        spawnt_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
-    let _cloud_sync_handle = fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db());
+    let _cloud_sync_handle = spawnt_daemon::sync::spawn_cloud_sync(orchestrator.db());
 
-    let state = fleethud_daemon::api::AppState {
+    let state = spawnt_daemon::api::AppState {
         db: orchestrator.db(),
         bearer_token: info.token.clone(),
         orchestrator: Some(Arc::new(orchestrator)),
     };
 
-    let router = fleethud_daemon::api::build_router(state);
+    let router = spawnt_daemon::api::build_router(state);
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context(format!("failed to bind loopback TCP listener on {addr}"))?;
 
     let local_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
-    let console_url = std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
+    let console_url = std::env::var("SPAWNT_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
     println!("=== SPAWNT DAEMON STARTED ===");
     println!("Status: Running");
     println!("Loopback Port: {port}");
     println!("PID: {}", info.pid);
-    println!("Native Console: {console_url}");
+    println!("Local console is available on loopback.");
     println!("Press Ctrl+C to terminate the daemon.");
 
     if open {
@@ -689,7 +689,7 @@ fn open_browser(url: &str) {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_owned());
-        let install_dir = std::path::PathBuf::from(&local_app_data).join("FleetHUD");
+        let install_dir = std::path::PathBuf::from(&local_app_data).join("Spawnt");
 
         // Ensure tray background service is running
         let run_tray = install_dir.join("run-tray.vbs");
@@ -701,7 +701,7 @@ fn open_browser(url: &str) {
         }
 
         let app_arg = format!("--app={url}");
-        let profile_arg = format!("--user-data-dir={local_app_data}\\FleetHUD\\AppProfile");
+        let profile_arg = format!("--user-data-dir={local_app_data}\\Spawnt\\AppProfile");
         let candidate_paths = [
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -716,7 +716,7 @@ fn open_browser(url: &str) {
                 .args([
                     &app_arg,
                     &profile_arg,
-                    "--window-name=FleetHUD",
+                    "--window-name=Spawnt",
                     "--window-size=1280,850",
                     "--no-first-run",
                     "--no-default-browser-check",
@@ -741,7 +741,7 @@ fn open_browser(url: &str) {
 }
 
 #[cfg(target_os = "windows")]
-const FLEETHUD_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
+const SPAWNT_ICO: &[u8] = include_bytes!("../../../scripts/spawnt.ico");
 #[cfg(target_os = "windows")]
 const TRAY_PS1: &str = include_str!("../../../scripts/tray.ps1");
 #[cfg(target_os = "windows")]
@@ -752,7 +752,7 @@ const OPEN_CONSOLE_VBS: &str = include_str!("../../../scripts/open-console.vbs")
 const OPEN_DASH_VBS: &str = include_str!("../../../scripts/open-dashboard.vbs");
 
 fn cmd_install(db_path: &std::path::Path) -> Result<()> {
-    println!("=== FLEETHUD NATIVE INSTALLER ===");
+    println!("=== SPAWNT NATIVE INSTALLER ===");
     if let Ok(mut db) = Database::open(db_path) {
         let _ = ingest_all(&mut db);
     }
@@ -765,7 +765,7 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
-            fleethud_home()
+            spawnt_home()
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new("."))
                 .join("AppData")
@@ -773,14 +773,14 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         });
-        let install_dir = PathBuf::from(local_app_data).join("fleethud");
+        let install_dir = PathBuf::from(local_app_data).join("spawnt");
         std::fs::create_dir_all(&install_dir).context("failed to create installation directory")?;
 
-        let dest_exe = install_dir.join("fleethud.exe");
+        let dest_exe = install_dir.join("spawnt.exe");
         if current_exe != dest_exe {
             let my_pid = std::process::id();
             let kill_cmd = format!(
-                "Get-Process -Name fleethud -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force -ErrorAction SilentlyContinue"
+                "Get-Process -Name spawnt -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force -ErrorAction SilentlyContinue"
             );
             let _ = std::process::Command::new("powershell")
                 .args(["-NoProfile", "-Command", &kill_cmd])
@@ -788,10 +788,10 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
                 .status();
             std::thread::sleep(std::time::Duration::from_millis(300));
             std::fs::copy(&current_exe, &dest_exe)
-                .context("failed to copy fleethud.exe to install directory")?;
+                .context("failed to copy spawnt.exe to install directory")?;
         }
 
-        std::fs::write(install_dir.join("fleethud.ico"), FLEETHUD_ICO)?;
+        std::fs::write(install_dir.join("spawnt.ico"), SPAWNT_ICO)?;
         std::fs::write(install_dir.join("tray.ps1"), TRAY_PS1)?;
         std::fs::write(install_dir.join("run-tray.vbs"), RUN_TRAY_VBS)?;
         std::fs::write(install_dir.join("open-console.vbs"), OPEN_CONSOLE_VBS)?;
@@ -801,17 +801,17 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
         let ps_setup = format!(
             r#"
 $InstallDir = '{dir_str}'
-$ExeDest = "$InstallDir\fleethud.exe"
-$IcoDest = "$InstallDir\fleethud.ico"
+$ExeDest = "$InstallDir\spawnt.exe"
+$IcoDest = "$InstallDir\spawnt.ico"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {{
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
 }}
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-Set-ItemProperty -Path $RunKey -Name "FleetHUD" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
+Set-ItemProperty -Path $RunKey -Name "Spawnt" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
 $WshShell = New-Object -ComObject WScript.Shell
 $DesktopDir = [Environment]::GetFolderPath("Desktop")
-foreach ($lnkPath in @("$DesktopDir\FleetHUD Console.lnk", "$DesktopDir\FleetHUD.lnk", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\FleetHUD Console.lnk")) {{
+foreach ($lnkPath in @("$DesktopDir\Spawnt Console.lnk", "$DesktopDir\Spawnt.lnk", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Spawnt Console.lnk")) {{
     $Shortcut = $WshShell.CreateShortcut($lnkPath)
     $Shortcut.TargetPath = "wscript.exe"
     $Shortcut.Arguments = "`"$InstallDir\open-console.vbs`""
@@ -846,7 +846,7 @@ Add-Type -AssemblyName System.Windows.Forms
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_owned());
         let bin_dir = PathBuf::from(home).join(".local").join("bin");
         std::fs::create_dir_all(&bin_dir)?;
-        let dest = bin_dir.join("fleethud");
+        let dest = bin_dir.join("spawnt");
         if current_exe != dest {
             std::fs::copy(&current_exe, &dest)?;
         }

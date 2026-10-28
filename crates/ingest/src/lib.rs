@@ -2,7 +2,7 @@
 //! of agent logs into the SQLite store (`SPEC §3.5`, `§4.4`).
 
 use chrono::Utc;
-use fleethud_adapters::{
+use spawnt_adapters::{
     FileCtx, SourceAdapter,
     aider::AiderAdapter,
     antigravity::{AntigravityAdapter, extract_conversation_id},
@@ -12,12 +12,12 @@ use fleethud_adapters::{
     cursor::CursorAdapter,
     gemini::GeminiAdapter,
 };
-use fleethud_core::{AgentId, Session};
-use fleethud_platform::{
+use spawnt_core::{AgentId, Session};
+use spawnt_platform::{
     AgentRoot, detect_local_subscriptions, discover_agent_roots, read_antigravity_fallback_model,
     read_from_offset,
 };
-use fleethud_store::{Database, SourceCheckpoint};
+use spawnt_store::{Database, SourceCheckpoint};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -28,10 +28,10 @@ use thiserror::Error;
 pub enum Error {
     /// Platform reading error.
     #[error("platform error: {0}")]
-    Platform(#[from] fleethud_platform::Error),
+    Platform(#[from] spawnt_platform::Error),
     /// Store operation error.
     #[error("store error: {0}")]
-    Store(#[from] fleethud_store::Error),
+    Store(#[from] spawnt_store::Error),
     /// Standard I/O error.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -249,8 +249,8 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 #[cfg(test)]
 mod tests {
     use super::{complete_jsonl_prefix_len, scan_log_files};
-    use fleethud_core::AgentId;
-    use fleethud_platform::AgentRoot;
+    use spawnt_core::AgentId;
+    use spawnt_platform::AgentRoot;
     use std::fs;
     use tempfile::tempdir;
 

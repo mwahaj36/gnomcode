@@ -5,7 +5,7 @@
 
 ## Context
 
-FleetHUD currently has a daemon-served HTML console, a separately authenticated Next.js cloud console, and a Rust tray controller with platform scripts. The console data and security paths must remain distinct. The rollout guide calls for matching layouts and tokens, but the web build (Next.js) and embedded local console currently have no shared presentation package. SPEC also describes a Tauri tray that is not present in this repository.
+Spawnt currently has a daemon-served HTML console, a separately authenticated Next.js cloud console, and a Rust tray controller with platform scripts. The console data and security paths must remain distinct. The rollout guide calls for matching layouts and tokens, but the web build (Next.js) and embedded local console currently have no shared presentation package. SPEC also describes a Tauri tray that is not present in this repository.
 
 ## Decision
 

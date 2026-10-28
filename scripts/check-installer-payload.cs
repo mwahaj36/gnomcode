@@ -18,9 +18,9 @@ public static class CheckInstallerPayload {
         Assembly installer = Assembly.LoadFile(Path.GetFullPath(args[0]));
         if (installer.GetName().Version.ToString() != args[3]) throw new Exception("Installer assembly version mismatch");
         if (System.Diagnostics.FileVersionInfo.GetVersionInfo(args[0]).FileVersion != args[3]) throw new Exception("Installer file version mismatch");
-        Verify(installer, "fleethud.exe", args[1]);
+        Verify(installer, "spawnt.exe", args[1]);
         Verify(installer, "THIRD_PARTY_NOTICES.html", args[2]);
-        foreach (string name in new [] { "LICENSE", "tray.ps1", "run-tray.vbs", "open-console.vbs", "open-dashboard.vbs", "fleethud.ico", "spawnt-tray.ico", "spawnt-mark.png" }) {
+        foreach (string name in new [] { "LICENSE", "tray.ps1", "run-tray.vbs", "open-console.vbs", "open-dashboard.vbs", "spawnt.ico", "spawnt-tray.ico", "spawnt-mark.png" }) {
             using (Stream resource = installer.GetManifestResourceStream(name)) {
                 if (resource == null || resource.Length == 0) throw new Exception("Missing installer resource: " + name);
             }

@@ -7,12 +7,12 @@
 
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter, claude::fallback_id_from_path};
 use chrono::{DateTime, TimeZone, Utc};
-use fleethud_core::{
+use serde_json::Value;
+use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
     SessionState, Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
 };
-use serde_json::Value;
 use std::collections::HashSet;
 
 /// Stateful parser for a Codex `rollout-*.jsonl` session log.

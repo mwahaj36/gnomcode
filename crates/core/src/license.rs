@@ -1,6 +1,6 @@
 //! Ed25519 offline license verification and tier capability enforcement (`SPEC §3.1`, `§6.8`).
 //!
-//! Licenses are offline cryptographic files (`~/.fleethud/license.key`).
+//! Licenses are offline cryptographic files (`~/.spawnt/license.key`).
 //! The payload contains:
 //! - `licensee`: Name or email of the purchaser.
 //! - `tier`: `"pro"` or `"team"`.
@@ -12,9 +12,9 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Hardcoded public key for verifying FleetHUD Pro and Team license files.
+/// Hardcoded public key for verifying Spawnt Pro and Team license files.
 /// In release binaries, the key is compiled directly into the binary.
-pub const FLEETHUD_LICENSE_PUBKEY_HEX: &str =
+pub const SPAWNT_LICENSE_PUBKEY_HEX: &str =
     "c8a5542a1226a7988ee0fcfe7dfa2c91838883ff0c96c567e997a66b9d628dd5";
 
 /// Licensing subsystem error type.
@@ -56,7 +56,7 @@ pub struct LicensePayload {
     pub expires_at: Option<String>,
 }
 
-/// Signed license file structure persisted in `~/.fleethud/license.key`.
+/// Signed license file structure persisted in `~/.spawnt/license.key`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LicenseFile {
     /// License claims payload.

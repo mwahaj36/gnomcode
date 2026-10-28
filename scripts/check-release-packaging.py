@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='spawnt-package-check-') as tmp:
         names=bundle.getnames()
         assert 'spawnt.app/Contents/Info.plist' in names
         assert 'spawnt.app/Contents/Resources/spawnt.icns' in names
-        assert bundle.getmember('spawnt.app/Contents/MacOS/fleethud').mode & 0o111
+        assert bundle.getmember('spawnt.app/Contents/MacOS/spawnt').mode & 0o111
         assert 'fonts/Inter-LICENSE.txt' in names
     header[:4]=b'\x7fELF'; header[18:20]=(62).to_bytes(2,'little'); binary.write_bytes(header)
     assert run('--linux-x86-64').returncode==0

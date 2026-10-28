@@ -12,10 +12,10 @@ use axum::{
     response::{IntoResponse, Json, Redirect},
     routing::{get, post},
 };
-use fleethud_core::rules::GuardrailRule;
-use fleethud_store::{Database, UserProfile};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use spawnt_core::rules::GuardrailRule;
+use spawnt_store::{Database, UserProfile};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -69,17 +69,19 @@ pub struct HealthResponse {
 
 const CONSOLE_HTML: &str = include_str!("console.html");
 const SPAWNT_TOKENS: &str = include_str!("../../../web/app/spawnt-tokens.css");
-const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/fleethud.ico");
+const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/spawnt.ico");
 const SPAWNT_MARK_SVG: &str = include_str!("../../../web/public/spawnt-mark.svg");
 
-/// Builds the axum router for FleetHUD local API and embedded console.
+/// Builds the axum router for Spawnt local API and embedded console.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(console_handler))
         .route("/console", get(console_handler))
         .route("/favicon.ico", get(favicon_handler))
-        .route("/fleethud.svg", get(svg_icon_handler))
+        .route("/spawnt.svg", get(svg_icon_handler))
         .route("/spawnt-mark.svg", get(svg_icon_handler))
+        .route("/theme-init.js", get(theme_init_handler))
+        .route("/console-app.js", get(console_app_handler))
         .route("/spawnt-tokens.css", get(tokens_handler))
         .route("/spawnt-console.css", get(console_styles_handler))
         .route(
@@ -186,9 +188,6 @@ async fn rules_get_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     Ok(Json(
         db.list_rules()
@@ -202,9 +201,6 @@ async fn rules_post_handler(
     Json(rule): Json<GuardrailRule>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     if rule.id.is_empty()
         || rule.id.len() > 64
         || !rule
@@ -231,9 +227,6 @@ async fn rule_delete_handler(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     db.delete_rule(&id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -245,9 +238,6 @@ async fn alerts_get_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     Ok(Json(
         db.list_alerts(100)
@@ -261,9 +251,6 @@ async fn export_handler(
     Query(params): Query<ReportQueryParams>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let range = params.range.as_deref().unwrap_or("30d");
     if !matches!(range, "today" | "7d" | "30d" | "all") {
         return Err(StatusCode::BAD_REQUEST);
@@ -299,7 +286,7 @@ async fn export_handler(
                 (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
                 (
                     header::CONTENT_DISPOSITION,
-                    "attachment; filename=fleethud-report.csv",
+                    "attachment; filename=spawnt-report.csv",
                 ),
             ],
             csv,
@@ -311,7 +298,7 @@ async fn export_handler(
                 (header::CONTENT_TYPE, "application/json"),
                 (
                     header::CONTENT_DISPOSITION,
-                    "attachment; filename=fleethud-report.json",
+                    "attachment; filename=spawnt-report.json",
                 ),
             ],
             Json(report),
@@ -359,9 +346,6 @@ async fn resume_queue_get_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     Ok(Json(
         db.list_resume_queue()
@@ -385,20 +369,24 @@ async fn resume_queue_arm_handler(
     Json(payload): Json<ArmResumeQueueRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
+    if payload
+        .resume_prompt
+        .as_deref()
+        .is_some_and(|prompt| prompt != "continue")
+    {
+        return Err(StatusCode::BAD_REQUEST);
     }
     if payload.session_id.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
     let agent = match payload.agent.as_str() {
-        "claude-code" => fleethud_core::AgentId::ClaudeCode,
-        "codex" => fleethud_core::AgentId::Codex,
-        "antigravity" => fleethud_core::AgentId::Antigravity,
-        "gemini-cli" => fleethud_core::AgentId::GeminiCli,
-        "cline" => fleethud_core::AgentId::Cline,
-        "cursor" => fleethud_core::AgentId::Cursor,
-        "aider" => fleethud_core::AgentId::Aider,
+        "claude-code" => spawnt_core::AgentId::ClaudeCode,
+        "codex" => spawnt_core::AgentId::Codex,
+        "antigravity" => spawnt_core::AgentId::Antigravity,
+        "gemini-cli" => spawnt_core::AgentId::GeminiCli,
+        "cline" => spawnt_core::AgentId::Cline,
+        "cursor" => spawnt_core::AgentId::Cursor,
+        "aider" => spawnt_core::AgentId::Aider,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
     let eligible_after = payload
@@ -407,7 +395,7 @@ async fn resume_queue_arm_handler(
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(chrono::Utc::now);
 
-    let entry = fleethud_core::rules::ResumeQueueEntry {
+    let entry = spawnt_core::rules::ResumeQueueEntry {
         session_id: payload.session_id,
         agent,
         cwd: payload.cwd.unwrap_or_else(|| ".".to_owned()),
@@ -435,9 +423,6 @@ async fn resume_queue_disarm_handler(
     Json(payload): Json<DisarmResumeQueueRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     db.disarm_resume_queue(&payload.session_id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -457,7 +442,7 @@ async fn relay_get_handler(
         .list_context_relays()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({
-        "is_pro": crate::pro::has_pro_license(),
+        "is_pro": true,
         "config": config,
         "relays": relays,
     })))
@@ -476,9 +461,6 @@ async fn relay_config_post_handler(
     Json(payload): Json<RelayConfigUpdateRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     let mut config = db
         .get_context_relay_config()
@@ -514,9 +496,6 @@ async fn relay_execute_post_handler(
     Json(payload): Json<RelayActionRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_pro_license() {
-        return Err(StatusCode::PAYMENT_REQUIRED);
-    }
     let db = state.db.lock().await;
     let relays = db
         .list_context_relays()
@@ -544,7 +523,7 @@ async fn relay_execute_post_handler(
                         .map(|p| p.to_string_lossy().to_string())
                         .unwrap_or_else(|_| ".".to_owned())
                 });
-            let entry = fleethud_store::ContextRelayEntry {
+            let entry = spawnt_store::ContextRelayEntry {
                 id: format!("relay-{}", s.id),
                 session_id: s.id.clone(),
                 source_agent: s.agent.clone(),
@@ -599,9 +578,31 @@ async fn guardrail_check_handler(Query(query): Query<GuardrailCheckQuery>) -> im
 }
 
 async fn console_handler() -> impl IntoResponse {
-    axum::response::Html(CONSOLE_HTML)
+    (
+        [(
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        )],
+        axum::response::Html(CONSOLE_HTML.replace(
+            "__SPAWNT_BASE_URL__",
+            spawnt_core::branding::branding().map_or("", |branding| branding.base_url.as_str()),
+        )),
+    )
 }
 
+async fn theme_init_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("theme-init.js"),
+    )
+}
+
+async fn console_app_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("console-app.js"),
+    )
+}
 async fn tokens_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
@@ -666,15 +667,15 @@ async fn focus_session_handler(
     };
     let repo_path = target.repo_root.clone();
     let (focused, destination) = tokio::task::spawn_blocking(move || {
-        if target.pid.is_some_and(fleethud_platform::bring_to_front) {
+        if target.pid.is_some_and(spawnt_platform::bring_to_front) {
             return (true, "process");
         }
-        if fleethud_platform::focus_agent_application(&target.agent, &target.surface) {
+        if spawnt_platform::focus_agent_application(&target.agent, &target.surface) {
             return (true, "application");
         }
         if matches!(target.agent.as_str(), "cline" | "roo") {
             if let Some(path) = target.repo_root {
-                if fleethud_platform::focus_project_in_editor(&path) {
+                if spawnt_platform::focus_project_in_editor(&path) {
                     return (false, "project_requested");
                 }
             }
@@ -758,7 +759,7 @@ async fn list_sessions_handler(
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let host = fleethud_platform::hostname();
+    let host = spawnt_platform::hostname();
     for s in &mut sessions {
         if s.device_name.is_none() {
             s.device_name = Some(host.clone());
@@ -771,16 +772,20 @@ async fn list_sessions_handler(
     let (_, active_count) = db
         .list_sessions_paginated(None, Some("active"), 0, 1)
         .unwrap_or_default();
+    let (_, awaiting_approval_count) = db
+        .list_sessions_paginated(None, Some("awaiting_approval"), 0, 1)
+        .unwrap_or_default();
 
     #[derive(Serialize)]
     struct PaginatedResponse {
-        sessions: Vec<fleethud_store::SessionListItem>,
+        sessions: Vec<spawnt_store::SessionListItem>,
         total_count: usize,
         page: usize,
         limit: usize,
         total_pages: usize,
         active_count: usize,
         ongoing_count: usize,
+        awaiting_approval_count: usize,
     }
 
     let total_pages = total_count.div_ceil(limit);
@@ -793,6 +798,7 @@ async fn list_sessions_handler(
         total_pages: total_pages.max(1),
         active_count,
         ongoing_count,
+        awaiting_approval_count,
     }))
 }
 
@@ -808,7 +814,7 @@ async fn report_handler(
     let to = params.to.clone();
     let (report, user_profile) = tokio::task::spawn_blocking(move || {
         let db = state.db.blocking_lock();
-        Ok::<_, fleethud_store::Error>((
+        Ok::<_, spawnt_store::Error>((
             db.generate_usage_report_timeline(&query_range, from.as_deref(), to.as_deref())?,
             db.get_user_profile()?,
         ))
@@ -830,7 +836,7 @@ async fn report_handler(
 
     #[derive(Serialize)]
     struct EnhancedReport {
-        timeline: fleethud_store::TimelineReport,
+        timeline: spawnt_store::TimelineReport,
         user_profile: UserProfile,
         roi_by_provider: Vec<PlanRoiInfo>,
         combined_roi: PlanRoiInfo,
@@ -879,7 +885,7 @@ async fn report_handler(
     if user_profile.claude_plan_usd > 0.0 && claude_spend > 0.0 {
         let eff_plan = user_profile.claude_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
+        let roi = spawnt_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "Claude Code".to_owned(),
             plan_usd: eff_plan,
@@ -894,7 +900,7 @@ async fn report_handler(
     if user_profile.openai_plan_usd > 0.0 && openai_spend > 0.0 {
         let eff_plan = user_profile.openai_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
+        let roi = spawnt_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "OpenAI Codex".to_owned(),
             plan_usd: eff_plan,
@@ -909,7 +915,7 @@ async fn report_handler(
     if user_profile.google_plan_usd > 0.0 && google_spend > 0.0 {
         let eff_plan = user_profile.google_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(google_spend, eff_plan);
+        let roi = spawnt_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "Google Antigravity".to_owned(),
             plan_usd: eff_plan,
@@ -922,7 +928,7 @@ async fn report_handler(
     }
 
     let combined_roi_calc =
-        fleethud_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
+        spawnt_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
     let combined_roi = PlanRoiInfo {
         provider: "All Plans (Combined)".to_owned(),
         plan_usd: combined_plan,
@@ -1026,15 +1032,15 @@ async fn quota_handler(
 #[derive(Serialize)]
 pub(crate) struct QuotaPoolView {
     #[serde(flatten)]
-    snapshot: fleethud_core::QuotaSnapshot,
+    snapshot: spawnt_core::QuotaSnapshot,
     remaining_pct: Option<f64>,
 }
 
-pub(crate) fn quota_views(snapshots: Vec<fleethud_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
+pub(crate) fn quota_views(snapshots: Vec<spawnt_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
     snapshots
         .into_iter()
         .map(|snapshot| {
-            let remaining_pct = (snapshot.basis != fleethud_core::TrustLevel::Unknown
+            let remaining_pct = (snapshot.basis != spawnt_core::TrustLevel::Unknown
                 && snapshot.used_pct.is_finite())
             .then(|| (100.0 - snapshot.used_pct).clamp(0.0, 100.0));
             QuotaPoolView {
@@ -1060,7 +1066,7 @@ async fn custom_pricing_get_handler(
 async fn custom_pricing_post_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-    Json(pricing): Json<fleethud_store::CustomModelPricing>,
+    Json(pricing): Json<spawnt_store::CustomModelPricing>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let mut db = state.db.lock().await;
@@ -1097,12 +1103,12 @@ async fn pricing_models_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let models = fleethud_core::pricing::all_model_pricings();
+    let models = spawnt_core::pricing::all_model_pricings();
     let db = state.db.lock().await;
     let custom = db.get_custom_model_pricings().unwrap_or_default();
 
     Ok(Json(json!({
-        "version": fleethud_core::pricing::PRICING_VERSION,
+        "version": spawnt_core::pricing::PRICING_VERSION,
         "source": "Official Provider Documentation & BerriAI/LiteLLM Open Source Pricing Registry",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "last_updated": "2026-10-26",
@@ -1155,7 +1161,7 @@ async fn pricing_refresh_handler(
                 let out_mtok = oc * 1_000_000.0;
                 let cache_read_mtok = cache_cost.map_or(in_mtok * 0.1, |c| c * 1_000_000.0);
 
-                let custom = fleethud_store::CustomModelPricing {
+                let custom = spawnt_store::CustomModelPricing {
                     model_pattern: model_name.clone(),
                     input_per_mtok_usd: in_mtok,
                     output_per_mtok_usd: out_mtok,
@@ -1185,18 +1191,18 @@ async fn supabase_config_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let mut url = std::env::var("FLEETHUD_SUPABASE_URL").unwrap_or_default();
-    let mut key = std::env::var("FLEETHUD_SUPABASE_KEY").unwrap_or_default();
+    let mut url = std::env::var("SPAWNT_SUPABASE_URL").unwrap_or_default();
+    let mut key = std::env::var("SPAWNT_SUPABASE_KEY").unwrap_or_default();
 
     if url.is_empty() || key.is_empty() {
-        let home = fleethud_platform::user_home_dir();
-        let env_file = home.join(".fleethud").join("supabase.env");
+        let home = spawnt_platform::user_home_dir();
+        let env_file = home.join(".spawnt").join("supabase.env");
         if let Ok(content) = std::fs::read_to_string(env_file) {
             for line in content.lines() {
                 let trimmed = line.trim();
-                if let Some(rest) = trimmed.strip_prefix("FLEETHUD_SUPABASE_URL=") {
+                if let Some(rest) = trimmed.strip_prefix("SPAWNT_SUPABASE_URL=") {
                     url = rest.trim().to_owned();
-                } else if let Some(rest) = trimmed.strip_prefix("FLEETHUD_SUPABASE_KEY=") {
+                } else if let Some(rest) = trimmed.strip_prefix("SPAWNT_SUPABASE_KEY=") {
                     key = rest.trim().to_owned();
                 }
             }
@@ -1213,7 +1219,7 @@ async fn supabase_config_handler(
 }
 
 fn session_file_path() -> std::path::PathBuf {
-    fleethud_platform::fleethud_home().join("session.json")
+    spawnt_platform::spawnt_home().join("session.json")
 }
 
 async fn auth_session_get_handler(
@@ -1322,7 +1328,7 @@ async fn live_snapshot_handler(
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let host = fleethud_platform::hostname();
+    let host = spawnt_platform::hostname();
     for s in &mut sessions {
         if s.device_name.is_none() {
             s.device_name = Some(host.clone());
@@ -1386,7 +1392,7 @@ async fn live_snapshot_handler(
     if user_profile.claude_plan_usd > 0.0 && claude_spend > 0.0 {
         let eff_plan = user_profile.claude_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
+        let roi = spawnt_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "Claude Code",
             "plan_usd": eff_plan,
@@ -1401,7 +1407,7 @@ async fn live_snapshot_handler(
     if user_profile.openai_plan_usd > 0.0 && openai_spend > 0.0 {
         let eff_plan = user_profile.openai_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
+        let roi = spawnt_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "OpenAI Codex",
             "plan_usd": eff_plan,
@@ -1416,7 +1422,7 @@ async fn live_snapshot_handler(
     if user_profile.google_plan_usd > 0.0 && google_spend > 0.0 {
         let eff_plan = user_profile.google_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = fleethud_core::pricing::calculate_plan_roi(google_spend, eff_plan);
+        let roi = spawnt_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "Google Antigravity",
             "plan_usd": eff_plan,
@@ -1429,7 +1435,7 @@ async fn live_snapshot_handler(
     }
 
     let combined_roi_calc =
-        fleethud_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
+        spawnt_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
     let combined_roi = json!({
         "provider": "All Plans (Combined)",
         "plan_usd": combined_plan,
@@ -1468,12 +1474,105 @@ mod tests {
     use super::{AppState, build_router, quota_views};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use fleethud_store::Database;
     use serde_json::json;
+    use spawnt_store::Database;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
 
+    #[tokio::test]
+    async fn local_automation_and_export_are_available_without_a_license() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+        });
+        for path in [
+            "/api/v1/rules",
+            "/api/v1/alerts",
+            "/api/v1/export",
+            "/api/v1/resume-queue",
+            "/api/v1/pro/relay",
+        ] {
+            let request = Request::builder()
+                .uri(path)
+                .header("Host", "127.0.0.1:41738")
+                .header("Authorization", "Bearer local-test-token")
+                .body(Body::empty())
+                .expect("request");
+            assert_eq!(
+                app.clone()
+                    .oneshot(request)
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::OK,
+                "{path}"
+            );
+        }
+    }
+    #[tokio::test]
+    async fn resume_queue_rejects_custom_prompts_without_persisting_them() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/resume-queue/arm")
+            .header("Host", "127.0.0.1:41738")
+            .header("Authorization", "Bearer local-test-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"session_id":"codex:test","agent":"codex","resume_prompt":"private test text"}"#))
+            .expect("request");
+        assert_eq!(
+            app.oneshot(request).await.expect("response").status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    #[tokio::test]
+    async fn console_enforces_script_csp_without_inline_handlers() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "test".to_owned(),
+            orchestrator: None,
+        });
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("Host", "127.0.0.1:41738")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let csp = response
+            .headers()
+            .get("content-security-policy")
+            .expect("CSP")
+            .to_str()
+            .expect("header");
+        assert!(csp.contains("script-src 'self'"));
+        assert!(
+            !csp.split(';')
+                .find(|directive| directive.trim().starts_with("script-src"))
+                .expect("script policy")
+                .contains("'unsafe-inline'")
+        );
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let html = std::str::from_utf8(&body).expect("UTF-8");
+        let branding = spawnt_core::branding::branding().expect("branding");
+        assert!(html.contains(&format!("{}/docs", branding.base_url)));
+        assert!(!html.contains("__SPAWNT_BASE_URL__"));
+        assert!(!html.contains("<script>"));
+        assert!(!html.contains(" onclick="));
+        assert!(!html.contains(" onchange="));
+        assert!(!html.contains(" onsubmit="));
+    }
     #[tokio::test]
     async fn native_console_serves_executable_shared_assets() {
         let app = build_router(AppState {
@@ -1482,7 +1581,9 @@ mod tests {
             orchestrator: None,
         });
         for (path, content_type, marker) in [
-            ("/", "text/html", "<script>"),
+            ("/", "text/html", "/console-app.js"),
+            ("/theme-init.js", "text/javascript", "spawnt-theme"),
+            ("/console-app.js", "text/javascript", "function setView"),
             (
                 "/console-presentation.js",
                 "text/javascript",
@@ -1617,7 +1718,7 @@ mod tests {
 
     #[test]
     fn quota_view_preserves_unknown_capacity() {
-        let mut quota: fleethud_core::QuotaSnapshot = serde_json::from_value(json!({
+        let mut quota: spawnt_core::QuotaSnapshot = serde_json::from_value(json!({
             "provider": "sample", "limit_id": "sample", "window": "weekly", "used_pct": 62.0,
             "resets_at": null, "plan": null, "basis": "estimated", "observed_at": "2026-10-28T00:00:00Z"
         })).expect("quota");
@@ -1625,7 +1726,7 @@ mod tests {
             quota_views(vec![quota.clone()])[0].remaining_pct,
             Some(38.0)
         );
-        quota.basis = fleethud_core::TrustLevel::Unknown;
+        quota.basis = spawnt_core::TrustLevel::Unknown;
         assert_eq!(quota_views(vec![quota])[0].remaining_pct, None);
     }
 
@@ -1747,7 +1848,7 @@ mod tests {
 
     #[tokio::test]
     async fn unavailable_focus_returns_a_local_copy_path_without_claiming_success() {
-        use fleethud_core::{AgentId, Project, Session, SessionState, Surface};
+        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/workspace/focus-test", None);
         let session = Session {
@@ -1763,7 +1864,7 @@ mod tests {
             started_at: chrono::Utc::now(),
             last_event_at: chrono::Utc::now(),
         };
-        let checkpoint = fleethud_store::SourceCheckpoint {
+        let checkpoint = spawnt_store::SourceCheckpoint {
             file_path: "/fixture".to_owned(),
             last_read_offset: 0,
             file_size: 0,

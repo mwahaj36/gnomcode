@@ -1,7 +1,7 @@
 Copyright (c) 2026 Wahaj. All rights reserved.
 
-FleetHUD is proprietary, closed-source software.
+Spawnt is proprietary, closed-source software.
 
 1. Source Code: The source code in this repository is confidential and proprietary. It may not be copied, redistributed, modified, or published in whole or in part without explicit written permission from the copyright holder.
-2. Binary Distribution: Compiled binaries of FleetHUD (Free, Pro, and Teams tiers) are licensed to end users under the FleetHUD End User License Agreement (EULA) distributed with each release and published at https://fleethud.pro/eula.
-3. Third-Party Components: FleetHUD incorporates open-source libraries under permissive licenses (MIT, Apache-2.0, BSD, ISC, MPL-2.0). Attribution and license texts for those components are generated via `cargo-about` and bundled as `THIRD_PARTY_NOTICES.html` in all binary distributions.
+2. Binary Distribution: Compiled binaries of Spawnt (Free, Pro, and Teams tiers) are licensed to end users under the Spawnt End User License Agreement (EULA) distributed with each release and published at https://spawntv.vercel.app/eula.
+3. Third-Party Components: Spawnt incorporates open-source libraries under permissive licenses (MIT, Apache-2.0, BSD, ISC, MPL-2.0). Attribution and license texts for those components are generated via `cargo-about` and bundled as `THIRD_PARTY_NOTICES.html` in all binary distributions.
