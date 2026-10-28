@@ -8,7 +8,6 @@ import { supabase } from "../lib/supabase";
 export default function AppNavbar() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
-  const [daemonLive, setDaemonLive] = useState<boolean | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -19,24 +18,7 @@ export default function AppNavbar() {
       setUser(session?.user ?? null);
     });
 
-    const checkDaemon = async () => {
-      try {
-        const res = await fetch("http://127.0.0.1:41738/api/v1/live?page=1&limit=1", {
-          signal: AbortSignal.timeout(1500),
-        });
-        setDaemonLive(res.ok);
-      } catch {
-        setDaemonLive(false);
-      }
-    };
-
-    checkDaemon();
-    const interval = setInterval(checkDaemon, 5000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearInterval(interval);
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleSignOut = async () => {
@@ -106,7 +88,7 @@ export default function AppNavbar() {
                 href="/settings"
                 className="px-2.5 py-1 rounded bg-green/15 text-green border border-green/30 hover:bg-green/25 font-semibold text-[11px]"
               >
-                [PRO] {user.email?.split("@")[0] || "User"}
+                {user.email?.split("@")[0] || "User"}
               </Link>
               <button
                 onClick={handleSignOut}
