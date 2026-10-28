@@ -33,6 +33,8 @@ pub struct AppState {
 /// Query parameters for listing sessions with pagination & filters.
 #[derive(Debug, Deserialize, Default)]
 pub struct SessionQueryParams {
+    /// Exact local project ID; filtering precedes pagination.
+    pub project: Option<String>,
     /// 1-indexed page number.
     pub page: Option<usize>,
     /// Limit per page (default 10).
@@ -724,9 +726,10 @@ async fn list_sessions_handler(
 
     let db = state.db.lock().await;
     let (mut sessions, total_count) = db
-        .list_sessions_paginated(
+        .list_sessions_filtered(
             params.agent.as_deref(),
             params.status.as_deref(),
+            params.project.as_deref().filter(|value| !value.is_empty()),
             offset,
             limit,
         )

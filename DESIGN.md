@@ -85,3 +85,5 @@ Overview is a compact marketing summary: three KPIs, a small seven-day chart and
 
 Windows app, tray and installer ICOs use the canonical red mark on an opaque #070708 canvas. Small ICO frames use Windows DIB encoding so the current GDI+ tray can render count overlays; web SVG/PNG marks keep their existing presentation.
 
+Overview leads with ongoing session identity beside compact provider limits, with history below. Narrow layouts stack these regions. Declare data provenance at the section or column level and reserve repeated inline warnings for missing or partial data. Today uses hourly local-clock labels; longer periods name the reporting period beside the token total. Account is a settings row; active licenses show replacement/removal actions instead of an activation prompt.
+
