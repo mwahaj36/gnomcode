@@ -11,3 +11,5 @@ export function renderSummary(data: { activeCount?: number | null; report?: unkn
 
 export function updateOngoing(element: HTMLElement, sessions: unknown): void;
 export function renderOngoing(sessions: unknown): string;
+
+export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: string | null): void;

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary, updateOngoing } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary, updateOngoing, updateQuota } from "../../lib/console-presentation.js";
 
 function SummaryPanel({ activeCount, report, quotaCount }: { activeCount: number | null; report: unknown; quotaCount: number | null }) {
   const element = useRef<HTMLDivElement>(null);
@@ -21,6 +21,12 @@ function OngoingPanel({ sessions }: { sessions: SessionItem[] | null }) {
 function ActivityPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
   useEffect(() => { if (element.current) updateActivity(element.current, report); }, [report]);
+  return <div ref={element} />;
+}
+
+function QuotaPanel({ pools, publishedAt }: { pools: QuotaItem[]; publishedAt: string | null }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateQuota(element.current, pools, publishedAt); }, [pools,publishedAt]);
   return <div ref={element} />;
 }
 
@@ -48,6 +54,7 @@ interface SessionItem {
   model: string;
   state: string;
   is_active: boolean;
+  is_ongoing?: boolean;
   started_at: string;
   last_event_at: string;
   input_tokens?: number;
@@ -249,11 +256,11 @@ export default function ConsolePage() {
         if (refreshed) setLastSuccessfulUpdate(new Date());
         const allSessions: SessionItem[] = [...(snap?.sessions || [])];
         setProjectNames([...new Set(allSessions.map((session: SessionItem) => session.project_name))].sort());
-        setOngoing(allSessions.filter((session: SessionItem) => session.is_active));
+        setOngoing(allSessions.filter((session: SessionItem) => (session.is_ongoing ?? session.is_active)));
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
           (projectFilter === "all" || session.project_name === projectFilter) &&
           (agentFilter === "all" || session.agent === agentFilter) &&
-          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
+          (statusFilter === "all" || (statusFilter === "ongoing" ? (session.is_ongoing ?? session.is_active) : statusFilter === "active" ? session.is_active : statusFilter === "ended" ? session.state === "ended" : session.state === "idle")));
         setSessions(filtered.slice((page-1)*10,page*10));
         setReport(snap?.timelines?.[timeline] || (timeline === "today" ? snap?.timeline : null) || null);
         setQuota(snap?.quota || []);
@@ -262,7 +269,7 @@ export default function ConsolePage() {
         setCombinedRoi(snap?.combined_roi || null);
         setUserProfile(snap?.user_profile || null);
         setSnapshotLoaded(Boolean(snap));
-        setActiveCount(snap?.active_count ?? null);
+        setActiveCount(snap?.ongoing_count ?? snap?.active_count ?? null);
         setTotalCount(filtered.length);
         setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
         if (snap) {
@@ -438,7 +445,7 @@ export default function ConsolePage() {
       </header>
 
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
-        <p>Sign in to view your paired desktop snapshots. Hosted cloud-session tracking is unavailable.</p>
+        <p>Sign in to view activity from your paired desktop.</p>
         <div className="sp-console-connect-actions">
           <Link href="/auth" className="sp-console-link sp-console-link-primary">Sign in</Link>
         </div>
@@ -460,9 +467,9 @@ export default function ConsolePage() {
       {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
 
       {/* Timeline Filter Bar */}
-      {!["settings", "automations"].includes(activeView) && <div className="sp-console-timeline-filter">
+      {["overview", "usage", "projects"].includes(activeView) && <div className="sp-console-timeline-filter">
         <div className="text-xs text-muted">
-          Scope: <span className="text-foreground uppercase">{timeline}</span>
+          <span className="text-foreground">{report?.range_label || "Activity"}</span>
           {report?.earliest_at && report?.latest_at && (
             <span className="ml-2 text-muted">
               {(() => {
@@ -474,27 +481,14 @@ export default function ConsolePage() {
           )}
         </div>
         <div className="flex gap-2">
-          {["today", "month", "7d", "30d", "all"].map((t) => (
-            <button
-              key={t}
-              onClick={() => { setTimeline(t); setPage(1); }}
-              aria-pressed={timeline === t}
-              className={`px-3 py-1 text-xs rounded border transition-colors ${
-                timeline === t
-                  ? "bg-accent text-bg border-accent font-semibold"
-                  : "border-border text-muted hover:border-accent"
-              }`}
-            >
-              {t === "today" ? "Today" : t === "month" ? "This month" : t === "7d" ? "7 Days" : t === "30d" ? "30 Days" : "All Time"}
-            </button>
-          ))}
+          <select aria-label="Reporting period" value={timeline} onChange={event => { setTimeline(event.target.value); setPage(1); }}>{[["today","Today"],["month","This month"],["7d","Last 7 days"],["30d","Last 30 days"],["all","All time"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
         </div>
       </div>
 
       }
       {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
       {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
-      {activeView === "overview" && <div className="sp-overview-live"><details className="sp-overview-limits" open><summary>Provider limits</summary><div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} /></details><OngoingPanel sessions={ongoing} /></div>}
+      {activeView === "overview" && <div className="sp-overview-live"><section className="sp-overview-limits"><QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} /></section><OngoingPanel sessions={ongoing} /></div>}
 
       {activeView === "usage" && <ProvidersPanel report={report} />}
 
@@ -545,13 +539,14 @@ export default function ConsolePage() {
         </div>
       </div>}
 
-      {activeView === "limits" && <div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} />}
+      {activeView === "limits" && <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
       <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
-      {/* Live & Historical Agent Sessions */}
+      {activeView === "sessions" && <OngoingPanel sessions={ongoing} />}
+      {/* Session history */}
       {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
-          <div className="text-xs text-muted uppercase font-semibold">Live & Historical Agent Sessions</div>
+          <div className="text-xs text-muted uppercase font-semibold">Session history</div>
           <div className="flex gap-2">
             <select aria-label="Project" value={projectFilter} onChange={event => { setProjectFilter(event.target.value); setPage(1); }}><option value="all">All projects</option>{projectNames.map(project => <option key={project} value={project}>{project}</option>)}</select>
             <select aria-label="Agent"
@@ -571,8 +566,8 @@ export default function ConsolePage() {
               className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"
             >
               <option value="all">All Statuses</option>
-              <option value="active">Active Only</option>
-              <option value="idle">Idle Only</option>
+              <option value="ongoing">Ongoing</option><option value="active">Running or waiting</option>
+              <option value="idle">Idle</option><option value="ended">Ended</option>
             </select>
           </div>
         </div>

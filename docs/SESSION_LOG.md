@@ -2,6 +2,14 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — consistent presence, focus and compact console
+
+- Replaced the unshipped fifteen-minute proposal with the approved shared Rust classification: two-minute idle grace, unresolved approvals retained, explicit open execution retained, stale unsupported observations inactive, and ended only when explicitly reported. Applied to all agents, SQL filters/totals, CLI, both tray controllers, both consoles and desktop snapshots. History retains last activity with relative and absolute timestamps.
+- Focus previously returned success unconditionally, treated desktop Codex as a terminal, and then reopened spawnt. Target the recorded process/host or application, restore minimized windows, check results, move OS calls off async workers/DB locks, and offer workspace copying on failure. Exact conversation selection is not claimed.
+- Preserve full-size tray geometry in a separate canonical ICO while keeping the Windows app inset. Simplified tray tooltip, console header and period/export controls; aligned panel headings, grouped provider windows into compact expandable rows, reduced summary height, preserved expanded rows during polling, and removed correction/history prose from public copy.
+- Reproduced Windows PowerShell requesting SeSecurityPrivilege for private credential Set-Acl. Direct .NET writes retain protected owner-only ACLs without escalation; replacement and ACL inspection tests pass.
+- Windows full gate including cargo-deny, workspace tests, source/DOM/runtime regressions, native tray bitmap and script parsing, packaging tests and Next build pass. Native files are rebuilt in the release phase. Browser visual tooling remains disabled; macOS builds remain deferred.
+
 ## 2026-10-28 — Overview order and Windows icon inset
 
 - Applied the owner's requested order to both consoles using actual DOM order: activity, spend summary, then limits on the left and ongoing sessions on the right. Narrow layouts preserve this reading/focus order.
