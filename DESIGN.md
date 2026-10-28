@@ -81,3 +81,7 @@ Overview is a compact marketing summary: three KPIs, a small seven-day chart and
 
 - Every executable command shown in the app has an integrated clipboard icon control with an accessible name, visible success/failure feedback, and keyboard focus styling.
 - Copy the exact command shown. Keep long commands horizontally scrollable or safely wrapped at narrow widths; the copy control remains visible.
+# Windows icon canvas
+
+Windows app, tray and installer ICOs use the canonical red mark on an opaque #070708 canvas. Small ICO frames use Windows DIB encoding so the current GDI+ tray can render count overlays; web SVG/PNG marks keep their existing presentation.
+
