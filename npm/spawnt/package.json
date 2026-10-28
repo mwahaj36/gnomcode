@@ -1,0 +1,31 @@
+{
+  "name": "spawnt",
+  "version": "0.9.0",
+  "description": "Local agent console and standalone CLI",
+  "license": "SEE LICENSE IN EULA.txt",
+  "bin": {
+    "spawnt": "bin/spawnt.js"
+  },
+  "files": [
+    "bin",
+    "EULA.txt",
+    "THIRD_PARTY_NOTICES.html"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@spawnt/cli-win32-x64": "0.9.0",
+    "@spawnt/cli-win32-arm64": "0.9.0",
+    "@spawnt/cli-darwin-x64": "0.9.0",
+    "@spawnt/cli-darwin-arm64": "0.9.0",
+    "@spawnt/cli-linux-x64": "0.9.0",
+    "@spawnt/cli-linux-arm64": "0.9.0",
+    "@spawnt/cli-linux-x64-musl": "0.9.0"
+  },
+  "scripts": {
+    "prepack": "node ../check-release.cjs",
+    "test": "node --test test/*.test.cjs",
+    "smoke": "node ../smoke-release.cjs"
+  }
+}

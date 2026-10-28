@@ -1,6 +1,6 @@
 [package]
-name = "fleethud"
-description = "Live mission control for AI coding agents: the fleethud CLI."
+name = "spawnt"
+description = "Live mission control for AI coding agents: the spawnt CLI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,16 +9,16 @@ repository.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "fleethud"
+name = "spawnt"
 path = "src/main.rs"
 
 [dependencies]
-fleethud-core = { workspace = true }
-fleethud-adapters = { workspace = true }
-fleethud-store = { workspace = true }
-fleethud-platform = { workspace = true }
-fleethud-ingest = { workspace = true }
-fleethud-daemon = { workspace = true }
+spawnt-core = { workspace = true }
+spawnt-adapters = { workspace = true }
+spawnt-store = { workspace = true }
+spawnt-platform = { workspace = true }
+spawnt-ingest = { workspace = true }
+spawnt-daemon = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
@@ -30,3 +30,6 @@ serde_json = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }

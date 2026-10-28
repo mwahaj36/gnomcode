@@ -71,7 +71,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
     loadBusy.current = true; setLoadingPreferences(true); setStatusMessage("Loading cloud preferences...");
     const generation = ++loadGeneration.current;
     try {
-      const { data, error } = await supabase.from("fleethud_sync_state").select("display_name,openai_plan_usd,claude_plan_usd,google_plan_usd,custom_pricing").eq("user_id", currentUser.id).maybeSingle();
+      const { data, error } = await supabase.from("spawnt_sync_state").select("display_name,openai_plan_usd,claude_plan_usd,google_plan_usd,custom_pricing").eq("user_id", currentUser.id).maybeSingle();
       if (generation !== loadGeneration.current) return;
       if (error) throw error;
       if (data) {
@@ -105,7 +105,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
     if (saveBusy.current || loadBusy.current) return false;
     saveBusy.current = true; setSaving(true); setStatusMessage("Saving cloud preferences...");
     try {
-      const { error } = await supabase.from("fleethud_sync_state").upsert({ user_id: user.id, email: user.email, ...values, updated_at: new Date().toISOString() });
+      const { error } = await supabase.from("spawnt_sync_state").upsert({ user_id: user.id, email: user.email, ...values, updated_at: new Date().toISOString() });
       if (error) throw error;
       setStatusMessage(success); return true;
     } catch (error) {

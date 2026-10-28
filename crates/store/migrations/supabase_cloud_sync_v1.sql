@@ -1,4 +1,4 @@
--- FleetHUD Supabase Schema & Row-Level Security (RLS) Migrations (SPEC §3.15)
+-- Spawnt Supabase Schema & Row-Level Security (RLS) Migrations (SPEC §3.15)
 -- Multi-tenant sync for Pro personal multi-device mirroring and Team organization rollups.
 
 -- 1. Organizations table

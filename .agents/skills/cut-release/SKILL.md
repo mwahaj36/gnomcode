@@ -1,18 +1,18 @@
 ---
 name: cut-release
 description: >-
-  End-to-end automated release procedure for FleetHUD: lockstep version bumping across
+  End-to-end automated release procedure for Spawnt: lockstep version bumping across
   all crates, web app, npm shims, installers, and download portals, followed by binary
   compilation, packaging, and tagging.
 ---
 
-# Cut a FleetHUD Release
+# Cut a Spawnt Release
 
 Follow this runbook when cutting any release (`docs/SPEC.md` §6).
 
 ## Automated Version Synchronization
 
-FleetHUD maintains synchronized versions across 8 files in the repository. Instead of manual editing, run the automated version bumper:
+Spawnt maintains synchronized versions across 8 files in the repository. Instead of manual editing, run the automated version bumper:
 
 ```sh
 # Explicit version:
@@ -31,8 +31,8 @@ node .agents/skills/cut-release/scripts/bump-version.mjs major
 | `scripts/Setup.cs` | `AssemblyVersion("X.Y.Z.0")`, `AssemblyFileVersion`, GUI badge `vX.Y.Z`, Windows Add/Remove Programs `DisplayVersion` |
 | `web/package.json` | `"version": "X.Y.Z"` |
 | `npm/package.json` | `"version": "X.Y.Z"` |
-| `npm/fleethud/package.json` | `"version": "X.Y.Z"` |
-| `scripts/install.ps1` | `FleetHUD-vX.Y.Z-windows-$Arch.zip` download URL and installation completion banner |
+| `npm/spawnt/package.json` | `"version": "X.Y.Z"` |
+| `scripts/install.ps1` | `Spawnt-vX.Y.Z-windows-$Arch.zip` download URL and installation completion banner |
 | `web/public/downloads/install.ps1` | Direct mirror of `scripts/install.ps1` |
 | `web/app/downloads/page.tsx` | UI badge `Production Release • vX.Y.Z` and zip download href |
 | `apps/tray/src-tauri/tauri.conf.json` | `"version": "X.Y.Z"` (when present) |
@@ -53,10 +53,10 @@ npm run --prefix web release-pack
 ```
 
 This runs:
-1. `cargo.exe build -p fleethud --release` (native 64-bit binary).
-2. Copies `target/release/fleethud.exe` -> `web/public/downloads/fleethud.exe`.
-3. `csc.exe` compiles `scripts/Setup.cs` -> `web/public/downloads/FleetHUD-Setup.exe` with embedded payload, 0.65x icon, and Windows Add or Remove Programs registration.
-4. `Compress-Archive` generates `web/public/downloads/FleetHUD-vX.Y.Z-windows-x64.zip`.
+1. `cargo.exe build -p spawnt --release` (native 64-bit binary).
+2. Copies `target/release/spawnt.exe` -> `web/public/downloads/spawnt.exe`.
+3. `csc.exe` compiles `scripts/Setup.cs` -> `web/public/downloads/Spawnt-Setup.exe` with embedded payload, 0.65x icon, and Windows Add or Remove Programs registration.
+4. `Compress-Archive` generates `web/public/downloads/Spawnt-vX.Y.Z-windows-x64.zip`.
 5. `npm run build --prefix web` rebuilds Next.js static assets with the updated download routes.
 
 ---
@@ -80,11 +80,11 @@ This runs:
 4. **Commit & Tag**:
    ```sh
    git commit -am "chore(release): vX.Y.Z"
-   git tag -a vX.Y.Z -m "FleetHUD vX.Y.Z"
+   git tag -a vX.Y.Z -m "Spawnt vX.Y.Z"
    git push origin main --follow-tags
    ```
 
 5. **Post-Release Verification**:
-   - Smoke-test installer: `web/public/downloads/FleetHUD-Setup.exe`.
-   - Verify Windows Settings -> "Installed apps" displays `FleetHUD Mission Control vX.Y.Z`.
-   - Test `FleetHUD-Uninstall.exe` cleanly purges services, registry entries, and shortcuts.
+   - Smoke-test installer: `web/public/downloads/Spawnt-Setup.exe`.
+   - Verify Windows Settings -> "Installed apps" displays `Spawnt Mission Control vX.Y.Z`.
+   - Test `Spawnt-Uninstall.exe` cleanly purges services, registry entries, and shortcuts.

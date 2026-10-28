@@ -1,12 +1,12 @@
 //! SQLite storage schema, migrations, queries, and rollups (`SPEC §3.6`, `§4.3`).
 
 use chrono::{DateTime, Datelike, Utc};
-use fleethud_core::rules::{GuardrailRule, ResumeQueueEntry};
-use fleethud_core::{
+use rusqlite::{Connection, OptionalExtension, params};
+use spawnt_core::rules::{GuardrailRule, ResumeQueueEntry};
+use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
     SessionState, Surface, TrustLevel, UsageRecord,
 };
-use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use thiserror::Error;
 
@@ -145,7 +145,7 @@ pub struct SessionListItem {
     pub is_ongoing: bool,
     /// Source-independent presence classification.
     #[serde(default)]
-    pub presence: fleethud_core::presence::SessionPresence,
+    pub presence: spawnt_core::presence::SessionPresence,
     /// Started at timestamp.
     pub started_at: String,
     /// Last event timestamp.
@@ -399,7 +399,7 @@ pub struct ContextRelayEntry {
     pub executed_at: Option<String>,
 }
 
-/// Managed SQLite database handle wrapped with FleetHUD schema & queries.
+/// Managed SQLite database handle wrapped with Spawnt schema & queries.
 pub struct Database {
     conn: Connection,
 }
@@ -776,7 +776,7 @@ impl Database {
                 entry.session_id,
                 entry.agent.as_str(),
                 entry.cwd,
-                entry.resume_prompt,
+                "continue",
                 entry.max_runs,
                 entry.runs_completed,
                 entry.eligible_after.to_rfc3339(),
@@ -1284,7 +1284,7 @@ impl Database {
         Ok(out)
     }
 
-    /// Aggregates usage report grouped by project, agent, and model for `fleethud report`.
+    /// Aggregates usage report grouped by project, agent, and model for `spawnt report`.
     ///
     /// # Errors
     /// Returns [`Error`] if query execution fails.
@@ -1502,7 +1502,7 @@ impl Database {
                     }
 
                     if let Some(ws) = detected_ws {
-                        let project = fleethud_core::Project::from_origin(None, &ws, None);
+                        let project = spawnt_core::Project::from_origin(None, &ws, None);
                         let _ = self.conn.execute(
                             r#"
                             INSERT INTO project (id, canonical_key, repo_root, name, git_branch)
@@ -1813,7 +1813,7 @@ impl Database {
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let now = Utc::now();
         let cutoff = (now
-            - chrono::Duration::milliseconds(fleethud_core::presence::RECENT_ACTIVITY_GRACE_MS))
+            - chrono::Duration::milliseconds(spawnt_core::presence::RECENT_ACTIVITY_GRACE_MS))
         .to_rfc3339();
         let agent = agent_filter
             .filter(|value| !value.is_empty())
@@ -1915,10 +1915,10 @@ impl Database {
                     ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
                 );
                 let presence =
-                    fleethud_core::presence::classify_presence(&state_str, age, open_execution);
+                    spawnt_core::presence::classify_presence(&state_str, age, open_execution);
                 let is_ongoing = presence.is_ongoing();
                 let is_active = presence.is_active();
-                let state = if presence == fleethud_core::presence::SessionPresence::Inactive
+                let state = if presence == spawnt_core::presence::SessionPresence::Inactive
                     && matches!(state_str.as_str(), "thinking" | "tool")
                 {
                     "unknown".to_owned()
@@ -2235,7 +2235,7 @@ impl Database {
         let mut agent_models: BTreeMap<&'static str, BTreeMap<String, ModelReport>> =
             BTreeMap::new();
         for item in raw_items {
-            let agent_label = fleethud_core::pricing::format_agent_display(&item.agent);
+            let agent_label = spawnt_core::pricing::format_agent_display(&item.agent);
             let models_map = agent_models.entry(agent_label).or_default();
             let entry = models_map
                 .entry(item.model.clone())
@@ -2446,8 +2446,8 @@ impl Database {
 mod tests {
     use super::{ContextRelayEntry, Database, SourceCheckpoint};
     use chrono::Utc;
-    use fleethud_core::rules::{GuardrailRule, RuleAction};
-    use fleethud_core::{
+    use spawnt_core::rules::{GuardrailRule, RuleAction};
+    use spawnt_core::{
         ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
         SessionState, Surface, TrustLevel, UsageRecord,
     };
@@ -2551,8 +2551,25 @@ mod tests {
     }
 
     #[test]
+    fn resume_queue_does_not_store_user_prompt_text() {
+        use spawnt_core::rules::ResumeQueueEntry;
+        let db = Database::open_in_memory().expect("database");
+        let entry = ResumeQueueEntry {
+            session_id: "codex:session-privacy".to_owned(),
+            agent: AgentId::Codex,
+            cwd: ".".to_owned(),
+            resume_prompt: "private text that must not be stored".to_owned(),
+            max_runs: 1,
+            runs_completed: 0,
+            eligible_after: Utc::now(),
+        };
+        db.arm_resume_queue(&entry).expect("arm");
+        let stored = db.list_resume_queue().expect("list");
+        assert_eq!(stored[0].resume_prompt, "continue");
+    }
+    #[test]
     fn resume_queue_persists_arms_and_disarms() {
-        use fleethud_core::rules::ResumeQueueEntry;
+        use spawnt_core::rules::ResumeQueueEntry;
         let db = Database::open_in_memory().expect("in-memory db");
         let entry = ResumeQueueEntry {
             session_id: "claude-code:session-1".to_owned(),
@@ -2596,8 +2613,8 @@ mod tests {
             session_id: "claude-code:s1".to_owned(),
             source_agent: "claude-code".to_owned(),
             target_agent: "claude-code".to_owned(),
-            project_name: "fleethud".to_owned(),
-            cwd: "/workspace/fleethud".to_owned(),
+            project_name: "spawnt".to_owned(),
+            cwd: "/workspace/spawnt".to_owned(),
             fill_pct: 92,
             status: "pending".to_owned(),
             created_at: Utc::now().to_rfc3339(),
@@ -2620,8 +2637,8 @@ mod tests {
     fn commit_batch_persists_and_queries_idempotently() {
         let mut db = Database::open_in_memory().expect("in-memory db");
         let p = Project::from_origin(
-            Some("https://github.com/mwahaj36/fleethud"),
-            "/workspace/fleethud",
+            Some("https://github.com/mwahaj36/spawnt"),
+            "/workspace/spawnt",
             Some("main"),
         );
         let s = Session {
@@ -2797,8 +2814,8 @@ mod tests {
         assert_eq!(report[0].input_tokens, 1000);
 
         let other_project = Project::from_origin(
-            Some("https://github.com/other/fleethud"),
-            "/workspace/other/fleethud",
+            Some("https://github.com/other/spawnt"),
+            "/workspace/other/spawnt",
             None,
         );
         let mut other_session = db.list_active_sessions(1).expect("session").remove(0);
@@ -2993,8 +3010,8 @@ mod tests {
     fn usage_report_timeline_honors_explicit_from_ts_and_local_start_of_day() {
         let mut db = Database::open_in_memory().expect("in-memory db");
         let p = Project::from_origin(
-            Some("https://github.com/mwahaj36/fleethud"),
-            "/workspace/fleethud",
+            Some("https://github.com/mwahaj36/spawnt"),
+            "/workspace/spawnt",
             Some("main"),
         );
         let s = Session {

@@ -9,12 +9,12 @@ use crate::{
     claude::{classify_tool_kind, extract_tool_detail},
 };
 use chrono::{DateTime, Utc};
-use fleethud_core::{
+use serde_json::Value;
+use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::redact_summary,
 };
-use serde_json::Value;
 use std::collections::HashSet;
 
 /// Stateful parser for an Antigravity `transcript.jsonl` conversation log.

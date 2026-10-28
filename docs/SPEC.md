@@ -1,6 +1,23 @@
-# FleetHUD — Specification, Roadmap & Delivery Plan
+# Spawnt — Specification, Roadmap & Delivery Plan
 
-> **This file is the single source of truth for FleetHUD.**
+> **Current decisions, 2026-10-28:** Spawnt is the product name. The following decisions supersede conflicting historical plans below. Implementation status must not be inferred from target decisions.
+>
+> Spawnt is a closed-source, local-first cross-platform agent app. The standalone Rust daemon owns business logic and serves the CLI, local dashboard and planned Electron desktop shell. The CLI works offline without the desktop app or an account. The working site is `https://spawntv.vercel.app`.
+>
+> All local features are free. Only Remote and Teams are paid; local features must not check licenses. Spawnt will persist its own conversation history for session continuity and model switches, alongside agent-owned logs. Remote content may leave the machine only as end-to-end encrypted traffic. Existing cloud sync and vendor credential access require a privacy review and a migration plan before claiming this target is implemented. Do not delete existing features without owner approval.
+>
+> Launch official agent CLIs; never read, store or forward their subscription tokens. Permission escalation is prohibited. Agents must survive a Spawnt crash; PTY ownership and reattachment require a cross-platform design spike before this can be promised. Local HTTP remains loopback-only with authentication and Host/Origin validation.
+>
+> **Planned phases:** Phase 0 audit and plan, followed by owner review; Phase 1 dedicated rename, Electron shell and standalone npm distribution; Phase 2 M6 launcher and terminal; Phase 3 M7 structured chat, file viewer and diff review; Phase 4 M8 routing and handoff; Phase 5 M9 Remote only after explicit owner confirmation, a threat model and independent security review. Stop for owner review after each phase. Five separate ADRs will document Electron, structured drivers and terminal fallback, Remote encryption, the free local core and the rename.
+>
+> **Rename target:** `spawnt`, `SPAWNT_HOME`, `~/.spawnt`, renamed IPC, app IDs, repositories and documentation, without a legacy executable, home-directory migration, or compatibility shim; no users require migration. Centralize branding and base URLs. The source and releases repositories are to be renamed in place, preserving redirects.
+>
+> **Distribution target:** `spawnt` npm shim and platform binary packages for Windows and macOS x64/arm64, Linux x64/arm64 and Linux x64 musl. Bundle the EULA and notices. Verify clean installs and skipped optional dependencies. Version CLI and desktop together using SemVer, remaining at 0.x until v1.0. The in-progress release uses 0.9.0; older unpublished 1.x artifacts are retired rather than relabeled.
+>
+> Electron is a thin UI and tray client. Use context isolation, disabled Node integration, a strict CSP, validated IPC and a narrow typed preload. Disable release devtools and remote content. The daemon remains a separate process. Measure idle memory across all processes on each supported OS.
+
+
+> **This file is the single source of truth for Spawnt.**
 > Product scope, architecture, roadmap, deliverables and deployment all live here.
 > If code, issues or other docs disagree with this file, this file wins — or it gets updated in the same PR.
 > Architectural decisions are recorded as ADRs in [`docs/adr/`](./adr/) and summarized here.
@@ -10,7 +27,7 @@
 | Status | Pre-M0 (scaffolding) |
 | Last updated | 2026-10-26 |
 | Owner | Wahaj (@mwahaj36) |
-| Domain | `fleethud.pro` |
+| Domain | `spawntv.vercel.app` |
 | License | Proprietary, closed source. Free tier is freeware; Pro and Teams are paid. Source repo is private. |
 
 ---
@@ -19,7 +36,7 @@
 
 ### 1.1 One-liner
 
-**FleetHUD is live mission control for every AI coding agent on your machine** — see which agents are running, which are blocked waiting for you, what they cost, and how close you are to your limits. Windows, macOS and Linux. Zero config. Nothing leaves your laptop.
+**Spawnt is live mission control for every AI coding agent on your machine** — see which agents are running, which are blocked waiting for you, what they cost, and how close you are to your limits. Windows, macOS and Linux. Zero config. Nothing leaves your laptop.
 
 ### 1.2 Problem
 
@@ -33,7 +50,7 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 
 ### 1.3 Positioning vs. alternatives
 
-| Tool | What it does | Gap FleetHUD fills |
+| Tool | What it does | Gap Spawnt fills |
 | :--- | :--- | :--- |
 | CodexBar | Free macOS menubar for quotas & cost, 60+ providers | macOS only; quotas, not live agent state; no guardrails |
 | ccusage & similar | CLI reports from Claude/Codex logs | After-the-fact, no live state, no tray |
@@ -64,16 +81,16 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 | **Guardrails** (budget / loop auto-stop via hooks) | — | Yes | Yes |
 | **Custom alert rules** (spend, context bloat, idle-awaiting) | — | Yes | Yes |
 | **Resume Queue** (auto-continue rate-limited agents at quota reset, §3.14) | — | Yes | Yes |
-| **Context Relay Engine** (zero-token saturation handoff, `.fleethud/HANDOFF.md`, §3.14.1) | — | Yes | Yes |
+| **Context Relay Engine** (zero-token saturation handoff, `.spawnt/HANDOFF.md`, §3.14.1) | — | Yes | Yes |
 | **Advanced analytics & CSV/JSON export** | — | Yes | Yes |
 | **Personal multi-machine sync** | — | Yes | Yes |
 | Team dashboard, Slack/Discord alerts, team caps | — | — | Yes |
 
-**Licensing model:** FleetHUD is **closed source**. The source repo is private, and only compiled binaries are distributed, under an End User License Agreement (EULA). One binary covers every tier: Pro features are compiled in and unlocked by an offline **Ed25519-signed license file** (see §6.6).
+**Licensing model:** Spawnt is **closed source**. The source repo is private, and only compiled binaries are distributed, under an End User License Agreement (EULA). One binary covers every tier: Pro features are compiled in and unlocked by an offline **Ed25519-signed license file** (see §6.6).
 
-**Trust without open source.** FleetHUD reads sensitive agent logs, so closed source has to be balanced with verifiable privacy:
+**Trust without open source.** Spawnt reads sensitive agent logs, so closed source has to be balanced with verifiable privacy:
 - No network access by default, apart from the opt-out update check.
-- `fleethud doctor --network` lists every outbound endpoint the build can contact.
+- `spawnt doctor --network` lists every outbound endpoint the build can contact.
 - A published privacy policy.
 - Third-party license notices bundled with every release.
 
@@ -92,7 +109,7 @@ Developers run a fleet of agents at once (Claude Code, Codex, Antigravity, Gemin
 | GitHub stars | 1,500 |
 | Weekly npm + release downloads | 2,000 |
 | Pro licenses sold | 150 |
-| Adapter parse-error rate (from `fleethud doctor` reports) | < 0.5% of lines |
+| Adapter parse-error rate (from `spawnt doctor` reports) | < 0.5% of lines |
 | Daemon idle footprint | < 30 MB RSS, < 1% CPU |
 
 ---
@@ -121,13 +138,13 @@ Editor roots for Cline/Roo are probed across `Code`, `Code - Insiders`, `Cursor`
 
 ### 3.1 Principles
 
-1. **Read-only by default.** Agent configs are only modified by explicit `fleethud integrate <agent>`, with backup and `--remove`.
+1. **Read-only by default.** Agent configs are only modified by explicit `spawnt integrate <agent>`, with backup and `--remove`.
 2. **Metadata, not content.** Counts, timings, tool names, redacted ≤120-char summaries.
 3. **Every number carries its trust level:** `exact | estimated | api | unknown`.
 4. **One Rust core, many shells:** CLI, daemon, hook handler and tray share crates.
 5. **Correctness doesn't depend on FS watchers.** Watchers are a latency optimization; a reconciler guarantees completeness.
 6. **Graceful per-OS degradation.** Unsupported features fall back, never crash.
-7. **Fail open.** If FleetHUD is down, agents behave exactly as without it.
+7. **Fail open.** If Spawnt is down, agents behave exactly as without it.
 
 ### 3.2 Component diagram
 
@@ -142,10 +159,10 @@ flowchart LR
         CU["Cursor state.vscdb (opt-in)"]
     end
     subgraph OptIn["Opt-in taps"]
-        HK["Claude Code hooks -> fleethud hook"]
+        HK["Claude Code hooks -> spawnt hook"]
         OT["OTLP receiver (configurable port, off by default)"]
     end
-    subgraph Daemon["fleethud daemon (single instance)"]
+    subgraph Daemon["spawnt daemon (single instance)"]
         W["Watcher + Reconciler"]
         T["Tailer + Checkpoints"]
         A["Adapters"]
@@ -159,7 +176,7 @@ flowchart LR
         IPC["IPC: UDS / named pipe"]
     end
     subgraph Clients
-        CLI["fleethud CLI"]
+        CLI["spawnt CLI"]
         WEB["Web dashboard (embedded)"]
         TRAY["Tauri tray"]
     end
@@ -178,17 +195,17 @@ flowchart LR
 
 | Component | Tech | Role |
 | :--- | :--- | :--- |
-| `fleethud` | Rust single binary | Subcommands: `daemon`, `status`, `report`, `hook <event>`, `integrate <agent>`, `doctor`, `install`, `uninstall`, `open` |
-| daemon (`fleethud daemon`) | tokio + axum + rusqlite | Owns watchers, DB, API. Single instance via lockfile + port probe. |
+| `spawnt` | Rust single binary | Subcommands: `daemon`, `status`, `report`, `hook <event>`, `integrate <agent>`, `doctor`, `install`, `uninstall`, `open` |
+| daemon (`spawnt daemon`) | tokio + axum + rusqlite | Owns watchers, DB, API. Single instance via lockfile + port probe. |
 | Web dashboard | React + Vite + Tailwind, embedded via `rust-embed` | Served at `http://127.0.0.1:3333` |
 | Tray app | Rust tray controller (`crates/tray`) and platform scripts | Thin local client; opens the daemon-served console and invokes platform focus/notification behavior. The Tauri v2 shell remains a future migration, not the current shipped implementation. |
 
-**FleetHUD home:** `~/.fleethud/` on all OSes (override: `FLEETHUD_HOME`). Contains `fleethud.db`, `daemon.json` (port + token, user-only perms), `ipc.sock` (Unix), `config.toml`, `pricing.toml`, `license.json`, `bin/`, `logs/`.
+**Spawnt home:** `~/.spawnt/` on all OSes (override: `SPAWNT_HOME`). Contains `spawnt.db`, `daemon.json` (port + token, user-only perms), `ipc.sock` (Unix), `config.toml`, `pricing.toml`, `license.json`, `bin/`, `logs/`.
 
 ### 3.4 Workspace layout
 
 ```
-fleethud/
+spawnt/
 ├─ crates/
 │  ├─ core/        # domain types, pricing, quota, rules, redactor — no I/O
 │  ├─ adapters/    # one module per agent; pure parse(bytes) -> events
@@ -196,7 +213,7 @@ fleethud/
 │  ├─ store/       # SQLite schema, migrations, queries, rollups
 │  ├─ platform/    # paths, process scan, window focus, autostart (cfg(target_os))
 │  ├─ daemon/      # axum HTTP/WS API, IPC server, orchestration
-│  └─ cli/         # `fleethud` binary
+│  └─ cli/         # `spawnt` binary
 ├─ apps/tray/      # Tauri v2 shell                      (M2)
 ├─ web/            # React dashboard                     (M1)
 ├─ npm/            # npm shim + per-platform packages
@@ -322,7 +339,7 @@ Every quota record and UI meter is keyed by `(provider, limit_id, window)`:
 | Standalone CLI process (Codex, Gemini, Aider) | SIGINT on Unix; on Windows notify and terminate only after user confirmation |
 | IDE-hosted (Cline, Antigravity, Cursor) | Notification only — never kill the editor |
 
-- `fleethud integrate claude` adds `PreToolUse`, `PostToolUse`, `Notification`, `Stop` hooks to `~/.claude/settings.json` (backup first; `--remove` restores).
+- `spawnt integrate claude` adds `PreToolUse`, `PostToolUse`, `Notification`, `Stop` hooks to `~/.claude/settings.json` (backup first; `--remove` restores).
 - Hook ↔ daemon over IPC with a **50 ms timeout, fail-open**.
 - Loop detection: hash `(tool_name, normalized args)`; fire on N repeats within a window.
 
@@ -330,7 +347,7 @@ Every quota record and UI meter is keyed by `(provider, limit_id, window)`:
 
 - Bind **127.0.0.1 only**. Random bearer token in `daemon.json` (0600 / user-only ACL).
 - Validate `Host` and `Origin` on every request (DNS-rebinding defense).
-- IPC: `~/.fleethud/ipc.sock` (Unix), `\\.\pipe\fleethud-<user>` (Windows).
+- IPC: `~/.spawnt/ipc.sock` (Unix), `\\.\pipe\spawnt-<user>` (Windows).
 - Current HTTP routes: `GET /api/v1/sessions?page=&limit=&agent=&status=`, `GET /api/v1/report?range=&from=&to=`, `GET /api/v1/projects?range=&from=&to=`, `GET /api/v1/quota`, `POST /api/v1/reconcile`, `GET /api/v1/sync/status`, `POST /api/v1/sessions/:id/focus`, `GET|POST /api/v1/rules`, and `GET /health`. Local clients poll these routes; a WebSocket stream remains planned.
 - Timeline reports include Rust-produced UTC daily token/cost measurements and chart proportions. Session and project totals count provider cache tokens once. Project rollups and repository identity remain local; cloud sources without project rollups show an explicit unavailable state.
 - Cloud snapshots carry `generated_at` from the daemon. Cloud settings-row edits must not make old observations appear fresh. Authenticated local sync status exposes the last publication attempt/success and a credential-free failure message. Provider quota provenance is retained, and a past reset timestamp does not prove a new quota observation.
@@ -361,7 +378,7 @@ Unsupported → show a toast with the repo path and a "copy path" action.
 
 ### 3.14 Resume Queue — auto-continue at quota reset (Pro)
 
-When an agent stops because it hit its rate limit, FleetHUD can continue it automatically once the window resets.
+When an agent stops because it hit its rate limit, Spawnt can continue it automatically once the window resets.
 
 **Detection.** The adapter emits a `rate_limited` activity event with `resets_at`:
 - Codex: `rate_limits.rate_limit_reached_type` plus `primary/secondary.resets_at` (exact).
@@ -373,13 +390,13 @@ When an agent stops because it hit its rate limit, FleetHUD can continue it auto
 
 | # | Strategy | Where it works | Result |
 | :--- | :--- | :--- | :--- |
-| 0 | **Agent-native auto-continue** | Claude Code ≥ 2.1.234 with `autoContinueAtUsageLimit` on and the session still open *(verify)* | FleetHUD does nothing except show "auto-resumes at HH:MM". No double prompts. |
+| 0 | **Agent-native auto-continue** | Claude Code ≥ 2.1.234 with `autoContinueAtUsageLimit` on and the session still open *(verify)* | Spawnt does nothing except show "auto-resumes at HH:MM". No double prompts. |
 | 1 | **Keystroke injection into the original terminal** | tmux (`tmux send-keys -t <pane>`) on all Unix systems; iTerm2 / Terminal.app via AppleScript matched by TTY | Resumes in the user's own window. Best UX. |
 | 2 | **Headless resume in the background** | Any OS, when the original process is gone: `claude -p --resume <id> "<prompt>"`, `codex exec resume <id> "<prompt>"` | Runs in the background. Progress shows in the dashboard through the normal log ingestion. The user can reattach with `claude --resume <id>`. |
 | — | **Notify only** | IDE-hosted agents (Antigravity, Cline/Roo, Cursor) and Windows Terminal tabs with a live process | Toast: "Limit reset — 3 sessions ready to continue" with a focus button. |
 
 **Safety rules:**
-- Never escalate permissions. Headless runs inherit the user's existing permission config and never pass `--dangerously-skip-permissions`, `--yolo` or similar flags. If a run hits a permission prompt, it stops and FleetHUD raises an "awaiting approval" notification.
+- Never escalate permissions. Headless runs inherit the user's existing permission config and never pass `--dangerously-skip-permissions`, `--yolo` or similar flags. If a run hits a permission prompt, it stops and Spawnt raises an "awaiting approval" notification.
 - Wait for the reset plus a random 30–120 s, and confirm the reset where possible (a Codex `used_percent` drop) before resuming.
 - Stagger the queue: resume sessions one at a time in the user's `order`, so they don't all burn the fresh window at once. Stop the queue when quota burn passes a user threshold.
 - `max_runs` (default 1) stops resume loops. Every resume is recorded as an `activity_event` (`kind = auto_resume`).
@@ -387,18 +404,18 @@ When an agent stops because it hit its rate limit, FleetHUD can continue it auto
 
 ### 3.14.1 Pro Labs: Context Relay Engine — zero-token handoff & saturation reserve (Pro)
 
-When an AI coding agent approaches context window saturation (>=90%), token costs escalate rapidly, latency increases, and reasoning quality degrades ("lost in the middle"). Because proprietary vendors (Anthropic, Google, OpenAI) maintain closed GUI databases and do not provide cross-agent handoffs, FleetHUD provides autonomous context rotation:
+When an AI coding agent approaches context window saturation (>=90%), token costs escalate rapidly, latency increases, and reasoning quality degrades ("lost in the middle"). Because proprietary vendors (Anthropic, Google, OpenAI) maintain closed GUI databases and do not provide cross-agent handoffs, Spawnt provides autonomous context rotation:
 
 1. **Safety Reserve Threshold (Default: 90%):**
    - Reserves 15,000–20,000 tokens of context buffer so the active agent has headroom to finalize pending file changes and write a clean workspace checkpoint before hitting hard failure or 429 rate limits.
-2. **Zero-Knowledge Repository Checkpoint (`.fleethud/HANDOFF.md`):**
-   - Generates a local markdown checkpoint in the repository workspace (`.fleethud/HANDOFF.md`).
+2. **Zero-Knowledge Repository Checkpoint (`.spawnt/HANDOFF.md`):**
+   - Generates a local markdown checkpoint in the repository workspace (`.spawnt/HANDOFF.md`).
    - Contains source agent, target agent, project, saturation percentage, timestamp, and step-by-step continuity instructions.
-   - Preserves Invariant 1: No prompts, tokens, or PII are stored in FleetHUD databases.
+   - Preserves Invariant 1: No prompts, tokens, or PII are stored in Spawnt databases.
 3. **Rotated Session Launch:**
    - Spawns the clean destination agent session in the repository directory with **0 context tokens**.
    - Rotated sessions run in the user's terminal/IDE terminal pane without permission escalation.
-   - Users can revisit or focus the window with 1 click from FleetHUD Console (`[Focus Window]`) or CLI (`claude --resume` / `codex resume`).
+   - Users can revisit or focus the window with 1 click from Spawnt Console (`[Focus Window]`) or CLI (`claude --resume` / `codex resume`).
 4. **Execution Policies & Strategy Routing:**
    - `ask_first` (Default): Records pending handoff event; prompts the user via desktop balloon and console button with 1-click `[Handoff & Rotate]`.
    - `auto`: Autonomous rotation when threshold is crossed.
@@ -406,7 +423,7 @@ When an AI coding agent approaches context window saturation (>=90%), token cost
    - Strategy: `same_agent` (homogeneous rotation) or `failover` (cross-vendor failover when one provider quota is exhausted).
 5. **Remote & Mobile Web Console Execution:**
    - When away from the primary workstation, users can trigger `[Handoff & Rotate]` from the Web Console (desktop or mobile).
-   - If outside local loopback, the command is transmitted via Supabase (`fleethud_sync_state`) and executed by the desktop daemon on the workstation.
+   - If outside local loopback, the command is transmitted via Supabase (`spawnt_sync_state`) and executed by the desktop daemon on the workstation.
 
 ### 3.15 Cloud Sync, Multi-Device & Organizations (Supabase)
 
@@ -487,16 +504,16 @@ erDiagram
     }
 ```
 
-#### B. Accounts, Auth Methods & Device Pairing (`fleethud login`)
-- **Optional for Free/Local users:** FleetHUD runs 100% offline with a local profile by default. Signing into a FleetHUD account is required only when activating Pro, syncing across devices, or joining a Team.
+#### B. Accounts, Auth Methods & Device Pairing (`spawnt login`)
+- **Optional for Free/Local users:** Spawnt runs 100% offline with a local profile by default. Signing into a Spawnt account is required only when activating Pro, syncing across devices, or joining a Team.
 - **Supported Auth Methods (Supabase Auth):**
   1. **GitHub OAuth** (1-click sign-in + auto-import avatar and username).
   2. **Google OAuth** (1-click sign-in + auto-import avatar and username).
   3. **Email + Password** (with email verification, password reset, and in-app email/password change).
 - **Pairing flow:**
-  1. User runs `fleethud login` (or signs in from the dashboard/tray).
+  1. User runs `spawnt login` (or signs in from the dashboard/tray).
   2. Daemon starts an OAuth 2.0 **Device Authorization Flow** (or localhost PKCE callback) against Supabase Auth.
-  3. On approval, a Supabase Edge Function mints a **scoped device token** (`fh_dev_...`), stores only `SHA-256(token)` in `devices`, and returns the raw token to the daemon (saved in `~/.fleethud/credentials.json` with `0600` / user-only ACL).
+  3. On approval, a Supabase Edge Function mints a **scoped device token** (`fh_dev_...`), stores only `SHA-256(token)` in `devices`, and returns the raw token to the daemon (saved in `~/.spawnt/credentials.json` with `0600` / user-only ACL).
   4. Users can revoke any lost laptop from the web dashboard (`DELETE /devices/:id`).
 
 #### C. Sync Engine & Conflict-Free Idempotency
@@ -507,7 +524,7 @@ erDiagram
 #### D. Privacy Boundary (What NEVER leaves the machine)
 - **Zero content, zero file paths, zero activity summaries:** `activity_event` stays 100% local in SQLite.
 - **Project name hashing:** By default, `project_key = HMAC-SHA256(org_salt, normalized_git_remote_or_folder_name)`. Team admins only see `proj_8f3a...` unless the member or org explicitly enables `share_project_names = true`.
-- **Member transparency:** `fleethud sync status` shows the exact JSON payload queued for Supabase so engineers can verify nothing sensitive is uploaded to their manager's org.
+- **Member transparency:** `spawnt sync status` shows the exact JSON payload queued for Supabase so engineers can verify nothing sensitive is uploaded to their manager's org.
 
 #### E. Roles, Seat Billing & Team Guardrails
 - **Roles enforced by Postgres RLS:**
@@ -553,7 +570,7 @@ Signed-in web Settings edits account-scoped cloud preferences only; the authenti
      4. Context window fill crosses `75%` (context bloat warning).
      5. Session cost or turn count crosses a user-set guardrail threshold.
 5. **Devices, License & Team:** enter/manage Pro license, view/revoke paired devices, create/manage Team organization, invite/remove members, assign roles (`owner / admin / member / billing`), and configure Slack/Discord webhooks.
-6. **Agent Integrations & Paths:** custom log directory overrides, 1-click install/remove for Claude Code hooks (`fleethud integrate claude`), toggle experimental adapters, and toggle WSL polling.
+6. **Agent Integrations & Paths:** custom log directory overrides, 1-click install/remove for Claude Code hooks (`spawnt integrate claude`), toggle experimental adapters, and toggle WSL polling.
 
 ---
 
@@ -598,9 +615,9 @@ flowchart LR
 | `adapters`: Claude Code (CLI + VS Code), Codex (CLI + ChatGPT/Codex Desktop App), Antigravity (App/IDE/CLI), Gemini CLI | Golden tests pass; dedup verified on resumed sessions | Yes |
 | `ingest`: tailer + checkpoints + reconciler + user-configurable backfill (0–30 days max) | Kill-mid-import test: no double counts | Yes |
 | `store`: schema v1 (`project`, `session`, `usage_record`, `activity_event`, `quota_snapshot`, `source_file`, `usage_daily`, `user_profile`, `user_settings`) + migrations + configurable retention | Migration test from empty DB | Yes |
-| `fleethud report` (daily/weekly/project/agent/model, side-by-side API-equivalent USD + quota % + Plan Value ROI) and `fleethud status` (live sessions, subagent tree, context fill) | Verified on live user logs against Claude, Codex, Antigravity | Yes |
-| `fleethud doctor` | Lists detected agents, paths, parse-error rates | Yes |
-| Distribution: npm per-platform packages + archives on `fleethud-releases` + shell/PowerShell installers + EULA and third-party notices bundled | `npx fleethud report` works on fresh Win/mac/Linux machines |
+| `spawnt report` (daily/weekly/project/agent/model, side-by-side API-equivalent USD + quota % + Plan Value ROI) and `spawnt status` (live sessions, subagent tree, context fill) | Verified on live user logs against Claude, Codex, Antigravity | Yes |
+| `spawnt doctor` | Lists detected agents, paths, parse-error rates | Yes |
+| Distribution: npm per-platform packages + archives on `spawnt-releases` + shell/PowerShell installers + EULA and third-party notices bundled | `npx spawnt report` works on fresh Win/mac/Linux machines |
 
 **Release:** `v0.1.0` — soft launch (r/ClaudeAI, r/ChatGPTCoding, X) for feedback.
 
@@ -612,7 +629,7 @@ flowchart LR
 | HTTP + WS API with token + Host/Origin checks | Security tests for rebinding and missing token | Yes |
 | Web dashboard (embedded): live sessions, cost by project/agent/model, quota cards | Zero external network calls; clean typography; works offline | Yes |
 | Quota engine (Codex exact, Claude estimated) | Codex values match CLI `/status` |
-| `fleethud install` / `uninstall` (stable binary + autostart per OS) | Survives reboot on all 3 OSes |
+| `spawnt install` / `uninstall` (stable binary + autostart per OS) | Survives reboot on all 3 OSes |
 | WSL polling | Claude Code inside WSL appears on Windows host |
 
 **Release:** `v0.2.0`.
@@ -662,8 +679,8 @@ All Tier A + B adapters stable, 0% parse errors on golden fixtures, zero PII lea
 
 | Repo | Visibility | Contents |
 | :--- | :--- | :--- |
-| `mwahaj36/fleethud` | **Private** | All source, CI, fixtures, docs |
-| `mwahaj36/fleethud-releases` | Public | **Binaries only** (GitHub Releases), public issue tracker, `latest.json` for the updater, install scripts. No source. |
+| `mwahaj36/spawnt` | **Private** | All source, CI, fixtures, docs |
+| `mwahaj36/spawnt-releases` | Public | **Binaries only** (GitHub Releases), public issue tracker, `latest.json` for the updater, install scripts. No source. |
 | `mwahaj36/homebrew-tap` | Public | Homebrew formula (CLI) and cask (tray) pointing at release assets |
 | `mwahaj36/scoop-bucket` | Public | Scoop manifest pointing at release assets |
 
@@ -671,25 +688,25 @@ The private repo's CI publishes to the public repos with a fine-grained token th
 
 ### 6.2 Artifacts per release
 
-Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; planned macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app (build deferred by the user after account billing blocked CI). Available Windows/Linux artifacts use the embedded local console, preserve `.fleethud` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
+Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; planned macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app (build deferred by the user after account billing blocked CI). Available Windows/Linux artifacts use the embedded local console, preserve `.spawnt` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
 
 
-Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; planned macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app (build deferred by the user after account billing blocked CI). Available Windows/Linux artifacts use the embedded local console, preserve `.fleethud` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
+Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; planned macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app (build deferred by the user after account billing blocked CI). Available Windows/Linux artifacts use the embedded local console, preserve `.spawnt` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
 
 
 | Artifact | Platforms / targets | Built by | Published to |
 | :--- | :--- | :--- | :--- |
-| `fleethud` CLI binary (`.tar.gz` / `.zip`) | `x86_64/aarch64-pc-windows-msvc`, `x86_64/aarch64-apple-darwin`, `x86_64/aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` | GitHub Actions matrix (private repo) | `fleethud-releases` GitHub Releases, plus a Cloudflare R2 mirror |
-| Shell + PowerShell installers | all | release job | `fleethud.pro/install.sh` and `/install.ps1` |
-| npm shim `fleethud` + `@fleethud/cli-<platform>` (binaries only, `license: SEE LICENSE IN EULA.txt`) | 7 targets above | CI publish job | npm |
+| `spawnt` CLI binary (`.tar.gz` / `.zip`) | `x86_64/aarch64-pc-windows-msvc`, `x86_64/aarch64-apple-darwin`, `x86_64/aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` | GitHub Actions matrix (private repo) | `spawnt-releases` GitHub Releases, plus a Cloudflare R2 mirror |
+| Shell + PowerShell installers | all | release job | `spawntv.vercel.app/install.sh` and `/install.ps1` |
+| npm shim `spawnt` + `@spawnt/cli-<platform>` (binaries only, `license: SEE LICENSE IN EULA.txt`) | 7 targets above | CI publish job | npm |
 | Homebrew formula (CLI) | macOS, Linux | release job | `homebrew-tap` |
 | Scoop manifest (CLI) | Windows | release job | `scoop-bucket` |
 | winget manifest (CLI + tray) | Windows | `wingetcreate` in release job | `microsoft/winget-pkgs` PR (proprietary freeware is allowed) |
-| AUR `fleethud-bin` (`license=('LicenseRef-FleetHUD')`) | Arch | release job | AUR |
+| AUR `spawnt-bin` (`license=('LicenseRef-Spawnt')`) | Arch | release job | AUR |
 | Tray `.dmg` (universal, notarized) | macOS 12+ | `tauri-action` | Releases, Homebrew cask |
 | Tray `.msi` / NSIS `.exe` | Windows 10+ x64/arm64 | `tauri-action` | Releases, winget |
 | Tray `.AppImage`, `.deb`, `.rpm` | Linux x64/arm64 | `tauri-action` | Releases |
-| Updater manifest `latest.json` (+ Ed25519 signatures) | tray, CLI self-update | release job | `fleethud-releases` |
+| Updater manifest `latest.json` (+ Ed25519 signatures) | tray, CLI self-update | release job | `spawnt-releases` |
 | `SHA256SUMS` (+ minisign signature) | all | release job | Releases |
 | `THIRD_PARTY_NOTICES.html` (generated by `cargo-about`) and `EULA.txt` | all | release job | Bundled inside every archive/installer, and on the website |
 
@@ -708,19 +725,19 @@ Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tra
 | Channel | Update mechanism |
 | :--- | :--- |
 | npm / Homebrew / Scoop / winget / AUR | The package manager |
-| Shell/PowerShell install | `fleethud self-update` (reads `latest.json`, verifies the signature) |
-| Tray | Tauri updater (Ed25519-signed `latest.json` in `fleethud-releases`) |
+| Shell/PowerShell install | `spawnt self-update` (reads `latest.json`, verifies the signature) |
+| Tray | Tauri updater (Ed25519-signed `latest.json` in `spawnt-releases`) |
 
 Update checks happen at most once a day, are opt-out via `config.toml`, and send nothing but a GET for the manifest.
 
 ### 6.5 Website & docs
 
-- `fleethud.pro` is a static Astro site on **Cloudflare Pages** (free). It hosts the landing page, docs, install scripts, changelog, **privacy policy, EULA, refund policy** (the merchant of record requires these) and third-party notices.
-- `fleethud.pro/install.sh|ps1` resolves the latest release from `latest.json`.
+- `spawntv.vercel.app` is a static Astro site on **Cloudflare Pages** (free). It hosts the landing page, docs, install scripts, changelog, **privacy policy, EULA, refund policy** (the merchant of record requires these) and third-party notices.
+- `spawntv.vercel.app/install.sh|ps1` resolves the latest release from `latest.json`.
 
 ### 6.6 Support
 
-Public issues on `fleethud-releases`, with templates: a bug template that asks for `fleethud doctor` output, and an adapter-request template. Pro buyers get email support.
+Public issues on `spawnt-releases`, with templates: a bug template that asks for `spawnt doctor` output, and an adapter-request template. Pro buyers get email support.
 
 ### 6.7 Payments & licensing
 
@@ -735,8 +752,8 @@ To prevent casual inspection (`strings`, DevTools, source-path leaks, single-bra
 
 1. **Rust binary hardening (`Cargo.toml` `[profile.release]` + CI env):**
    - `lto = "fat"`, `codegen-units = 1`, `strip = "symbols"`, `panic = "abort"`, `debug = false`.
-   - `RUSTFLAGS="--remap-path-prefix=$PWD=/fleethud --remap-path-prefix=$CARGO_HOME=/cargo"` in release CI so build-machine paths and usernames never appear in panic metadata.
-   - Compile-time string obfuscation (`obfstr`) on sensitive literals (SQL schema/queries, adapter path patterns, license verification messages, internal endpoints) so `strings fleethud` reveals nothing.
+   - `RUSTFLAGS="--remap-path-prefix=$PWD=/spawnt --remap-path-prefix=$CARGO_HOME=/cargo"` in release CI so build-machine paths and usernames never appear in panic metadata.
+   - Compile-time string obfuscation (`obfstr`) on sensitive literals (SQL schema/queries, adapter path patterns, license verification messages, internal endpoints) so `strings spawnt` reveals nothing.
 2. **Frontend / WebView hardening (`web/` + `apps/tray`):**
    - **Zero business logic in TypeScript:** all log parsing, pricing, quota math, rule evaluation, and license verification execute in Rust. The React UI is a pure view over pre-computed JSON from the daemon.
    - Production builds disable sourcemaps (`build.sourcemap = false`), minify identifiers, and apply JS string-array/control-flow obfuscation (`vite-plugin-javascript-obfuscator`).
@@ -764,7 +781,7 @@ To prevent casual inspection (`strings`, DevTools, source-path leaks, single-bra
 | Need | Choice | Cost |
 | :--- | :--- | :--- |
 | Source, CI | GitHub private repo + Actions | Free plan: 2,000 min/mo (Windows ×2, macOS ×10 multipliers). GitHub Pro \$4/mo gives 3,000 min. |
-| Public binaries + issues | `fleethud-releases` public repo (GitHub Releases) + Cloudflare R2 mirror | \$0 (R2 free tier: 10 GB, no egress fees) |
+| Public binaries + issues | `spawnt-releases` public repo (GitHub Releases) + Cloudflare R2 mirror | \$0 (R2 free tier: 10 GB, no egress fees) |
 | Package registries | npm, Homebrew tap, Scoop bucket, winget, AUR | \$0 |
 | Website + install scripts | Cloudflare Pages | \$0 |
 | License issuing | Cloudflare Workers free tier | \$0 |
@@ -773,7 +790,7 @@ To prevent casual inspection (`strings`, DevTools, source-path leaks, single-bra
 | Windows signing | OV code-signing certificate for an individual (e.g. Certum, SSL.com, Sectigo reseller), cloud HSM | **~\$100–300/yr** (from M3; check individual eligibility in your country) |
 | Linux signing | minisign-signed `SHA256SUMS` | \$0 |
 | Teams backend (M5) | Supabase free tier → Pro | \$0 → \$25/mo |
-| Domain `fleethud.pro` | Registrar | ~\$20–30/yr |
+| Domain `spawntv.vercel.app` | Registrar | ~\$20–30/yr |
 
 **Year-one cash cost:** about **\$250–450** (Apple, Windows certificate, domain, optional GitHub Pro). Before M3 it's only the domain.
 
@@ -799,7 +816,7 @@ The CLI doesn't need notarization: binaries installed via npm, a Homebrew formul
 
 - **M1–M2:** ship the CLI unsigned. Installs through npm, Scoop and winget are largely unaffected by SmartScreen. Direct `.zip` downloads show an "unknown publisher" warning; the docs explain it.
 - **M3:** buy an OV certificate, which is HSM-backed (cloud signing) as now required, and sign the CLI `.exe`, the tray `.exe`/`.msi` and the installers in CI. SmartScreen reputation builds up with downloads. EV certificates no longer skip that ramp-up, so OV is enough.
-- If FleetHUD is incorporated later, re-evaluate Azure Artifact Signing (\$9.99/mo) under the organization.
+- If Spawnt is incorporated later, re-evaluate Azure Artifact Signing (\$9.99/mo) under the organization.
 
 ### 7.6 Linux tray dependencies
 
@@ -814,7 +831,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | Agent log formats change without notice | High | High | Tolerant parsers, version gating, golden fixtures in CI, `doctor` error rates, fast patch releases |
 | **Closed source + reads sensitive logs, so developers distrust it** | High | High | No network by default, `doctor --network` endpoint list, published privacy policy, no telemetry, clear data-flow docs. Consider a third-party privacy audit post-traction. |
 | Vendors ship their own cross-agent dashboards | Medium | High | Cross-vendor neutrality is the moat; move fast on live state + Linux/Windows |
-| Open-source clone of FleetHUD appears | Medium | Medium | Polish, cross-platform tray and Pro features; ship faster |
+| Open-source clone of Spawnt appears | Medium | Medium | Polish, cross-platform tray and Pro features; ship faster |
 | CodexBar goes cross-platform | Medium | Medium | Compete on live state + guardrails, not quotas |
 | Unofficial APIs (Claude OAuth usage, Cursor) break or violate ToS | Medium | Medium | Opt-in only, labeled experimental, never required |
 | CI minutes exhausted | Medium | Low | §7.3 policy, self-hosted runner, GitHub Pro |
@@ -850,3 +867,51 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 5. Antigravity model inference — **resolved**: `<USER_SETTINGS_CHANGE>` in `USER_INPUT` steps logs exact `Model Selection` transitions, and `antigravity_state.pbtxt` holds `last_selected_agent_model` as a fallback when a session has no settings change step.
 6. Claude subscription quota: is the OAuth usage endpoint acceptable to use opt-in?
 7. Claude Code native auto-continue (`autoContinueAtUsageLimit`): confirm the version, the default, and how it shows up in the JSONL so the Resume Queue can defer to it.
+
+### Phase 0 audit and delivery plan (2026-10-28)
+
+This section records the approved product direction and proposed implementation; it does not claim that future work has shipped. Historical sections and ADRs remain evidence of the existing product until superseded by new ADRs. See [Phase 0 audit and plan](./SPAWNT_PHASE_0.md) for the inventory, migration, estimates, external dependencies and review gates. The existing source version is 1.5.3, not 0.8.0; the requested 0.x release sequence needs an explicit upgrade and rollback strategy before release.
+
+- The current Rust tray and script-based launchers are the baseline for Electron parity; native cross-platform tray parity is not assumed to exist. No Tauri replacement is presumed without inventorying installed artifacts.
+- The current Claude subscription detection reads the credentials file; audit the opt-in usage endpoint separately. Neither is compatible with the target prohibition on reading subscription tokens. Preserve existing features pending owner approval of their migration or removal.
+- Current cloud sync must not be represented as end-to-end encrypted Remote. Its treatment needs an explicit privacy migration and owner approval before removal.
+- Future ADRs use new sequential numbers after 0010, independently covering Electron, agent drivers and terminal fallback, Remote encryption, free local core, and the rename. Existing ADRs retain their historical record and will be marked superseded where appropriate.
+- Vercel Hobby is restricted to non-commercial personal use; verify an appropriate plan before deploying the commercial product. The working domain is not guaranteed available. Website waitlist collection needs an explicit privacy and storage design.
+
+Owner clarification, 2026-10-28: the app has not been publicly launched; the owner is its only user and there are no existing customers. Existing deployments and published artifacts still require safe data migration and version-order testing. Phase 1 is approved; Phase 2 remains subject to review after Phase 1.
+
+Owner clarification: there was no existing releases repository. The new `mwahaj36/spawnt-releases` repository is private until launch; no old releases repository requires renaming. The source repository has been renamed to `mwahaj36/spawnt` and the local origin updated.
+
+Transition ADRs: [0011 Electron](./adr/0011-electron-shell.md), [0012 agent drivers](./adr/0012-agent-drivers.md), [0013 Remote encryption proposal](./adr/0013-remote-encryption.md), [0014 free local core](./adr/0014-free-local-core.md), and [0015 rename](./adr/0015-spawnt-rename.md). These describe decisions and pending work, not shipped behavior.
+
+Phase 1 implementation in progress: authenticated local API endpoints, guardrails, Resume Queue and context relay no longer require a local Pro license. Previously configured automation may run after daemon restart. Legacy license management remains available for compatibility; it does not grant local access. The complete rename, UI cleanup and release remain pending.
+
+Claude plan detection no longer reads `.credentials.json`; configure the plan manually. The previously described Claude OAuth usage endpoint was not found in the current Rust or web source audit and is not approved for implementation under the no-subscription-token rule. Existing settings remain intact.
+
+Privacy audit finding: the current `resume_queue.resume_prompt` column persists user-supplied text, and the current resume executor does not pass that field to the agent. This violates the no-message-persistence target. A migration must stop new writes and address previously stored rows without silently deleting user data or representing resume behavior as implemented. Owner decision requested.
+
+Resume Queue privacy transition: new entries retain only the fixed compatibility marker `continue`, and the API rejects custom prompt text. Existing session-ID resume behavior remains. Existing database rows are not cleaned automatically pending the owner's separate decision; old backups and SQLite WAL files may retain historical text.
+
+The owner authorized cleanup of the current local database. On 2026-10-28 the queue contained zero entries and zero custom prompt values; an SQLite secure-delete transaction confirmed this and the WAL checkpoint completed. Other databases, backups and prior copies were not inspected or altered.
+
+Electron parity constraint: the existing embedded console uses inline scripts and inline event handlers. A strict script CSP will block them, so the shell migration must first move executable code and event binding into packaged external scripts or otherwise implement a verified equally strict policy. Do not weaken CSP to make the legacy console load.
+
+Console CSP preparation in progress: executable scripts and inline event handlers were moved into daemon-embedded JavaScript files. The local console sends a same-origin script policy with no inline-script allowance. Inline style attributes are still allowed for the existing console; this is not yet the final Electron security policy. Native Electron and complete platform parity remain pending.
+
+Electron prototype in `apps/desktop` is development-only: it connects to an authenticated loopback daemon or starts the Spawnt debug binary, restricts navigation to that daemon, uses a sandboxed context-isolated renderer with Node disabled, denies popup windows and permissions, and exposes a typed version-only preload API with sender validation. It has an Open/Quit tray menu. It is not a release shell: notifications, dynamic tray status, full parity, signing, packaging, updater and multi-platform testing remain outstanding.
+
+Owner decision, 2026-10-28: retain existing opt-in Supabase metadata sync during the transition; encryption will be addressed later. This is an explicit temporary exception to the E2EE-only network target, not a claim that current sync is end-to-end encrypted. Do not transmit message text through it.
+
+Owner decision, 2026-10-28: Spawnt will keep its own persistent conversation history so users can switch models and continue sessions. Agent-owned history and native session IDs remain intact and can be used for resume. This supersedes the earlier no-second-copy rule. Storage format, retention, deletion, access control, migration and cross-vendor handoff need a concrete design before implementation. Remote conversation traffic remains end-to-end encrypted; the separately approved existing opt-in metadata sync is not end-to-end encrypted and must not carry chat content.
+
+Phase 1 rename implementation: the Rust packages and sole CLI binary are named Spawnt. The default data directory is `~/.spawnt`, overridden by `SPAWNT_HOME`. No legacy migration or compatibility executable is planned because there are no customers. Existing local directories are not deleted. The npm release preflight checks all seven platform packages. Installer, website, Electron parity, package publication and cross-platform release verification remain in progress.
+
+**Rename decision, 2026-10-28:** Retire the previous product name entirely. Spawnt uses only `SPAWNT_HOME` and `~/.spawnt`; automatic migration and compatibility aliases are removed because the product has no users. Existing local directories are not deleted. Earlier migration and alias status notes above are superseded.
+
+Phase 1 cloud naming: local code and schema now use `spawnt_sync_state`. The existing opt-in Supabase metadata sync remains a supported feature, but the new SQL schema must be applied to the owner project before a deployment can connect to the renamed table. No chat content may be sent through this table.
+
+Phase 1 packaging: Reqwest uses its Rust TLS backend to remove the Linux system OpenSSL dependency from standalone binaries. Native trust verification remains enabled. npm staging requires all seven actual platform artifacts and approved legal inputs; the offline tarball smoke script exercises version, doctor and report.
+
+Branding configuration: `web/branding.json` is consumed by the website and embedded in `core::branding` at compile time. The daemon renders its public console links from that configuration. `scripts/sync-branding.mjs` generates Electron and npm configuration and synchronizes installer base URLs; CI checks generated outputs for drift.
+
+The manually triggered `npm-smoke.yml` builds the host CLI on Windows, macOS and Linux, stages host packages with approved legal inputs, installs actual npm tarballs offline, and invokes version, doctor and report. It does not publish packages. Full seven-target release preflight remains separate.

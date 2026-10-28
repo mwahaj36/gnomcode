@@ -1,7 +1,7 @@
 //! OS-specific integration: paths, shared-mode file reading, process scanning,
 //! window focus, and autostart (`SPEC §3.5`, `§3.12`, `§4.5`).
 
-use fleethud_core::AgentId;
+use spawnt_core::AgentId;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom};
@@ -27,22 +27,20 @@ pub struct AgentRoot {
     pub exists: bool,
 }
 
-/// Resolves the FleetHUD data directory (`$FLEETHUD_HOME` or `~/.fleethud`).
+/// Resolves the data directory using `SPAWNT_HOME` or the user's home.
 #[must_use]
-pub fn fleethud_home() -> PathBuf {
-    if let Ok(custom) = env::var("FLEETHUD_HOME") {
-        let trimmed = custom.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-    user_home_dir().join(".fleethud")
+pub fn spawnt_home() -> PathBuf {
+    env::var("SPAWNT_HOME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| PathBuf::from(value.trim()))
+        .unwrap_or_else(|| user_home_dir().join(".spawnt"))
 }
 
-/// Resolves the default SQLite database path (`~/.fleethud/state.db`).
+/// Resolves the default SQLite database path (`~/.spawnt/state.db`).
 #[must_use]
 pub fn default_db_path() -> PathBuf {
-    fleethud_home().join("state.db")
+    spawnt_home().join("state.db")
 }
 
 /// Resolves the user's home directory across Windows, macOS, and Linux.
@@ -281,38 +279,12 @@ pub struct DetectedSubscriptions {
     pub google: Option<(f64, String)>,
 }
 
-/// Automatically detects local agent subscription tiers from non-secret config metadata
-/// (`~/.claude/.credentials.json` tier fields and `~/.gemini/antigravity/installation_id`).
-/// Never reads or stores tokens or credentials (`SPEC §2`).
+/// Detects the existing Antigravity installation marker without reading credentials.
+/// Claude plans must be configured manually; its credentials file is never read.
 #[must_use]
 pub fn detect_local_subscriptions() -> DetectedSubscriptions {
     let home = user_home_dir();
-    let claude_dir = env::var("CLAUDE_CONFIG_DIR")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .map_or_else(|| home.join(".claude"), PathBuf::from);
-
-    let mut anthropic = None;
-    if let Ok(raw) = fs::read_to_string(claude_dir.join(".credentials.json")) {
-        let lower = raw.to_ascii_lowercase();
-        if lower.contains("max_20x") {
-            anthropic = Some((200.0, "Claude Max 20x".to_owned()));
-        } else if lower.contains("max_5x") {
-            anthropic = Some((100.0, "Claude Max 5x".to_owned()));
-        } else if lower.contains("\"subscriptiontype\":\"max\"")
-            || lower.contains("\"subscriptiontype\": \"max\"")
-        {
-            anthropic = Some((100.0, "Claude Max".to_owned()));
-        } else if lower.contains("\"subscriptiontype\":\"team\"")
-            || lower.contains("\"subscriptiontype\": \"team\"")
-        {
-            anthropic = Some((30.0, "Claude Team".to_owned()));
-        } else if lower.contains("\"subscriptiontype\":\"pro\"")
-            || lower.contains("\"subscriptiontype\": \"pro\"")
-        {
-            anthropic = Some((20.0, "Claude Pro".to_owned()));
-        }
-    }
+    let anthropic = None;
 
     let gemini_base = env::var("GEMINI_HOME")
         .ok()
@@ -355,7 +327,7 @@ pub fn read_antigravity_fallback_model() -> Option<String> {
     None
 }
 
-/// Opens a file with shared read/write/delete permissions on Windows so FleetHUD
+/// Opens a file with shared read/write/delete permissions on Windows so Spawnt
 /// never blocks an active agent from appending or rotating its log (`SPEC §3.12`).
 ///
 /// # Errors
@@ -598,7 +570,7 @@ pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
         let escaped_cwd = cwd.replace('\"', "\\\"");
         let cmd_line = format!("cd /d \"{escaped_cwd}\" && {clean_agent}");
         let _ = std::process::Command::new("cmd")
-            .args(["/c", "start", "FleetHUD Relay", "cmd.exe", "/k", &cmd_line])
+            .args(["/c", "start", "Spawnt Relay", "cmd.exe", "/k", &cmd_line])
             .spawn();
         true
     }
@@ -722,7 +694,7 @@ mod tests {
         let dot_git = repo_root.join(".git");
         fs::create_dir_all(&dot_git).expect("create .git dir");
 
-        let git_config = "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:mwahaj36/fleethud.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
+        let git_config = "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:mwahaj36/spawnt.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
         fs::write(dot_git.join("config"), git_config).expect("write git config");
 
         // 1. Direct repo lookup
@@ -743,7 +715,7 @@ mod tests {
         );
         assert_eq!(
             remote.as_deref(),
-            Some("git@github.com:mwahaj36/fleethud.git")
+            Some("git@github.com:mwahaj36/spawnt.git")
         );
 
         // 2. Worktree simulation
@@ -765,7 +737,7 @@ mod tests {
         );
         assert_eq!(
             wt_remote.as_deref(),
-            Some("git@github.com:mwahaj36/fleethud.git")
+            Some("git@github.com:mwahaj36/spawnt.git")
         );
     }
 }
@@ -783,7 +755,7 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         .ok_or_else(|| io::Error::other("Missing parent directory"))?;
     fs::create_dir_all(parent)?;
     let pending = parent.join(format!(
-        ".fleethud-private-{}-{}.tmp",
+        ".spawnt-private-{}-{}.tmp",
         std::process::id(),
         NEXT_FILE.fetch_add(1, Ordering::Relaxed)
     ));
@@ -800,8 +772,8 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         {
             use std::os::windows::process::CommandExt as _;
             let output = std::process::Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:FLEETHUD_PRIVATE_FILE,$acl)"])
-                .env("FLEETHUD_PRIVATE_FILE", &pending)
+                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:SPAWNT_PRIVATE_FILE,$acl)"])
+                .env("SPAWNT_PRIVATE_FILE", &pending)
                 .creation_flags(0x0800_0000).output()?;
             if !output.status.success() {
                 return Err(io::Error::other("Cannot restrict credential file access"));
@@ -851,6 +823,37 @@ mod file_lock {
 }
 
 #[cfg(test)]
+mod subscription_privacy_tests {
+    #[test]
+    fn claude_credentials_do_not_set_subscription_plan() {
+        if std::env::var_os("SPAWNT_TEST_CREDENTIAL_CHILD").is_some() {
+            assert!(super::detect_local_subscriptions().anthropic.is_none());
+            return;
+        }
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join(".credentials.json"),
+            br#"{"subscriptionType":"pro","token":"test-only"}"#,
+        )
+        .expect("fixture");
+        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "subscription_privacy_tests::claude_credentials_do_not_set_subscription_plan",
+                "--exact",
+            ])
+            .env("SPAWNT_TEST_CREDENTIAL_CHILD", "1")
+            .env("CLAUDE_CONFIG_DIR", dir.path())
+            .env("GEMINI_HOME", dir.path())
+            .output()
+            .expect("child test");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+}
+#[cfg(test)]
 mod private_file_tests {
     #[test]
     fn replaces_credentials_without_leaving_partial_files() {
@@ -862,7 +865,7 @@ mod private_file_tests {
         assert_eq!(std::fs::read_dir(dir.path()).expect("files").count(), 1);
         #[cfg(target_os = "windows")]
         {
-            let output = std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command", "$acl=[IO.File]::GetAccessControl($env:FLEETHUD_PRIVATE_FILE,[Security.AccessControl.AccessControlSections]::Access); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $sid.Value){exit 1}; exit 0"]).env("FLEETHUD_PRIVATE_FILE",&path).output().expect("inspect private ACL");
+            let output = std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command", "$acl=[IO.File]::GetAccessControl($env:SPAWNT_PRIVATE_FILE,[Security.AccessControl.AccessControlSections]::Access); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $sid.Value){exit 1}; exit 0"]).env("SPAWNT_PRIVATE_FILE",&path).output().expect("inspect private ACL");
             assert!(
                 output.status.success(),
                 "credentials must retain one owner-only protected access rule"
@@ -893,5 +896,45 @@ mod daemon_lock_tests {
         assert!(super::open_exclusive_lock(&path).is_err());
         drop(first);
         assert!(super::open_exclusive_lock(&path).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod spawnt_home_tests {
+    #[test]
+    fn honors_override_and_uses_spawnt_default() {
+        if let Ok(expected) = std::env::var("SPAWNT_TEST_EXPECTED_HOME") {
+            assert_eq!(super::spawnt_home(), std::path::PathBuf::from(expected));
+            return;
+        }
+        let root = tempfile::tempdir().expect("home");
+        for custom in [false, true] {
+            let expected = if custom {
+                root.path().join("custom")
+            } else {
+                root.path().join(".spawnt")
+            };
+            let mut child =
+                std::process::Command::new(std::env::current_exe().expect("test executable"));
+            child
+                .args([
+                    "spawnt_home_tests::honors_override_and_uses_spawnt_default",
+                    "--exact",
+                ])
+                .env("SPAWNT_TEST_EXPECTED_HOME", &expected)
+                .env("HOME", root.path())
+                .env("USERPROFILE", root.path());
+            if custom {
+                child.env("SPAWNT_HOME", &expected);
+            } else {
+                child.env_remove("SPAWNT_HOME");
+            }
+            let output = child.output().expect("child test");
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
     }
 }

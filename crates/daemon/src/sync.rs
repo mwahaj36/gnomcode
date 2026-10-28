@@ -7,11 +7,11 @@
 //! - HMAC-SHA256 privacy-preserving project key generation (`SPEC §3.15.D`).
 
 use chrono::{DateTime, Utc};
-use fleethud_store::Database;
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::Sha256;
+use spawnt_store::Database;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -92,7 +92,7 @@ pub fn hash_project_key(org_salt: &[u8], canonical_project_name: &str) -> String
     format!("proj_{hex}")
 }
 
-fn build_remote_snapshot(db: &Database) -> Result<Value, fleethud_store::Error> {
+fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
     let today = db.generate_usage_report_timeline("today", None, None)?;
     let week = db.generate_usage_report_timeline("7d", None, None)?;
     let month = db.generate_usage_report_timeline("30d", None, None)?;
@@ -164,7 +164,7 @@ async fn push_snapshot(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let session_path = fleethud_platform::fleethud_home().join("session.json");
+    let session_path = spawnt_platform::spawnt_home().join("session.json");
     let Some(CloudAuth {
         user_id,
         access_token,
@@ -177,7 +177,7 @@ async fn push_snapshot(
 
     // Poll for pending remote relay commands from web console
     let check_url =
-        format!("{base_url}/rest/v1/fleethud_sync_state?user_id=eq.{user_id}&select=live_snapshot");
+        format!("{base_url}/rest/v1/spawnt_sync_state?user_id=eq.{user_id}&select=live_snapshot");
     if let Ok(resp) = client
         .get(&check_url)
         .header("apikey", &public_key)
@@ -224,7 +224,7 @@ async fn push_snapshot(
                                                         .map(|p| p.to_string_lossy().to_string())
                                                         .unwrap_or_else(|_| ".".to_owned())
                                                 });
-                                            let entry = fleethud_store::ContextRelayEntry {
+                                            let entry = spawnt_store::ContextRelayEntry {
                                                 id: format!("relay-{}", s.id),
                                                 session_id: s.id.clone(),
                                                 source_agent: s.agent.clone(),
@@ -258,7 +258,7 @@ async fn push_snapshot(
     .await??;
     client
         .post(format!(
-            "{base_url}/rest/v1/fleethud_sync_state?on_conflict=user_id"
+            "{base_url}/rest/v1/spawnt_sync_state?on_conflict=user_id"
         ))
         .header("apikey", &public_key)
         .bearer_auth(&access_token)
@@ -289,7 +289,7 @@ async fn credential_lock(path: &std::path::Path) -> Result<std::fs::File, std::i
     }
     let lock_path = path.with_extension("json.lock");
     for _ in 0..150 {
-        match fleethud_platform::open_exclusive_lock(&lock_path) {
+        match spawnt_platform::open_exclusive_lock(&lock_path) {
             Ok(file) => return Ok(file),
             Err(error)
                 if error.kind() == std::io::ErrorKind::WouldBlock
@@ -318,10 +318,7 @@ pub(crate) async fn save_cloud_session(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _guard = AUTH_REFRESH_LOCK.lock().await;
     let _file_guard = credential_lock(path).await?;
-    fleethud_platform::write_private_file(
-        path,
-        &serde_json::to_vec(&stored_auth_session(session))?,
-    )?;
+    spawnt_platform::write_private_file(path, &serde_json::to_vec(&stored_auth_session(session))?)?;
     Ok(())
 }
 
@@ -391,7 +388,7 @@ pub(crate) async fn read_cloud_auth(
                 .unwrap_or(3600);
             session["expires_at"] = json!(chrono::Utc::now().timestamp() + expires_in);
         }
-        fleethud_platform::write_private_file(
+        spawnt_platform::write_private_file(
             session_path,
             &serde_json::to_vec(&stored_auth_session(&session))?,
         )?;
@@ -449,9 +446,9 @@ pub(crate) async fn validate_session(
 }
 
 pub(crate) fn cloud_config() -> (String, String) {
-    let url = std::env::var("FLEETHUD_SUPABASE_URL")
+    let url = std::env::var("SPAWNT_SUPABASE_URL")
         .unwrap_or_else(|_| obfstr::obfstr!("https://jjnuxngvhuvxkxrfmnqx.supabase.co").to_owned());
-    let key = std::env::var("FLEETHUD_SUPABASE_KEY").unwrap_or_else(|_| {
+    let key = std::env::var("SPAWNT_SUPABASE_KEY").unwrap_or_else(|_| {
         obfstr::obfstr!("sb_publishable_o2ZiGak7RHq_cmL81BOeZQ_g7JJeyCI").to_owned()
     });
     (url.trim_end_matches('/').to_owned(), key)
@@ -472,9 +469,9 @@ mod tests {
 
     #[test]
     fn project_key_hashing_is_deterministic_and_prefixes_proj() {
-        let salt = b"fleethud-test-org-salt-123456";
-        let h1 = hash_project_key(salt, "github.com/mwahaj36/fleethud");
-        let h2 = hash_project_key(salt, "github.com/mwahaj36/fleethud");
+        let salt = b"spawnt-test-org-salt-123456";
+        let h1 = hash_project_key(salt, "github.com/mwahaj36/spawnt");
+        let h2 = hash_project_key(salt, "github.com/mwahaj36/spawnt");
         let h3 = hash_project_key(salt, "github.com/other/project");
 
         assert_eq!(h1, h2);
@@ -486,8 +483,8 @@ mod tests {
     #[test]
     fn remote_snapshot_contains_no_local_project_path_or_pairing_token() {
         use chrono::Utc;
-        use fleethud_core::{AgentId, Project, Session, SessionState, Surface};
-        use fleethud_store::{Database, SourceCheckpoint};
+        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
+        use spawnt_store::{Database, SourceCheckpoint};
 
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/private/client/source", None);

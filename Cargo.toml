@@ -3,23 +3,23 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "1.5.3"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.87"
 license-file = "LICENSE"
-repository = "https://github.com/mwahaj36/fleethud"
-homepage = "https://fleethud.pro"
+repository = "https://github.com/mwahaj36/spawnt"
+homepage = "https://spawntv.vercel.app"
 authors = ["Wahaj <https://github.com/mwahaj36>"]
 publish = false
 
 [workspace.dependencies]
 # Internal crates
-fleethud-core = { path = "crates/core" }
-fleethud-adapters = { path = "crates/adapters" }
-fleethud-ingest = { path = "crates/ingest" }
-fleethud-store = { path = "crates/store" }
-fleethud-platform = { path = "crates/platform" }
-fleethud-daemon = { path = "crates/daemon" }
+spawnt-core = { path = "crates/core" }
+spawnt-adapters = { path = "crates/adapters" }
+spawnt-ingest = { path = "crates/ingest" }
+spawnt-store = { path = "crates/store" }
+spawnt-platform = { path = "crates/platform" }
+spawnt-daemon = { path = "crates/daemon" }
 # External dependencies (see AGENTS.md §5).
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -40,7 +40,7 @@ sha2 = "0.11"
 hmac = "0.13"
 getrandom = "0.3"
 libc = "0.2"
-reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 toml = "0.8"
 tempfile = "3.13"

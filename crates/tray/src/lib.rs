@@ -1,11 +1,11 @@
 //! Native desktop tray application controller and state (`SPEC §3.10`, `§4.5`).
 //!
 //! Provides tray menu actions, notification triggers, and window focus hooks
-//! for the FleetHUD tray icon across Windows, macOS, and Linux.
+//! for the Spawnt tray icon across Windows, macOS, and Linux.
 
 pub mod focus;
 
-use fleethud_store::Database;
+use spawnt_store::Database;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 pub enum Error {
     /// Store query failure.
     #[error("store error: {0}")]
-    Store(#[from] fleethud_store::Error),
+    Store(#[from] spawnt_store::Error),
 }
 
 /// Compact badge summary for the system tray icon (`SPEC §3.10`).

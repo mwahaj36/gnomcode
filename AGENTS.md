@@ -1,10 +1,10 @@
-# AGENTS.md — FleetHUD
+# AGENTS.md — Spawnt
 
 Rules for any AI agent (or human) working in this repo. Read this first, every session.
 
 ## 1. What this project is
 
-FleetHUD is live mission control for AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor) on Windows, macOS and Linux. It reads the agents' local logs, normalizes them, stores metadata in SQLite, and shows live state, cost and quota through a CLI, a local web dashboard and a Tauri tray app.
+Spawnt is live mission control for AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor) on Windows, macOS and Linux. It reads the agents' local logs, normalizes them, stores metadata in SQLite, and shows live state, cost and quota through a standalone CLI, a local web dashboard and an Electron desktop shell. The Rust daemon owns product logic.
 
 **Single source of truth: [`docs/SPEC.md`](docs/SPEC.md).** Before working on a feature, read the relevant SPEC section. If your change alters scope, architecture, the roadmap or deliverables, update SPEC.md **in the same change**. Never let code and SPEC drift apart.
 
@@ -12,14 +12,14 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 
 ## 2. Non-negotiable product invariants
 
-1. **Never store content.** No prompts, code, file contents or tool output go to disk or the network. Activity summaries go through `core::redact` *before* persistence.
-2. **Read-only by default.** Only `fleethud integrate <agent>` may modify agent config, and it must back up first and support `--remove`.
-3. **Fail open.** Hooks and integrations must never block an agent when FleetHUD is down, slow or erroring (hook IPC timeout: 50 ms).
-4. **No telemetry.** No analytics, no phone-home. The only network traffic allowed is the opt-out update-manifest GET, the opt-in pricing refresh, opt-in vendor APIs, and license checks.
+1. **Protect conversation history.** Spawnt-owned chat history is permitted locally for session continuity and model switches. Preserve agent-owned history. Do not add chat content to the existing unencrypted cloud sync. Do not persist unrelated file contents or tool output; activity summaries go through `core::redact` *before* persistence. Design retention, deletion and access controls in SPEC before implementing chat storage.
+2. **Read-only by default.** Only `spawnt integrate <agent>` may modify agent config, and it must back up first and support `--remove`.
+3. **Fail open.** Hooks and integrations must never block an agent when Spawnt is down, slow or erroring (hook IPC timeout: 50 ms).
+4. **No telemetry.** No analytics, no phone-home. The only network traffic allowed is the opt-out update-manifest GET, the opt-in pricing refresh, opt-in vendor APIs, and the existing opt-in metadata cloud sync.
 5. **Loopback only.** Servers bind to `127.0.0.1` and require the bearer token plus Host/Origin validation.
 6. **Every number declares its trust level** (`exact | estimated | api | unknown`). Never present an estimate as exact.
 7. **Never escalate agent permissions.** Auto-resume and guardrails must never pass `--dangerously-skip-permissions`, `--yolo` or similar flags.
-8. **Protect the closed-source binary (SPEC §6.8).** Keep 100% of business logic (parsing, pricing, quota math, rules, licensing) in Rust, never in TypeScript. Wrap sensitive string literals (SQL, adapter path patterns, license checks) with `obfstr!`. Never enable sourcemaps or Tauri `devtools` in release builds, and never use `.exe` packers (UPX/VMProtect).
+8. **Protect the closed-source binary (SPEC §6.8).** Keep 100% of business logic (parsing, pricing, quota math, rules, routing) in Rust, never in TypeScript. Wrap sensitive string literals (SQL, adapter path patterns, license checks) with `obfstr!`. Never enable sourcemaps or Electron DevTools in release builds, and never use `.exe` packers (UPX/VMProtect).
 9. **No emojis anywhere.** Never use emojis in CLI output, UI components, tray labels, notifications, documentation, commit messages, or comments. Use clean typography, geometric SVG icons, or plain-text badges (`[WAIT]`, `[RUN]`, `EXACT`, `EST`).
 
 ## 3. Repo map
@@ -32,8 +32,8 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 | `crates/store` | SQLite schema, migrations, queries, rollups. |
 | `crates/platform` | OS-specific code: paths, process scan, focus, autostart. All `cfg(target_os)` code lives here. |
 | `crates/daemon` | axum HTTP/WS API, IPC server, orchestration. |
-| `crates/cli` | The `fleethud` binary. Thin: parse args, call into the other crates. |
-| `apps/tray` | Tauri v2 tray (M3). |
+| `crates/cli` | The `spawnt` binary. Thin: parse args, call into the other crates. |
+| `apps/desktop` | Electron shell and tray. |
 | `web/` | React dashboard (M2). |
 | `npm/` | npm shim and per-platform binary packages. |
 | `fixtures/` | Anonymized real agent logs, organized as `fixtures/<agent>/<version-or-date>/`. |
@@ -48,7 +48,7 @@ cargo fmt --all                                            # format
 cargo clippy --workspace --all-targets -- -D warnings      # lint (CI gate)
 cargo test --workspace                                     # tests (CI gate)
 cargo deny check                                           # licenses/advisories (CI gate)
-cargo run -p fleethud -- <subcommand>                      # run the CLI
+cargo run -p spawnt -- <subcommand>                      # run the CLI
 ```
 
 To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/rust-quality-gate/`).
@@ -63,7 +63,7 @@ To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/r
 - **Logging:** `tracing`. Never log content fields or tokens. Levels: `error` = needs user action, `warn` = degraded, `info` = lifecycle, `debug`/`trace` = dev.
 - **Dependencies:** prefer well-maintained crates with permissive licenses (allow-list in `deny.toml`). Add them to `[workspace.dependencies]` first, then reference with `{ workspace = true }`. Justify each new dependency in the PR description.
 - **Public API:** every `pub` item in library crates gets a doc comment. Keep things `pub(crate)` unless another crate needs them.
-- **Paths:** never hardcode `/` or `\`. Use `Path`/`PathBuf` and resolve home and app dirs through `platform::paths`. Respect env overrides (`FLEETHUD_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`).
+- **Paths:** never hardcode `/` or `\`. Use `Path`/`PathBuf` and resolve home and app dirs through `platform::paths`. Respect env overrides (`SPAWNT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`).
 - **Time:** store UTC (`time` or `chrono`, one only, chosen in M1). Convert to local time only in the UI.
 
 ## 6. Testing standards
@@ -82,6 +82,10 @@ To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/r
 - Line endings: the repo is LF (`.gitattributes`). Parsers must accept both `\n` and `\r\n`.
 - Before merging platform-touching code, run the `cross-platform-review` skill.
 
+## Task continuity
+
+When Wahaj authorizes a product phase, keep working until that phase is complete and reviewable. Do not end a turn for routine progress or decisions that can be resolved from the spec and repo. Report only a concrete blocker requiring Wahaj, or the finished phase with its PR and verification.
+
 ## 8. Workflow
 
 - **Conventional Commits:** `feat(adapters): …`, `fix(ingest): …`, `docs(spec): …`, `chore(ci): …`. Scope = crate or area.
@@ -92,7 +96,7 @@ To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/r
 - **Installed engineering skills (`.agents/skills/`):**
   - `ponytail` (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`): minimalist filter ladder — write the smallest code that works, reuse stdlib/existing crates, avoid speculative abstractions.
   - `test-driven-development`, `systematic-debugging`, `verification-before-completion` (`obra/superpowers`): strict red-green-refactor TDD, root-cause debugging, and evidence-backed completion checks.
-  - `rust-best-practices`, `tauri-v2`, `supabase-postgres-best-practices`: domain guides for idiomatic Rust, Tauri v2 tray/IPC, and Supabase RLS/schema design.
-  - `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`: FleetHUD-specific runbooks.
+  - `rust-best-practices`, `supabase-postgres-best-practices`: domain guides for idiomatic Rust and Supabase RLS/schema design.
+  - `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`: Spawnt-specific runbooks.
 - Don't add features that aren't in SPEC. Propose them in SPEC (and an ADR if architectural) first.
 - Don't rewrite or delete existing comments and docs that are unrelated to your change.

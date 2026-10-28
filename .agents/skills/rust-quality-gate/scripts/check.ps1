@@ -22,7 +22,7 @@ if (Get-Command cargo-deny -ErrorAction SilentlyContinue) {
 
 Write-Host "==> 5/5 core purity check"
 $coreLines = Get-Content "crates/core/Cargo.toml" | Where-Object { $_ -notmatch '^name\s*=' }
-if ($coreLines -match "^\s*(fleethud-|tokio|rusqlite|notify|axum)\s*=") {
+if ($coreLines -match "^\s*(spawnt-|tokio|rusqlite|notify|axum)\s*=") {
     Write-Error "crates/core/Cargo.toml must stay pure (no internal, I/O, or async crates)."
     exit 1
 }

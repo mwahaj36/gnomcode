@@ -1,5 +1,5 @@
 [package]
-name = "fleethud-platform"
+name = "spawnt-platform"
 description = "OS-specific integration: paths, process scanning, window focus, autostart."
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-fleethud-core = { workspace = true }
+spawnt-core = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 obfstr = { workspace = true }

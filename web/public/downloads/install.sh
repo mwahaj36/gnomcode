@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# FleetHUD Unix installer. Download and verify before replacing an existing install.
+# Spawnt Unix installer. Download and verify before replacing an existing install.
 set -euo pipefail
 
-VERSION="1.5.3"
-BASE_URL="https://fleethud.vercel.app/downloads"
-INSTALL_DIR="${FLEETHUD_INSTALL_DIR:-${HOME}/.local/bin}"
+VERSION="0.9.0"
+BASE_URL="https://spawntv.vercel.app/downloads"
+INSTALL_DIR="${SPAWNT_INSTALL_DIR:-${HOME}/.local/bin}"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "${OS}" in linux|darwin) ;; *) echo "Unsupported operating system: ${OS}" >&2; exit 1 ;; esac
 case "$(uname -m)" in
@@ -24,7 +24,7 @@ fi
 stage="$(mktemp -d)"
 replacement=""
 trap 'rm -rf "${stage}"; if [ -n "${replacement}" ]; then rm -f "${replacement}"; fi' EXIT
-asset="fleethud-v${VERSION}-${OS}-${ARCH_TAG}.tar.gz"
+asset="spawnt-v${VERSION}-${OS}-${ARCH_TAG}.tar.gz"
 if ! curl --fail --show-error --silent --location "${BASE_URL}/${asset}" -o "${stage}/${asset}"; then
   echo "No downloadable spawnt ${VERSION} package for ${OS}-${ARCH_TAG}. Your existing install was preserved." >&2
   exit 1
@@ -39,16 +39,16 @@ else
 fi
 [ "${actual}" = "${expected}" ] || { echo 'Package checksum verification failed.' >&2; exit 1; }
 mkdir "${stage}/unpacked"
-tar -xzf "${stage}/${asset}" -C "${stage}/unpacked" fleethud LICENSE THIRD_PARTY_NOTICES.html
-chmod 755 "${stage}/unpacked/fleethud"
-[ "$("${stage}/unpacked/fleethud" --version)" = "fleethud ${VERSION}" ] || {
+tar -xzf "${stage}/${asset}" -C "${stage}/unpacked" spawnt LICENSE THIRD_PARTY_NOTICES.html
+chmod 755 "${stage}/unpacked/spawnt"
+[ "$("${stage}/unpacked/spawnt" --version)" = "spawnt ${VERSION}" ] || {
   echo 'The downloaded binary cannot run on this system or has the wrong version. Existing install preserved.' >&2; exit 1;
 }
-mkdir -p "${INSTALL_DIR}" "${INSTALL_DIR}/fleethud-licenses"
-cp "${stage}/unpacked/LICENSE" "${stage}/unpacked/THIRD_PARTY_NOTICES.html" "${INSTALL_DIR}/fleethud-licenses/"
-replacement="$(mktemp "${INSTALL_DIR}/.fleethud-update.XXXXXX")"
-install -m 755 "${stage}/unpacked/fleethud" "${replacement}"
-mv -f "${replacement}" "${INSTALL_DIR}/fleethud"
+mkdir -p "${INSTALL_DIR}" "${INSTALL_DIR}/spawnt-licenses"
+cp "${stage}/unpacked/LICENSE" "${stage}/unpacked/THIRD_PARTY_NOTICES.html" "${INSTALL_DIR}/spawnt-licenses/"
+replacement="$(mktemp "${INSTALL_DIR}/.spawnt-update.XXXXXX")"
+install -m 755 "${stage}/unpacked/spawnt" "${replacement}"
+mv -f "${replacement}" "${INSTALL_DIR}/spawnt"
 replacement=""
-printf 'spawnt %s installed to %s/fleethud.\n' "${VERSION}" "${INSTALL_DIR}"
+printf 'spawnt %s installed to %s/spawnt.\n' "${VERSION}" "${INSTALL_DIR}"
 printf 'User data and account pairing were preserved. Ensure %s is in PATH.\n' "${INSTALL_DIR}"
