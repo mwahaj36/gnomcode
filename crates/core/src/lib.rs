@@ -509,10 +509,66 @@ pub struct ChatEvent {
     pub created_at: DateTime<Utc>,
 }
 
+/// Routing policy for model failover and session continuation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingPolicy {
+    /// Prompt user before initiating any model switch or resume.
+    #[default]
+    AskFirst,
+    /// Automatically switch to the highest-quota available model.
+    Automatic,
+    /// Prohibit switching to a different AI vendor/provider.
+    DenyCrossProvider,
+}
+
+impl RoutingPolicy {
+    /// Stable string identifier.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AskFirst => "ask_first",
+            Self::Automatic => "automatic",
+            Self::DenyCrossProvider => "deny_cross_provider",
+        }
+    }
+
+    /// Parse from string representation.
+    #[must_use]
+    pub fn parse_policy(s: &str) -> Option<Self> {
+        match s {
+            "ask_first" => Some(Self::AskFirst),
+            "automatic" => Some(Self::Automatic),
+            "deny_cross_provider" => Some(Self::DenyCrossProvider),
+            _ => None,
+        }
+    }
+}
+
+/// Zero-token handoff compilation payload for model or agent switches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandoffPacket {
+    /// Originating session identifier.
+    pub session_id: String,
+    /// Originating agent surface or model.
+    pub source_model: String,
+    /// Target model selected for failover or continuation.
+    pub target_model: String,
+    /// Synthesized, redacted goal prompt and task context.
+    pub prompt_summary: String,
+    /// List of file paths modified or touched during the session.
+    pub touched_files: Vec<String>,
+    /// Number of turns summarized.
+    pub turn_count: u32,
+    /// UTC timestamp of packet compilation.
+    pub created_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentId, ChatEvent, ChatRole, Project, Session, TrustLevel, UsageRecord, UserSettings,
+        AgentId, ChatEvent, ChatRole, HandoffPacket, Project, RoutingPolicy, Session, TrustLevel,
+        UsageRecord, UserSettings,
     };
 
     #[test]
@@ -622,5 +678,35 @@ mod tests {
         let parsed: ChatEvent = serde_json::from_str(&json).expect("parse");
         assert_eq!(parsed.event_id, "evt-123");
         assert_eq!(parsed.role, ChatRole::User);
+    }
+
+    #[test]
+    fn routing_policy_round_trip() {
+        assert_eq!(RoutingPolicy::default(), RoutingPolicy::AskFirst);
+        for p in [
+            RoutingPolicy::AskFirst,
+            RoutingPolicy::Automatic,
+            RoutingPolicy::DenyCrossProvider,
+        ] {
+            assert_eq!(RoutingPolicy::parse_policy(p.as_str()), Some(p));
+        }
+        assert_eq!(RoutingPolicy::parse_policy("unknown"), None);
+    }
+
+    #[test]
+    fn handoff_packet_serialization() {
+        let packet = HandoffPacket {
+            session_id: "s1".to_owned(),
+            source_model: "claude-3-5-sonnet".to_owned(),
+            target_model: "o3".to_owned(),
+            prompt_summary: "Refactor core types".to_owned(),
+            touched_files: vec!["crates/core/src/lib.rs".to_owned()],
+            turn_count: 5,
+            created_at: chrono::Utc::now(),
+        };
+        let json = serde_json::to_string(&packet).expect("serialize");
+        let parsed: HandoffPacket = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.target_model, "o3");
+        assert_eq!(parsed.touched_files.len(), 1);
     }
 }
