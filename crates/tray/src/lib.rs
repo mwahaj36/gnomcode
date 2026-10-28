@@ -5,7 +5,6 @@
 
 pub mod focus;
 
-use fleethud_core::SessionState;
 use fleethud_store::Database;
 use std::sync::Arc;
 use thiserror::Error;
@@ -22,7 +21,7 @@ pub enum Error {
 /// Compact badge summary for the system tray icon (`SPEC §3.10`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayStatus {
-    /// Number of live sessions currently executing a tool or generating tokens.
+    /// Ongoing count, including the two-minute idle grace period.
     pub active_count: usize,
     /// Number of sessions currently blocked awaiting user approval.
     pub awaiting_approval_count: usize,
@@ -33,15 +32,16 @@ pub struct TrayStatus {
 /// Formats the tray tooltip and state badge.
 #[must_use]
 pub fn format_tray_tooltip(status: &TrayStatus) -> String {
+    let suffix = if status.active_count == 1 { "" } else { "s" };
     if status.awaiting_approval_count > 0 {
         format!(
-            "spawnt · {} active EXACT · {} awaiting approval EXACT",
+            "{} active session{suffix} · {} awaiting approval",
             status.active_count, status.awaiting_approval_count
         )
     } else if status.active_count > 0 {
-        format!("spawnt · {} active sessions EXACT", status.active_count)
+        format!("{} active session{suffix}", status.active_count)
     } else {
-        "spawnt · IDLE".to_owned()
+        "No active sessions".to_owned()
     }
 }
 
@@ -51,18 +51,9 @@ pub fn format_tray_tooltip(status: &TrayStatus) -> String {
 /// Returns [`Error::Store`] if querying the database fails.
 pub async fn compute_tray_status(db: &Arc<Mutex<Database>>) -> Result<TrayStatus, Error> {
     let guard = db.lock().await;
-    let sessions = guard.list_active_sessions(50)?;
-
-    let mut active_count = 0;
-    let mut awaiting_approval_count = 0;
-
-    for s in &sessions {
-        match s.state {
-            SessionState::Thinking | SessionState::Tool => active_count += 1,
-            SessionState::AwaitingApproval => awaiting_approval_count += 1,
-            SessionState::Idle | SessionState::Error | SessionState::Ended => {}
-        }
-    }
+    let (_, active_count) = guard.list_sessions_paginated(None, Some("ongoing"), 0, 1)?;
+    let (_, awaiting_approval_count) =
+        guard.list_sessions_paginated(None, Some("awaiting_approval"), 0, 1)?;
 
     let status = TrayStatus {
         active_count,
@@ -89,17 +80,14 @@ mod tests {
             awaiting_approval_count: 0,
             tooltip: String::new(),
         };
-        assert_eq!(format_tray_tooltip(&idle), "spawnt · IDLE");
+        assert_eq!(format_tray_tooltip(&idle), "No active sessions");
 
         let running = TrayStatus {
             active_count: 3,
             awaiting_approval_count: 0,
             tooltip: String::new(),
         };
-        assert_eq!(
-            format_tray_tooltip(&running),
-            "spawnt · 3 active sessions EXACT"
-        );
+        assert_eq!(format_tray_tooltip(&running), "3 active sessions");
 
         let waiting = TrayStatus {
             active_count: 2,
@@ -108,7 +96,7 @@ mod tests {
         };
         assert_eq!(
             format_tray_tooltip(&waiting),
-            "spawnt · 2 active EXACT · 1 awaiting approval EXACT"
+            "2 active sessions · 1 awaiting approval"
         );
     }
 }

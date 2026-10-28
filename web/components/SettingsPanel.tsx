@@ -160,6 +160,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
         <span className="sp-settings-hint">{lastLoaded ? "Last successful preference refresh: " + lastLoaded.toLocaleTimeString() : "Preferences have not been refreshed yet."}</span>
       </div>
       {/* Account & Sync Status */}
+      <nav className="sp-settings-resources" aria-label="Resources"><Link href="/docs">Documentation</Link><Link href="/pricing">Pricing</Link></nav>
       <section className="sp-settings-section" aria-labelledby="settings-account">
         <div className="sp-settings-section-heading">
           <h2 id="settings-account">Account</h2>

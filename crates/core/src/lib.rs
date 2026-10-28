@@ -3,6 +3,7 @@
 //! See `docs/SPEC.md` §3.6–§3.9 for the data model and invariants.
 
 pub mod license;
+pub mod presence;
 pub mod pricing;
 pub mod redact;
 pub mod rules;
@@ -114,7 +115,7 @@ pub enum SessionState {
     Idle,
     /// Encountered an API or runtime error.
     Error,
-    /// Process exited and log inactive for >10 minutes.
+    /// Explicitly reported session closure or completion.
     Ended,
 }
 

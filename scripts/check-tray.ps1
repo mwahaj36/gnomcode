@@ -3,6 +3,9 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon); }'
 $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../scripts/tray.ps1'))
+$parseErrors=$null; $parseTokens=$null
+[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$parseTokens,[ref]$parseErrors) | Out-Null
+if ($parseErrors.Count -gt 0) { throw 'Tray script contains a PowerShell syntax error' }
 $fn=[regex]::Match($source,'(?s)function Update-TrayIconBadge\(.*?\n}\r?\n').Value
 if (!$fn) { throw 'Badge function absent' }
 Invoke-Expression ($fn.Replace('catch {}','catch { throw }'))
@@ -16,6 +19,12 @@ $boundsX=$redPixels | Measure-Object X -Minimum -Maximum
 $boundsY=$redPixels | Measure-Object Y -Minimum -Maximum
 if ($redPixels.Count -eq 0 -or $boundsX.Minimum -lt 8 -or $boundsY.Minimum -lt 8 -or ($boundsX.Maximum-$boundsX.Minimum+1) -gt 17 -or ($boundsY.Maximum-$boundsY.Minimum+1) -gt 17) { throw 'Windows mark must use the centered 0.65x asset scale' }
 $baseBitmap.Dispose()
+$baseIcon.Dispose()
+$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/spawnt-tray.ico'),32,32)
+$trayBitmap=$baseIcon.ToBitmap()
+$trayPixel=$trayBitmap.GetPixel(6,6)
+if ($trayPixel.R -lt 180 -or $trayPixel.G -gt 80) { throw 'Tray mark must retain its full original scale' }
+$trayBitmap.Dispose()
 $badgeIcon=$null
 Update-TrayIconBadge 1
 if (!$notifyIcon.Icon) {throw 'No generated badge'}

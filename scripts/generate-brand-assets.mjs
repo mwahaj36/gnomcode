@@ -17,9 +17,10 @@ for (const size of sizes) {
 const iconSizes = sizes.filter(size => size <= 256);
 // Legacy Windows tray/GDI+ cannot draw PNG-compressed small ICO frames.
 // Keep the large frame compressed, and encode small frames as Windows DIBs.
+async function windowsIcon(scale) {
 const frames = new Map();
 for (const size of iconSizes) {
-  const markSize = Math.round(size * 0.65);
+  const markSize = Math.round(size * scale);
   const inset = Math.floor((size - markSize) / 2);
   const windowsImage = await sharp(images.get(size)).resize(markSize, markSize).extend({
     top: inset, left: inset, bottom: size - markSize - inset, right: size - markSize - inset,
@@ -53,7 +54,11 @@ for (const [index, size] of iconSizes.entries()) {
   header.writeUInt32LE(offset, entry + 12);
   offset += frames.get(size).length;
 }
-const ico = Buffer.concat([header, ...iconSizes.map(size => frames.get(size))]);
+return Buffer.concat([header, ...iconSizes.map(size => frames.get(size))]);
+}
+const ico = await windowsIcon(0.65);
+const trayIco = await windowsIcon(1);
+for (const path of ['scripts/spawnt-tray.ico', 'web/public/downloads/spawnt-tray.ico']) await writeFile(new URL(path, root), trayIco);
 for (const path of ['scripts/fleethud.ico', 'web/app/favicon.ico', 'web/public/downloads/fleethud.ico']) {
   await writeFile(new URL(path, root), ico);
 }

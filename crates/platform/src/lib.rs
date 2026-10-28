@@ -425,6 +425,11 @@ pub fn attach_parent_console() {
 #[cfg(not(target_os = "windows"))]
 pub fn attach_parent_console() {}
 
+#[cfg(target_os = "windows")]
+fn windows_focus_prelude() -> &'static str {
+    r#"$ErrorActionPreference='Stop'; Add-Type 'using System; using System.Runtime.InteropServices; public class SpawntFocus { [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h,int command); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); }'; $shell=New-Object -ComObject WScript.Shell; $focus={ param([int]$targetId) $window=Get-Process -Id $targetId -ErrorAction SilentlyContinue; if(!$window -or $window.MainWindowHandle -eq 0){return $false}; if([SpawntFocus]::IsIconic($window.MainWindowHandle)){[SpawntFocus]::ShowWindowAsync($window.MainWindowHandle,9)|Out-Null}; $null=$shell.AppActivate($targetId); [SpawntFocus]::SetForegroundWindow($window.MainWindowHandle)|Out-Null; return ([SpawntFocus]::GetForegroundWindow() -eq $window.MainWindowHandle) }; "#
+}
+
 /// Dispatches a window focus request for a process ID across OS platforms (`SPEC §3.13`).
 ///
 /// Returns `true` if a focus attempt was dispatched, or `false` if unsupported.
@@ -432,35 +437,135 @@ pub fn attach_parent_console() {}
 pub fn bring_to_front(pid: u32) -> bool {
     #[cfg(target_os = "windows")]
     {
-        let script =
-            format!("$wshell = New-Object -ComObject Wscript.Shell; $wshell.AppActivate({pid})");
-        let _ = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
-            .spawn();
-        true
+        use std::os::windows::process::CommandExt as _;
+        let prelude = windows_focus_prelude();
+        let script = format!(
+            "{prelude} $target={pid}; for($i=0;$i -lt 8 -and $target -gt 0;$i++) {{ if((& $focus ([int]$target))) {{ exit 0 }}; $process=Get-CimInstance Win32_Process -Filter \"ProcessId=$target\" -ErrorAction SilentlyContinue; if(!$process) {{ break }}; $target=$process.ParentProcessId }}; exit 1"
+        );
+        std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x0800_0000)
+            .status()
+            .is_ok_and(|status| status.success())
     }
     #[cfg(target_os = "macos")]
     {
         let script = format!(
             "tell application \"System Events\" to set frontmost of (every process whose unix id is {pid}) to true"
         );
-        let _ = std::process::Command::new("osascript")
+        std::process::Command::new("osascript")
             .args(["-e", &script])
-            .spawn();
-        true
+            .status()
+            .is_ok_and(|status| status.success())
     }
     #[cfg(target_os = "linux")]
     {
-        let pid_str = pid.to_string();
-        let _ = std::process::Command::new("wmctrl")
-            .args(["-a", &pid_str])
-            .spawn();
-        true
+        let Ok(windows) = std::process::Command::new("wmctrl").args(["-lp"]).output() else {
+            return false;
+        };
+        if !windows.status.success() {
+            return false;
+        }
+        let pid_text = pid.to_string();
+        let window = String::from_utf8_lossy(&windows.stdout)
+            .lines()
+            .find_map(|line| {
+                let mut fields = line.split_whitespace();
+                let id = fields.next()?;
+                fields.next()?;
+                (fields.next()? == pid_text).then(|| id.to_owned())
+            });
+        window.is_some_and(|id| {
+            std::process::Command::new("wmctrl")
+                .args(["-ia", &id])
+                .status()
+                .is_ok_and(|status| status.success())
+        })
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         let _ = pid;
         false
+    }
+}
+
+/// Activates a known desktop agent application without launching a new session.
+/// Returns false for unsupported surfaces or unavailable windows.
+#[must_use]
+pub fn focus_agent_application(agent: &str, surface: &str) -> bool {
+    let Some(app) = desktop_agent_name(agent, surface) else {
+        return false;
+    };
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt as _;
+        let prelude = windows_focus_prelude();
+        let script = format!(
+            "{prelude} foreach($process in (Get-Process -Name '{app}' -ErrorAction SilentlyContinue | Where-Object {{ $_.MainWindowHandle -ne 0 }})) {{ if((& $focus $process.Id)) {{ exit 0 }} }}; exit 1"
+        );
+        std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x0800_0000)
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .args(["-e", &format!("if application \"{app}\" is running then\ntell application \"{app}\" to activate\nelse\nerror \"Agent app is not running\"\nend if")])
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("wmctrl")
+            .args(["-xa", app])
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+fn desktop_agent_name(agent: &str, surface: &str) -> Option<&'static str> {
+    match (agent, surface) {
+        ("codex", "desktop_app") => Some(if cfg!(target_os = "windows") {
+            "ChatGPT"
+        } else {
+            "Codex"
+        }),
+        ("claude-code" | "claude", "desktop_app") => Some("Claude"),
+        ("antigravity", "ide") => Some("Antigravity"),
+        ("cursor", "ide") => Some("Cursor"),
+        ("cline" | "roo", "ide") => Some(if cfg!(target_os = "macos") {
+            "Visual Studio Code"
+        } else {
+            "Code"
+        }),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod focus_target_tests {
+    #[test]
+    fn desktop_targets_do_not_match_cli_or_untrusted_names() {
+        assert_eq!(
+            super::desktop_agent_name("codex", "desktop_app"),
+            Some(if cfg!(target_os = "windows") {
+                "ChatGPT"
+            } else {
+                "Codex"
+            })
+        );
+        assert_eq!(super::desktop_agent_name("codex", "cli"), None);
+        assert_eq!(
+            super::desktop_agent_name("unknown;command", "desktop_app"),
+            None
+        );
     }
 }
 
@@ -695,7 +800,7 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         {
             use std::os::windows::process::CommandExt as _;
             let output = std::process::Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); Set-Acl -LiteralPath $env:FLEETHUD_PRIVATE_FILE -AclObject $acl"])
+                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:FLEETHUD_PRIVATE_FILE,$acl)"])
                 .env("FLEETHUD_PRIVATE_FILE", &pending)
                 .creation_flags(0x0800_0000).output()?;
             if !output.status.success() {
@@ -755,6 +860,14 @@ mod private_file_tests {
         super::write_private_file(&path, b"new").expect("replace");
         assert_eq!(std::fs::read(&path).expect("read"), b"new");
         assert_eq!(std::fs::read_dir(dir.path()).expect("files").count(), 1);
+        #[cfg(target_os = "windows")]
+        {
+            let output = std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command", "$acl=[IO.File]::GetAccessControl($env:FLEETHUD_PRIVATE_FILE,[Security.AccessControl.AccessControlSections]::Access); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $sid.Value){exit 1}; exit 0"]).env("FLEETHUD_PRIVATE_FILE",&path).output().expect("inspect private ACL");
+            assert!(
+                output.status.success(),
+                "credentials must retain one owner-only protected access rule"
+            );
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;

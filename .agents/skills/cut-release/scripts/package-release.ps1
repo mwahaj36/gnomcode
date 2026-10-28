@@ -33,7 +33,7 @@ $CompilerArgs = @(
     "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/fleethud.ico",
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
     "/resource:$RepoRoot/target/release/fleethud.exe,fleethud.exe",
-    "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/fleethud.ico,fleethud.ico",
+    "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/fleethud.ico,fleethud.ico", "/resource:$RepoRoot/scripts/spawnt-tray.ico,spawnt-tray.ico",
     "/resource:$RepoRoot/web/public/icons/spawnt-512.png,spawnt-mark.png",
     "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
     "/resource:$RepoRoot/scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:$RepoRoot/LICENSE,LICENSE",
@@ -54,7 +54,7 @@ try {
 
 $Archive = Join-Path $Out "FleetHUD-v$Version-windows-x64.zip"
 $Files = @("$Out/fleethud.exe", "$Out/FleetHUD-Setup.exe", "$Out/LICENSE", "$Out/THIRD_PARTY_NOTICES.html",
-    "scripts/fleethud.ico", "scripts/tray.ps1", "scripts/run-tray.vbs", "scripts/open-console.vbs", "scripts/open-dashboard.vbs")
+    "scripts/fleethud.ico", "scripts/spawnt-tray.ico", "scripts/tray.ps1", "scripts/run-tray.vbs", "scripts/open-console.vbs", "scripts/open-dashboard.vbs")
 Compress-Archive -Path $Files -DestinationPath $Archive -Force
 # Include already-built Unix archives when preparing a combined release.
 $Assets = @((Get-Item "$Out/fleethud.exe"), (Get-Item "$Out/FleetHUD-Setup.exe"), (Get-Item $Archive))
