@@ -554,7 +554,7 @@ export default function ConsolePage() {
           <div className="text-xs text-muted uppercase font-semibold">Live & Historical Agent Sessions</div>
           <div className="flex gap-2">
             <select aria-label="Project" value={projectFilter} onChange={event => { setProjectFilter(event.target.value); setPage(1); }}><option value="all">All projects</option>{projectNames.map(project => <option key={project} value={project}>{project}</option>)}</select>
-            <select
+            <select aria-label="Agent"
               value={agentFilter}
               onChange={(e) => { setAgentFilter(e.target.value); setPage(1); }}
               className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"
@@ -565,7 +565,7 @@ export default function ConsolePage() {
               <option value="antigravity">Antigravity</option>
               <option value="gemini-cli">Gemini CLI</option>
             </select>
-            <select
+            <select aria-label="Session status"
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"
