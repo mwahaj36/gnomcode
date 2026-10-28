@@ -19,8 +19,14 @@ const iconSizes = sizes.filter(size => size <= 256);
 // Keep the large frame compressed, and encode small frames as Windows DIBs.
 const frames = new Map();
 for (const size of iconSizes) {
-  if (size === 256) { frames.set(size, await sharp(images.get(size)).flatten({ background: '#070708' }).png().toBuffer()); continue; }
-  const pixels = await sharp(images.get(size)).flatten({ background: '#070708' }).ensureAlpha().raw().toBuffer();
+  const markSize = Math.round(size * 0.65);
+  const inset = Math.floor((size - markSize) / 2);
+  const windowsImage = await sharp(images.get(size)).resize(markSize, markSize).extend({
+    top: inset, left: inset, bottom: size - markSize - inset, right: size - markSize - inset,
+    background: '#070708'
+  }).flatten({ background: '#070708' }).png().toBuffer();
+  if (size === 256) { frames.set(size, await sharp(windowsImage).png().toBuffer()); continue; }
+  const pixels = await sharp(windowsImage).ensureAlpha().raw().toBuffer();
   const maskStride = Math.ceil(size / 32) * 4;
   const dib = Buffer.alloc(40 + size * size * 4 + maskStride * size);
   dib.writeUInt32LE(40, 0); dib.writeInt32LE(size, 4); dib.writeInt32LE(size * 2, 8);
