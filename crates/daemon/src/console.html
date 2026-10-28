@@ -574,6 +574,17 @@
         </div>
       </div>
     </div>
+    <section class="card" aria-labelledby="remote-heading" style="margin-top: 20px;">
+      <h2 id="remote-heading" class="section-title">Encrypted Remote</h2>
+      <p>Pair a phone to read available conversations and prompt an idle agent. Confirm the matching code on both devices.</p>
+      <button type="button" class="btn-primary" data-action="remote-start">Start pairing</button>
+      <button type="button" class="btn-control" data-action="remote-revoke">Revoke connection</button>
+      <div id="remote-status" role="status" style="margin-top: 12px; white-space: pre-wrap;"></div>
+      <div id="remote-link" style="margin-top: 8px;"></div>
+      <label for="remote-code">Code shown on both devices</label>
+      <input id="remote-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
+      <button type="button" class="btn-control" data-action="remote-confirm">Confirm matching code</button>
+    </section>
   </main>
 
   <!-- ==================== VIEW 3: ACCOUNT ==================== -->

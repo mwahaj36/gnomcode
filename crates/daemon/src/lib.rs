@@ -3,6 +3,7 @@
 
 pub mod api;
 pub mod pro;
+pub mod remote;
 pub mod sync;
 
 use chrono::Utc;
@@ -33,6 +34,171 @@ pub enum Error {
     /// I/O error.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// Failure while preparing a model handoff.
+#[derive(Debug, Error)]
+pub enum HandoffError {
+    /// The source session or its repository is unavailable.
+    #[error("session or repository not found")]
+    MissingSession,
+    /// The session store could not be read.
+    #[error("store error: {0}")]
+    Store(#[from] spawnt_store::Error),
+    /// The repository could not be inspected.
+    #[error("repository error: {0}")]
+    Platform(#[from] spawnt_platform::Error),
+    /// The target model does not belong to a supported interactive agent.
+    #[error("unsupported target model or agent")]
+    UnsupportedTarget,
+    /// The new agent session could not be launched or prompted.
+    #[error("agent launch or prompt failed: {0}")]
+    Launch(String),
+}
+
+/// Resolve an interactive agent for a model, rejecting mismatched agent requests.
+pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'static str> {
+    let lower = model.to_ascii_lowercase();
+    let inferred = if lower.starts_with("claude-") {
+        "claude-code"
+    } else if lower.starts_with("gemini-") {
+        "gemini-cli"
+    } else if lower.starts_with("gpt-")
+        || lower.starts_with("codex-")
+        || lower.starts_with("o1")
+        || lower.starts_with("o3")
+        || lower.starts_with("o4")
+    {
+        "codex"
+    } else {
+        return None;
+    };
+    match requested_agent {
+        None => Some(inferred),
+        Some("claude" | "claude-code") if inferred == "claude-code" => Some(inferred),
+        Some("gemini" | "gemini-cli") if inferred == "gemini-cli" => Some(inferred),
+        Some("codex") if inferred == "codex" => Some(inferred),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod switch_tests {
+    #[test]
+    fn model_switch_rejects_wrong_agent_and_unknown_model() {
+        assert_eq!(super::agent_for_model("o3", None), Some("codex"));
+        assert_eq!(
+            super::agent_for_model("claude-sonnet-4", None),
+            Some("claude-code")
+        );
+        assert_eq!(
+            super::agent_for_model("gemini-2.5-pro", None),
+            Some("gemini-cli")
+        );
+        assert_eq!(super::agent_for_model("o3", Some("claude-code")), None);
+        assert_eq!(super::agent_for_model("--yolo", None), None);
+    }
+}
+
+/// Launches a fresh target agent and sends its redacted handoff prompt.
+///
+/// # Errors
+/// Returns [`HandoffError`] if the source, model, launch, or prompt delivery fails.
+pub async fn switch_session(
+    db: &Database,
+    session_id: &str,
+    target_model: &str,
+    requested_agent: Option<&str>,
+) -> Result<spawnt_pty::SessionRecord, HandoffError> {
+    let prepared = prepare_switch(db, session_id, target_model, requested_agent)?;
+    execute_switch(prepared).await
+}
+
+pub(crate) struct PreparedSwitch {
+    agent: &'static str,
+    repo: String,
+    packet: spawnt_core::HandoffPacket,
+}
+
+pub(crate) fn prepare_switch(
+    db: &Database,
+    session_id: &str,
+    target_model: &str,
+    requested_agent: Option<&str>,
+) -> Result<PreparedSwitch, HandoffError> {
+    let agent =
+        agent_for_model(target_model, requested_agent).ok_or(HandoffError::UnsupportedTarget)?;
+    let target = db
+        .get_session_focus_target(session_id)?
+        .ok_or(HandoffError::MissingSession)?;
+    let repo = target.repo_root.ok_or(HandoffError::MissingSession)?;
+    let packet = prepare_handoff(db, session_id, target_model)?;
+    Ok(PreparedSwitch {
+        agent,
+        repo,
+        packet,
+    })
+}
+
+pub(crate) async fn execute_switch(
+    PreparedSwitch {
+        agent,
+        repo,
+        packet,
+    }: PreparedSwitch,
+) -> Result<spawnt_pty::SessionRecord, HandoffError> {
+    let mut random = [0u8; 8];
+    getrandom::fill(&mut random).map_err(|e| HandoffError::Launch(e.to_string()))?;
+    let new_id = format!("switch-{}", u64::from_be_bytes(random));
+    let record =
+        spawnt_pty::launch_session(&new_id, agent, Path::new(&repo), Some(&packet.target_model))
+            .await
+            .map_err(|e| HandoffError::Launch(e.to_string()))?;
+    let files = packet.touched_files.join("\n");
+    let prompt = format!(
+        "Continue the task from session {} in this workspace. Inspect the current files before editing.\n\nRecent user objectives:\n{}\n\nChanged files:\n{}\n",
+        packet.session_id, packet.prompt_summary, files
+    );
+    use futures_util::SinkExt as _;
+    let url = format!(
+        "ws://127.0.0.1:{}/stream?token={}",
+        record.port, record.token
+    );
+    let delivered = async {
+        let (mut stream, _) = tokio_tungstenite::connect_async(&url)
+            .await
+            .map_err(|_| HandoffError::Launch("could not connect to agent session".to_owned()))?;
+        stream
+            .send(tokio_tungstenite::tungstenite::Message::Binary(
+                format!("{prompt}\r").into_bytes().into(),
+            ))
+            .await
+            .map_err(|_| HandoffError::Launch("could not send handoff prompt".to_owned()))
+    }
+    .await;
+    if delivered.is_err() {
+        let _ = spawnt_pty::stop_session(&new_id).await;
+    }
+    delivered?;
+    Ok(record)
+}
+
+/// Prepare a handoff using the source session's repository and recent chat.
+///
+/// # Errors
+/// Returns [`HandoffError`] if the session or repository cannot be read.
+pub fn prepare_handoff(
+    db: &Database,
+    session_id: &str,
+    target_model: &str,
+) -> Result<spawnt_core::HandoffPacket, HandoffError> {
+    let target = db
+        .get_session_focus_target(session_id)?
+        .ok_or(HandoffError::MissingSession)?;
+    let repo = target.repo_root.ok_or(HandoffError::MissingSession)?;
+    let files = spawnt_platform::handoff_files(Path::new(&repo))?;
+    db.prepare_handoff(session_id, target_model, files)?
+        .ok_or(HandoffError::MissingSession)
 }
 
 /// Metadata written to `~/.spawnt/daemon.json` for local API clients (`SPEC §3.1`).
@@ -223,6 +389,69 @@ impl DaemonOrchestrator {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn handoff_preparation_includes_repository_and_redacted_chat() {
+        use spawnt_core::{AgentId, ChatEvent, ChatRole, Project, Session, SessionState, Surface};
+        let repo = tempfile::tempdir().expect("repo");
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "-q"])
+                .current_dir(repo.path())
+                .status()
+                .expect("git")
+                .success()
+        );
+        std::fs::write(repo.path().join("new file.txt"), "data").expect("file");
+        let mut db = spawnt_store::Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, &repo.path().to_string_lossy(), None);
+        let now = chrono::Utc::now();
+        let session = Session {
+            id: "codex:test".into(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("o3".into()),
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let checkpoint = spawnt_store::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+            .expect("session");
+        db.insert_chat_event(&ChatEvent {
+            event_id: "event".into(),
+            session_id: "codex:test".into(),
+            turn_index: 1,
+            role: ChatRole::User,
+            content: "Fix tests token=secret-value".into(),
+            tool_name: None,
+            status: None,
+            created_at: now,
+        })
+        .expect("chat");
+        let packet = super::prepare_handoff(&db, "codex:test", "o4-mini").expect("packet");
+        assert_eq!(packet.source_model, "o3");
+        assert_eq!(packet.touched_files, ["new file.txt"]);
+        assert!(packet.prompt_summary.contains("Fix tests"));
+        assert!(!packet.prompt_summary.contains("secret-value"));
+    }
+    #[test]
+    fn handoff_preparation_rejects_unknown_session() {
+        let db = spawnt_store::Database::open_in_memory().expect("database");
+        assert!(matches!(
+            super::prepare_handoff(&db, "missing", "o3"),
+            Err(super::HandoffError::MissingSession)
+        ));
+    }
     use super::DaemonOrchestrator;
     use std::time::Duration;
     use tempfile::tempdir;

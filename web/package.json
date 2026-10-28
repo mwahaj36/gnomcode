@@ -10,7 +10,7 @@
     "bump-version": "node ../.agents/skills/cut-release/scripts/bump-version.mjs",
     "release-pack": "powershell -ExecutionPolicy Bypass -File ../.agents/skills/cut-release/scripts/package-release.ps1",
     "typecheck": "tsc --noEmit --incremental false",
-    "test": "node ../scripts/check-console-presentation.mjs"
+    "test": "node ../scripts/check-console-presentation.mjs && node --test test/*.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
