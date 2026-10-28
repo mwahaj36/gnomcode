@@ -72,3 +72,66 @@ async fn fail_open_agent_process_survives_independent_lifecycle() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert!(spawnt_pty::load_session_record(&session_id).is_err());
 }
+
+#[test]
+fn policy_command_gets_and_sets_routing_mode() {
+    let root = tempfile::tempdir().expect("root");
+    let binary = env!("CARGO_BIN_EXE_spawnt");
+
+    // 1. Get default policy
+    let get_out = Command::new(binary)
+        .arg("policy")
+        .env("SPAWNT_HOME", root.path())
+        .output()
+        .expect("get policy");
+    assert!(get_out.status.success());
+    let get_str = String::from_utf8_lossy(&get_out.stdout);
+    assert!(get_str.contains("ask_first"));
+
+    // 2. Set policy to automatic
+    let set_out = Command::new(binary)
+        .args(["policy", "--set", "automatic"])
+        .env("SPAWNT_HOME", root.path())
+        .output()
+        .expect("set policy");
+    assert!(set_out.status.success());
+    let set_str = String::from_utf8_lossy(&set_out.stdout);
+    assert!(set_str.contains("automatic"));
+
+    // 3. Confirm policy persisted
+    let confirm_out = Command::new(binary)
+        .arg("policy")
+        .env("SPAWNT_HOME", root.path())
+        .output()
+        .expect("confirm policy");
+    assert!(confirm_out.status.success());
+    let confirm_str = String::from_utf8_lossy(&confirm_out.stdout);
+    assert!(confirm_str.contains("automatic"));
+}
+
+#[test]
+fn switch_and_resume_commands_execute() {
+    let root = tempfile::tempdir().expect("root");
+    let binary = env!("CARGO_BIN_EXE_spawnt");
+
+    // 1. Switch
+    let switch_out = Command::new(binary)
+        .args(["switch", "sess-test", "--model", "o3"])
+        .env("SPAWNT_HOME", root.path())
+        .output()
+        .expect("switch");
+    assert!(switch_out.status.success());
+    let switch_str = String::from_utf8_lossy(&switch_out.stdout);
+    assert!(switch_str.contains("Zero-token handoff compiled"));
+    assert!(switch_str.contains("o3"));
+
+    // 2. Resume
+    let resume_out = Command::new(binary)
+        .args(["resume", "sess-test", "--prompt", "continue work"])
+        .env("SPAWNT_HOME", root.path())
+        .output()
+        .expect("resume");
+    assert!(resume_out.status.success());
+    let resume_str = String::from_utf8_lossy(&resume_out.stdout);
+    assert!(resume_str.contains("armed in Resume Queue"));
+}
