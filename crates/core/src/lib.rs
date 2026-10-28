@@ -7,6 +7,7 @@ pub mod license;
 pub mod presence;
 pub mod pricing;
 pub mod redact;
+pub mod remote_crypto;
 pub mod rules;
 
 use chrono::{DateTime, Utc};
@@ -523,6 +524,21 @@ pub enum RoutingPolicy {
 }
 
 impl RoutingPolicy {
+    /// Returns whether an automatic switch is allowed between the known providers.
+    #[must_use]
+    pub fn allows_automatic(
+        self,
+        source_provider: Option<&str>,
+        target_provider: Option<&str>,
+    ) -> bool {
+        match self {
+            Self::AskFirst => false,
+            Self::Automatic => true,
+            Self::DenyCrossProvider => {
+                matches!((source_provider, target_provider), (Some(source), Some(target)) if !source.is_empty() && source.eq_ignore_ascii_case(target))
+            }
+        }
+    }
     /// Stable string identifier.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -564,12 +580,141 @@ pub struct HandoffPacket {
     pub created_at: DateTime<Utc>,
 }
 
+/// Compiles user objectives and tool states without including tool output.
+#[must_use]
+pub fn handoff_summary(events: &[ChatEvent]) -> String {
+    let mut lines = Vec::new();
+    for event in events {
+        match event.role {
+            ChatRole::User => lines.push(format!(
+                "Goal: {}",
+                redact::redact_chat_content(&event.content)
+            )),
+            ChatRole::Tool => {
+                if let Some(status) = &event.status {
+                    let name = event.tool_name.as_deref().unwrap_or("tool");
+                    lines.push(format!(
+                        "Tool {}: {}",
+                        redact::redact_chat_content(name),
+                        redact::redact_chat_content(status)
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    lines.join("\n")
+}
+
+/// A remote pairing session state for mobile connection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemotePairingSession {
+    /// Ephemeral room identifier.
+    pub room_id: String,
+    /// Desktop ephemeral public key (hex-encoded).
+    pub public_key: String,
+    /// 6-digit confirmation code shown on desktop and phone.
+    pub verify_code: String,
+    /// Expiration timestamp (UTC).
+    pub expires_at: DateTime<Utc>,
+}
+
+impl RemotePairingSession {
+    /// Computes a 6-digit verification code from shared key material.
+    #[must_use]
+    pub fn derive_verify_code(shared_secret: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(b"spawnt-remote-verify-v1");
+        hasher.update(shared_secret);
+        let result = hasher.finalize();
+        let num = u32::from_be_bytes([result[0], result[1], result[2], result[3]]) % 1_000_000;
+        format!("{num:06}")
+    }
+}
+
+/// A sealed ciphertext frame transmitted across the zero-knowledge relay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EncryptedRemoteFrame {
+    /// Monotonically increasing sequence number to defeat replay attacks.
+    pub sequence_num: u32,
+    /// 12-byte initialization vector / nonce (hex-encoded).
+    pub nonce: String,
+    /// AEAD ciphertext (hex-encoded).
+    pub ciphertext: String,
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn remote_cipher_round_trip_rejects_replay_and_tampering() {
+        use crate::remote_crypto::{PeerRole, RemoteChannel, RemoteKeyPair};
+        let desktop = RemoteKeyPair::from_private([7; 32]);
+        let phone = RemoteKeyPair::from_private([9; 32]);
+        let mut a =
+            RemoteChannel::new(&desktop, phone.public_key(), "test-room", PeerRole::Desktop)
+                .expect("desktop channel");
+        let mut b = RemoteChannel::new(&phone, desktop.public_key(), "test-room", PeerRole::Phone)
+            .expect("phone channel");
+        assert_eq!(a.verify_code(), b.verify_code());
+        assert_eq!(
+            desktop.public_key_hex(),
+            "13be4feaeaf204c7fd3358fc9c00721881d174278128227ec674f37f7fe97b6d"
+        );
+        assert_eq!(
+            phone.public_key_hex(),
+            "57db4b359f23ae5e146e4e2512056704722506348c150c14753d0c933d04d421"
+        );
+        assert_eq!(a.verify_code(), "107539");
+        let mut vector =
+            RemoteChannel::new(&desktop, phone.public_key(), "test-room", PeerRole::Desktop)
+                .expect("vector channel");
+        let vector_frame = vector
+            .seal(br#"{"type":"sessions"}"#)
+            .expect("vector frame");
+        assert_eq!(
+            vector_frame.ciphertext,
+            "14ec0cfbb605d66599953653b73328b932fc4b0832f36df8dd6a690a3322ab4ddd82fc"
+        );
+        let frame = a.seal(b"conversation").expect("seal");
+        assert_eq!(b.open(&frame).expect("open"), b"conversation");
+        assert!(b.open(&frame).is_err());
+        let mut changed = a.seal(b"second").expect("seal second");
+        changed.ciphertext.push('0');
+        assert!(b.open(&changed).is_err());
+        let mut wrong_room =
+            RemoteChannel::new(&phone, desktop.public_key(), "other-room", PeerRole::Phone)
+                .expect("wrong room channel");
+        assert_ne!(a.verify_code(), wrong_room.verify_code());
+        assert!(wrong_room.open(&frame).is_err());
+        assert!(RemoteChannel::new(&desktop, [0; 32], "test-room", PeerRole::Desktop).is_err());
+    }
     use super::{
-        AgentId, ChatEvent, ChatRole, HandoffPacket, Project, RoutingPolicy, Session, TrustLevel,
-        UsageRecord, UserSettings,
+        AgentId, ChatEvent, ChatRole, EncryptedRemoteFrame, HandoffPacket, Project,
+        RemotePairingSession, RoutingPolicy, Session, TrustLevel, UsageRecord, UserSettings,
     };
+
+    #[test]
+    fn handoff_keeps_user_goals_and_tool_status_without_tool_output() {
+        let now = chrono::Utc::now();
+        let event = |role, content: &str, status: Option<&str>| ChatEvent {
+            event_id: "event".into(),
+            session_id: "codex:1".into(),
+            turn_index: 1,
+            role,
+            content: content.into(),
+            tool_name: Some("test".into()),
+            status: status.map(str::to_owned),
+            created_at: now,
+        };
+        let events = [
+            event(ChatRole::User, "Fix tests", None),
+            event(ChatRole::Tool, "private output", Some("failed")),
+        ];
+        let summary = super::handoff_summary(&events);
+        assert!(summary.contains("Fix tests"));
+        assert!(summary.contains("failed"));
+        assert!(!summary.contains("private output"));
+    }
 
     #[test]
     fn trust_level_identifiers_are_stable() {
@@ -694,6 +839,17 @@ mod tests {
     }
 
     #[test]
+    fn automatic_handoff_requires_policy_and_known_provider() {
+        assert!(!RoutingPolicy::AskFirst.allows_automatic(Some("openai"), Some("openai")));
+        assert!(RoutingPolicy::Automatic.allows_automatic(Some("openai"), Some("anthropic")));
+        assert!(
+            !RoutingPolicy::DenyCrossProvider.allows_automatic(Some("openai"), Some("anthropic"))
+        );
+        assert!(!RoutingPolicy::DenyCrossProvider.allows_automatic(None, None));
+        assert!(RoutingPolicy::DenyCrossProvider.allows_automatic(Some("openai"), Some("openai")));
+    }
+
+    #[test]
     fn handoff_packet_serialization() {
         let packet = HandoffPacket {
             session_id: "s1".to_owned(),
@@ -708,5 +864,25 @@ mod tests {
         let parsed: HandoffPacket = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed.target_model, "o3");
         assert_eq!(parsed.touched_files.len(), 1);
+    }
+
+    #[test]
+    fn remote_pairing_verify_code_and_frame_serialization() {
+        let secret = [42u8; 32];
+        let code1 = RemotePairingSession::derive_verify_code(&secret);
+        let code2 = RemotePairingSession::derive_verify_code(&secret);
+        assert_eq!(code1, code2);
+        assert_eq!(code1.len(), 6);
+        assert!(code1.chars().all(|c| c.is_ascii_digit()));
+
+        let frame = EncryptedRemoteFrame {
+            sequence_num: 1,
+            nonce: "0102030405060708090a0b0c".to_owned(),
+            ciphertext: "deadbeefcafe".to_owned(),
+        };
+        let json = serde_json::to_string(&frame).expect("frame json");
+        let parsed: EncryptedRemoteFrame = serde_json::from_str(&json).expect("parse frame");
+        assert_eq!(parsed.sequence_num, 1);
+        assert_eq!(parsed.ciphertext, "deadbeefcafe");
     }
 }

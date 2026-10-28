@@ -27,6 +27,8 @@ pub enum FileKind {
 pub struct FileCtx {
     /// Logical path or filename of the log file (used to derive fallback IDs).
     pub source_path: String,
+    /// Byte position of the first byte in this chunk within the source file.
+    pub source_offset: u64,
     /// Optional fallback model name (e.g. from `antigravity_state.pbtxt`).
     pub fallback_model: Option<String>,
     /// Optional fallback workspace path if the log file omits `cwd`.
@@ -44,6 +46,8 @@ pub struct ParsedBatch {
     pub usage_records: Vec<UsageRecord>,
     /// Redacted tool/file/command activity summaries.
     pub activity_events: Vec<ActivityEvent>,
+    /// Redacted user and assistant conversation events for local continuity.
+    pub chat_events: Vec<spawnt_core::ChatEvent>,
     /// Per-model quota pool snapshots.
     pub quota_snapshots: Vec<QuotaSnapshot>,
     /// Count of malformed or unparseable lines/records skipped cleanly.
@@ -67,6 +71,118 @@ pub trait SourceAdapter {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codex_conversation_fixture_emits_only_user_and_assistant_messages() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");
+        let context = FileCtx::default();
+        let first = CodexAdapter::new().parse(&context, bytes);
+        let second = CodexAdapter::new().parse(&context, bytes);
+        assert_eq!(first.chat_events.len(), 2);
+        assert_eq!(first.chat_events, second.chat_events);
+        assert_eq!(first.chat_events[0].role, spawnt_core::ChatRole::User);
+        assert_eq!(first.chat_events[1].role, spawnt_core::ChatRole::Assistant);
+        let split = bytes.iter().position(|b| *b == b'\n').expect("newline") + 1;
+        let mut adapter = CodexAdapter::new();
+        let _ = adapter.parse(&context, &bytes[..split]);
+        let resumed = adapter.parse(
+            &FileCtx {
+                source_offset: split as u64,
+                ..context
+            },
+            &bytes[split..],
+        );
+        assert_eq!(first.chat_events, resumed.chat_events);
+    }
+
+    #[test]
+    fn codex_chat_ids_are_unique_without_ordinals() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let lines = concat!(
+            "{\"timestamp\":\"2026-01-01T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"same-second\"}}\n",
+            "{\"timestamp\":\"2026-01-01T00:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"first\"}]}}\n",
+            "{\"timestamp\":\"2026-01-01T00:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"second\"}]}}\n",
+        );
+        let context = FileCtx::default();
+        let events = CodexAdapter::new()
+            .parse(&context, lines.as_bytes())
+            .chat_events;
+        assert_eq!(events.len(), 2);
+        assert_ne!(events[0].event_id, events[1].event_id);
+        assert!(events[0].turn_index < events[1].turn_index);
+        let mut prefixed = b"\xff\n".to_vec();
+        prefixed.extend_from_slice(lines.as_bytes());
+        let shifted = CodexAdapter::new().parse(&context, &prefixed).chat_events;
+        assert_eq!(shifted[0].turn_index, events[0].turn_index + 2);
+    }
+
+    #[test]
+    fn claude_conversation_fixture_excludes_tool_results() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let bytes = include_bytes!("../../../fixtures/claude-code/v2.1/session_sample.jsonl");
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.chat_events.len(), 2);
+        assert_eq!(batch.chat_events[0].role, spawnt_core::ChatRole::User);
+        assert_eq!(batch.chat_events[1].role, spawnt_core::ChatRole::Assistant);
+        assert!(
+            batch
+                .chat_events
+                .iter()
+                .all(|event| event.content == "[REDACTED]")
+        );
+    }
+
+    #[test]
+    fn gemini_rewritten_chat_keeps_only_user_and_model_text() {
+        use super::{FileCtx, SourceAdapter, gemini::GeminiAdapter};
+        let bytes = br#"{"sessionId":"gem-chat","messages":[{"id":"u1","type":"user","content":"Question"},{"id":"m1","type":"gemini","content":"Answer","toolCalls":[{"name":"run_shell_command","args":{"command":"secret"}}]}]}"#;
+        let batch = GeminiAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.chat_events.len(), 2);
+        assert_eq!(batch.chat_events[0].content, "Question");
+        assert_eq!(batch.chat_events[1].content, "Answer");
+        assert!(
+            batch
+                .chat_events
+                .iter()
+                .all(|event| !event.content.contains("secret"))
+        );
+    }
+
+    #[test]
+    fn antigravity_chat_skips_settings_and_tool_outputs() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let bytes = concat!(
+            "{\"step_index\":0,\"type\":\"USER_INPUT\",\"content\":\"<USER_SETTINGS_CHANGE>model</USER_SETTINGS_CHANGE>\"}\n",
+            "{\"step_index\":1,\"type\":\"USER_INPUT\",\"content\":\"Question\"}\n",
+            "{\"step_index\":2,\"source\":\"MODEL\",\"type\":\"GENERIC\",\"content\":\"Answer\"}\n",
+            "{\"step_index\":3,\"source\":\"TOOL\",\"type\":\"GENERIC\",\"content\":\"secret output\"}\n",
+        );
+        let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes.as_bytes());
+        assert_eq!(batch.chat_events.len(), 2);
+        assert_eq!(batch.chat_events[0].content, "Question");
+        assert_eq!(batch.chat_events[1].content, "Answer");
+    }
+
+    #[test]
+    fn cursor_chat_keeps_user_and_assistant_text_only() {
+        use super::{FileCtx, SourceAdapter, cursor::CursorAdapter};
+        let bytes = br#"{"sessionId":"cursor-chat","messages":[{"role":"user","content":"Question"},{"role":"assistant","content":"Answer","tool_calls":[{"name":"Shell","output":"secret"}]},{"role":"tool","content":"secret output"}]}"#;
+        let batch = CursorAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.chat_events.len(), 2);
+        assert_eq!(batch.chat_events[0].content, "Question");
+        assert_eq!(batch.chat_events[1].content, "Answer");
+    }
+
+    #[test]
+    fn cline_chat_keeps_task_feedback_and_answer_without_tools() {
+        use super::{FileCtx, SourceAdapter, cline::ClineAdapter};
+        let bytes = br#"[{"ts":1,"type":"say","say":"task","text":"Question"},{"ts":2,"type":"say","say":"text","text":"Answer"},{"ts":3,"type":"say","say":"tool","text":"secret tool output"},{"ts":4,"type":"say","say":"user_feedback","text":"Follow up"}]"#;
+        let batch = ClineAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.chat_events.len(), 3);
+        assert_eq!(batch.chat_events[0].content, "Question");
+        assert_eq!(batch.chat_events[1].content, "Answer");
+        assert_eq!(batch.chat_events[2].content, "Follow up");
+    }
     use super::{
         FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
         codex::CodexAdapter, gemini::GeminiAdapter,

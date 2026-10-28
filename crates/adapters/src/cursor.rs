@@ -5,9 +5,10 @@ use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use spawnt_core::{
-    ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
+    Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
-    redact::redact_summary,
+    redact::{redact_chat_content, redact_summary},
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -105,6 +106,38 @@ impl SourceAdapter for CursorAdapter {
             session.last_event_at = ts;
 
             let role = msg.get("role").and_then(Value::as_str).unwrap_or("");
+            let chat_role = match role {
+                "user" => Some(ChatRole::User),
+                "assistant" => Some(ChatRole::Assistant),
+                _ => None,
+            };
+            if let Some(chat_role) = chat_role {
+                let text = match msg.get("content") {
+                    Some(Value::String(text)) => text.clone(),
+                    Some(Value::Array(parts)) => parts
+                        .iter()
+                        .filter_map(|part| part.get("text").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    _ => String::new(),
+                };
+                if !text.is_empty() {
+                    let message_id = msg
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map_or_else(|| idx.to_string(), str::to_owned);
+                    batch.chat_events.push(ChatEvent {
+                        event_id: format!("{session_id}:{message_id}"),
+                        session_id: session_id.clone(),
+                        turn_index: i64::try_from(idx).unwrap_or(i64::MAX),
+                        role: chat_role,
+                        content: redact_chat_content(&text),
+                        tool_name: None,
+                        status: None,
+                        created_at: ts,
+                    });
+                }
+            }
             if let Some(m) = msg.get("model").and_then(Value::as_str) {
                 session.model = Some(m.to_owned());
             }

@@ -5,10 +5,10 @@ use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use spawnt_core::{
-    ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, TrustLevel,
-    UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
+    Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
-    redact::redact_summary,
+    redact::{redact_chat_content, redact_summary},
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -89,6 +89,26 @@ impl SourceAdapter for ClineAdapter {
             let msg_type = msg.get("type").and_then(Value::as_str).unwrap_or("");
             let say = msg.get("say").and_then(Value::as_str).unwrap_or("");
             let ask = msg.get("ask").and_then(Value::as_str).unwrap_or("");
+
+            let role = match say {
+                "task" | "user_feedback" => Some(ChatRole::User),
+                "text" | "completion_result" => Some(ChatRole::Assistant),
+                _ => None,
+            };
+            if let (Some(role), Some(content)) = (role, msg.get("text").and_then(Value::as_str)) {
+                if !content.is_empty() {
+                    batch.chat_events.push(ChatEvent {
+                        event_id: format!("{session_id}:{idx}"),
+                        session_id: session_id.clone(),
+                        turn_index: i64::try_from(idx).unwrap_or(i64::MAX),
+                        role,
+                        content: redact_chat_content(content),
+                        tool_name: None,
+                        status: None,
+                        created_at: ts,
+                    });
+                }
+            }
 
             // Determine state transitions
             if msg_type == "ask" {
