@@ -3,7 +3,7 @@
 All notable changes to FleetHUD are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
-## [1.5.0] — prepared 2026-10-28
+## [1.5.0] — 2026-10-28
 
 ### Changed
 - Applied spawnt branding, theme tokens, self-hosted fonts, canonical icons and balanced square controls across marketing, account, settings, both consoles and Windows setup/tray.
@@ -20,7 +20,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ### Release artifacts and limits
 - Rebuilt Windows x64 setup/archive and Linux x64/ARM64 archives with canonical icons, font/dependency notices and SHA-256 checksums. Updater tests reject corruption and preserve data.
 - macOS packaging source includes Intel/Apple Silicon browser-console app bundles, but native builds are blocked by GitHub account billing. No macOS binary, notarization or Unix native tray is claimed.
-- Final browser visual parity checks and fresh cloud publication verification remain pending browser access and desktop re-pairing. This release is prepared as a draft pending those checks and merge.
+- Final browser visual parity checks and fresh cloud publication verification remain pending browser access and desktop re-pairing. The user authorized release after available verification, with macOS builds deferred and unavailable visual/live checks disclosed.
 
 ## [1.3.0] — 2026-10-27
 
