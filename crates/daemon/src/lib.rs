@@ -2,7 +2,6 @@
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
 pub mod api;
-pub mod cloud;
 pub mod pro;
 pub mod sync;
 
@@ -11,7 +10,7 @@ use fleethud_ingest::ingest_all;
 use fleethud_platform::fleethud_home;
 use fleethud_store::Database;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -60,7 +59,6 @@ pub fn read_daemon_info() -> Option<DaemonInfo> {
 /// Single-instance process lock handle held via file locking (`SPEC §4.4`).
 pub struct DaemonLock {
     _file: File,
-    lock_path: PathBuf,
     info_path: PathBuf,
 }
 
@@ -77,18 +75,8 @@ impl DaemonLock {
         let lock_path = home.join("daemon.lock");
         let info_path = home.join("daemon.json");
 
-        let mut opts = OpenOptions::new();
-        opts.write(true).create(true).truncate(false);
-
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::fs::OpenOptionsExt as _;
-            // Zero share mode = exclusive lock on Windows
-            opts.share_mode(0);
-        }
-
-        let file = match opts.open(&lock_path) {
-            Ok(f) => f,
+        let file = match fleethud_platform::open_exclusive_lock(&lock_path) {
+            Ok(file) => file,
             Err(_) => return Err(Error::AlreadyRunning),
         };
 
@@ -101,23 +89,12 @@ impl DaemonLock {
         };
 
         let json_bytes = serde_json::to_vec_pretty(&info).map_err(std::io::Error::other)?;
-        let mut info_file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&info_path)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            info_file.set_permissions(fs::Permissions::from_mode(0o600))?;
-        }
-        use std::io::Write as _;
-        info_file.write_all(&json_bytes)?;
+        fleethud_platform::write_private_file(&info_path, &json_bytes)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
 
         Ok((
             Self {
                 _file: file,
-                lock_path,
                 info_path,
             },
             info,
@@ -128,7 +105,7 @@ impl DaemonLock {
 impl Drop for DaemonLock {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.info_path);
-        let _ = fs::remove_file(&self.lock_path);
+        // Keep the inode stable so another process cannot lock a replacement file.
     }
 }
 
