@@ -100,7 +100,7 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v1.3.0  ·  64-bit Native";
+        lblVer.Text = "v1.4.1  ·  64-bit Native";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
         lblVer.ForeColor = Color.FromArgb(141, 153, 170);
         lblVer.Location = new Point(36, 225);
