@@ -63,6 +63,52 @@ pub fn redact_summary(tool_name: &str, raw_detail: &str) -> String {
     truncate_summary(&full, MAX_SUMMARY_CHARS)
 }
 
+/// Redacts secrets, tokens, API keys and credentials from conversation text
+/// without truncating the message length.
+#[must_use]
+pub fn redact_chat_content(raw: &str) -> String {
+    let mut tokens_out = Vec::new();
+    let mut mask_next = false;
+
+    for raw_word in raw.split_whitespace() {
+        if mask_next {
+            tokens_out.push("<REDACTED>".to_owned());
+            mask_next = false;
+            continue;
+        }
+
+        let trimmed =
+            raw_word.trim_matches(|c: char| matches!(c, '\'' | '"' | ',' | ';' | '(' | ')'));
+        let lower = trimmed.to_ascii_lowercase();
+
+        if lower == "bearer"
+            || lower == "--token"
+            || lower == "--with-token"
+            || lower == "--api-key"
+            || lower == "--password"
+        {
+            tokens_out.push(trimmed.to_owned());
+            mask_next = true;
+            continue;
+        }
+
+        if let Some((k, v)) = trimmed.split_once('=') {
+            if is_sensitive_env_key(k) || looks_like_secret_token(v) {
+                tokens_out.push(format!("{k}=<REDACTED>"));
+                continue;
+            }
+        }
+
+        if looks_like_secret_token(trimmed) {
+            tokens_out.push("<REDACTED>".to_owned());
+        } else {
+            tokens_out.push(raw_word.to_owned());
+        }
+    }
+
+    tokens_out.join(" ")
+}
+
 fn is_sensitive_env_key(key: &str) -> bool {
     let upper = key.to_ascii_uppercase();
     upper.contains("KEY")
@@ -124,7 +170,7 @@ fn truncate_summary(input: &str, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::redact_summary;
+    use super::{redact_chat_content, redact_summary};
 
     #[test]
     fn redacts_common_api_keys_and_tokens() {
@@ -176,5 +222,16 @@ mod tests {
         assert!(s.chars().count() <= 120);
         assert!(!s.contains('\n'));
         assert!(s.ends_with("..."));
+    }
+
+    #[test]
+    fn redacts_chat_content_without_length_truncation() {
+        let text = "Here is my key: sk-ant-api03-1234567890abcdefghijklmnopqrstuvwxyz and my database password: DATABASE_PASSWORD=secret1234567890. Please help me refactor this 300 character long sentence which should never be cut short or truncated to 120 characters under any circumstance whatsoever because full user explanations need to be preserved.";
+        let redacted = redact_chat_content(text);
+        assert!(!redacted.contains("sk-ant-api03"));
+        assert!(!redacted.contains("secret1234567890"));
+        assert!(redacted.contains("<REDACTED>"));
+        assert!(redacted.contains("DATABASE_PASSWORD=<REDACTED>"));
+        assert!(redacted.chars().count() > 200);
     }
 }

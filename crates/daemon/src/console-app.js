@@ -932,7 +932,43 @@ function cycleTheme() {
       const action = target.dataset.action;
       if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); return; }
       if (action.startsWith('export:')) { exportData(action.slice(7)); return; }
-      const actions = { theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+      async function loadChat(sessionId) {
+      if (!sessionId) return;
+      try {
+        const events = await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { headers });
+        const presentation = await import('/console-presentation.js');
+        const container = document.getElementById('chat-stream');
+        if (container) presentation.updateChat(container, events || []);
+      } catch (e) {
+        console.error('Failed to load chat history', e);
+      }
+    }
+
+    async function deleteChat(sessionId) {
+      if (!sessionId || !confirm('Permanently delete local chat history for this session? This action cannot be undone.')) return;
+      try {
+        await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });
+        await loadChat(sessionId);
+      } catch (e) {
+        console.error('Failed to delete chat history', e);
+      }
+    }
+
+    async function handlePermissionAction(sessionId, action, toolCallId) {
+      try {
+        await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/permissions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action, tool_call_id: toolCallId })
+        });
+        await loadChat(sessionId);
+      } catch (e) {
+        console.error('Failed to record permission action', e);
+      }
+    }
+
+    const actions = { theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+      'delete-chat': deleteChat, 'load-chat': loadChat,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
