@@ -477,6 +477,7 @@
       <div class="timeline-label" id="timeline-label">Showing: All Time</div>
       <div class="timeline-buttons">
         <button class="btn-control" onclick="setTimeline('today', this)">Today</button>
+        <button class="btn-control" onclick="setTimeline('month', this)">This month</button>
         <button class="btn-control" onclick="setTimeline('7d', this)">Last 7 Days</button>
         <button class="btn-control" onclick="setTimeline('30d', this)">Last 30 Days</button>
         <button class="btn-control active" onclick="setTimeline('all', this)">All Time</button>
@@ -489,6 +490,7 @@
 
   <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
     <div id="overview-summary" data-local-view="overview">Loading fleet summary...</div>
+    <div class="sp-overview-live" data-local-view="overview"><div id="ongoing-sessions">Loading ongoing sessions...</div><details class="sp-overview-limits" open><summary>Provider limits</summary><div id="overview-limits">Loading limits...</div></details></div>
     <div id="daily-activity" data-local-view="overview,usage"><p>Loading daily activity...</p></div>
     <!-- Spend by Agent (Click to View Models) -->
     <div data-local-view="usage" id="providers-container" style="align-items: start;">
@@ -506,13 +508,13 @@
       </div>
     </div>
 
-    <div id="quota-table" data-local-view="overview,limits"><p>Loading provider limits...</p></div>
+    <div id="quota-table" data-local-view="limits"><p>Loading provider limits...</p></div>
     <!-- Paginated Sessions Table -->
-    <div class="table-container" data-local-view="overview,sessions">
+    <div class="table-container" data-local-view="sessions">
       <div class="table-header-controls">
         <div class="section-title">Live & Historical Agent Sessions</div>
         <div class="filters">
-          <select id="agent-filter" onchange="onFilterChange()">
+          <label>Project <select id="project-filter" onchange="currentPage=1; lastSessionsJson=''; loadSessions()"><option value="">All projects</option></select></label><select id="agent-filter" onchange="onFilterChange()">
             <option value="all">All Agents</option>
             <option value="antigravity">Antigravity</option>
             <option value="codex">OpenAI Codex</option>
@@ -543,7 +545,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <button class="btn-control" type="button" onclick="switchTab('auth')">Account and cloud pairing</button><p id="cloud-sync-status" role="status">Cloud publication status unknown.</p>
+    <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" onclick="switchTab('auth')">Manage account</button></div>
     <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
@@ -581,7 +583,7 @@
           <input type="number" id="settings-model-in" placeholder="In $" step="0.1">
           <input type="number" id="settings-model-out" placeholder="Out $" step="0.1">
           <input type="number" id="settings-model-cache" placeholder="Cache $" step="0.1">
-          <button class="btn-control" style="height: 32px;" onclick="addCustomPricingSettings()">+ Add</button>
+          <button class="btn-control" style="white-space: nowrap; flex: 0 0 auto;" onclick="addCustomPricingSettings()">+ Add</button>
         </div>
 
         <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
@@ -655,7 +657,7 @@
 
   <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
   <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+    <div class="sp-license-export">
       <!-- License Activation Card -->
       <div class="card">
         <div class="card-title">spawnt Pro Offline License</div>
@@ -666,7 +668,7 @@
         <div id="pro-license-details" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
           Free tier active. Pro features (Spend Guardrails, Auto-Resume Queue, CSV Analytics Export) unlock with an offline Ed25519-signed license key.
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div id="license-entry" class="sp-license-actions">
           <input
             type="text"
             id="license-key-input"
@@ -674,7 +676,7 @@
             style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
           >
           <button class="btn-primary" onclick="activateLicenseKey()">Activate Pro</button>
-          <button class="btn-control" onclick="removeLicenseKey()">Remove</button>
+          </div><div class="sp-license-actions"><button id="replace-license" class="btn-control" hidden onclick="document.getElementById('license-entry').hidden = false; this.hidden = true">Replace license</button><button id="remove-license" class="btn-control" hidden onclick="removeLicenseKey()">Remove license</button>
         </div>
         <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
       </div>
@@ -866,6 +868,7 @@
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
     let activeView = 'overview';
+    let projectsLoaded = false;
     let lastReportJson = '';
     let lastSessionsJson = '';
     let lastQuotaJson = '';
@@ -923,7 +926,7 @@
       try {
         while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
         if (['overview', 'sessions', 'usage', 'limits'].includes(activeView)) {
-          const results = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+          const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
         } else if (activeView === 'settings') {
           if (!await loadSettingsData()) throw new Error('Settings could not be loaded');
@@ -955,7 +958,7 @@
       if (!['overview', 'sessions', 'usage', 'limits'].includes(activeView)) return;
       pollBusy = true;
       try {
-      const results = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+      const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
       const state = document.getElementById('sync-state');
       const updated = document.getElementById('last-updated');
       if (results.every(Boolean)) {
@@ -984,7 +987,7 @@
         if (response.status === 409) {
           document.getElementById('sync-state').textContent = 'Reconciliation in progress';
         } else if (!response.ok) throw new Error('Reconciliation failed');
-        const refreshed = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+        const refreshed = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
         if (refreshed.some(result => !result)) throw new Error('Local data refresh failed');
         if (response.status === 409) {
           document.getElementById('sync-state').textContent = 'Reconciliation in progress';
@@ -1027,9 +1030,9 @@
     async function exportData(fmt) {
       try {
         let url = `/api/v1/export?range=${currentTimeline}&format=${fmt}`;
-        if (currentTimeline === 'today') {
+        if (currentTimeline === 'today' || currentTimeline === 'month') {
           const d = new Date();
-          d.setHours(0, 0, 0, 0);
+          d.setHours(0, 0, 0, 0); if (currentTimeline === 'month') d.setDate(1);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
         const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
@@ -1063,6 +1066,9 @@
           const lic = await licRes.json();
           const badge = document.getElementById('pro-tier-badge');
           const details = document.getElementById('pro-license-details');
+          document.getElementById('license-entry').hidden = lic.licensed;
+          document.getElementById('replace-license').hidden = !lic.licensed;
+          document.getElementById('remove-license').hidden = !lic.licensed;
           if (lic.licensed) {
             badge.innerText = lic.tier.toUpperCase();
             badge.style.color = 'var(--green)';
@@ -1362,9 +1368,9 @@
       try {
         const requestedRange = currentTimeline;
         let url = `/api/v1/report?range=${currentTimeline}`;
-        if (currentTimeline === 'today') {
+        if (currentTimeline === 'today' || currentTimeline === 'month') {
           const d = new Date();
-          d.setHours(0, 0, 0, 0);
+          d.setHours(0, 0, 0, 0); if (currentTimeline === 'month') d.setDate(1);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
         const res = await apiJson(url, { headers, signal: AbortSignal.timeout(15000) });
@@ -1429,12 +1435,21 @@
         if (range !== currentTimeline) return true;
         const presentation = await import('/console-presentation.js');
         container.innerHTML = presentation.renderProjects(projects);
+        projectsLoaded = true;
+        const select = document.getElementById('project-filter'); const selected = select.value; select.innerHTML = '<option value="">All projects</option>'; for (const project of projects) { const option = document.createElement('option'); option.value = project.id; option.textContent = project.name; select.append(option); } select.value = selected;
         return true;
       } catch (_) {
         container.textContent = 'Project usage could not be refreshed. Retry Reload view.';
         return false;
       }
     }
+
+    document.addEventListener('click', event => {
+      const project = event.target.closest('[data-project-id]');
+      if (!project) return;
+      event.preventDefault(); document.getElementById('project-filter').value = project.dataset.projectId;
+      currentPage = 1; lastSessionsJson = ''; switchTab('sessions');
+    });
 
     document.getElementById('sessions-table').addEventListener('click', async event => {
       const button = event.target.closest('[data-session-action="focus"]');
@@ -1451,12 +1466,14 @@
     });
     async function loadSessions() {
       try {
+        if (!projectsLoaded) await loadProjects();
         const requestedPage = currentPage;
+        const project = document.getElementById('project-filter').value;
         const agent = document.getElementById('agent-filter').value;
         const status = document.getElementById('status-filter').value;
-        const res = await apiJson(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers, signal: AbortSignal.timeout(15000) });
+        const res = await apiJson(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}&project=${encodeURIComponent(project)}`, { headers, signal: AbortSignal.timeout(15000) });
         if (!res) return false;
-        if (requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
+        if (project !== document.getElementById('project-filter').value || requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastSessionsJson) return true;
@@ -1593,6 +1610,15 @@
       }
     }
 
+    async function loadOngoing() {
+      try {
+        const response = await apiJson('/api/v1/sessions?status=active&page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
+        const presentation = await import('/console-presentation.js');
+        presentation.updateOngoing(document.getElementById('ongoing-sessions'), response.sessions);
+        return true;
+      } catch (_) { document.getElementById('ongoing-sessions').textContent = 'Ongoing session status unavailable. Retry Reload view.'; return false; }
+    }
+
     async function loadQuota() {
       try {
         const res = await apiJson('/api/v1/quota', { headers, signal: AbortSignal.timeout(15000) });
@@ -1602,10 +1628,12 @@
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
         document.getElementById('quota-table').innerHTML = presentation.renderQuota(res, new Date().toISOString());
+        document.getElementById('overview-limits').innerHTML = presentation.renderQuota(res, new Date().toISOString());
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
         lastQuotaJson = '';
+        document.getElementById('overview-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
         summaryState.quotaCount = null; await refreshSummary();
         document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;
