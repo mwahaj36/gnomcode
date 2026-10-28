@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import shutil
+import subprocess
 import tarfile
 import tomllib
 import zipfile
@@ -20,6 +21,7 @@ parser.add_argument('--darwin-x86-64', type=Path)
 parser.add_argument('--darwin-aarch64', type=Path)
 args = parser.parse_args()
 version = tomllib.loads((root / 'Cargo.toml').read_text())['workspace']['package']['version']
+subprocess.run(['node', str(root / 'scripts/check-console.mjs')], check=True)
 out = root / 'web/public/downloads'
 notices = out / 'THIRD_PARTY_NOTICES.html'
 if not notices.is_file() or notices.stat().st_size < 1000:
