@@ -573,88 +573,8 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
     }
 }
 
-/// Resolves an explicit provider identity or a detected Codex cloud thread.
-/// Explicit bindings let every supported agent share the same automatic startup path.
-#[must_use]
-pub fn cloud_session_identity() -> Option<(AgentId, String)> {
-    cloud_session_identity_from(|name| env::var(name).ok())
-}
-
-fn cloud_session_identity_from(get: impl Fn(&str) -> Option<String>) -> Option<(AgentId, String)> {
-    if let Some(provider) = get("FLEETHUD_CLOUD_AGENT") {
-        let agent = match provider.as_str() {
-            "codex" => AgentId::Codex,
-            "claude-code" => AgentId::ClaudeCode,
-            "cursor" => AgentId::Cursor,
-            "antigravity" => AgentId::Antigravity,
-            "gemini-cli" => AgentId::GeminiCli,
-            "cline" => AgentId::Cline,
-            "aider" => AgentId::Aider,
-            _ => return None,
-        };
-        return get("FLEETHUD_CLOUD_SESSION_ID")
-            .filter(|id| !id.trim().is_empty())
-            .map(|id| (agent, id));
-    }
-    let cloud = ["CODEX_ENVIRONMENT_ID", "CODEX_CAAS_SESSION_ID"]
-        .iter()
-        .any(|name| get(name).is_some_and(|v| !v.trim().is_empty()));
-    if !cloud {
-        return None;
-    }
-    ["CODEX_THREAD_ID", "CODEX_SESSION_ID"]
-        .iter()
-        .filter_map(|name| get(name))
-        .find(|id| !id.trim().is_empty())
-        .map(|id| (AgentId::Codex, id))
-}
-
-/// Detects a Codex cloud thread from runtime metadata without reading credentials or logs.
-#[must_use]
-pub fn codex_cloud_session_id() -> Option<String> {
-    cloud_session_identity()
-        .filter(|(agent, _)| *agent == AgentId::Codex)
-        .map(|(_, id)| id)
-}
-
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn automatic_cloud_identity_respects_provider_and_missing_metadata() {
-        use std::collections::HashMap;
-        let mut vars = HashMap::from([
-            ("CODEX_ENVIRONMENT_ID", "environment"),
-            ("CODEX_THREAD_ID", "thread"),
-        ]);
-        let resolve = |vars: &HashMap<&str, &str>| {
-            super::cloud_session_identity_from(|name| vars.get(name).map(|v| (*v).to_owned()))
-        };
-        assert_eq!(
-            resolve(&vars),
-            Some((fleethud_core::AgentId::Codex, "thread".to_owned()))
-        );
-        vars.remove("CODEX_ENVIRONMENT_ID");
-        assert!(resolve(&vars).is_none());
-        for provider in [
-            "codex",
-            "claude-code",
-            "cursor",
-            "antigravity",
-            "gemini-cli",
-            "cline",
-            "aider",
-        ] {
-            vars.insert("FLEETHUD_CLOUD_AGENT", provider);
-            assert!(resolve(&vars).is_none());
-            vars.insert("FLEETHUD_CLOUD_SESSION_ID", "provider-thread");
-            assert_eq!(
-                resolve(&vars).expect("explicit provider").0.as_str(),
-                provider
-            );
-            vars.remove("FLEETHUD_CLOUD_SESSION_ID");
-        }
-    }
-
     use super::{open_shared_read, read_from_offset};
     use std::io::Write as _;
     use tempfile::NamedTempFile;
@@ -742,5 +662,123 @@ mod tests {
             wt_remote.as_deref(),
             Some("git@github.com:mwahaj36/fleethud.git")
         );
+    }
+}
+
+/// Atomically writes account credentials with owner-only file access.
+///
+/// # Errors
+/// Fails without replacing the existing file if permissions or writing fail.
+pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("Missing parent directory"))?;
+    fs::create_dir_all(parent)?;
+    let pending = parent.join(format!(
+        ".fleethud-private-{}-{}.tmp",
+        std::process::id(),
+        NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut opts = OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    let result = (|| -> io::Result<()> {
+        let mut file = opts.open(&pending)?;
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            let output = std::process::Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); Set-Acl -LiteralPath $env:FLEETHUD_PRIVATE_FILE -AclObject $acl"])
+                .env("FLEETHUD_PRIVATE_FILE", &pending)
+                .creation_flags(0x0800_0000).output()?;
+            if !output.status.success() {
+                return Err(io::Error::other("Cannot restrict credential file access"));
+            }
+        }
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&pending, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&pending);
+    }
+    result.map_err(Error::from)
+}
+
+/// Opens an OS-held exclusive file lock, released when the returned file closes.
+///
+/// # Errors
+/// Returns an error when another process owns the lock or the file cannot be opened.
+pub fn open_exclusive_lock(path: &Path) -> io::Result<File> {
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(false);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        opts.share_mode(0);
+    }
+    let file = opts.open(path)?;
+    #[cfg(unix)]
+    file_lock::lock(&file)?;
+    Ok(file)
+}
+
+#[cfg(unix)]
+mod file_lock {
+    #![allow(unsafe_code)]
+    use std::os::fd::AsRawFd as _;
+    pub(super) fn lock(file: &std::fs::File) -> std::io::Result<()> {
+        // SAFETY: the file descriptor is valid for the call; flock retains no Rust pointer.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+}
+
+#[cfg(test)]
+mod private_file_tests {
+    #[test]
+    fn replaces_credentials_without_leaving_partial_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("session.json");
+        super::write_private_file(&path, b"old").expect("write");
+        super::write_private_file(&path, b"new").expect("replace");
+        assert_eq!(std::fs::read(&path).expect("read"), b"new");
+        assert_eq!(std::fs::read_dir(dir.path()).expect("files").count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            assert_eq!(
+                std::fs::metadata(path)
+                    .expect("metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod daemon_lock_tests {
+    #[test]
+    fn second_daemon_cannot_replace_a_running_daemons_credentials() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("daemon.lock");
+        let first = super::open_exclusive_lock(&path).expect("first daemon");
+        assert!(super::open_exclusive_lock(&path).is_err());
+        drop(first);
+        assert!(super::open_exclusive_lock(&path).is_ok());
     }
 }
