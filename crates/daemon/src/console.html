@@ -595,43 +595,9 @@
         FleetHUD operates 100% locally by default. To sync your live fleet metrics, ROI multipliers, and quota pools across multiple workstations, pair your local daemon with your Supabase account.
       </p>
 
-      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 20px; font-family: var(--font-mono); font-size: 12px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Cloud Telemetry Mirror:</span>
-          <span style="color: var(--green);">Connected & Ready</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span style="color: var(--text-muted);">Sync Frequency:</span>
-          <span style="color: var(--green);">Every 2 seconds (Live)</span>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-muted);">Privacy Invariant:</span>
-          <span style="color: var(--green);">Zero Prompt Retention & HMAC Masked</span>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <a
-          href="https://fleethud.vercel.app/console"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-primary"
-          style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;"
-        >
-          <span>Open Web Cloud Console</span>
-          <span>&rarr;</span>
-        </a>
-        <a
-          id="auth-signin-link"
-          href="https://fleethud.vercel.app/auth"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-pill"
-          style="text-decoration: none; display: inline-flex; align-items: center; padding: 8px 16px;"
-        >
-          <span>Sign In via GitHub / Email</span>
-        </a>
-      </div>
+      <p id="auth-cloud-status" role="status" style="font-size:12px;color:var(--text-muted)">Checking account status…</p>
+      <p style="font-size:12px;line-height:1.7;color:var(--text-muted)">Pair this desktop with your FleetHUD account to view its local reports from the web console. Desktop summaries update every minute while the daemon runs. Hosted cloud-session tracking is not available.</p>
+      <a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-pill" style="display:inline-block;margin-top:12px">Open Web Cloud Console</a>
 
       <!-- Paired Account Status Card -->
       <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-top: 20px;">
@@ -642,7 +608,7 @@
               <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
             </div>
             <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
-              Desktop daemon is actively paired with cloud roaming and syncing private snapshots.
+              Account credentials are saved for this device. Sync retries automatically while the daemon runs.
             </p>
           </div>
           <button
@@ -663,7 +629,7 @@
         </p>
         <div style="display: flex; gap: 8px;">
           <input
-            type="text"
+            type="password"
             id="auth-token-input"
             placeholder="Paste pairing token or session JSON here..."
             style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
@@ -852,6 +818,7 @@
     </div>
   </main>
 
+  <p id="connection-status" role="alert" hidden style="position:sticky;bottom:12px;padding:16px;background:var(--card-bg);border:1px solid var(--red);color:var(--red)"></p>
   <script>
     let currentTimeline = 'all';
     let currentPage = 1;
@@ -962,6 +929,20 @@
         button.textContent = 'Resync local data';
         refreshBusy = false;
       }
+    }
+
+    async function apiJson(url, options = { headers }) {
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error(response.status === 401 ? 'Authorization expired. Reopen FleetHUD from its tray icon or shortcut.' : `FleetHUD request failed (${response.status}). Restart FleetHUD if this persists.`);
+      return response.json();
+    }
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+    }
+    function showConnectionError(error) {
+      const status = document.getElementById('connection-status');
+      status.textContent = error.message;
+      status.hidden = false;
     }
 
     function switchTab(tabName) {
@@ -1334,6 +1315,7 @@
         if (jsonStr === lastReportJson) return true;
         lastReportJson = jsonStr;
 
+        document.getElementById('connection-status').hidden = true;
         const tl = res.timeline;
         document.getElementById('total-spend').innerHTML = `$${tl.total_cost_usd.toFixed(2)} <span class="trust-mark">EST</span>`;
         document.getElementById('total-savings').innerHTML = `$${tl.total_cache_savings_usd.toFixed(2)} <span class="trust-mark">EST</span>`;
@@ -1429,7 +1411,9 @@
           return true;
         }
 
-        table.innerHTML = res.sessions.map(s => {
+        table.innerHTML = res.sessions.map(raw => {
+          const s = { ...raw };
+          for (const key of ['project_name', 'title', 'agent', 'surface', 'device_name', 'model', 'state']) s[key] = escapeHtml(s[key]);
           const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
           const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
           const cacheBadge = (s.cache_read_tokens && s.cache_read_tokens > 0)
@@ -1559,6 +1543,7 @@
         const pairedCard = document.getElementById('auth-paired-card');
         const unpairedCard = document.getElementById('auth-unpaired-card');
         const emailEl = document.getElementById('auth-paired-email');
+        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Desktop account paired. Desktop summary sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
         if (res && res.paired) {
           if (pairedCard) pairedCard.style.display = 'block';
           if (unpairedCard) unpairedCard.style.display = 'none';
@@ -1662,7 +1647,7 @@
 
     async function loadCustomPricingSettings() {
       try {
-        const res = await fetch('/api/v1/pricing/custom', { headers }).then(r => r.json());
+        const res = await apiJson('/api/v1/pricing/custom', { headers });
         const container = document.getElementById('settings-pricing-list');
         if (!res || !res.custom_pricing || res.custom_pricing.length === 0) {
           container.innerHTML = '<span style="color: var(--text-muted);">No custom rate overrides configured (using default catalog).</span>';
