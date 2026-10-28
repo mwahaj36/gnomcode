@@ -2053,6 +2053,9 @@ impl Database {
         let cutoff = (now
             - chrono::Duration::milliseconds(spawnt_core::presence::RECENT_ACTIVITY_GRACE_MS))
         .to_rfc3339();
+        let stale_cutoff = (now
+            - chrono::Duration::milliseconds(spawnt_core::presence::STALE_EXECUTION_LIMIT_MS))
+        .to_rfc3339();
         let agent = agent_filter
             .filter(|value| !value.is_empty())
             .unwrap_or("all");
@@ -2064,25 +2067,25 @@ impl Database {
                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
-                   OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval')
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))))
+                   OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?5)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?5)))))
                    OR (?2 = 'idle' AND s.state = 'idle'))"#,
-            params![agent, status, cutoff, project_filter],
+            params![agent, status, cutoff, project_filter, stale_cutoff],
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
             r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN (s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))) THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
-                   OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval')
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END))))
+                   OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))))
                     OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
@@ -2123,7 +2126,8 @@ impl Database {
                 cutoff,
                 project_filter,
                 limit as i64,
-                offset as i64
+                offset as i64,
+                stale_cutoff
             ],
             |row| {
                 let id: String = row.get(0)?;
@@ -3032,6 +3036,25 @@ mod tests {
                 .1,
             1
         );
+        let ancient = (Utc::now() - chrono::Duration::days(15)).to_rfc3339();
+        db.conn
+            .execute(
+                "UPDATE session SET last_event_at = ?1 WHERE id = 'claude-code:s1'",
+                rusqlite::params![ancient],
+            )
+            .expect("age tool");
+        assert_eq!(
+            db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
+                .expect("ancient tool")
+                .1,
+            0
+        );
+        db.conn
+            .execute(
+                "UPDATE session SET last_event_at = ?1 WHERE id = 'claude-code:s1'",
+                rusqlite::params![old],
+            )
+            .expect("restore tool age");
         db.conn
             .execute(
                 "UPDATE activity_event SET kind = 'tool_end' WHERE session_id = 'claude-code:s1'",

@@ -19,6 +19,10 @@ const sessions = renderSessions([{ id: 'sample" onmouseover="bad', project_name:
 assert.doesNotMatch(sessions, /<img>|data-key="sample" onmouseover=/);
 assert.match(sessions, /Unknown/);
 assert.doesNotMatch(sessions, /\$0\.00/);
+const localSessions = renderSessions([{ id: 'codex:session-1', project_name: 'Demo', agent: 'codex', model: 'sample', state: 'idle', last_event_at: '2026-10-28' }], { focus: true });
+assert.match(localSessions, /data-action="load-chat"[^>]*data-arg="codex:session-1"/);
+const localConsole = await readFile(new URL('../crates/daemon/src/console.html', import.meta.url), 'utf8');
+assert.match(localConsole, /id="chat-stream"/);
 assert.match(renderProjects(undefined), /remain local/);
 console.log('PASS: shared console escaping, unknown data, trust, reset and freshness states');
 
