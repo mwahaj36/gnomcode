@@ -19,10 +19,14 @@ spawnt-store = { workspace = true }
 spawnt-platform = { workspace = true }
 spawnt-ingest = { workspace = true }
 spawnt-daemon = { workspace = true }
+spawnt-pty = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+reqwest = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 obfstr = { workspace = true }
