@@ -157,6 +157,16 @@ pub fn build_router(state: AppState) -> Router {
             post(relay_dismiss_post_handler),
         )
         .route("/api/v1/guardrails/check", get(guardrail_check_handler))
+        .route(
+            "/api/v1/sessions/{id}/chat",
+            get(chat_get_handler).delete(chat_delete_handler),
+        )
+        .route(
+            "/api/v1/sessions/{id}/permissions",
+            post(permissions_post_handler),
+        )
+        .route("/api/v1/repos/file", get(repo_file_get_handler))
+        .route("/api/v1/repos/diff", get(repo_diff_get_handler))
         .with_state(state)
 }
 
@@ -945,6 +955,221 @@ async fn models_handler(
     }
 
     Ok(Json(items))
+}
+
+/// Query parameters for retrieving chat events.
+#[derive(Debug, Deserialize)]
+pub struct ChatQuery {
+    /// Maximum number of events to return.
+    pub limit: Option<usize>,
+}
+
+async fn chat_get_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<ChatQuery>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    match db.get_session_chat(&id, query.limit) {
+        Ok(events) => Ok(Json(events)),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+async fn chat_delete_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    match db.delete_session_chat(&id) {
+        Ok(deleted_count) => Ok(Json(json!({
+            "ok": true,
+            "session_id": id,
+            "deleted_count": deleted_count
+        }))),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+/// Request payload to approve or deny a pending tool execution or action.
+#[derive(Debug, Deserialize)]
+pub struct PermissionRequest {
+    /// Decision: `approve` or `deny`.
+    pub action: String,
+    /// Optional tool call identifier.
+    pub tool_call_id: Option<String>,
+    /// Optional summary text.
+    pub summary: Option<String>,
+}
+
+async fn permissions_post_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<PermissionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let action = payload.action.to_ascii_lowercase();
+    if action != "approve" && action != "deny" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let summary = payload
+        .summary
+        .unwrap_or_else(|| format!("User {}d action", action));
+    let redacted_content = spawnt_core::redact::redact_chat_content(&summary);
+
+    let db = state.db.lock().await;
+    let evt = spawnt_core::ChatEvent {
+        event_id: format!(
+            "perm-{}-{}",
+            id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ),
+        session_id: id.clone(),
+        turn_index: 0,
+        role: spawnt_core::ChatRole::System,
+        content: redacted_content,
+        tool_name: payload.tool_call_id,
+        status: Some(action.clone()),
+        created_at: chrono::Utc::now(),
+    };
+    let _ = db.insert_chat_event(&evt);
+
+    Ok(Json(
+        json!({ "ok": true, "session_id": id, "action": action }),
+    ))
+}
+
+/// Query parameters for reading a repository file.
+#[derive(Debug, Deserialize)]
+pub struct RepoFileQuery {
+    /// Absolute or relative path to the repo root.
+    pub repo: String,
+    /// Relative path to the file inside the repo.
+    pub path: String,
+}
+
+async fn repo_file_get_handler(
+    headers: HeaderMap,
+    Query(query): Query<RepoFileQuery>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if query.repo.trim().is_empty() || query.path.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let relative = std::path::Path::new(&query.path);
+    if relative.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let repo_path = std::path::Path::new(&query.repo);
+    let Ok(canonical_repo) = repo_path.canonicalize() else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    if !canonical_repo.is_dir() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let target_path = canonical_repo.join(&query.path);
+    let Ok(canonical_target) = target_path.canonicalize() else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    // Strict containment inside repo root (path-traversal and symlink escape defense)
+    if !canonical_target.starts_with(&canonical_repo) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if !canonical_target.is_file() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let metadata =
+        std::fs::metadata(&canonical_target).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if metadata.len() > 512 * 1024 {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    let content = std::fs::read_to_string(&canonical_target)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({
+        "path": query.path,
+        "content": content
+    })))
+}
+
+/// Query parameters for inspecting git workspace diffs.
+#[derive(Debug, Deserialize)]
+pub struct RepoDiffQuery {
+    /// Path to the repository root.
+    pub repo: String,
+}
+
+async fn repo_diff_get_handler(
+    headers: HeaderMap,
+    Query(query): Query<RepoDiffQuery>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let repo_path = std::path::Path::new(&query.repo);
+    let Ok(canonical_repo) = repo_path.canonicalize() else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    if !canonical_repo.is_dir() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt as _;
+
+    let mut diff_cmd = std::process::Command::new("git");
+    diff_cmd.args(["diff", "HEAD"]).current_dir(&canonical_repo);
+    #[cfg(windows)]
+    diff_cmd.creation_flags(0x0800_0000);
+    let diff_output = diff_cmd.output();
+
+    let mut status_cmd = std::process::Command::new("git");
+    status_cmd
+        .args(["status", "--porcelain"])
+        .current_dir(&canonical_repo);
+    #[cfg(windows)]
+    status_cmd.creation_flags(0x0800_0000);
+    let status_output = status_cmd.output();
+
+    let diff_str = diff_output
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    let status_str = status_output
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    Ok(Json(json!({
+        "repo": query.repo,
+        "diff": diff_str,
+        "status": status_str
+    })))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -2218,5 +2443,192 @@ mod tests {
             .expect("request");
         let res = app.oneshot(bad_dir).await.expect("response");
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn chat_endpoints_retrieve_and_hard_delete_history() {
+        let db = Database::open_in_memory().expect("database");
+        let project = spawnt_core::Project::from_origin(None, "C:\\repo", None);
+        let session = spawnt_core::Session {
+            id: "chat-test-session".to_owned(),
+            agent: spawnt_core::AgentId::ClaudeCode,
+            surface: spawnt_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("claude-3-5-sonnet".to_owned()),
+            title: Some("Chat Test".to_owned()),
+            state: spawnt_core::SessionState::Idle,
+            pid: Some(100),
+            started_at: chrono::Utc::now(),
+            last_event_at: chrono::Utc::now(),
+        };
+        let cp = spawnt_store::SourceCheckpoint {
+            file_path: "/path/to/c.jsonl".to_owned(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fp".to_owned(),
+            last_ingested_at: chrono::Utc::now(),
+        };
+        let mut db_mut = db;
+        db_mut
+            .commit_batch(&[project], &[session], &[], &[], &[], &cp)
+            .expect("commit");
+
+        let evt = spawnt_core::ChatEvent {
+            event_id: "evt-test-1".to_owned(),
+            session_id: "chat-test-session".to_owned(),
+            turn_index: 1,
+            role: spawnt_core::ChatRole::User,
+            content: "Please inspect tests".to_owned(),
+            tool_name: None,
+            status: None,
+            created_at: chrono::Utc::now(),
+        };
+        db_mut.insert_chat_event(&evt).expect("insert chat");
+
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(db_mut)),
+            bearer_token: "chat-token".to_owned(),
+            orchestrator: None,
+        });
+
+        // 1. GET chat events
+        let req_get = Request::builder()
+            .uri("/api/v1/sessions/chat-test-session/chat")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer chat-token")
+            .body(Body::empty())
+            .expect("request");
+
+        let res_get = app.clone().oneshot(req_get).await.expect("res");
+        assert_eq!(res_get.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res_get.into_body(), 16384)
+            .await
+            .expect("body");
+        let events: Vec<spawnt_core::ChatEvent> = serde_json::from_slice(&body).expect("json");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].content, "Please inspect tests");
+
+        // 2. DELETE chat events (hard deletion)
+        let req_del = Request::builder()
+            .method("DELETE")
+            .uri("/api/v1/sessions/chat-test-session/chat")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer chat-token")
+            .body(Body::empty())
+            .expect("request");
+
+        let res_del = app.clone().oneshot(req_del).await.expect("res");
+        assert_eq!(res_del.status(), StatusCode::OK);
+
+        // 3. GET chat events after delete -> empty
+        let req_get_after = Request::builder()
+            .uri("/api/v1/sessions/chat-test-session/chat")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer chat-token")
+            .body(Body::empty())
+            .expect("request");
+
+        let res_get_after = app.oneshot(req_get_after).await.expect("res");
+        assert_eq!(res_get_after.status(), StatusCode::OK);
+        let body_after = axum::body::to_bytes(res_get_after.into_body(), 16384)
+            .await
+            .expect("body");
+        let events_after: Vec<spawnt_core::ChatEvent> =
+            serde_json::from_slice(&body_after).expect("json");
+        assert!(events_after.is_empty());
+    }
+
+    #[tokio::test]
+    async fn repo_file_endpoint_rejects_path_traversal() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let inside_file = temp_dir.path().join("safe.txt");
+        std::fs::write(&inside_file, "clean content").expect("write safe");
+
+        let outside_dir = tempfile::tempdir().expect("outside");
+        let outside_file = outside_dir.path().join("secret.txt");
+        std::fs::write(&outside_file, "secret credentials").expect("write secret");
+
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "file-token".to_owned(),
+            orchestrator: None,
+        });
+
+        let repo_param = temp_dir.path().to_string_lossy().replace('\\', "/");
+
+        // 1. Path traversal attempt with .. -> 400 Bad Request
+        let bad_uri = format!("/api/v1/repos/file?repo={}&path=../secret.txt", repo_param);
+        let req_bad = Request::builder()
+            .uri(&bad_uri)
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer file-token")
+            .body(Body::empty())
+            .expect("request");
+        let res_bad = app.clone().oneshot(req_bad).await.expect("res");
+        assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+
+        // 2. Safe file read -> 200 OK
+        let safe_uri = format!("/api/v1/repos/file?repo={}&path=safe.txt", repo_param);
+        let req_safe = Request::builder()
+            .uri(&safe_uri)
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer file-token")
+            .body(Body::empty())
+            .expect("request");
+        let res_safe = app.oneshot(req_safe).await.expect("res");
+        assert_eq!(res_safe.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res_safe.into_body(), 16384)
+            .await
+            .expect("body");
+        let val: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(val["content"], "clean content");
+    }
+
+    #[tokio::test]
+    async fn permissions_endpoint_records_approval_decision() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "perm-token".to_owned(),
+            orchestrator: None,
+        });
+
+        // 1. Approve
+        let req_app = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/test-s1/permissions")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer perm-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"action":"approve","tool_call_id":"tool-123"}"#,
+            ))
+            .expect("request");
+        let res_app = app.clone().oneshot(req_app).await.expect("res");
+        assert_eq!(res_app.status(), StatusCode::OK);
+
+        // 2. Deny
+        let req_deny = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/test-s1/permissions")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer perm-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"action":"deny","tool_call_id":"tool-123"}"#))
+            .expect("request");
+        let res_deny = app.clone().oneshot(req_deny).await.expect("res");
+        assert_eq!(res_deny.status(), StatusCode::OK);
+
+        // 3. Invalid action (escalation) -> 400 Bad Request
+        let req_bad = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/test-s1/permissions")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer perm-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"action":"escalate_permissions"}"#))
+            .expect("request");
+        let res_bad = app.oneshot(req_bad).await.expect("res");
+        assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
     }
 }
