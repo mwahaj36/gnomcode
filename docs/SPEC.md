@@ -287,7 +287,7 @@ Liveness = log recency + **process scanner** (`sysinfo`, every 3 s, matches agen
 ### 3.8 Pricing engine
 
 - Bundled snapshot of LiteLLM `model_prices_and_context_window.json`, tagged `pricing_version`; optional daily refresh; user overrides in `pricing.toml`.
-- Console projections declare priced/unpriced invocation coverage for partial subtotals; unpriced usage never zero-fills a complete price. Today is hourly since local midnight, longer views are daily UTC, and calendar month is source-owned. Ongoing sessions lead Overview beside compact limits; local project filtering precedes session pagination (ADR 0009).
+- Console projections declare priced/unpriced invocation coverage for partial subtotals; unpriced usage never zero-fills a complete price. Today is hourly since local midnight, longer views are daily UTC, and calendar month is source-owned. Overview orders activity, spend summary, then a provider-limits/ongoing-session column pair; local project filtering precedes session pagination (ADR 0009).
 - Cache writes priced by TTL (5m vs 1h).
 - Subscription surfaces display **"API-equivalent"**, never "spent".
 - Raw tokens are always stored so history can be re-priced.
