@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, Tray } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
 import { spawn } from 'node:child_process';
-import { get } from 'node:http';
+import { get, type IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayTooltip } from './security';
@@ -80,6 +80,56 @@ async function start(): Promise<void> {
   ipcMain.handle('desktop:bring-to-front', (event, ...args: unknown[]) => {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
     showWindow();
+  });
+  ipcMain.handle('desktop:launch-session', async (event, agent: unknown, repoPath: unknown, model: unknown) => {
+    if (event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
+    if (typeof agent !== 'string' || typeof repoPath !== 'string') throw new Error('Invalid launch parameters');
+    const parsed = new URL(connectedUrl);
+    const postData = JSON.stringify({ agent, repo_path: repoPath, model: typeof model === 'string' ? model : undefined });
+    return new Promise((resolve, reject) => {
+      const request = get({
+        hostname: '127.0.0.1', port: daemonPort, path: '/api/v1/sessions/launch', method: 'POST',
+        headers: {
+          Authorization: `Bearer ${parsed.searchParams.get('token')}`,
+          Host: `127.0.0.1:${daemonPort}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+        timeout: 10000,
+      }, (res: IncomingMessage) => {
+        let body = '';
+        res.on('data', (c: Buffer | string) => { body += c.toString(); });
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch { resolve({ ok: res.statusCode === 200 }); }
+        });
+      });
+      request.on('error', reject);
+      request.write(postData);
+      request.end();
+    });
+  });
+  ipcMain.handle('desktop:stop-session', async (event, sessionId: unknown) => {
+    if (event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
+    if (typeof sessionId !== 'string') throw new Error('Invalid session ID');
+    const parsed = new URL(connectedUrl);
+    return new Promise((resolve, reject) => {
+      const request = get({
+        hostname: '127.0.0.1', port: daemonPort, path: `/api/v1/sessions/${encodeURIComponent(sessionId)}/stop`, method: 'POST',
+        headers: {
+          Authorization: `Bearer ${parsed.searchParams.get('token')}`,
+          Host: `127.0.0.1:${daemonPort}`,
+        },
+        timeout: 5000,
+      }, (res: IncomingMessage) => {
+        let body = '';
+        res.on('data', (c: Buffer | string) => { body += c.toString(); });
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch { resolve({ ok: res.statusCode === 200 }); }
+        });
+      });
+      request.on('error', reject);
+      request.end();
+    });
   });
   const iconName = process.platform === 'win32' ? 'spawnt-tray.ico' : 'spawnt-64.png';
   const icon = app.isPackaged ? path.join(process.resourcesPath, iconName) :
