@@ -93,24 +93,6 @@ enum Commands {
         #[command(subcommand)]
         action: LicenseCommands,
     },
-    /// Register a cloud session and send presence heartbeats (no inferred usage).
-    CloudSession {
-        /// Provider; omitted only when Codex cloud metadata is available.
-        #[arg(long, value_parser = ["codex", "claude-code", "cursor", "antigravity", "gemini-cli", "cline", "aider"])]
-        agent: Option<String>,
-        /// Opaque provider session ID. Required except for detected Codex cloud threads.
-        #[arg(long)]
-        session_id: Option<String>,
-        /// Existing Supabase session JSON file; defaults to FleetHUD home/session.json.
-        #[arg(long)]
-        pairing_file: Option<PathBuf>,
-        /// Append-only metadata JSONL with per-invocation usage deltas (see docs/CLOUD_SESSIONS.md).
-        #[arg(long)]
-        usage_file: Option<PathBuf>,
-        /// Register and attempt one sync, then exit.
-        #[arg(long)]
-        once: bool,
-    },
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
@@ -161,13 +143,6 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
-        Commands::CloudSession {
-            agent,
-            session_id,
-            pairing_file,
-            usage_file,
-            once,
-        } => cmd_cloud_session(db_path, agent, session_id, pairing_file, usage_file, once).await,
     }
 }
 
@@ -674,8 +649,6 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
     let _cloud_sync_handle = fleethud_daemon::sync::spawn_cloud_sync(orchestrator.db());
-    let _cloud_presence_handle =
-        fleethud_daemon::cloud::spawn_auto_collector(db_path.to_path_buf());
 
     let state = fleethud_daemon::api::AppState {
         db: orchestrator.db(),
