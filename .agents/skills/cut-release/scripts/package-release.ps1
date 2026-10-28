@@ -14,6 +14,8 @@ if (-not (Test-Path $Csc)) { throw ".NET Framework C# compiler is required" }
 $Out = Join-Path $RepoRoot "web/public/downloads"
 & node scripts/check-console.mjs
 if ($LASTEXITCODE -ne 0) { throw "Embedded console JavaScript is invalid" }
+& node scripts/check-native-navigation.mjs
+if ($LASTEXITCODE -ne 0) { throw "Native console navigation/recovery regression failed" }
 
 & $Cargo build --locked -p fleethud --release
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }

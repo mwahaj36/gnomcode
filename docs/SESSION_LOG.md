@@ -2,6 +2,28 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — v1.5.1 follow-up packages
+
+- Rebuilt Windows x64 engine/setup and Linux x64/ARM64 binaries from the navigation and compact-tour fixes. Updated all release metadata, installer mirrors and checksum manifests to 1.5.1; retained published historical artifacts.
+- Full Windows Rust gate including cargo-deny, Rust 1.87 compatibility, Linux clippy/workspace tests, ARM64 version smoke, production Next build, native navigation/JavaScript, rendered tour density, shared presenters, settings failures and version synchronization passed.
+- Installer payload/version validation, isolated Windows updater tests, Unix install/corrupt-manifest preservation and packaging architecture/permissions tests passed. PowerShell Compress-Archive could not read the running executable with its sharing mode; the existing Python multi-platform packager completed and its resulting Windows archive passed updater validation.
+- Projects reads use the same actionable local authorization errors as other views. Native navigation regression now runs before release packaging.
+- Final review reproduced an additional direct cause of the native unavailable screen: lastReportJson, lastSessionsJson and lastQuotaJson were read without declarations. Added explicit initial values and invalidate caches on failed reads so identical successful retries replace error placeholders. The regression executes a healthy quota response followed by failure and identical recovery; it failed before the declaration fix and passed afterward. Rebuilt packages again from this corrected source.
+- Browser access was checked again and remains disabled in Work settings, so desktop/narrow visual inspection is not claimed. macOS builds remain explicitly deferred. Assumption: the landing tour should summarize Overview without clipping or changing the actual consoles.
+
+## 2026-10-28 — landing overview preview density
+
+- Replaced the full daily grid and five-column session table in the Overview tour with a compact seven-day chart and three short agent/state/token rows, preserving the same illustrative fixtures, KPIs and trust labels.
+- Kept detailed sessions in their dedicated tab, reduced tour-only row/padding density and retained reduced-motion behavior. The actual web/local console layouts are unaffected.
+- Verification: a rendered-component regression failed on the full table before the change, then passed for three compact rows/seven bars and retained Sessions details. Production Next build passed. Browser visual tooling remains unavailable.
+
+## 2026-10-28 — native console authorization survives navigation
+
+- User screenshot showed a rendered console with all local reads unavailable. Direct authenticated daemon probes returned 200 for report, sessions and quota. Reproduction showed setView replaced the URL with `/` or `/#view`, dropping the bearer query; a subsequent page reload lost authorization. The brand link also navigated to an unauthenticated root.
+- Preserve the complete current query when changing views or following the brand link. No auth bypass, automatic credential recovery or persistent browser token storage was added.
+- Local reads now expose actionable authorization failures, and failed report reads resolve the daily-activity loading state. Render caches are committed only after successful rendering so a transient UI failure can be retried.
+- Verification: functional navigation/reload and failed-401 regression reproduced the issue before the fix; native script/target checks and full Rust gate passed.
+
 ## 2026-10-28 — reconcile final redesign with current main
 
 - Final fetch found main had advanced through PRs 44–46, including the owner's withdrawal of hosted cloud sessions/browser device pairing. Integrated that main history before merge, retaining private desktop credential handling, desktop summary sync and the existing manual account-token flow while removing hosted-session reads/collectors from the redesigned web UI.

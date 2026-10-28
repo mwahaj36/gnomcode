@@ -3,6 +3,15 @@
 All notable changes to FleetHUD are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] — 2026-10-28
+
+### Fixed
+- Keep the landing Overview tour compact: three summary metrics, seven short chart bars and three agent rows. Detailed sessions remain in the Sessions tab.
+- Preserve local-console authorization when switching views or following the brand link, so reloading does not lose access.
+- Resolve failed report loading states and show actionable authorization recovery guidance for local reads.
+- Initialize native response caches and clear them after failed reads so healthy responses and retries render correctly.
+- Rebuild Windows x64 and Linux x64/ARM64 packages and synchronize website/install versions. macOS builds remain deferred.
+
 ## [1.5.0] — 2026-10-28
 
 ### Changed

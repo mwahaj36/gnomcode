@@ -429,11 +429,11 @@
 <body>
   <header class="app-header">
     <div class="header-left">
-      <a class="app-brand" href="/" aria-label="spawnt local console">
+      <a class="app-brand" href="/" onclick="switchTab('overview'); return false" aria-label="spawnt local console">
         <span class="sp-brand-mark" aria-hidden="true"></span>
         <span>spawnt</span>
       </a>
-<nav class="header-links" aria-label="App navigation"><a href="#overview" onclick="switchTab('overview')">Console</a><a href="#settings" onclick="switchTab('settings')">Settings</a></nav>
+<nav class="header-links" aria-label="App navigation"><a href="#overview" onclick="switchTab('overview'); return false">Console</a><a href="#settings" onclick="switchTab('settings'); return false">Settings</a></nav>
     </div>
     <div class="header-right">
       <button class="theme-control" id="theme-control" type="button" onclick="cycleTheme()" aria-label="Theme: system. Switch mode">Theme / system</button>
@@ -866,6 +866,12 @@
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
     let activeView = 'overview';
+    let lastReportJson = '';
+    let lastSessionsJson = '';
+    let lastQuotaJson = '';
+
+    function consoleViewUrl(view) { const url = new URL(window.location.href); url.hash = view === 'overview' ? '' : view; return url.pathname + url.search + url.hash; }
+    document.querySelector('.app-brand').href = consoleViewUrl('overview');
 
     function setView(view, updateUrl = true) {
       document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view[0].toUpperCase() + view.slice(1);
@@ -883,7 +889,7 @@
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
-      if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', view === 'overview' ? '/' : `/#${view}`);
+      if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
     }
 
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
@@ -1001,7 +1007,7 @@
 
     async function apiJson(url, options = { headers }) {
       const response = await fetch(url, options);
-      if (!response.ok) throw new Error(response.status === 401 ? 'Authorization expired. Reopen FleetHUD from its tray icon or shortcut.' : `FleetHUD request failed (${response.status}). Restart FleetHUD if this persists.`);
+      if (!response.ok) throw new Error(response.status === 401 ? 'Local authorization is missing or expired. Close this window and reopen spawnt from its tray icon or shortcut.' : `spawnt request failed (${response.status}). Retry Reload view or restart spawnt if this persists.`);
       return response.json();
     }
     function escapeHtml(value) {
@@ -1361,15 +1367,12 @@
           d.setHours(0, 0, 0, 0);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
-        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Report request failed');
-        const res = await response.json();
-        if (!res || !res.timeline) return false;
+        const res = await apiJson(url, { headers, signal: AbortSignal.timeout(15000) });
+        if (!res || !res.timeline) throw new Error('The local report response is incomplete. Retry Reload view.');
         if (requestedRange !== currentTimeline) return true;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastReportJson) return true;
-        lastReportJson = jsonStr;
 
         document.getElementById('connection-status').hidden = true;
         const tl = res.timeline;
@@ -1403,9 +1406,13 @@
 
         // Render the shared provider breakdown.
         presentation.updateProviders(document.getElementById('providers-container'), tl);
+        lastReportJson = jsonStr;
         return true;
       } catch (e) {
         console.error('Failed to load report', e);
+        lastReportJson = '';
+        showConnectionError(e);
+        document.getElementById('daily-activity').textContent = 'Daily activity unavailable. ' + e.message;
         summaryState.report = null; await refreshSummary();
         document.getElementById('providers-container').innerHTML = '<p class="local-view-message">Usage data is unavailable. Retry Reload view when the local daemon is reachable.</p>';
         return false;
@@ -1418,9 +1425,7 @@
       try {
         let url = `/api/v1/projects?range=${encodeURIComponent(range)}`;
         if (range === 'today') { const start = new Date(); start.setHours(0, 0, 0, 0); url += `&from=${encodeURIComponent(start.toISOString())}`; }
-        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Project query failed');
-        const projects = await response.json();
+        const projects = await apiJson(url, { headers, signal: AbortSignal.timeout(15000) });
         if (range !== currentTimeline) return true;
         const presentation = await import('/console-presentation.js');
         container.innerHTML = presentation.renderProjects(projects);
@@ -1449,15 +1454,12 @@
         const requestedPage = currentPage;
         const agent = document.getElementById('agent-filter').value;
         const status = document.getElementById('status-filter').value;
-        const response = await fetch(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Sessions request failed');
-        const res = await response.json();
+        const res = await apiJson(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers, signal: AbortSignal.timeout(15000) });
         if (!res) return false;
         if (requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastSessionsJson) return true;
-        lastSessionsJson = jsonStr;
 
         summaryState.activeCount = res.active_count ?? null; await refreshSummary();
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
@@ -1466,9 +1468,12 @@
 
         const presentation = await import('/console-presentation.js');
         presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
+        lastSessionsJson = jsonStr;
         return true;
       } catch (e) {
         console.error('Failed to load sessions', e);
+        lastSessionsJson = '';
+        showConnectionError(e);
         summaryState.activeCount = null; await refreshSummary();
         document.getElementById('sessions-table').textContent = 'Session data is unavailable. Retry Reload view when the local daemon is reachable.';
         return false;
@@ -1590,18 +1595,17 @@
 
     async function loadQuota() {
       try {
-        const response = await fetch('/api/v1/quota', { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Quota request failed');
-        const res = await response.json();
+        const res = await apiJson('/api/v1/quota', { headers, signal: AbortSignal.timeout(15000) });
         if (!Array.isArray(res)) throw new Error('Invalid quota response');
         summaryState.quotaCount = res.length; await refreshSummary();
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastQuotaJson) return true;
-        lastQuotaJson = jsonStr;
         const presentation = await import('/console-presentation.js');
         document.getElementById('quota-table').innerHTML = presentation.renderQuota(res, new Date().toISOString());
+        lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
+        lastQuotaJson = '';
         summaryState.quotaCount = null; await refreshSummary();
         document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;
