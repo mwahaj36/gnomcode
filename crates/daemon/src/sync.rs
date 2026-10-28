@@ -99,7 +99,8 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, fleethud_store::Error> 
     let calendar_month = db.generate_usage_report_timeline("month", None, None)?;
     let all = db.generate_usage_report_timeline("all", None, None)?;
     let (sessions, _) = db.list_sessions_paginated(None, None, 0, 200)?;
-    let active_count = sessions.iter().filter(|session| session.is_active).count();
+    let (_, ongoing_count) = db.list_sessions_paginated(None, Some("ongoing"), 0, 1)?;
+    let (_, active_count) = db.list_sessions_paginated(None, Some("active"), 0, 1)?;
     let count = sessions.len();
     Ok(json!({
         "generated_at": Utc::now().to_rfc3339(),
@@ -109,6 +110,7 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, fleethud_store::Error> 
         "sessions": sessions,
         "quota": crate::api::quota_views(db.get_latest_quota_snapshots()?),
         "active_count": active_count,
+        "ongoing_count": ongoing_count,
         "total_count": count,
         "total_pages": 1,
         "context_relays": db.list_context_relays().unwrap_or_default(),

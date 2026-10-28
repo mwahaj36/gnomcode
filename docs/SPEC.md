@@ -276,18 +276,18 @@ stateDiagram-v2
     Idle --> Thinking: new prompt
     Thinking --> Error: api error
     Error --> Thinking: retry
-    Idle --> Ended: no process and no writes for 10 min
+    Idle --> Ended: explicit source-reported closure
     Ended --> [*]
 ```
 
-Liveness = log recency + **process scanner** (`sysinfo`, every 3 s, matches agent processes to sessions by `cwd`) + hook events when integrated.
+Presence is computed in Rust for all agents: two-minute idle grace, approval waits retained, explicit open execution retained, and stale unsupported observations classified inactive. Silence never establishes ended. The same projection feeds console, tray, CLI and snapshots (ADR 0010).
 
 **Redactor:** strips token-like strings (`sk-…`, `ghp_…`, `AKIA…`, `xox?-…`, JWTs, high-entropy > 32 chars), env assignments, then truncates to 120 chars. Applied **before** anything is written to disk.
 
 ### 3.8 Pricing engine
 
 - Bundled snapshot of LiteLLM `model_prices_and_context_window.json`, tagged `pricing_version`; optional daily refresh; user overrides in `pricing.toml`.
-- Console projections declare priced/unpriced invocation coverage for partial subtotals; unpriced usage never zero-fills a complete price. Today is hourly since local midnight, longer views are daily UTC, and calendar month is source-owned. Ongoing sessions lead Overview beside compact limits; local project filtering precedes session pagination (ADR 0009).
+- Console projections declare priced/unpriced invocation coverage for partial subtotals; unpriced usage never zero-fills a complete price. Today is hourly since local midnight, longer views are daily UTC, and calendar month is source-owned. Overview orders activity, spend summary, then a provider-limits/ongoing-session column pair; local project filtering precedes session pagination (ADR 0009).
 - Cache writes priced by TTL (5m vs 1h).
 - Subscription surfaces display **"API-equivalent"**, never "spent".
 - Raw tokens are always stored so history can be re-priced.
@@ -837,6 +837,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0007](./adr/0007-shared-console-renderers.md) | Shared console presenters and navigation layout, Rust daily measurements, source-generated freshness and authenticated sync status | Accepted |
 | [0008](./adr/0008-platform-release-fallbacks.md) | Versioned native archives and browser-console launchers; retain existing Windows tray and unsigned cross-platform fallbacks | Accepted |
 | [0009](./adr/0009-console-pricing-coverage-and-periods.md) | Rust pricing coverage, local-midnight hourly Today, source calendar month, ongoing-first Overview and project filtering | Accepted |
+| [0010](./adr/0010-session-presence-and-focus.md) | Shared two-minute presence rules, truthful window focus and separate app/tray icon scales | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

@@ -180,7 +180,7 @@ export default function DocsPage() {
               <div className="bg-card border border-border rounded-lg p-4">
                 <div className="text-accent font-semibold mb-1">Project identifiers are minimized</div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Before any cloud synchronization (e.g., Supabase), local file paths are truncated to directory basenames, and full paths are irreversibly hashed using HMAC-SHA256 with a local machine key.
+                  Before account synchronization, local file paths are truncated to directory basenames, and full paths are irreversibly hashed using HMAC-SHA256 with a local machine key.
                 </div>
               </div>
 
@@ -315,15 +315,13 @@ export default function DocsPage() {
           {/* Pricing and quota remain in the local Rust engine. */}
           <section id="pricing-engine" className="sp-docs-section mb-14 scroll-mt-24">
             <h2>Cost and trust</h2>
-            <p>spawnt calculates token cost, cache savings, quota usage, and rollups in its local Rust engine. This guide does not duplicate model rates or compute totals.</p>
+            <p>spawnt calculates token costs, cache savings and quota usage locally. Costs use the rate catalog available on your desktop; unpriced usage is identified separately.</p>
             <h3>Reading model and pricing labels</h3>
             <dl className="sp-docs-label-list">
               <div><dt>Frontier</dt><dd>A model family or capability tier label. It is not a price or a measurement-confidence level.</dd></div>
               <div><dt>Tiered</dt><dd>The provider rate depends on a tier or request conditions such as context length, volume, or service level. A rate-based cost remains estimated unless usage is reconciled against an API or invoice.</dd></div>
               <div><dt>Exact</dt><dd>In a provider pricing catalog, the rate is listed by the provider for the named model and conditions. In spawnt's live views, <code>EXACT</code> separately means the measurement came directly from an exact local record or provider limit response.</dd></div>
             </dl>
-            <p><strong>Provider family matters:</strong> Claude Fable 5 and Claude Fable 5.1 are Anthropic Claude models, never Gemini models. See <a href="https://www.anthropic.com/claude/fable" target="_blank" rel="noreferrer">Anthropic's Claude Fable page</a> for current model details.</p>
-            <p className="sp-docs-provider-example"><strong>Published rate example:</strong> Anthropic lists Claude Fable 5.1 at $10 per million input tokens and $50 per million output tokens for Claude API usage. Provider rates and conditions can change; this example is not used to calculate spawnt data.</p>
             <div className="sp-docs-trust-grid" aria-label="Measurement trust levels">
               <div><strong>EXACT</strong><p>Measured from local usage records or an exact provider limit response.</p></div>
               <div><strong>EST</strong><p>Calculated from a rate catalog when provider usage is not an invoice.</p></div>
@@ -364,7 +362,7 @@ export default function DocsPage() {
                   Q: Can I use spawnt completely offline?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Yes. The local CLI, daemon, SQLite store, and tray app operate 100% locally with zero internet access required. Connecting to Supabase is strictly optional for cross-device roaming.
+                  Yes. The local CLI, daemon, SQLite store, and tray app operate 100% locally with zero internet access required. Account sync is optional for viewing desktop activity across devices.
                 </div>
               </div>
             </div>
