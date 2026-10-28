@@ -287,6 +287,7 @@ Liveness = log recency + **process scanner** (`sysinfo`, every 3 s, matches agen
 ### 3.8 Pricing engine
 
 - Bundled snapshot of LiteLLM `model_prices_and_context_window.json`, tagged `pricing_version`; optional daily refresh; user overrides in `pricing.toml`.
+- Console projections declare priced/unpriced invocation coverage for partial subtotals; unpriced usage never zero-fills a complete price. Today is hourly since local midnight, longer views are daily UTC, and calendar month is source-owned. Ongoing sessions lead Overview beside compact limits; local project filtering precedes session pagination (ADR 0009).
 - Cache writes priced by TTL (5m vs 1h).
 - Subscription surfaces display **"API-equivalent"**, never "spent".
 - Raw tokens are always stored so history can be re-priced.
@@ -835,6 +836,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0006](./adr/0006-shared-spawnt-console-ui.md) | Shared token source and matched local/cloud presentation; preserve separate data adapters and existing native runtime pending a separate migration | Accepted |
 | [0007](./adr/0007-shared-console-renderers.md) | Shared console presenters and navigation layout, Rust daily measurements, source-generated freshness and authenticated sync status | Accepted |
 | [0008](./adr/0008-platform-release-fallbacks.md) | Versioned native archives and browser-console launchers; retain existing Windows tray and unsigned cross-platform fallbacks | Accepted |
+| [0009](./adr/0009-console-pricing-coverage-and-periods.md) | Rust pricing coverage, local-midnight hourly Today, source calendar month, ongoing-first Overview and project filtering | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

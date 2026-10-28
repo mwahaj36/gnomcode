@@ -4,11 +4,17 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary, updateOngoing } from "../../lib/console-presentation.js";
 
 function SummaryPanel({ activeCount, report, quotaCount }: { activeCount: number | null; report: unknown; quotaCount: number | null }) {
   const element = useRef<HTMLDivElement>(null);
   useEffect(() => { if (element.current) updateSummary(element.current, { activeCount, report, quotaCount }); }, [activeCount, report, quotaCount]);
+  return <div ref={element} />;
+}
+
+function OngoingPanel({ sessions }: { sessions: SessionItem[] | null }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateOngoing(element.current, sessions); }, [sessions]);
   return <div ref={element} />;
 }
 
@@ -150,6 +156,8 @@ export default function ConsolePage() {
 
   // Filters & Pagination
   const [timeline, setTimeline] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [projectNames, setProjectNames] = useState<string[]>([]);
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -157,6 +165,7 @@ export default function ConsolePage() {
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
+  const [ongoing, setOngoing] = useState<SessionItem[] | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quota, setQuota] = useState<QuotaItem[]>([]);
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
@@ -180,7 +189,8 @@ export default function ConsolePage() {
 
   useEffect(() => {
     lastDesktopSnapshot.current = null;
-    setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
+    setProjectNames([]); setProjectFilter('all');
+    setOngoing(null); setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
     setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
     setRefreshMessage(""); setConnectedSource(user ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
@@ -238,11 +248,14 @@ export default function ConsolePage() {
         refreshed = !desktop.error;
         if (refreshed) setLastSuccessfulUpdate(new Date());
         const allSessions: SessionItem[] = [...(snap?.sessions || [])];
+        setProjectNames([...new Set(allSessions.map((session: SessionItem) => session.project_name))].sort());
+        setOngoing(allSessions.filter((session: SessionItem) => session.is_active));
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
+          (projectFilter === "all" || session.project_name === projectFilter) &&
           (agentFilter === "all" || session.agent === agentFilter) &&
           (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
         setSessions(filtered.slice((page-1)*10,page*10));
-        setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
+        setReport(snap?.timelines?.[timeline] || (timeline === "today" ? snap?.timeline : null) || null);
         setQuota(snap?.quota || []);
         setSnapshotGeneratedAt(snap?.generated_at || null);
         setRoiByProvider(snap?.roi_by_provider || []);
@@ -277,7 +290,7 @@ export default function ConsolePage() {
     refreshInFlight.current = false;
     }
     return refreshed;
-  }, [user, timeline, agentFilter, statusFilter, page]);
+  }, [user, timeline, projectFilter, agentFilter, statusFilter, page]);
 
   const refreshCloudSnapshot = async () => {
     if (manualRefreshInFlight.current || refreshing) return;
@@ -461,7 +474,7 @@ export default function ConsolePage() {
           )}
         </div>
         <div className="flex gap-2">
-          {["today", "7d", "30d", "all"].map((t) => (
+          {["today", "month", "7d", "30d", "all"].map((t) => (
             <button
               key={t}
               onClick={() => { setTimeline(t); setPage(1); }}
@@ -472,7 +485,7 @@ export default function ConsolePage() {
                   : "border-border text-muted hover:border-accent"
               }`}
             >
-              {t === "today" ? "Today" : t === "7d" ? "7 Days" : t === "30d" ? "30 Days" : "All Time"}
+              {t === "today" ? "Today" : t === "month" ? "This month" : t === "7d" ? "7 Days" : t === "30d" ? "30 Days" : "All Time"}
             </button>
           ))}
         </div>
@@ -480,6 +493,7 @@ export default function ConsolePage() {
 
       }
       {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
+      {activeView === "overview" && <div className="sp-overview-live"><OngoingPanel sessions={ongoing} /><details className="sp-overview-limits" open><summary>Provider limits</summary><div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} /></details></div>}
       {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
 
       {activeView === "usage" && <ProvidersPanel report={report} />}
@@ -531,15 +545,16 @@ export default function ConsolePage() {
         </div>
       </div>}
 
-      {(activeView === "overview" || activeView === "limits") && <div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} />}
+      {activeView === "limits" && <div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} />}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
       <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
       {/* Live & Historical Agent Sessions */}
-      {(activeView === "overview" || activeView === "sessions") && <div className="bg-card border border-border rounded-lg p-5 font-mono">
+      {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div className="text-xs text-muted uppercase font-semibold">Live & Historical Agent Sessions</div>
           <div className="flex gap-2">
-            <select
+            <select aria-label="Project" value={projectFilter} onChange={event => { setProjectFilter(event.target.value); setPage(1); }}><option value="all">All projects</option>{projectNames.map(project => <option key={project} value={project}>{project}</option>)}</select>
+            <select aria-label="Agent"
               value={agentFilter}
               onChange={(e) => { setAgentFilter(e.target.value); setPage(1); }}
               className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"
@@ -550,7 +565,7 @@ export default function ConsolePage() {
               <option value="antigravity">Antigravity</option>
               <option value="gemini-cli">Gemini CLI</option>
             </select>
-            <select
+            <select aria-label="Session status"
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"

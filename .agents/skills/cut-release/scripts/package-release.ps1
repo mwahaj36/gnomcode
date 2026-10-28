@@ -16,6 +16,8 @@ $Out = Join-Path $RepoRoot "web/public/downloads"
 if ($LASTEXITCODE -ne 0) { throw "Embedded console JavaScript is invalid" }
 & node scripts/check-native-navigation.mjs
 if ($LASTEXITCODE -ne 0) { throw "Native console navigation/recovery regression failed" }
+& powershell -NoProfile -File scripts/check-tray.ps1
+if ($LASTEXITCODE -ne 0) { throw "Native tray icon regression failed" }
 
 & $Cargo build --locked -p fleethud --release
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
