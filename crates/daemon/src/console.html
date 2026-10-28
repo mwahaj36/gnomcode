@@ -866,6 +866,9 @@
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
     let activeView = 'overview';
+    let lastReportJson = '';
+    let lastSessionsJson = '';
+    let lastQuotaJson = '';
 
     function consoleViewUrl(view) { const url = new URL(window.location.href); url.hash = view === 'overview' ? '' : view; return url.pathname + url.search + url.hash; }
     document.querySelector('.app-brand').href = consoleViewUrl('overview');
@@ -1407,6 +1410,7 @@
         return true;
       } catch (e) {
         console.error('Failed to load report', e);
+        lastReportJson = '';
         showConnectionError(e);
         document.getElementById('daily-activity').textContent = 'Daily activity unavailable. ' + e.message;
         summaryState.report = null; await refreshSummary();
@@ -1421,9 +1425,7 @@
       try {
         let url = `/api/v1/projects?range=${encodeURIComponent(range)}`;
         if (range === 'today') { const start = new Date(); start.setHours(0, 0, 0, 0); url += `&from=${encodeURIComponent(start.toISOString())}`; }
-        const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Project query failed');
-        const projects = await response.json();
+        const projects = await apiJson(url, { headers, signal: AbortSignal.timeout(15000) });
         if (range !== currentTimeline) return true;
         const presentation = await import('/console-presentation.js');
         container.innerHTML = presentation.renderProjects(projects);
@@ -1470,6 +1472,7 @@
         return true;
       } catch (e) {
         console.error('Failed to load sessions', e);
+        lastSessionsJson = '';
         showConnectionError(e);
         summaryState.activeCount = null; await refreshSummary();
         document.getElementById('sessions-table').textContent = 'Session data is unavailable. Retry Reload view when the local daemon is reachable.';
@@ -1602,6 +1605,7 @@
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
+        lastQuotaJson = '';
         summaryState.quotaCount = null; await refreshSummary();
         document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;

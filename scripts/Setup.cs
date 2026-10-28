@@ -13,8 +13,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("spawnt Setup")]
 [assembly: AssemblyProduct("spawnt")]
 [assembly: AssemblyCompany("spawnt")]
-[assembly: AssemblyVersion("1.5.0.0")]
-[assembly: AssemblyFileVersion("1.5.0.0")]
+[assembly: AssemblyVersion("1.5.1.0")]
+[assembly: AssemblyFileVersion("1.5.1.0")]
 
 public static class DeviceTheme
 {
@@ -113,7 +113,7 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v1.5.0  ·  64-bit Native";
+        lblVer.Text = "v1.5.1  ·  64-bit Native";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
         lblVer.ForeColor = Color.FromArgb(141, 153, 170);
         lblVer.Location = new Point(36, 225);
@@ -236,7 +236,7 @@ public class SetupForm : Form
                     string uninstallExe = Path.Combine(installDir, "FleetHUD-Uninstall.exe");
                     string ico = Path.Combine(installDir, "fleethud.ico");
                     key.SetValue("DisplayName", "spawnt");
-                    key.SetValue("DisplayVersion", "1.5.0");
+                    key.SetValue("DisplayVersion", "1.5.1");
                     key.SetValue("Publisher", "spawnt");
                     key.SetValue("DisplayIcon", ico + ",0");
                     key.SetValue("InstallLocation", installDir);
