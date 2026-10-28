@@ -1,3 +1,5 @@
+> Withdrawn in v1.4.1 at the owner’s request. Retained as a historical decision record.
+
 # 0004 — Opt-in cloud session collectors
 
 - **Status:** Accepted

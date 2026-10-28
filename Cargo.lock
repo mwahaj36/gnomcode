@@ -616,6 +616,7 @@ name = "fleethud-platform"
 version = "1.4.0"
 dependencies = [
  "fleethud-core",
+ "libc",
  "obfstr",
  "sysinfo",
  "tempfile",
