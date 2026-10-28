@@ -23,7 +23,7 @@ Furthermore, routing conversation content or tool outputs unencrypted through a 
    - Subsequent traffic uses directional AES-256-GCM keys and monotonic sequence numbers.
 
 3. **Remote Capability Boundaries**:
-   - The phone interface pages through available conversation history and polls for subsequent responses. Prompt input is limited to an idle Spawnt-hosted session with a verified local PTY binding; an explicit model handoff may launch a fresh supported agent session. Conversation traffic uses the encrypted Remote channel and never the unencrypted metadata sync.
+   - The phone interface and the web console's Chat panel page through available conversation history and poll for subsequent responses after two-device pairing. Prompt input is limited to an idle Spawnt-hosted session with a verified local PTY binding; an explicit model handoff may launch a fresh supported agent session. Conversation traffic uses the encrypted Remote channel and never the unencrypted metadata sync.
    - Destructive operations, arbitrary file downloads, raw terminal command injection, and permission-escalation flags are strictly forbidden over remote channels.
    - Revocation from the desktop closes the room and invalidates keys. Starting a new pairing generates a fresh room and keypair.
 

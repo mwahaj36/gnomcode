@@ -12,7 +12,7 @@
 
 > **Implementation status:** The local model-switch path launches a fresh supported agent session and submits a redacted handoff prompt; live vendor-agent validation remains pending. Remote has an opt-in encrypted relay, two-device code confirmation, chat history paging and bounded prompting for idle Spawnt-hosted sessions. Pairing requires a signed license or a live validated Pro account; the legacy unencrypted cloud command intake is retired. Live cross-device validation and the independent security review remain pending before Remote is offered as a production feature.
 
-> **Remote chat:** A paired device must be able to view the complete available conversation history, submit prompts to the active agent, and receive subsequent responses as they arrive. Conversation traffic must use the end-to-end encrypted Remote channel and must never enter the existing unencrypted metadata sync. Preserve agent-owned history and enforce the same permission boundaries as local interaction.
+> **Remote chat:** A paired device must be able to view the complete available conversation history, submit prompts to the active agent, and receive subsequent responses as they arrive. The phone page and web console Chat panel use the same end-to-end encrypted Remote channel; the web console requires the desktop pairing link before it can show conversation content. Chat must never enter the existing unencrypted metadata sync. Preserve agent-owned history and enforce the same permission boundaries as local interaction.
 >
 > **Rename target:** `spawnt`, `SPAWNT_HOME`, `~/.spawnt`, renamed IPC, app IDs, repositories and documentation, without a legacy executable, home-directory migration, or compatibility shim; no users require migration. Centralize branding and base URLs. The source and releases repositories are to be renamed in place, preserving redirects.
 >
@@ -301,7 +301,7 @@ stateDiagram-v2
     Ended --> [*]
 ```
 
-Presence is computed in Rust for all agents: two-minute idle grace, approval waits retained, explicit open execution retained, and stale unsupported observations classified inactive. Silence never establishes ended. The same projection feeds console, tray, CLI and snapshots (ADR 0010).
+Presence is computed in Rust for all agents: two-minute idle grace, approval waits and explicit open execution retained for up to 24 hours after the last source event, and older unresolved observations classified inactive. This bound prevents a missing completion event from displaying a session as running for days. Silence never establishes ended; the last source state remains in history. The same projection feeds console, tray, CLI and snapshots (ADR 0010).
 
 **Redactor:** strips token-like strings (`sk-…`, `ghp_…`, `AKIA…`, `xox?-…`, JWTs, high-entropy > 32 chars), env assignments, then truncates to 120 chars. Applied **before** anything is written to disk.
 
@@ -916,7 +916,7 @@ Phase 1 rename implementation: the Rust packages and sole CLI binary are named S
 
 **Rename decision, 2026-10-28:** Retire the previous product name entirely. Spawnt uses only `SPAWNT_HOME` and `~/.spawnt`; automatic migration and compatibility aliases are removed because the product has no users. Existing local directories are not deleted. Earlier migration and alias status notes above are superseded.
 
-Phase 1 cloud naming: local code and schema now use `spawnt_sync_state`. The existing opt-in Supabase metadata sync remains a supported feature, but the new SQL schema must be applied to the owner project before a deployment can connect to the renamed table. No chat content may be sent through this table.
+Phase 1 cloud naming: local code and schema now use `spawnt_sync_state`. The existing opt-in Supabase metadata sync remains a supported feature. The owner project requires the table, owner-only RLS policies, and `SELECT`, `INSERT`, `UPDATE` grants to `authenticated` from `supabase_live_sync_v2.sql`. No chat content may be sent through this table.
 
 Phase 1 packaging: Reqwest uses its Rust TLS backend to remove the Linux system OpenSSL dependency from standalone binaries. Native trust verification remains enabled. npm staging requires all seven actual platform artifacts and approved legal inputs; the offline tarball smoke script exercises version, doctor and report.
 

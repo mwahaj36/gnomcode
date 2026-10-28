@@ -60,6 +60,7 @@ function cycleTheme() {
         button.tabIndex = selected ? 0 : -1;
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
+      if (view !== 'sessions') document.getElementById('session-chat-panel').hidden = true;
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
     }
@@ -607,6 +608,40 @@ function cycleTheme() {
       }
     }
 
+    let activeChatSession = '';
+    let chatEvents = [];
+    async function loadChat(sessionId, earlier = false) {
+      if (!sessionId) return;
+      const panel = document.getElementById('session-chat-panel');
+      const status = document.getElementById('chat-status');
+      status.textContent = 'Loading conversation...';
+      try {
+        const before = earlier && chatEvents.length ? `&before=${encodeURIComponent(chatEvents[0].event_id)}` : '';
+        const page = await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat?limit=500${before}`, { headers });
+        activeChatSession = sessionId;
+        chatEvents = earlier ? [...page, ...chatEvents] : page;
+        const presentation = await import('/console-presentation.js');
+        presentation.updateChat(document.getElementById('chat-stream'), chatEvents);
+        document.getElementById('chat-session-label').textContent = sessionId;
+        document.getElementById('chat-earlier').hidden = page.length < 500;
+        document.getElementById('chat-delete').hidden = chatEvents.length === 0;
+        status.textContent = `${chatEvents.length} recorded message${chatEvents.length === 1 ? '' : 's'}`;
+        panel.hidden = false;
+        if (!earlier) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {
+        status.textContent = 'Could not load conversation history.';
+        panel.hidden = false;
+      }
+    }
+
+    async function deleteChat() {
+      if (!activeChatSession || !confirm('Permanently delete local chat history for this session? This action cannot be undone.')) return;
+      try {
+        await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/chat`, { method: 'DELETE', headers });
+        await loadChat(activeChatSession);
+      } catch { document.getElementById('chat-status').textContent = 'Could not delete local chat history.'; }
+    }
+
     document.addEventListener('click', event => {
       const project = event.target.closest('[data-project-id]');
       if (!project) return;
@@ -947,7 +982,7 @@ function cycleTheme() {
 
     async function startRemote() {
       try { showRemoteStatus(await apiJson('/api/v1/remote/pairing', { headers })); }
-      catch { document.getElementById('remote-status').textContent = 'Could not start pairing. Check your Pro account and relay configuration.'; }
+      catch (error) { document.getElementById('remote-status').textContent = error.message.includes('503') ? 'Remote relay is not configured for this desktop build. Pairing is unavailable until a relay URL is installed.' : 'Could not start pairing. Check your Pro account and relay connection.'; }
     }
 
     async function confirmRemote() {
@@ -970,28 +1005,6 @@ function cycleTheme() {
       const action = target.dataset.action;
       if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); return; }
       if (action.startsWith('export:')) { exportData(action.slice(7)); return; }
-      async function loadChat(sessionId) {
-      if (!sessionId) return;
-      try {
-        const events = await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { headers });
-        const presentation = await import('/console-presentation.js');
-        const container = document.getElementById('chat-stream');
-        if (container) presentation.updateChat(container, events || []);
-      } catch (e) {
-        console.error('Failed to load chat history', e);
-      }
-    }
-
-    async function deleteChat(sessionId) {
-      if (!sessionId || !confirm('Permanently delete local chat history for this session? This action cannot be undone.')) return;
-      try {
-        await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });
-        await loadChat(sessionId);
-      } catch (e) {
-        console.error('Failed to delete chat history', e);
-      }
-    }
-
     async function handlePermissionAction(sessionId, action, toolCallId) {
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/permissions`, {
@@ -1007,6 +1020,8 @@ function cycleTheme() {
 
     const actions = { theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'delete-chat': deleteChat, 'load-chat': loadChat,
+      'earlier-chat': () => loadChat(activeChatSession, true),
+      'close-chat': () => { document.getElementById('session-chat-panel').hidden = true; },
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
