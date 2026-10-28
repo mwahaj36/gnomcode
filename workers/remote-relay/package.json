@@ -1,0 +1,17 @@
+{
+  "name": "spawnt-remote-relay",
+  "version": "0.9.0",
+  "description": "Zero-knowledge end-to-end encrypted relay for Spawnt remote companion.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "keywords": [
+    "spawnt",
+    "relay",
+    "e2ee",
+    "websocket"
+  ],
+  "author": "Wahaj",
+  "license": "SEE LICENSE IN LICENSE"
+}

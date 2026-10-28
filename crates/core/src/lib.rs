@@ -564,11 +564,48 @@ pub struct HandoffPacket {
     pub created_at: DateTime<Utc>,
 }
 
+/// A remote pairing session state for mobile connection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemotePairingSession {
+    /// Ephemeral room identifier.
+    pub room_id: String,
+    /// Desktop ephemeral public key (hex-encoded).
+    pub public_key: String,
+    /// 6-digit confirmation code shown on desktop and phone.
+    pub verify_code: String,
+    /// Expiration timestamp (UTC).
+    pub expires_at: DateTime<Utc>,
+}
+
+impl RemotePairingSession {
+    /// Computes a 6-digit verification code from shared key material.
+    #[must_use]
+    pub fn derive_verify_code(shared_secret: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(b"spawnt-remote-verify-v1");
+        hasher.update(shared_secret);
+        let result = hasher.finalize();
+        let num = u32::from_be_bytes([result[0], result[1], result[2], result[3]]) % 1_000_000;
+        format!("{num:06}")
+    }
+}
+
+/// A sealed ciphertext frame transmitted across the zero-knowledge relay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EncryptedRemoteFrame {
+    /// Monotonically increasing sequence number to defeat replay attacks.
+    pub sequence_num: u32,
+    /// 12-byte initialization vector / nonce (hex-encoded).
+    pub nonce: String,
+    /// AEAD ciphertext (hex-encoded).
+    pub ciphertext: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentId, ChatEvent, ChatRole, HandoffPacket, Project, RoutingPolicy, Session, TrustLevel,
-        UsageRecord, UserSettings,
+        AgentId, ChatEvent, ChatRole, EncryptedRemoteFrame, HandoffPacket, Project,
+        RemotePairingSession, RoutingPolicy, Session, TrustLevel, UsageRecord, UserSettings,
     };
 
     #[test]
@@ -708,5 +745,25 @@ mod tests {
         let parsed: HandoffPacket = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed.target_model, "o3");
         assert_eq!(parsed.touched_files.len(), 1);
+    }
+
+    #[test]
+    fn remote_pairing_verify_code_and_frame_serialization() {
+        let secret = [42u8; 32];
+        let code1 = RemotePairingSession::derive_verify_code(&secret);
+        let code2 = RemotePairingSession::derive_verify_code(&secret);
+        assert_eq!(code1, code2);
+        assert_eq!(code1.len(), 6);
+        assert!(code1.chars().all(|c| c.is_ascii_digit()));
+
+        let frame = EncryptedRemoteFrame {
+            sequence_num: 1,
+            nonce: "0102030405060708090a0b0c".to_owned(),
+            ciphertext: "deadbeefcafe".to_owned(),
+        };
+        let json = serde_json::to_string(&frame).expect("frame json");
+        let parsed: EncryptedRemoteFrame = serde_json::from_str(&json).expect("parse frame");
+        assert_eq!(parsed.sequence_num, 1);
+        assert_eq!(parsed.ciphertext, "deadbeefcafe");
     }
 }

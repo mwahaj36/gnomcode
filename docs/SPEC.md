@@ -858,6 +858,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0016](./adr/0016-pty-launcher.md) | Independent PTY owner, ConPTY and POSIX terminal sessions, loopback API, and authenticated reattachment | Accepted |
 | [0017](./adr/0017-structured-chat-and-history.md) | Structured drivers, local redacted conversation history, retention, hard deletion, and sandboxed file/diff inspection | Accepted |
 | [0018](./adr/0018-router-and-zero-token-handoff.md) | Model router, zero-token handoff compilation, switch/resume, and CLI policy controls | Accepted |
+| [0019](./adr/0019-remote-e2ee-relay.md) | End-to-end encrypted remote access, zero-knowledge Cloudflare relay room, ephemeral SAS verification, and mobile companion | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 
