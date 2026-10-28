@@ -93,7 +93,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
+        .route("/api/v1/sessions/launch", post(launch_session_handler))
+        .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
+        .route("/api/v1/sessions/{id}/pty", get(pty_stream_handler))
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
+        .route("/api/v1/models", get(models_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/projects", get(projects_handler))
         .route("/api/v1/quota", get(quota_handler))
@@ -689,6 +693,258 @@ async fn focus_session_handler(
             "message": if focused { "Opened the agent window. Select the session in the app if needed." } else { "The session window could not be opened. Open the agent app to continue." }
         }),
     ))
+}
+
+/// Request payload to launch an agent in a workspace.
+#[derive(Debug, Deserialize)]
+pub struct LaunchSessionRequest {
+    /// Agent identifier (e.g. `claude`, `codex`, `gemini`).
+    pub agent: String,
+    /// Absolute path to the repository directory.
+    pub repo_path: String,
+    /// Optional model identifier.
+    pub model: Option<String>,
+}
+
+async fn launch_session_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<LaunchSessionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let session_id = format!(
+        "{}-{}",
+        payload.agent,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    );
+    let repo = std::path::Path::new(&payload.repo_path);
+    if !repo.is_dir() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    match spawnt_pty::launch_session(&session_id, &payload.agent, repo, payload.model.as_deref())
+        .await
+    {
+        Ok(record) => Ok(Json(record)),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+async fn stop_session_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    match spawnt_pty::stop_session(&id).await {
+        Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id }))),
+        Err(_) => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// Query parameters for PTY streaming WebSocket.
+#[derive(Debug, Deserialize)]
+pub struct PtyStreamQuery {
+    /// Bearer authentication token.
+    pub token: Option<String>,
+}
+
+async fn pty_stream_handler(
+    headers: HeaderMap,
+    Query(query): Query<PtyStreamQuery>,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+    ws: axum::extract::ws::WebSocketUpgrade,
+) -> Result<impl IntoResponse, StatusCode> {
+    let authorized = if validate_auth(&headers, &state.bearer_token).is_ok() {
+        true
+    } else if let Some(t) = query.token {
+        t == state.bearer_token
+    } else {
+        false
+    };
+
+    if !authorized {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let record = spawnt_pty::load_session_record(&id).map_err(|_| StatusCode::NOT_FOUND)?;
+
+    let backend_url = format!(
+        "ws://127.0.0.1:{}/stream?token={}",
+        record.port, record.token
+    );
+
+    Ok(ws.on_upgrade(move |client_ws| async move {
+        proxy_pty_ws(client_ws, backend_url).await;
+    }))
+}
+
+async fn proxy_pty_ws(client_ws: axum::extract::ws::WebSocket, backend_url: String) {
+    use futures_util::{SinkExt, StreamExt};
+    let Ok((backend_ws, _)) = tokio_tungstenite::connect_async(&backend_url).await else {
+        return;
+    };
+    let (mut backend_write, mut backend_read) = backend_ws.split();
+    let (mut client_write, mut client_read) = client_ws.split();
+
+    let client_to_backend = async {
+        while let Some(Ok(msg)) = client_read.next().await {
+            match msg {
+                axum::extract::ws::Message::Text(t) => {
+                    let _ = backend_write
+                        .send(tokio_tungstenite::tungstenite::Message::Text(
+                            t.as_str().into(),
+                        ))
+                        .await;
+                }
+                axum::extract::ws::Message::Binary(b) => {
+                    let _ = backend_write
+                        .send(tokio_tungstenite::tungstenite::Message::Binary(b))
+                        .await;
+                }
+                axum::extract::ws::Message::Close(_) => {
+                    let _ = backend_write
+                        .send(tokio_tungstenite::tungstenite::Message::Close(None))
+                        .await;
+                    break;
+                }
+                _ => {}
+            }
+        }
+    };
+
+    let backend_to_client = async {
+        while let Some(Ok(msg)) = backend_read.next().await {
+            match msg {
+                tokio_tungstenite::tungstenite::Message::Text(t) => {
+                    if client_write
+                        .send(axum::extract::ws::Message::Text(t.as_str().into()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                tokio_tungstenite::tungstenite::Message::Binary(b) => {
+                    if client_write
+                        .send(axum::extract::ws::Message::Binary(b))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                tokio_tungstenite::tungstenite::Message::Close(_) => {
+                    let _ = client_write
+                        .send(axum::extract::ws::Message::Close(None))
+                        .await;
+                    break;
+                }
+                _ => {}
+            }
+        }
+    };
+
+    tokio::select! {
+        _ = client_to_backend => {},
+        _ = backend_to_client => {},
+    }
+}
+
+/// A model available in the catalog with live quota capacity and pricing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelCatalogItem {
+    /// Agent identifier.
+    pub agent: String,
+    /// Model identifier.
+    pub model: String,
+    /// Human-readable display name.
+    pub display_name: String,
+    /// Provider name.
+    pub provider: String,
+    /// Context window size in tokens.
+    pub context_window: u64,
+    /// Estimated remaining quota percentage.
+    pub remaining_pct: Option<u32>,
+    /// Input cost per 1M tokens in USD.
+    pub input_cost_per_mtok: f64,
+    /// Output cost per 1M tokens in USD.
+    pub output_cost_per_mtok: f64,
+}
+
+async fn models_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+
+    let candidates = [
+        (
+            "claude-code",
+            "claude-3-5-sonnet-20241022",
+            "Claude 3.5 Sonnet",
+            "anthropic",
+        ),
+        (
+            "claude-code",
+            "claude-3-opus-20240229",
+            "Claude 3 Opus",
+            "anthropic",
+        ),
+        (
+            "claude-code",
+            "claude-3-5-haiku-20241022",
+            "Claude 3.5 Haiku",
+            "anthropic",
+        ),
+        ("codex", "o3", "OpenAI o3", "openai"),
+        ("codex", "o4-mini", "OpenAI o4-mini", "openai"),
+        ("codex", "codex-mini", "OpenAI Codex Mini", "openai"),
+        ("gemini-cli", "gemini-2.5-pro", "Gemini 2.5 Pro", "google"),
+        (
+            "gemini-cli",
+            "gemini-2.5-flash",
+            "Gemini 2.5 Flash",
+            "google",
+        ),
+    ];
+
+    let db = state.db.lock().await;
+    let quotas = db.get_latest_quota_snapshots().unwrap_or_default();
+    drop(db);
+
+    let mut items = Vec::new();
+    for (agent, model, display, provider) in candidates {
+        let pricing = spawnt_core::pricing::lookup_model_pricing(model);
+        let (cw, in_cost, out_cost) = match pricing {
+            Some(p) => (
+                p.context_window,
+                p.input_per_mtok_usd,
+                p.output_per_mtok_usd,
+            ),
+            None => (128_000, 0.0, 0.0),
+        };
+        let rem_pct = quotas
+            .iter()
+            .find(|q| q.provider == provider)
+            .map(|q| (100.0 - q.used_pct).clamp(0.0, 100.0).round() as u32);
+
+        items.push(ModelCatalogItem {
+            agent: agent.to_owned(),
+            model: model.to_owned(),
+            display_name: display.to_owned(),
+            provider: provider.to_owned(),
+            context_window: cw,
+            remaining_pct: rem_pct,
+            input_cost_per_mtok: in_cost,
+            output_cost_per_mtok: out_cost,
+        });
+    }
+
+    Ok(Json(items))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -1471,7 +1727,7 @@ async fn live_snapshot_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, build_router, quota_views};
+    use super::{AppState, ModelCatalogItem, build_router, quota_views};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use serde_json::json;
@@ -1894,5 +2150,73 @@ mod tests {
         assert_eq!(value["focused"], false);
         assert_eq!(value["exact_session"], false);
         assert_eq!(value["repo_path"], "/workspace/focus-test");
+    }
+
+    #[tokio::test]
+    async fn models_endpoint_returns_verified_catalog_with_pricing() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "models-token".to_owned(),
+            orchestrator: None,
+        });
+
+        let request = Request::builder()
+            .uri("/api/v1/models")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer models-token")
+            .body(Body::empty())
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 16384)
+            .await
+            .expect("body");
+        let items: Vec<ModelCatalogItem> = serde_json::from_slice(&body).expect("json");
+        assert!(
+            items
+                .iter()
+                .any(|m| m.agent == "claude-code" && m.model == "claude-3-5-sonnet-20241022")
+        );
+        assert!(items.iter().any(|m| m.agent == "codex" && m.model == "o3"));
+        assert!(
+            items
+                .iter()
+                .any(|m| m.agent == "gemini-cli" && m.model == "gemini-2.5-pro")
+        );
+    }
+
+    #[tokio::test]
+    async fn launch_endpoint_rejects_missing_directory_and_requires_auth() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "launch-token".to_owned(),
+            orchestrator: None,
+        });
+
+        // 1. Missing auth
+        let unauth = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/launch")
+            .header("Host", "127.0.0.1")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"agent":"claude","repo_path":"."}"#))
+            .expect("request");
+        let res = app.clone().oneshot(unauth).await.expect("response");
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // 2. Non-existent directory
+        let bad_dir = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/launch")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer launch-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"agent":"claude","repo_path":"nonexistent_dir_12345"}"#,
+            ))
+            .expect("request");
+        let res = app.oneshot(bad_dir).await.expect("response");
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }
