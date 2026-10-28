@@ -34,6 +34,12 @@ export function trayTooltip(value: unknown): string {
   return count === 0 ? 'No ongoing sessions (estimated)' : `${count} ongoing session${count === 1 ? '' : 's'} (estimated)`;
 }
 
+export function trayBadgeName(value: unknown): string {
+  const count = value && typeof value === 'object' ? (value as Record<string, unknown>).ongoing_count : null;
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) return 'spawnt-tray.ico';
+  return `spawnt-tray-${count > 9 ? '9plus' : count}.png`;
+}
+
 export function isAllowedResource(input: string, port: number): boolean {
   if (input.startsWith('data:image/')) return true;
   if (input.startsWith('blob:')) {

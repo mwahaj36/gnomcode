@@ -5,11 +5,11 @@
 
 ## Decision
 
-All agents use the same pure Rust presence classifier. A recent running observation or an unmatched execution start consistent with the source state establishes running. Approval waits remain until resolved. Idle remains ongoing for two minutes; stale observations without execution evidence become inactive, never implicitly ended. Only source-reported closure establishes ended. SQL filters, totals, CLI, tray and desktop snapshots use this projection; clients render supplied classifications.
+All agents use the same pure Rust presence classifier. A recent running observation or an unmatched execution start consistent with the source state establishes running. Approval waits and unmatched execution starts remain ongoing for up to 24 hours after the last event; older unresolved observations become inactive, never implicitly ended. Idle remains ongoing for two minutes. Only source-reported closure establishes ended. SQL filters, totals, CLI, tray and desktop snapshots use this projection; clients render supplied classifications.
 
 Focus targets the recorded PID/host or known application, with blocking OS calls outside the database lock and async worker. The endpoint reports the actual result rather than unconditional success. Windows restores minimized windows and verifies foreground ownership; macOS and X11 use available OS controls. Unsupported focus offers a local workspace-copy fallback. Opening a window does not claim exact chat selection.
 
-Windows app icons use the requested 0.65x inset; the tray retains a separate full-size icon generated from the same canonical SVG. No permission escalation, new telemetry or content storage is introduced.
+Windows app icons use the requested 0.65x inset; the tray retains a separate full-size icon generated from the same canonical SVG. The Electron tray selects a generated numbered icon for the daemon-reported ongoing count, capped at 9+. No permission escalation, new telemetry or content storage is introduced.
 
 ## Consequences
 

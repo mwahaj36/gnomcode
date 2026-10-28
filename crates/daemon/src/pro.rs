@@ -347,17 +347,9 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
                 project_name: s.project_name.clone(),
                 cwd,
                 fill_pct,
-                status: if config.policy == "auto" {
-                    "executed".to_owned()
-                } else {
-                    "pending".to_owned()
-                },
+                status: "pending".to_owned(),
                 created_at: chrono::Utc::now().to_rfc3339(),
-                executed_at: if config.policy == "auto" {
-                    Some(chrono::Utc::now().to_rfc3339())
-                } else {
-                    None
-                },
+                executed_at: None,
             };
 
             db.record_context_relay(&entry)?;
@@ -371,7 +363,10 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
             let _ = spawnt_platform::send_desktop_notification(&title, &body);
 
             if config.policy == "auto" {
-                let _ = execute_relay_handoff(&entry);
+                match execute_relay_handoff(&entry) {
+                    Ok(()) => db.update_context_relay_status(&entry.id, "executed")?,
+                    Err(error) => tracing::warn!("context relay launch failed: {error}"),
+                }
             }
         }
     }
@@ -411,7 +406,9 @@ pub fn execute_relay_handoff(
     std::fs::write(&handoff_path, content)?;
 
     // Spawn the fresh target agent session in an interactive terminal or focus editor
-    let _ = spawnt_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd);
+    if !spawnt_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd) {
+        return Err("agent session could not launch".into());
+    }
 
     let title = format!("[RELAY] Handoff Complete: {}", entry.target_agent);
     let body = format!(
@@ -451,6 +448,24 @@ pub fn is_session_blocked(session_id: &str) -> bool {
 
 #[cfg(test)]
 mod remote_entitlement_tests {
+    #[test]
+    fn relay_handoff_does_not_claim_success_when_agent_cannot_launch() {
+        let repo = tempfile::tempdir().expect("repo");
+        let entry = spawnt_store::ContextRelayEntry {
+            id: "relay-test".to_owned(),
+            session_id: "codex:test".to_owned(),
+            source_agent: "codex".to_owned(),
+            target_agent: "unsupported-agent".to_owned(),
+            project_name: "test".to_owned(),
+            cwd: repo.path().to_string_lossy().into_owned(),
+            fill_pct: 92,
+            status: "pending".to_owned(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            executed_at: None,
+        };
+        assert!(super::execute_relay_handoff(&entry).is_err());
+    }
+
     #[test]
     fn pro_claim_requires_server_controlled_metadata_or_primary_account() {
         assert!(!super::cloud_user_is_pro(

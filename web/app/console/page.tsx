@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import RemoteCompanion from "../../components/RemoteCompanion";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
 import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary, updateOngoing, updateQuota } from "../../lib/console-presentation.js";
@@ -202,7 +203,7 @@ export default function ConsolePage() {
   useEffect(() => {
     const restore = () => {
       const view = new URLSearchParams(window.location.search).get("view") || "overview";
-      if (["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].includes(view)) setActiveView(view);
+      if (["overview", "sessions", "chat", "usage", "limits", "projects", "automations", "settings"].includes(view)) setActiveView(view);
     };
     restore();
     window.addEventListener("popstate", restore);
@@ -405,10 +406,11 @@ export default function ConsolePage() {
 
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
-        {["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}>{view}</button>)}
+        {["overview", "sessions", "chat", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}>{view}</button>)}
       </nav>
       <div className="sp-console-content">
       {activeView === "settings" && <SettingsPanel embedded />}
+      {activeView === "chat" && <RemoteCompanion embedded />}
       {activeView === "projects" && <div dangerouslySetInnerHTML={{ __html: renderProjects(undefined) }} />}
       {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
 

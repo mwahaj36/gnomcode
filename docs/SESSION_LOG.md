@@ -934,3 +934,11 @@ Phase 1 final pass completed and PR created.
 - Removed the legacy unencrypted cloud `relay_commands` intake and its misleading web-console rotation button. Metadata snapshot publishing remains opt-in. Remote pairing now validates the account with the auth server and requires the primary Pro account or a server-controlled Pro/Team claim; a file named `session.json` alone no longer grants Remote access.
 - Generated Rust, Electron, and Chromium notices, staged the development EULA and release binary, and built the Windows Electron Forge installer and ZIP. The installer is an unsigned development artifact; the public legal and signing work remains for launch.
 - Windows workspace tests, clippy, formatting, cargo-deny, desktop tests/lint/typecheck, web tests/typecheck, npm shim tests, and relay tests pass after these changes. Cargo-deny reports duplicate-version warnings only.
+
+# Spec completion follow-up (2026-10-29)
+
+- Traced a 15-day-old Antigravity `tool_start` row that still appeared ongoing. Rust presence and SQL filters now classify unresolved tool and approval observations as inactive after 24 hours while preserving the historical source state. Added core and store regressions.
+- The local session list now opens paged chat history with a hard-delete control. The website console has a Chat view that reuses the encrypted Remote companion; the desktop pairing link is required there. The metadata cloud table still carries no conversation text.
+- The installed Electron tray previously had only a tooltip. Generated numbered tray icons for counts 1–9 and 9+ and wired the daemon-reported ongoing count to icon selection. The legacy PowerShell tray already had a count badge.
+- Context relay no longer records execution before a successful launch. CLI targets launch through the independent PTY owner without shell interpolation; unsupported IDE targets report failure.
+- The live Supabase table initially returned `PGRST205` (missing table). After the owner applied its migration it returned `42501` because the `authenticated` table grant was absent. Added `SELECT`, `INSERT`, `UPDATE` grants to the migration. After the owner applied the grant, the daemon reported a successful cloud snapshot at 2026-10-28 22:20:38 UTC and the user-owned row had an updated timestamp.
