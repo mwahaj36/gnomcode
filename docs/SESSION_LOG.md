@@ -2,6 +2,13 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — reconcile final redesign with current main
+
+- Final fetch found main had advanced through PRs 44–46, including the owner's withdrawal of hosted cloud sessions/browser device pairing. Integrated that main history before merge, retaining private desktop credential handling, desktop summary sync and the existing manual account-token flow while removing hosted-session reads/collectors from the redesigned web UI.
+- Retained shared presenters, truthful freshness and reload behavior. Fixed merge-time missing status targets and a test AppState initializer. A regression reproduced retired hosted usage leaking into reports; all current report/daily/project queries now exclude those rows without deleting history.
+- Renumbered redesign ADRs to 0006–0008 to preserve main's withdrawn ADR 0005 and avoid duplicate identities. Historical published release archives are retained from main; the current release remains 1.5.0.
+- Windows full Rust gate including cargo-deny, Linux clippy/tests, Rust 1.87 check, production web build and source-matching Windows/Linux packaging passed. Native asset MIME/body tests and embedded syntax/runtime-target checks passed before authorized merge/publication. macOS remains deferred; browser visual checks remain unavailable.
+
 ## 2026-10-28 — final website version audit and release authorization
 
 - The user deferred macOS builds and explicitly authorized final testing as far as available tools permit, followed by merge. Browser visual checks remain unavailable and live cloud publication still awaits re-pairing; these limits are disclosed rather than treated as passes.
@@ -645,3 +652,37 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Outcome: added the aligned “Your agent fleet” heading, canonical mark, connection status line, local reload/resync actions, arrow-key accessible tab navigation, divided metric sections, and square controls to the daemon console. Removed visible bracket wrappers from local status copy and made the local console’s remaining bordered surfaces square. Updated the Windows tray menu palette, labels, estimated-cost trust marker, and square red session badge; retained the existing data profile and compatibility window detection. Rust tray status and notification strings now use plain labels, and CLI reports use spawnt headings and plain trust labels.
 - Decision: do not create a Tauri window during this redesign. The current implementation is daemon HTML plus platform scripts; only the Windows tray script exists here. macOS/Linux tray UI remains future work.
 - Verification: full Rust quality gate, PowerShell parser validation, embedded JavaScript syntax check, and `git diff --check` passed; `cargo-deny` is not installed. A temporary loopback-only preview confirmed the desktop layout in dark and light themes, the disconnected `UNKNOWN` state, and keyboard arrow navigation. Narrow visual review remains pending.
+## 2026-10-27 — Browser cloud pairing and v1.4.0 recovery
+
+- Goal: remove manual session-file copying, repair the Windows console loading failure, expose cloud presence on native clients and publish working update downloads.
+- Root cause reproduced: duplicate `url` declaration in embedded export JavaScript prevented the entire dashboard script from executing. `check-console.mjs` failed on the shipped script and passes with the corrected variable.
+- Added isolated browser GitHub PKCE/email login, explicit code comparison and encrypted one-time approval RPCs. User applied the v4 migration; a live anonymous consume probe returned HTTP 200/null, without accessing account data.
+- PostgreSQL checks cover repeated migrations, denied anonymous approvals/direct reads, capability verification, one-time consumption and replay rejection. Browser checks exercise the actual console, unauthorized states, pairing initiation/cancel and encrypted independent login transfer; external auth transport is stubbed.
+- Native consoles merge remote cloud presence with paging/dedup. Tray separates cloud connectivity from local active work and reports daemon failure. Cloud daemons no longer overwrite desktop summaries. Atomic private credential writes serialize with refresh/disconnect; OS-held daemon locks protect metadata.
+- New dependencies: RustCrypto aes-gcm for authenticated WebCrypto-compatible encryption, existing base64 crate as a direct dependency, and existing libc dependency for the Unix flock system call confined to platform code.
+- Scope follows Ponytail Ultra: account pairing and reported failures only; no provider billing guesses, hidden-log discovery or generic device-management framework.
+- Native Windows GUI and macOS hardware are unavailable in this cloud environment. Windows executable behavior is checked under Wine; macOS packages remain unavailable rather than relabeling old artifacts.
+
+- Verification: 65 Rust tests, Clippy, cargo-deny and MSRV 1.87 passed. Both embedded PostgreSQL migration suites and real-browser email/PKCE approval checks passed. Windows PE/installer payload and PowerShell updater checks passed; Linux/ARM64 versions and Wine Windows collector smoke checks passed. Unix updater rejects corrupt manifests without replacing the existing install. Final Linux x86_64 packaging explicitly selects static OpenSSL to avoid an accidental host shared-library dependency.
+
+## 2026-10-27 — Synthetic browser-auth fixture clarification
+
+GitGuardian flagged the hardcoded JWT header/signature in the browser integration
+fixture in PR #44 as a Generic High Entropy Secret. The token is synthetic, uses
+an all-zero test account and an invalid signature, and is accepted only by mocked
+auth transport. Generate its header and signature from clearly named test values
+instead. No real account credential was committed or needs rotating. Production
+code and packaged binaries are unchanged. Rerun the browser flow with this fixture.
+
+## 2026-10-27 — Withdraw hosted cloud integration, v1.4.1
+
+- User requested removal of the cloud feature. The latest clarification explicitly preserves older desktop account sync and sign-in.
+- Removed cloud runtime identity detection, collector command/startup, metadata usage-file ingestion, cloud session types, remote presence reads and native/web/tray presence presentation. Removed the new browser device pairing command, page and RPC client.
+- Retained unrelated security/advisory, pricing/date, embedded-console, credential-permission, daemon-lock and update-integrity fixes. Restored existing manual desktop account pairing while retaining server-side login validation and credential protection; unsafe auth callback URLs stay removed.
+- Stopped this workspace’s daemon and standalone collectors, deleted its remote presence row, revoked its independent Supabase login and deleted its credential file. Other desktop accounts were untouched.
+- Retired SQL migration creates no new feature schema; the repeatable cleanup drops only hosted presence/pairing objects. Owner must run it in the SQL editor because no admin connection is available here.
+- Added checks for retired local pairing endpoints returning 404 and inert historical rows being hidden without deleting data. Disposable PostgreSQL cleanup checks verify desktop sync and Auth survive.
+- Updated the environment startup draft to remove cloud collection/pairing instructions; saving the draft does not publish it.
+- Replacement native packages are v1.4.1, keeping Windows update ordering correct. Native Windows GUI and macOS hardware remain unavailable in this cloud environment.
+
+- Verification: Rust gate (56 tests, Clippy, cargo-deny), MSRV, production web build and disposable PostgreSQL cleanup checks passed. Browser checks against the packaged daemon verify working local data/auth UI, preserved desktop snapshot reads, ignored legacy cloud rows, no presence fetches and retired pairing API/page returning 404. CLI rejects retired commands and a daemon in this actual cloud runtime creates no cloud-presence row. Live Supabase pairing/view/table probes now return 404; the older desktop sync endpoint still exists.
