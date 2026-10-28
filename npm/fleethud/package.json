@@ -1,6 +1,6 @@
 {
   "name": "fleethud",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Live Mission Control & Flight Recorder for AI Coding Agents (Claude Code, Codex, Antigravity, Cursor, Cline)",
   "main": "bin/index.js",
   "bin": {

@@ -2,6 +2,27 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — v1.5.3 native release
+
+- Rebuilt Windows x64 engine/setup/archive and Linux x64/ARM64 archives, including the distinct full-size tray icon. Synchronized website, installers, shims and checksum manifests to 1.5.3.
+- Windows Rust gate including cargo-deny, Linux clippy/workspace tests, ARM64 smoke, Next production build, native JS/navigation/account/icon regressions, presence boundaries, focus authorization/failure and protected credential ACL checks passed. Installer resource verification includes the separate tray icon; corruption/preservation and packaging checks pass.
+- Browser visual tooling remains disabled and macOS builds remain deferred. Window focus cannot select an exact chat where the host offers no supported targeting; failures retain an explicit copy-workspace fallback.
+
+## 2026-10-28 — consistent presence, focus and compact console
+
+- Replaced the unshipped fifteen-minute proposal with the approved shared Rust classification: two-minute idle grace, unresolved approvals retained, explicit open execution retained, stale unsupported observations inactive, and ended only when explicitly reported. Applied to all agents, SQL filters/totals, CLI, both tray controllers, both consoles and desktop snapshots. History retains last activity with relative and absolute timestamps.
+- Focus previously returned success unconditionally, treated desktop Codex as a terminal, and then reopened spawnt. Target the recorded process/host or application, restore minimized windows, check results, move OS calls off async workers/DB locks, and offer workspace copying on failure. Exact conversation selection is not claimed.
+- Preserve full-size tray geometry in a separate canonical ICO while keeping the Windows app inset. Simplified tray tooltip, console header and period/export controls; aligned panel headings, grouped provider windows into compact expandable rows, reduced summary height, preserved expanded rows during polling, and removed correction/history prose from public copy.
+- Reproduced Windows PowerShell requesting SeSecurityPrivilege for private credential Set-Acl. Direct .NET writes retain protected owner-only ACLs without escalation; replacement and ACL inspection tests pass.
+- Windows full gate including cargo-deny, workspace tests, source/DOM/runtime regressions, native tray bitmap and script parsing, packaging tests and Next build pass. Native files are rebuilt in the release phase. Browser visual tooling remains disabled; macOS builds remain deferred.
+
+## 2026-10-28 — Overview order and Windows icon inset
+
+- Applied the owner's requested order to both consoles using actual DOM order: activity, spend summary, then limits on the left and ongoing sessions on the right. Narrow layouts preserve this reading/focus order.
+- Removed duplicated total cost and pricing-warning text from the activity header; the spend summary remains authoritative and expanded day/hour details retain their own costs.
+- Center the Windows canonical asset at 0.65x on its black canvas, without changing marketing marks. The real GDI+ icon regression failed with the previous red bounds and passes with the inset asset, including badge rendering and the zero-count reset.
+- Shared presenter checks verify that costs stay out of the chart header but remain in expanded interval details. Native script checks pass; production build, Rust gate and package checks run before push. macOS remains deferred and browser visual tooling remains unavailable.
+
 ## 2026-10-28 — final v1.5.2 Account package rebuild
 
 - Rebuilt all Windows x64 and Linux x64/ARM64 release files again after the Account panel refinement so embedded HTML/CSS match the final source. Updated combined manifests and retained the existing 1.5.2 version while the release is unpublished.

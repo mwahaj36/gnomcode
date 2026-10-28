@@ -3,6 +3,16 @@
 All notable changes to FleetHUD are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [1.5.3] — 2026-10-28
+
+- Order Overview as activity, compact spend summary, then aligned provider-limit and ongoing-session columns. Group quota windows per provider and remove duplicate chart cost.
+- Apply shared presence rules to all agents: two-minute idle grace, retained approvals/open execution, inactive stale observations and explicit-only ended status. Show ongoing sessions and last activity on Sessions.
+- Repair session-window focus, restore minimized Windows windows, report actual outcomes and offer workspace copying when unavailable.
+- Keep the tray mark full size while insetting the Windows app icon to 0.65x; simplify tray tooltip wording.
+- Simplify console navigation and reporting controls, move Docs/Pricing into Settings, and remove correction prose from public copy.
+- Preserve protected owner-only Windows credential ACLs without requesting audit privileges.
+- Rebuild Windows x64 setup/archive and Linux x64/ARM64 archives. macOS remains deferred.
+
 ## [1.5.2] — 2026-10-28
 
 - Restore the Windows running-count badge; use a red Windows mark on a black canvas and readable tray tooltips.

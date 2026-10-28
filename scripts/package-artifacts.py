@@ -41,7 +41,7 @@ if args.windows_exe:
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
         for name in ('fleethud.exe', 'FleetHUD-Setup.exe', 'LICENSE', 'THIRD_PARTY_NOTICES.html'):
             bundle.write(out / name, name)
-        for name in ('fleethud.ico', 'tray.ps1', 'run-tray.vbs', 'open-console.vbs', 'open-dashboard.vbs'):
+        for name in ('fleethud.ico', 'spawnt-tray.ico', 'tray.ps1', 'run-tray.vbs', 'open-console.vbs', 'open-dashboard.vbs'):
             bundle.write(root / 'scripts' / name, name)
     assets.append(archive)
 for os_name, arch, source in [

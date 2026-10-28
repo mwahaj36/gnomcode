@@ -365,8 +365,8 @@ fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
     let mut db = Database::open(db_path).context("failed to open database")?;
     let _ = ingest_all(&mut db);
 
-    let sessions = db
-        .list_active_sessions(limit)
+    let (sessions, _) = db
+        .list_sessions_paginated(None, Some("ongoing"), 0, limit)
         .context("failed to query active sessions")?;
 
     println!("=== SPAWNT ACTIVE SESSIONS ===");
@@ -383,8 +383,8 @@ fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
     println!("{}", "-".repeat(100));
 
     for s in sessions {
-        let model = s.model.as_deref().unwrap_or("unknown");
-        let last_active = s.last_event_at.format("%Y-%m-%d %H:%M:%S UTC");
+        let model = &s.model;
+        let last_active = &s.last_event_at;
         println!(
             "{:<20} {:<12} {:<10} {:<24} {:<10} {:<20}",
             truncate_str(&s.id, 20),

@@ -432,12 +432,10 @@
         <span class="sp-brand-mark" aria-hidden="true"></span>
         <span>spawnt</span>
       </a>
-<nav class="header-links" aria-label="App navigation"><a href="#overview" onclick="switchTab('overview'); return false">Console</a><a href="#settings" onclick="switchTab('settings'); return false">Settings</a></nav>
+<nav class="header-links" aria-label="App navigation"><a href="#settings" onclick="switchTab('settings'); return false">Settings</a></nav>
     </div>
     <div class="header-right">
       <button class="theme-control" id="theme-control" type="button" onclick="cycleTheme()" aria-label="Theme: system. Switch mode">Theme / system</button>
-      <a href="https://fleethud.vercel.app/docs" target="_blank" rel="noopener noreferrer" class="external-link">Docs &rarr;</a>
-      <a href="https://fleethud.vercel.app/pricing" target="_blank" rel="noopener noreferrer" class="external-link">Pricing &rarr;</a>
     </div>
   </header>
 
@@ -472,25 +470,12 @@
       </nav><div class="sp-console-content">
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
     <!-- Timeline Filter Bar -->
-    <div class="timeline-bar" data-local-view="overview,sessions,usage,limits,projects">
-      <div class="timeline-label" id="timeline-label">Showing: All Time</div>
-      <div class="timeline-buttons">
-        <button class="btn-control" onclick="setTimeline('today', this)">Today</button>
-        <button class="btn-control" onclick="setTimeline('month', this)">This month</button>
-        <button class="btn-control" onclick="setTimeline('7d', this)">Last 7 Days</button>
-        <button class="btn-control" onclick="setTimeline('30d', this)">Last 30 Days</button>
-        <button class="btn-control active" onclick="setTimeline('all', this)">All Time</button>
-      </div>
-      <div style="margin-left: auto; display: flex; gap: 8px;">
-        <button class="btn-control" onclick="exportData('csv')">Export CSV</button>
-        <button class="btn-control" onclick="exportData('json')">Export JSON</button>
-      </div>
-    </div>
+    <div class="timeline-bar" data-local-view="overview,usage,projects"><div class="timeline-label" id="timeline-label">All time</div><div class="sp-period-actions"><select id="timeline-select" aria-label="Reporting period" onchange="setTimeline(this.value)"><option value="today">Today</option><option value="month">This month</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all" selected>All time</option></select><details class="sp-export-menu"><summary>Export</summary><div><button type="button" class="btn-control" onclick="exportData('csv')">CSV</button><button type="button" class="btn-control" onclick="exportData('json')">JSON</button></div></details></div></div>
 
   <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
-    <div id="overview-summary" data-local-view="overview">Loading fleet summary...</div>
-    <div class="sp-overview-live" data-local-view="overview"><div id="ongoing-sessions">Loading ongoing sessions...</div><details class="sp-overview-limits" open><summary>Provider limits</summary><div id="overview-limits">Loading limits...</div></details></div>
     <div id="daily-activity" data-local-view="overview,usage"><p>Loading daily activity...</p></div>
+    <div id="overview-summary" data-local-view="overview">Loading fleet summary...</div>
+    <div class="sp-overview-live" data-local-view="overview"><section class="sp-overview-limits"><div id="overview-limits">Loading limits...</div></section><div id="ongoing-sessions">Loading ongoing sessions...</div></div>
     <!-- Spend by Agent (Click to View Models) -->
     <div data-local-view="usage" id="providers-container" style="align-items: start;">
       <!-- Injected dynamically -->
@@ -508,10 +493,11 @@
     </div>
 
     <div id="quota-table" data-local-view="limits"><p>Loading provider limits...</p></div>
+    <div id="sessions-ongoing" data-local-view="sessions">Loading ongoing sessions...</div>
     <!-- Paginated Sessions Table -->
     <div class="table-container" data-local-view="sessions">
       <div class="table-header-controls">
-        <div class="section-title">Live & Historical Agent Sessions</div>
+        <div class="section-title">Session history</div>
         <div class="filters">
           <label>Project <select id="project-filter" onchange="currentPage=1; lastSessionsJson=''; loadSessions()"><option value="">All projects</option></select></label><select id="agent-filter" aria-label="Agent" onchange="onFilterChange()">
             <option value="all">All Agents</option>
@@ -522,12 +508,12 @@
           </select>
           <select id="status-filter" aria-label="Session status" onchange="onFilterChange()">
             <option value="all">All Statuses</option>
-            <option value="active">Active Only</option>
-            <option value="idle">Idle Only</option>
+            <option value="ongoing">Ongoing</option><option value="active">Running or waiting</option>
+            <option value="idle">Idle</option><option value="ended">Ended</option>
           </select>
         </div>
       </div>
-      <div id="sessions-table" role="region" aria-label="Agent sessions" tabindex="0">Loading sessions...</div><p id="session-action-status" role="status"></p>
+      <div id="sessions-table" role="region" aria-label="Agent sessions" tabindex="0">Loading sessions...</div><p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden onclick="copySessionWorkspace()">Copy workspace path</button>
       <div class="pagination">
         <span id="pagination-info">Page 1 of 1</span>
         <div>
@@ -544,6 +530,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
+    <div class="sp-settings-resources"><a href="https://fleethud.vercel.app/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="https://fleethud.vercel.app/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" onclick="switchTab('auth')">Manage account</button></div>
     <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
@@ -1285,15 +1272,9 @@
       return n.toString();
     }
 
-    function setTimeline(range, btn) {
+    function setTimeline(range) {
       currentTimeline = range;
-      document.querySelectorAll('.timeline-buttons .btn-control').forEach(b => b.classList.remove('active'));
-      if (btn) {
-        btn.classList.add('active');
-      } else {
-        const found = Array.from(document.querySelectorAll('.timeline-buttons .btn-control')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(range));
-        if (found) found.classList.add('active');
-      }
+      document.getElementById('timeline-select').value = range;
       lastReportJson = '';
       loadReport();
       if (activeView === 'projects') loadProjects();
@@ -1411,14 +1392,21 @@
       if (!button || button.disabled) return;
       button.disabled = true;
       const status = document.getElementById('session-action-status');
-      status.textContent = 'Sending focus request...';
+      document.getElementById('session-action-copy').hidden = true;
+      status.textContent = 'Opening agent window...';
       try {
         const response = await fetch(`/api/v1/sessions/${encodeURIComponent(button.dataset.sessionId)}/focus`, { method: 'POST', headers });
         if (!response.ok) throw new Error('Focus failed');
-        status.textContent = 'Focus request sent. Window availability depends on the session host.';
+        const result = await response.json(); status.textContent = result.message || (result.focused ? 'Agent window opened.' : 'Session window unavailable.');
+        const copy = document.getElementById('session-action-copy'); copy.hidden = result.focused || !result.repo_path; copy.dataset.path = result.repo_path || '';
       } catch (_) { status.textContent = 'Focus request failed. The session may no longer be available.'; }
       finally { button.disabled = false; }
     });
+    async function copySessionWorkspace() {
+      const status = document.getElementById('session-action-status');
+      try { await navigator.clipboard.writeText(document.getElementById('session-action-copy').dataset.path); status.textContent = 'Workspace path copied.'; }
+      catch (_) { status.textContent = 'Could not copy the path. Check clipboard access and retry.'; }
+    }
     async function loadSessions() {
       try {
         if (!projectsLoaded) await loadProjects();
@@ -1433,7 +1421,7 @@
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastSessionsJson) return true;
 
-        summaryState.activeCount = res.active_count ?? null; await refreshSummary();
+        summaryState.activeCount = res.ongoing_count ?? res.active_count ?? null; await refreshSummary();
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
         document.getElementById('prev-btn').disabled = res.page <= 1;
         document.getElementById('next-btn').disabled = res.page >= res.total_pages;
@@ -1573,9 +1561,10 @@
 
     async function loadOngoing() {
       try {
-        const response = await apiJson('/api/v1/sessions?status=active&page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
+        const response = await apiJson('/api/v1/sessions?status=ongoing&page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
         const presentation = await import('/console-presentation.js');
         presentation.updateOngoing(document.getElementById('ongoing-sessions'), response.sessions);
+        presentation.updateOngoing(document.getElementById('sessions-ongoing'), response.sessions);
         return true;
       } catch (_) { document.getElementById('ongoing-sessions').textContent = 'Ongoing session status unavailable. Retry Reload view.'; return false; }
     }
@@ -1588,8 +1577,8 @@
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
-        document.getElementById('quota-table').innerHTML = presentation.renderQuota(res, new Date().toISOString());
-        document.getElementById('overview-limits').innerHTML = presentation.renderQuota(res, new Date().toISOString());
+        presentation.updateQuota(document.getElementById('quota-table'), res, new Date().toISOString());
+        presentation.updateQuota(document.getElementById('overview-limits'), res, new Date().toISOString());
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {

@@ -655,16 +655,39 @@ async fn focus_session_handler(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let db = state.db.lock().await;
-    if let Ok(Some(target)) = db.get_session_focus_target(&id) {
-        let focused = target.pid.is_some_and(fleethud_platform::bring_to_front);
-        if !focused {
+    let target = state
+        .db
+        .lock()
+        .await
+        .get_session_focus_target(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let Some(target) = target else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+    let repo_path = target.repo_root.clone();
+    let (focused, destination) = tokio::task::spawn_blocking(move || {
+        if target.pid.is_some_and(fleethud_platform::bring_to_front) {
+            return (true, "process");
+        }
+        if fleethud_platform::focus_agent_application(&target.agent, &target.surface) {
+            return (true, "application");
+        }
+        if matches!(target.agent.as_str(), "cline" | "roo") {
             if let Some(path) = target.repo_root {
-                let _ = fleethud_platform::focus_project_in_editor(&path);
+                if fleethud_platform::focus_project_in_editor(&path) {
+                    return (false, "project_requested");
+                }
             }
         }
-    }
-    Ok(Json(json!({ "ok": true })))
+        (false, "unavailable")
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(
+        json!({ "ok": focused, "focused": focused, "target": destination, "exact_session": false, "repo_path": if focused { None } else { repo_path },
+            "message": if focused { "Opened the agent window. Select the session in the app if needed." } else { "The session window could not be opened. Open the agent app to continue." }
+        }),
+    ))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -742,6 +765,9 @@ async fn list_sessions_handler(
         }
     }
 
+    let (_, ongoing_count) = db
+        .list_sessions_paginated(None, Some("ongoing"), 0, 1)
+        .unwrap_or_default();
     let (_, active_count) = db
         .list_sessions_paginated(None, Some("active"), 0, 1)
         .unwrap_or_default();
@@ -754,6 +780,7 @@ async fn list_sessions_handler(
         limit: usize,
         total_pages: usize,
         active_count: usize,
+        ongoing_count: usize,
     }
 
     let total_pages = total_count.div_ceil(limit);
@@ -765,6 +792,7 @@ async fn list_sessions_handler(
         limit,
         total_pages: total_pages.max(1),
         active_count,
+        ongoing_count,
     }))
 }
 
@@ -1301,6 +1329,9 @@ async fn live_snapshot_handler(
         }
     }
 
+    let (_, ongoing_count) = db
+        .list_sessions_paginated(None, Some("ongoing"), 0, 1)
+        .unwrap_or_default();
     let (_, active_count) = db
         .list_sessions_paginated(None, Some("active"), 0, 1)
         .unwrap_or_default();
@@ -1426,6 +1457,7 @@ async fn live_snapshot_handler(
             "limit": limit,
             "total_pages": total_pages.max(1),
             "active_count": active_count,
+            "ongoing_count": ongoing_count,
             "custom_pricing": custom_pricing,
         })),
     ))
@@ -1686,5 +1718,80 @@ mod tests {
 
         let res = app.oneshot(req).await.expect("response");
         assert_eq!(res.status(), StatusCode::OK);
+    }
+    #[tokio::test]
+    async fn focus_requires_auth_and_never_claims_an_unknown_session_opened() {
+        for (authorized, expected) in [
+            (false, StatusCode::UNAUTHORIZED),
+            (true, StatusCode::NOT_FOUND),
+        ] {
+            let app = build_router(AppState {
+                db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+                bearer_token: "focus-unit".to_owned(),
+                orchestrator: None,
+            });
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions/missing/focus")
+                .header("Host", "127.0.0.1");
+            if authorized {
+                request = request.header("Authorization", "Bearer focus-unit");
+            }
+            let response = app
+                .oneshot(request.body(Body::empty()).expect("request"))
+                .await
+                .expect("response");
+            assert_eq!(response.status(), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn unavailable_focus_returns_a_local_copy_path_without_claiming_success() {
+        use fleethud_core::{AgentId, Project, Session, SessionState, Surface};
+        let mut db = Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, "/workspace/focus-test", None);
+        let session = Session {
+            id: "codex:focus-unit".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: chrono::Utc::now(),
+            last_event_at: chrono::Utc::now(),
+        };
+        let checkpoint = fleethud_store::SourceCheckpoint {
+            file_path: "/fixture".to_owned(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "unit".to_owned(),
+            last_ingested_at: chrono::Utc::now(),
+        };
+        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+            .expect("fixture");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(db)),
+            bearer_token: "focus-unit".to_owned(),
+            orchestrator: None,
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/codex:focus-unit/focus")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer focus-unit")
+            .body(Body::empty())
+            .expect("request");
+        let response = app.oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .expect("body");
+        let value: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(value["focused"], false);
+        assert_eq!(value["exact_session"], false);
+        assert_eq!(value["repo_path"], "/workspace/focus-test");
     }
 }
