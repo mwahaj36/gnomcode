@@ -18,15 +18,15 @@ Furthermore, routing conversation content or tool outputs unencrypted through a 
 
 2. **Ephemeral Pairing & E2EE Key Derivation (`crates/core`, `crates/daemon`)**:
    - The desktop initiates a pairing session, generating a one-time room ID and an ephemeral X25519 keypair.
-   - The mobile device connects via QR code or pairing link, exchanges public keys, and both sides compute a shared secret.
-   - A 6-digit confirmation code (derived from the shared secret) is verified by the user on both screens to defeat active MITM attacks.
-   - Subsequent traffic is sealed with AEAD encryption (ChaCha20-Poly1305 / AES-GCM) with monotonic sequence numbers.
+   - The mobile device connects via a pairing link, exchanges public keys, and both sides compute a shared secret.
+   - A 6-digit code derived from the room, roles, both public keys, and shared secret is compared and confirmed on both screens to defeat active MITM attacks.
+   - Subsequent traffic uses directional AES-256-GCM keys and monotonic sequence numbers.
 
 3. **Remote Capability Boundaries**:
-   - The phone interface provides status inspection, chat streaming, prompt input, and low-risk approvals.
+   - The phone interface pages through available conversation history and polls for subsequent responses. Prompt input is limited to an idle Spawnt-hosted session with a verified local PTY binding; an explicit model handoff may launch a fresh supported agent session. Conversation traffic uses the encrypted Remote channel and never the unencrypted metadata sync.
    - Destructive operations, arbitrary file downloads, raw terminal command injection, and permission-escalation flags are strictly forbidden over remote channels.
-   - Revocation from the desktop immediately rotates the room and invalidates keys.
+   - Revocation from the desktop closes the room and invalidates keys. Starting a new pairing generates a fresh room and keypair.
 
 ## Consequences
 
-Remote access provides true mobile freedom without compromising local host security. The relay remains simple, stateless beyond active rooms, and cost-effective.
+The relay remains simple and holds only active room connections. Live two-device validation and an independent security review are required before production availability.

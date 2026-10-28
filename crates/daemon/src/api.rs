@@ -28,6 +28,8 @@ pub struct AppState {
     pub bearer_token: String,
     /// Handle used to trigger an immediate local reconciliation.
     pub orchestrator: Option<Arc<crate::DaemonOrchestrator>>,
+    /// Opt-in encrypted remote connection state.
+    pub remote: Arc<crate::remote::RemoteManager>,
 }
 
 /// Query parameters for listing sessions with pagination & filters.
@@ -175,6 +177,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/remote/pairing", get(remote_pairing_handler))
         .route("/api/v1/remote/status", get(remote_status_handler))
+        .route("/api/v1/remote/confirm", post(remote_confirm_handler))
         .route("/api/v1/remote/revoke", post(remote_revoke_handler))
         .with_state(state)
 }
@@ -335,7 +338,7 @@ async fn license_get_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(crate::pro::get_license_status()))
+    Ok(Json(crate::pro::get_verified_license_status().await))
 }
 
 #[derive(Debug, Deserialize)]
@@ -361,7 +364,7 @@ async fn license_delete_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     crate::pro::remove_license().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(crate::pro::get_license_status()))
+    Ok(Json(crate::pro::get_verified_license_status().await))
 }
 
 async fn resume_queue_get_handler(
@@ -777,17 +780,7 @@ async fn pty_stream_handler(
     State(state): State<AppState>,
     ws: axum::extract::ws::WebSocketUpgrade,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let authorized = if validate_auth(&headers, &state.bearer_token).is_ok() {
-        true
-    } else if let Some(t) = query.token {
-        t == state.bearer_token
-    } else {
-        false
-    };
-
-    if !authorized {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    validate_pty_auth(&headers, query.token.as_deref(), &state.bearer_token)?;
 
     let record = spawnt_pty::load_session_record(&id).map_err(|_| StatusCode::NOT_FOUND)?;
 
@@ -799,6 +792,24 @@ async fn pty_stream_handler(
     Ok(ws.on_upgrade(move |client_ws| async move {
         proxy_pty_ws(client_ws, backend_url).await;
     }))
+}
+
+fn validate_pty_auth(
+    headers: &HeaderMap,
+    query_token: Option<&str>,
+    expected: &str,
+) -> Result<(), StatusCode> {
+    match validate_auth(headers, expected) {
+        Err(StatusCode::UNAUTHORIZED) if query_token == Some(expected) => {
+            let mut authenticated = headers.clone();
+            let value = format!("Bearer {expected}")
+                .parse()
+                .map_err(|_| StatusCode::UNAUTHORIZED)?;
+            authenticated.insert("authorization", value);
+            validate_auth(&authenticated, expected)
+        }
+        result => result,
+    }
 }
 
 async fn proxy_pty_ws(client_ws: axum::extract::ws::WebSocket, backend_url: String) {
@@ -971,6 +982,8 @@ async fn models_handler(
 pub struct ChatQuery {
     /// Maximum number of events to return.
     pub limit: Option<usize>,
+    /// Return events older than this event ID.
+    pub before: Option<String>,
 }
 
 async fn chat_get_handler(
@@ -981,7 +994,7 @@ async fn chat_get_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
-    match db.get_session_chat(&id, query.limit) {
+    match db.get_session_chat_before(&id, query.limit, query.before.as_deref()) {
         Ok(events) => Ok(Json(events)),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
@@ -1195,58 +1208,31 @@ async fn switch_session_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
     Json(payload): Json<SwitchSessionRequest>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let db = state.db.lock().await;
-
-    let history = db.get_session_chat(&id, Some(50)).unwrap_or_default();
-    let turn_count = history.len() as u32;
-
-    let mut user_prompts = Vec::new();
-    for evt in &history {
-        if evt.role == spawnt_core::ChatRole::User {
-            user_prompts.push(evt.content.clone());
-        }
+    let prepared = {
+        let db = state.db.lock().await;
+        crate::prepare_switch(&db, &id, &payload.target_model, payload.agent.as_deref())
     }
-    let summary = if user_prompts.is_empty() {
-        format!("Continuation of session {id}")
-    } else {
-        user_prompts.join("; ")
-    };
-    let redacted_summary = spawnt_core::redact::redact_chat_content(&summary);
-
-    // Compile zero-token handoff packet
-    let packet = spawnt_core::HandoffPacket {
-        session_id: id.clone(),
-        source_model: "previous".to_owned(),
-        target_model: payload.target_model.clone(),
-        prompt_summary: redacted_summary,
-        touched_files: Vec::new(),
-        turn_count,
-        created_at: chrono::Utc::now(),
-    };
-
-    // Record system chat event documenting switch
-    let handoff_evt = spawnt_core::ChatEvent {
-        event_id: format!(
-            "switch-{}-{}",
-            id,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        ),
-        session_id: id.clone(),
-        turn_index: (turn_count + 1) as i64,
-        role: spawnt_core::ChatRole::System,
-        content: format!("Model switched to {}", payload.target_model),
-        tool_name: None,
-        status: Some("switched".to_owned()),
-        created_at: chrono::Utc::now(),
-    };
-    let _ = db.insert_chat_event(&handoff_evt);
-
-    Ok(Json(packet))
+    .map_err(|error| match error {
+        crate::HandoffError::MissingSession => StatusCode::NOT_FOUND,
+        crate::HandoffError::UnsupportedTarget => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    })?;
+    let record = crate::execute_switch(prepared)
+        .await
+        .map_err(|error| match error {
+            crate::HandoffError::MissingSession => StatusCode::NOT_FOUND,
+            crate::HandoffError::UnsupportedTarget => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+    Ok(Json(json!({
+        "ok": true,
+        "source_session_id": id,
+        "session_id": record.session_id,
+        "agent": record.agent,
+        "model": record.model
+    })))
 }
 
 /// Request payload to resume an idle or suspended session.
@@ -1265,13 +1251,30 @@ async fn resume_session_handler(
     Json(payload): Json<ResumeSessionRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    if payload
+        .prompt
+        .as_deref()
+        .is_some_and(|prompt| prompt != "continue")
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let db = state.db.lock().await;
 
+    let target = db
+        .get_session_focus_target(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let agent = match target.agent.as_str() {
+        "claude-code" => spawnt_core::AgentId::ClaudeCode,
+        "codex" => spawnt_core::AgentId::Codex,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    let cwd = target.repo_root.ok_or(StatusCode::BAD_REQUEST)?;
     let prompt = payload.prompt.unwrap_or_else(|| "continue".to_owned());
     let entry = spawnt_core::rules::ResumeQueueEntry {
         session_id: id.clone(),
-        agent: spawnt_core::AgentId::ClaudeCode,
-        cwd: ".".to_owned(),
+        agent,
+        cwd,
         resume_prompt: prompt,
         max_runs: payload.max_runs.unwrap_or(1),
         runs_completed: 0,
@@ -1327,37 +1330,31 @@ async fn routing_policy_post_handler(
 async fn remote_pairing_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-
-    let mut room_bytes = [0u8; 16];
-    let _ = getrandom::fill(&mut room_bytes);
-    let room_id = format!(
-        "room-{}",
-        room_bytes
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>()
-    );
-
-    let mut pubkey_bytes = [0u8; 32];
-    let _ = getrandom::fill(&mut pubkey_bytes);
-    let public_key = pubkey_bytes
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
-
-    let verify_code = spawnt_core::RemotePairingSession::derive_verify_code(&pubkey_bytes);
-    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(5);
-
-    let session = spawnt_core::RemotePairingSession {
-        room_id,
-        public_key,
-        verify_code,
-        expires_at,
-    };
-
-    Ok(Json(session))
+    if !crate::pro::has_remote_access().await {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let status = state
+        .remote
+        .start(state.db.clone())
+        .await
+        .map_err(|error| match error {
+            crate::remote::RemoteError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
+            _ => StatusCode::BAD_GATEWAY,
+        })?;
+    let mut body = json!(status);
+    if let (Some(room), Some(key), Some(relay)) = (
+        status.room_id.as_deref(),
+        status.public_key.as_deref(),
+        status.relay_url.as_deref(),
+    ) {
+        let base = spawnt_core::branding::branding()
+            .map(|branding| branding.base_url.as_str())
+            .unwrap_or("https://spawntv.vercel.app");
+        body["pairing_url"] = json!(format!("{base}/remote#room={room}&key={key}&relay={relay}"));
+    }
+    Ok(Json(body))
 }
 
 async fn remote_status_handler(
@@ -1365,24 +1362,41 @@ async fn remote_status_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(json!({
-        "enabled": true,
-        "paired": false,
-        "relay_url": "wss://relay.spawnt.internal",
-        "entitled": true
-    })))
+    Ok(Json(json!(state.remote.status().await)))
+}
+
+/// Desktop-side confirmation of the shared six-digit code.
+#[derive(Debug, Deserialize)]
+pub struct RemoteConfirmRequest {
+    /// Code displayed on both devices.
+    pub code: String,
+}
+
+async fn remote_confirm_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<RemoteConfirmRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let status = state
+        .remote
+        .confirm(&payload.code)
+        .await
+        .map_err(|error| match error {
+            crate::remote::RemoteError::WrongCode => StatusCode::BAD_REQUEST,
+            crate::remote::RemoteError::Expired => StatusCode::GONE,
+            _ => StatusCode::CONFLICT,
+        })?;
+    Ok(Json(json!(status)))
 }
 
 async fn remote_revoke_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(json!({
-        "ok": true,
-        "revoked": true,
-        "status": "disconnected"
-    })))
+    let revoked = state.remote.revoke().await;
+    Ok(Json(json!({"ok": true, "revoked": revoked})))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -2166,6 +2180,34 @@ async fn live_snapshot_handler(
 #[cfg(test)]
 mod tests {
     use super::{AppState, ModelCatalogItem, build_router, quota_views};
+
+    #[test]
+    fn pty_query_token_does_not_bypass_host_or_origin_validation() {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "attacker.example".parse().expect("host"));
+        assert_eq!(
+            super::validate_pty_auth(&headers, Some("secret"), "secret"),
+            Err(StatusCode::FORBIDDEN)
+        );
+        headers.insert("host", "127.0.0.1".parse().expect("host"));
+        headers.insert(
+            "origin",
+            "https://attacker.example".parse().expect("origin"),
+        );
+        assert_eq!(
+            super::validate_pty_auth(&headers, Some("secret"), "secret"),
+            Err(StatusCode::FORBIDDEN)
+        );
+        headers.insert("origin", "http://127.0.0.1:3000".parse().expect("origin"));
+        assert_eq!(
+            super::validate_pty_auth(&headers, Some("secret"), "secret"),
+            Ok(())
+        );
+        assert_eq!(
+            super::validate_pty_auth(&headers, Some("wrong"), "secret"),
+            Err(StatusCode::UNAUTHORIZED)
+        );
+    }
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use serde_json::json;
@@ -2180,6 +2222,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "local-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         for path in [
             "/api/v1/rules",
@@ -2211,6 +2254,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "local-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         let request = Request::builder()
             .method("POST")
@@ -2231,6 +2275,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "test".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         let response = app
             .oneshot(
@@ -2273,6 +2318,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "asset-test".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         for (path, content_type, marker) in [
             ("/", "text/html", "/console-app.js"),
@@ -2339,6 +2385,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "local-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         for method in ["GET", "POST", "DELETE"] {
             let request = Request::builder()
@@ -2366,6 +2413,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "secret-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         };
         let app = build_router(state);
 
@@ -2385,6 +2433,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         for (path, expected) in [
             ("/api/v1/projects?range=all", StatusCode::OK),
@@ -2431,6 +2480,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "secret-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         for path in [
             "/api/v1/live",
@@ -2461,6 +2511,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "secret-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         let request = Request::builder()
             .method("POST")
@@ -2480,6 +2531,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "secret-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         };
         let app = build_router(state);
 
@@ -2501,6 +2553,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "secret-test-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         };
         let app = build_router(state);
 
@@ -2524,6 +2577,7 @@ mod tests {
                 db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
                 bearer_token: "focus-unit".to_owned(),
                 orchestrator: None,
+                remote: Arc::new(crate::remote::RemoteManager::new()),
             });
             let mut request = Request::builder()
                 .method("POST")
@@ -2571,6 +2625,7 @@ mod tests {
             db: Arc::new(Mutex::new(db)),
             bearer_token: "focus-unit".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         let request = Request::builder()
             .method("POST")
@@ -2596,6 +2651,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "models-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         let request = Request::builder()
@@ -2630,6 +2686,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "launch-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         // 1. Missing auth
@@ -2703,6 +2760,7 @@ mod tests {
             db: Arc::new(Mutex::new(db_mut)),
             bearer_token: "chat-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         // 1. GET chat events
@@ -2766,6 +2824,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "file-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         let repo_param = temp_dir.path().to_string_lossy().replace('\\', "/");
@@ -2804,6 +2863,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "perm-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         // 1. Approve
@@ -2851,6 +2911,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "switch-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         let req = Request::builder()
@@ -2863,21 +2924,16 @@ mod tests {
             .expect("request");
 
         let res = app.oneshot(req).await.expect("res");
-        assert_eq!(res.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(res.into_body(), 16384)
-            .await
-            .expect("body");
-        let packet: spawnt_core::HandoffPacket = serde_json::from_slice(&body).expect("json");
-        assert_eq!(packet.target_model, "o3");
-        assert_eq!(packet.session_id, "switch-test-s1");
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
-    async fn resume_session_endpoint_arms_queue() {
+    async fn resume_session_rejects_unknown_session() {
         let app = build_router(AppState {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "resume-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         let req = Request::builder()
@@ -2886,11 +2942,63 @@ mod tests {
             .header("Host", "127.0.0.1")
             .header("Authorization", "Bearer resume-token")
             .header("Content-Type", "application/json")
-            .body(Body::from(r#"{"prompt":"continue work","max_runs":2}"#))
+            .body(Body::from(r#"{"prompt":"continue","max_runs":2}"#))
             .expect("request");
 
         let res = app.oneshot(req).await.expect("res");
-        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn resume_session_uses_recorded_agent_and_repository() {
+        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
+        let mut db = Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, "/workspace/resume", None);
+        let session = Session {
+            id: "codex:resume-test".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: chrono::Utc::now(),
+            last_event_at: chrono::Utc::now(),
+        };
+        let checkpoint = spawnt_store::SourceCheckpoint {
+            file_path: "/fixture".to_owned(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "unit".to_owned(),
+            last_ingested_at: chrono::Utc::now(),
+        };
+        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+            .expect("fixture");
+        let db = Arc::new(Mutex::new(db));
+        let app = build_router(AppState {
+            db: db.clone(),
+            bearer_token: "resume-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/codex:resume-test/resume")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer resume-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from("{}"))
+            .expect("request");
+        assert_eq!(
+            app.oneshot(req).await.expect("response").status(),
+            StatusCode::OK
+        );
+        let db = db.lock().await;
+        let queue = db.list_resume_queue().expect("queue");
+        assert_eq!(queue[0].agent, AgentId::Codex);
+        assert_eq!(queue[0].cwd, "/workspace/resume");
     }
 
     #[tokio::test]
@@ -2899,6 +3007,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "policy-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         // 1. GET default policy
@@ -2942,6 +3051,7 @@ mod tests {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "remote-token".to_owned(),
             orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
         });
 
         // 1. GET /api/v1/remote/pairing
@@ -2952,14 +3062,7 @@ mod tests {
             .body(Body::empty())
             .expect("request");
         let res_pair = app.clone().oneshot(req_pair).await.expect("res");
-        assert_eq!(res_pair.status(), StatusCode::OK);
-        let body_pair = axum::body::to_bytes(res_pair.into_body(), 16384)
-            .await
-            .expect("body");
-        let session: spawnt_core::RemotePairingSession =
-            serde_json::from_slice(&body_pair).expect("json");
-        assert!(session.room_id.starts_with("room-"));
-        assert_eq!(session.verify_code.len(), 6);
+        assert_ne!(res_pair.status(), StatusCode::OK);
 
         // 2. GET /api/v1/remote/status
         let req_stat = Request::builder()

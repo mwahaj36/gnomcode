@@ -187,6 +187,7 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 
         let ctx = FileCtx {
             source_path: path_str.clone(),
+            source_offset: read_result.effective_start_offset,
             fallback_model,
             fallback_cwd,
         };
@@ -210,7 +211,11 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             continue;
         }
         let batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
-        if is_rewritten && batch.parse_errors > 0 && batch.usage_records.is_empty() {
+        if is_rewritten
+            && batch.parse_errors > 0
+            && batch.usage_records.is_empty()
+            && batch.chat_events.is_empty()
+        {
             continue;
         }
         total_records_ingested += batch.usage_records.len() as u64;
@@ -225,13 +230,14 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             last_ingested_at: Utc::now(),
         };
 
-        if let Err(e) = db.commit_batch(
+        if let Err(e) = db.commit_batch_with_chat(
             &batch.projects,
             &batch.sessions,
             &batch.usage_records,
             &batch.activity_events,
             &batch.quota_snapshots,
             &new_checkpoint,
+            &batch.chat_events,
         ) {
             tracing::warn!("failed to commit batch for {path_str}: {e}");
         }
@@ -248,6 +254,36 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codex_chat_batch_persists_and_replays_without_duplicates() {
+        use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
+        let mut db = spawnt_store::Database::open_in_memory().expect("database");
+        let checkpoint = spawnt_store::SourceCheckpoint {
+            file_path: "synthetic".into(),
+            last_read_offset: bytes.len() as u64,
+            file_size: bytes.len() as u64,
+            fingerprint: "synthetic".into(),
+            last_ingested_at: chrono::Utc::now(),
+        };
+        for _ in 0..2 {
+            db.commit_batch_with_chat(
+                &batch.projects,
+                &batch.sessions,
+                &batch.usage_records,
+                &batch.activity_events,
+                &batch.quota_snapshots,
+                &checkpoint,
+                &batch.chat_events,
+            )
+            .expect("commit");
+        }
+        let chat = db.get_session_chat("codex:id_0001", None).expect("chat");
+        assert_eq!(chat.len(), 2);
+        assert_eq!(chat[0].role, spawnt_core::ChatRole::User);
+        assert_eq!(chat[1].role, spawnt_core::ChatRole::Assistant);
+    }
     use super::{complete_jsonl_prefix_len, scan_log_files};
     use spawnt_core::AgentId;
     use spawnt_platform::AgentRoot;

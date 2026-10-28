@@ -721,6 +721,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         db: orchestrator.db(),
         bearer_token: info.token.clone(),
         orchestrator: Some(Arc::new(orchestrator)),
+        remote: Arc::new(spawnt_daemon::remote::RemoteManager::new()),
     };
 
     let router = spawnt_daemon::api::build_router(state);
@@ -983,7 +984,7 @@ async fn cmd_attach(session_id: &str) -> Result<()> {
         record.port, record.token
     );
 
-    println!("Connecting to session {} at {}...", session_id, url);
+    println!("Connecting to session {}...", session_id);
     println!("Press Ctrl+C to detach without stopping the agent.\n");
 
     let (ws_stream, _) = connect_async(&url).await?;
@@ -1115,54 +1116,36 @@ async fn cmd_models(db_path: &Path) -> Result<()> {
 }
 
 async fn cmd_switch(session_id: &str, model: &str, db_path: &Path) -> Result<()> {
-    println!(
-        "[WAIT] Compiling zero-token handoff for session {} -> {}...",
-        session_id, model
-    );
     let db = spawnt_store::Database::open(db_path)?;
-    let history = db
-        .get_session_chat(session_id, Some(50))
-        .unwrap_or_default();
-    let turn_count = history.len() as u32;
-
-    let mut user_prompts = Vec::new();
-    for evt in &history {
-        if evt.role == spawnt_core::ChatRole::User {
-            user_prompts.push(evt.content.clone());
-        }
-    }
-    let summary = if user_prompts.is_empty() {
-        format!("Continuation of session {session_id}")
-    } else {
-        user_prompts.join("; ")
-    };
-    let redacted_summary = spawnt_core::redact::redact_chat_content(&summary);
-
-    let packet = spawnt_core::HandoffPacket {
-        session_id: session_id.to_owned(),
-        source_model: "previous".to_owned(),
-        target_model: model.to_owned(),
-        prompt_summary: redacted_summary,
-        touched_files: Vec::new(),
-        turn_count,
-        created_at: chrono::Utc::now(),
-    };
-
-    println!("[RUN] Zero-token handoff compiled successfully");
-    println!("Session ID:   {}", packet.session_id);
-    println!("Target Model: {}", packet.target_model);
-    println!("Summarized:   {} turns", packet.turn_count);
-    println!("Context Goal: {}", packet.prompt_summary);
+    let record = spawnt_daemon::switch_session(&db, session_id, model, None).await?;
+    println!(
+        "[RUN] Switched to {} in session {}",
+        model, record.session_id
+    );
+    println!("Attach with: spawnt attach {}", record.session_id);
     Ok(())
 }
 
 async fn cmd_resume(session_id: &str, prompt: Option<String>, db_path: &Path) -> Result<()> {
+    anyhow::ensure!(
+        prompt.as_deref().is_none_or(|p| p == "continue"),
+        "Only the default resume prompt is supported"
+    );
     println!("[WAIT] Arming resume queue for session {}...", session_id);
     let db = spawnt_store::Database::open(db_path)?;
+    let target = db
+        .get_session_focus_target(session_id)?
+        .context("Session not found")?;
+    let agent = match target.agent.as_str() {
+        "claude-code" => spawnt_core::AgentId::ClaudeCode,
+        "codex" => spawnt_core::AgentId::Codex,
+        _ => anyhow::bail!("Agent does not support resume"),
+    };
+    let cwd = target.repo_root.context("Session has no repository path")?;
     let entry = spawnt_core::rules::ResumeQueueEntry {
         session_id: session_id.to_owned(),
-        agent: spawnt_core::AgentId::ClaudeCode,
-        cwd: ".".to_owned(),
+        agent,
+        cwd,
         resume_prompt: prompt.unwrap_or_else(|| "continue".to_owned()),
         max_runs: 1,
         runs_completed: 0,

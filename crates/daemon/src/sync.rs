@@ -175,81 +175,6 @@ async fn push_snapshot(
         return Ok(false);
     };
 
-    // Poll for pending remote relay commands from web console
-    let check_url =
-        format!("{base_url}/rest/v1/spawnt_sync_state?user_id=eq.{user_id}&select=live_snapshot");
-    if let Ok(resp) = client
-        .get(&check_url)
-        .header("apikey", &public_key)
-        .bearer_auth(&access_token)
-        .send()
-        .await
-    {
-        if let Ok(rows) = resp.json::<Vec<serde_json::Value>>().await {
-            if let Some(first_row) = rows.first() {
-                if let Some(cmds) = first_row
-                    .pointer("/live_snapshot/relay_commands")
-                    .and_then(Value::as_array)
-                {
-                    for cmd in cmds {
-                        if cmd.get("action").and_then(Value::as_str) == Some("execute") {
-                            if let Some(target_session) =
-                                cmd.get("session_id").and_then(Value::as_str)
-                            {
-                                let db_clone = Arc::clone(db);
-                                let sid = target_session.to_owned();
-                                let _ = tokio::task::spawn_blocking(move || {
-                                    let guard = db_clone.blocking_lock();
-                                    let relays = guard.list_context_relays().unwrap_or_default();
-                                    if let Some(entry) =
-                                        relays.iter().find(|r| r.session_id == sid || r.id == sid)
-                                    {
-                                        let _ = crate::pro::execute_relay_handoff(entry);
-                                        let _ = guard
-                                            .update_context_relay_status(&entry.id, "executed");
-                                    } else {
-                                        let (sessions, _) = guard
-                                            .list_sessions_paginated(None, None, 0, 100)
-                                            .unwrap_or_default();
-                                        if let Some(s) = sessions.iter().find(|s| s.id == sid) {
-                                            let cwd = guard
-                                                .get_session_focus_target(&s.id)
-                                                .ok()
-                                                .flatten()
-                                                .and_then(|t| t.repo_root)
-                                                .filter(|p| !p.trim().is_empty())
-                                                .or_else(|| guard.find_antigravity_workspace(&s.id))
-                                                .unwrap_or_else(|| {
-                                                    std::env::current_dir()
-                                                        .map(|p| p.to_string_lossy().to_string())
-                                                        .unwrap_or_else(|_| ".".to_owned())
-                                                });
-                                            let entry = spawnt_store::ContextRelayEntry {
-                                                id: format!("relay-{}", s.id),
-                                                session_id: s.id.clone(),
-                                                source_agent: s.agent.clone(),
-                                                target_agent: s.agent.clone(),
-                                                project_name: s.project_name.clone(),
-                                                cwd,
-                                                fill_pct: 92,
-                                                status: "executed".to_owned(),
-                                                created_at: chrono::Utc::now().to_rfc3339(),
-                                                executed_at: Some(chrono::Utc::now().to_rfc3339()),
-                                            };
-                                            let _ = guard.record_context_relay(&entry);
-                                            let _ = crate::pro::execute_relay_handoff(&entry);
-                                        }
-                                    }
-                                })
-                                .await;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     let db = Arc::clone(db);
     let snapshot = tokio::task::spawn_blocking(move || {
         let guard = db.blocking_lock();
@@ -515,6 +440,7 @@ mod tests {
         assert!(!encoded.contains("/private/client"));
         assert!(!encoded.contains("rollout.jsonl"));
         assert!(!encoded.contains("paired_session"));
+        assert!(!encoded.contains("relay_commands"));
         assert_eq!(snapshot["active_count"], 1);
         assert!(
             chrono::DateTime::parse_from_rfc3339(
