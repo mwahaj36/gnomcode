@@ -596,63 +596,19 @@
   </main>
 
   <!-- ==================== VIEW 3: ACCOUNT ==================== -->
-  <main id="view-auth" class="view-content">
-    <div style="max-w: 680px; margin: 0 auto;" class="card">
-      <div class="section-title" style="margin-bottom: 16px;">Supabase Cloud Sync & Account Roaming</div>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;">
-        spawnt operates 100% locally by default. To sync your live fleet metrics, ROI multipliers, and quota pools across multiple workstations, pair your local daemon with your Supabase account.
-      </p>
-
-      <p id="auth-cloud-status" role="status">Checking desktop account status…</p>
-      <p>Desktop metadata snapshots publish every minute while the daemon runs. Hosted cloud-session tracking is unavailable.</p>
-      <a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a>
-
-      <!-- Paired Account Status Card -->
-      <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-top: 20px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-          <div>
-            <div style="font-weight: 600; font-size: 13px; color: var(--green); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-              <span style="display: inline-block; width: 8px; height: 8px; background: var(--green);"></span>
-              <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
-            </div>
-            <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
-              Account credentials are saved for this device. Sync retries automatically while the daemon runs.
-            </p>
-          </div>
-          <button
-            onclick="unpairSession()"
-            class="btn-control"
-            style="border-color: var(--red); color: var(--red); font-size: 11px; padding: 6px 14px; cursor: pointer;"
-          >
-            Unpair / Disconnect
-          </button>
+  <main id="view-auth" class="view-content" tabindex="0">
+    <section class="sp-account-panel" aria-labelledby="account-heading">
+      <div class="sp-account-intro"><div><span class="sp-account-label">THIS DESKTOP</span><h2 id="account-heading">Your account, on this device.</h2><p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p></div><a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a></div>
+      <div class="sp-account-state"><span class="sp-account-label">CONNECTION</span><p id="auth-cloud-status" role="status" tabindex="-1">Checking account connection...</p><p id="auth-publication-status">Checking the last desktop update...</p></div>
+      <div class="sp-account-columns">
+        <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Pairing shares this desktop's activity metadata, usage and quota snapshots with your account. Prompts, code and tool output are never synced.</p><p>Snapshots update about once a minute while spawnt is running. Local monitoring works without an account.</p></div>
+        <div>
+          <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This device is paired. Disconnecting keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" onclick="unpairSession()">Disconnect desktop</button></div>
+          <div id="auth-unpaired-card" hidden><h3>Connect this desktop</h3><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy desktop pairing token</strong>.</li><li>Paste the token below and connect.</li></ol><form onsubmit="event.preventDefault(); pairTokenDirectly()"><label for="auth-token-input">Desktop pairing token</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your pairing token" required><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local spawnt app.</p></form></div>
+          <p id="auth-pair-status" role="status" hidden></p>
         </div>
       </div>
-
-      <!-- Quick Account Pairing / Token Paste Card -->
-      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-top: 20px;">
-        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
-        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
-          Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to pair this desktop.
-        </p>
-        <div style="display: flex; gap: 8px;">
-          <input
-            type="password"
-            id="auth-token-input"
-            placeholder="Paste pairing token or session JSON here..."
-            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
-          >
-          <button
-            onclick="pairTokenDirectly()"
-            class="btn-primary"
-            style="padding: 8px 16px; white-space: nowrap; font-size: 11px;"
-          >
-            Connect Account
-          </button>
-        </div>
-        <div id="auth-pair-status" style="margin-top: 10px; font-size: 11px; font-family: var(--font-mono); display: none;"></div>
-      </div>
-    </div>
+    </section>
   </main>
 
   <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
@@ -877,7 +833,7 @@
     document.querySelector('.app-brand').href = consoleViewUrl('overview');
 
     function setView(view, updateUrl = true) {
-      document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view[0].toUpperCase() + view.slice(1);
+      document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view === 'auth' ? 'Account' : view[0].toUpperCase() + view.slice(1);
       activeView = view;
       const titles = { overview: 'Your agent fleet', sessions: 'Sessions', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Settings' };
       document.getElementById('console-title').textContent = titles[view] || 'Your agent fleet';
@@ -1521,16 +1477,20 @@
       }
     }
 
+    let accountWriteBusy = false;
     async function pairTokenDirectly() {
+      if (accountWriteBusy) return;
       const input = document.getElementById('auth-token-input');
       const status = document.getElementById('auth-pair-status');
       if (!input || !status) return;
       const val = input.value.trim();
       if (!val) return;
 
-      status.style.display = 'block';
+      accountWriteBusy = true; input.disabled = true;
+      const button = document.getElementById('auth-pair-button'); button.disabled = true; button.textContent = 'Connecting...';
+      status.hidden = false;
       status.style.color = 'var(--text-muted)';
-      status.textContent = 'Verifying and saving session...';
+      status.textContent = 'Connecting this desktop...';
 
       try {
         let sessionData = null;
@@ -1545,69 +1505,71 @@
         }
 
         const res = await fetch('/api/v1/auth/session', {
-          method: 'POST',
+          method: 'POST', signal: AbortSignal.timeout(30000),
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(sessionData)
         });
 
         if (res.ok) {
           status.style.color = 'var(--green)';
-          status.textContent = 'Account successfully paired! Roaming enabled.';
+          status.textContent = 'Desktop connected. Waiting for its next metadata update.';
           input.value = '';
-          setTimeout(() => location.reload(), 1200);
+          if (await checkAuthSession()) document.getElementById('auth-cloud-status').focus({ preventScroll: true });
         } else {
           status.style.color = 'var(--red)';
           status.textContent = 'Failed to save session. Check token and try again.';
         }
       } catch (err) {
         status.style.color = 'var(--red)';
-        status.textContent = 'Error: ' + err.message;
-      }
+        status.textContent = 'Connection could not be confirmed. Reload account status before retrying.';
+      } finally { accountWriteBusy = false; input.disabled = false; button.disabled = false; button.textContent = 'Connect desktop'; }
     }
 
     async function checkAuthSession() {
       try {
-        const response = await fetch('/api/v1/auth/session', { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Account status request failed');
-        const res = await response.json();
-        const syncResponse = await fetch('/api/v1/sync/status', { headers, signal: AbortSignal.timeout(15000) });
-        const sync = syncResponse.ok ? await syncResponse.json() : null;
-        const syncLabel = document.getElementById('cloud-sync-status');
-        if (syncLabel) syncLabel.textContent = sync ? `${sync.message} Last published: ${sync.last_success_at ? new Date(sync.last_success_at).toLocaleString() : 'not yet'}` : 'Cloud publication status unavailable.';
-        const pairedCard = document.getElementById('auth-paired-card');
-        const unpairedCard = document.getElementById('auth-unpaired-card');
-        const emailEl = document.getElementById('auth-paired-email');
-        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Desktop account paired. Desktop summary sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
-        if (res && res.paired) {
-          if (pairedCard) pairedCard.style.display = 'block';
-          if (unpairedCard) unpairedCard.style.display = 'none';
-          if (emailEl) emailEl.textContent = res.email || 'Connected Account';
-        } else {
-          if (pairedCard) pairedCard.style.display = 'none';
-          if (unpairedCard) unpairedCard.style.display = 'block';
-        }
+        const [account, publication] = await Promise.allSettled([
+          apiJson('/api/v1/auth/session', { headers, signal: AbortSignal.timeout(15000) }),
+          apiJson('/api/v1/sync/status', { headers, signal: AbortSignal.timeout(15000) })
+        ]);
+        if (account.status !== 'fulfilled') throw new Error('Account unavailable');
+        const res = account.value;
+        const sync = publication.status === 'fulfilled' ? publication.value : null;
+        const publicationText = sync ? `${sync.message} Last published: ${sync.last_success_at ? new Date(sync.last_success_at).toLocaleString() : 'not yet'}.` : 'Publication status unavailable. Retry Reload view.';
+        document.getElementById('auth-publication-status').textContent = publicationText;
+        document.getElementById('cloud-sync-status').textContent = publicationText;
+        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.';
+        document.getElementById('auth-paired-card').hidden = !res.paired;
+        document.getElementById('auth-unpaired-card').hidden = Boolean(res.paired);
+        document.getElementById('auth-paired-email').textContent = res.email || 'Connected account';
         return true;
-      } catch (err) {
-        console.error('Failed to check auth session', err);
+      } catch (_) {
+        document.getElementById('auth-cloud-status').textContent = 'Account connection unavailable. Retry Reload view.';
+        document.getElementById('auth-publication-status').textContent = 'Local monitoring does not require an account connection.';
+        document.getElementById('cloud-sync-status').textContent = 'Account status unavailable. Retry Reload view.';
+        document.getElementById('auth-paired-card').hidden = true;
+        document.getElementById('auth-unpaired-card').hidden = true;
         return false;
       }
     }
 
     async function unpairSession() {
-      if (!confirm('Unpair desktop daemon from cloud sync and disconnect account?')) return;
+      if (accountWriteBusy) return;
+      if (!confirm('Disconnect this desktop from your account? Recorded local sessions will stay on this device.')) return;
+      accountWriteBusy = true;
+      const button = document.getElementById('auth-disconnect-button'); button.disabled = true; button.textContent = 'Disconnecting...';
       try {
         const res = await fetch('/api/v1/auth/session', {
-          method: 'DELETE',
+          method: 'DELETE', signal: AbortSignal.timeout(30000),
           headers
         });
         if (res.ok) {
-          checkAuthSession();
+          await checkAuthSession();
         } else {
-          alert('Failed to disconnect account session.');
+          alert('Could not disconnect. Reload the account status and retry.');
         }
       } catch (err) {
-        alert('Error: ' + err.message);
-      }
+        alert('Connection could not be confirmed. Reload the account status before retrying.');
+      } finally { accountWriteBusy = false; button.disabled = false; button.textContent = 'Disconnect desktop'; }
     }
 
     async function loadOngoing() {
@@ -1643,7 +1605,8 @@
       try {
         const [userResponse, statsResponse] = await Promise.all([
           fetch('/api/v1/user', { headers }),
-          fetch('/api/v1/stats', { headers })
+          fetch('/api/v1/stats', { headers }),
+          checkAuthSession()
         ]);
         if (!userResponse.ok || !statsResponse.ok) throw new Error('Settings request failed');
         const [user, stats] = await Promise.all([userResponse.json(), statsResponse.json()]);

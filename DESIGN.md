@@ -87,3 +87,5 @@ Windows app, tray and installer ICOs use the canonical red mark on an opaque #07
 
 Overview leads with ongoing session identity beside compact provider limits, with history below. Narrow layouts stack these regions. Declare data provenance at the section or column level and reserve repeated inline warnings for missing or partial data. Today uses hourly local-clock labels; longer periods name the reporting period beside the token total. Account is a settings row; active licenses show replacement/removal actions instead of an activation prompt.
 
+Desktop Account uses a connection summary above a two-column explanation and pairing flow. Pairing instructions name the exact web control, token entry is masked and labeled, and connected devices show a separate Disconnect action. Publication status is independent of account status; loading must resolve to a status or retry message.
+
