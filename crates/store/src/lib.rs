@@ -4,8 +4,8 @@ use chrono::{DateTime, Datelike, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use spawnt_core::rules::{GuardrailRule, ResumeQueueEntry};
 use spawnt_core::{
-    ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
-    SessionState, Surface, TrustLevel, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
+    Session, SessionState, Surface, TrustLevel, UsageRecord,
 };
 use std::path::Path;
 use thiserror::Error;
@@ -668,7 +668,143 @@ impl Database {
             )?;
         }
 
+        let has_v8: bool = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM schema_migrations WHERE version = 8",
+                [],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+
+        if !has_v8 {
+            self.conn.execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS chat_event (
+                    event_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    turn_index INTEGER NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    tool_name TEXT,
+                    status TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_chat_event_session ON chat_event(session_id, turn_index);
+                INSERT INTO schema_migrations (version, applied_at) VALUES (8, datetime('now'));
+                "#,
+            )?;
+        }
+
         Ok(())
+    }
+
+    /// Inserts a local redacted structured chat event.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite insert failure.
+    pub fn insert_chat_event(&self, event: &ChatEvent) -> Result<(), Error> {
+        let created_at = event.created_at.to_rfc3339();
+        self.conn.execute(
+            r#"
+            INSERT INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(event_id) DO UPDATE SET
+                content = excluded.content,
+                tool_name = excluded.tool_name,
+                status = excluded.status
+            "#,
+            params![
+                event.event_id,
+                event.session_id,
+                event.turn_index,
+                event.role.as_str(),
+                event.content,
+                event.tool_name,
+                event.status,
+                created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Retrieves structured chat events for a session in turn order.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn get_session_chat(
+        &self,
+        session_id: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<ChatEvent>, Error> {
+        let limit = limit.unwrap_or(1000).min(5000);
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT event_id, session_id, turn_index, role, content, tool_name, status, created_at
+            FROM chat_event
+            WHERE session_id = ?1
+            ORDER BY turn_index ASC, created_at ASC
+            LIMIT ?2
+            "#,
+        )?;
+
+        let rows = stmt.query_map(params![session_id, limit as i64], |row| {
+            let event_id: String = row.get(0)?;
+            let session_id: String = row.get(1)?;
+            let turn_index: i64 = row.get(2)?;
+            let role_str: String = row.get(3)?;
+            let content: String = row.get(4)?;
+            let tool_name: Option<String> = row.get(5)?;
+            let status: Option<String> = row.get(6)?;
+            let created_at_str: String = row.get(7)?;
+
+            let role = ChatRole::parse_role(&role_str).unwrap_or(ChatRole::System);
+            let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+
+            Ok(ChatEvent {
+                event_id,
+                session_id,
+                turn_index,
+                role,
+                content,
+                tool_name,
+                status,
+                created_at,
+            })
+        })?;
+
+        let mut events = Vec::new();
+        for r in rows {
+            events.push(r?);
+        }
+        Ok(events)
+    }
+
+    /// Hard-deletes all stored conversation events for a session.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite deletion failure.
+    pub fn delete_session_chat(&self, session_id: &str) -> Result<usize, Error> {
+        let deleted = self.conn.execute(
+            "DELETE FROM chat_event WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        Ok(deleted)
+    }
+
+    /// Prunes chat events older than the specified retention window in days.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite deletion failure.
+    pub fn purge_chat_events_older_than(&self, days: u32) -> Result<usize, Error> {
+        let deleted = self.conn.execute(
+            "DELETE FROM chat_event WHERE created_at < datetime('now', '-' || ?1 || ' days')",
+            params![days],
+        )?;
+        Ok(deleted)
     }
 
     /// Returns configured local guardrail rules.
@@ -3164,5 +3300,79 @@ mod tests {
             .expect("calendar month");
         assert_eq!(month.range_label, "This month");
         assert_eq!(month.total_tokens, 1650);
+    }
+
+    #[test]
+    fn chat_event_storage_retrieval_and_hard_deletion() {
+        use spawnt_core::{ChatEvent, ChatRole};
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "C:\\repo", None);
+        let session = Session {
+            id: "chat-sess-1".to_owned(),
+            agent: AgentId::ClaudeCode,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("claude-3-5-sonnet".to_owned()),
+            title: Some("Chat Test".to_owned()),
+            state: SessionState::Idle,
+            pid: Some(1234),
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+
+        let cp = SourceCheckpoint {
+            file_path: "/path/to/chat.jsonl".to_owned(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "chat-fp".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+
+        db.commit_batch(&[project], &[session], &[], &[], &[], &cp)
+            .expect("commit base session");
+
+        let evt1 = ChatEvent {
+            event_id: "evt-1".to_owned(),
+            session_id: "chat-sess-1".to_owned(),
+            turn_index: 1,
+            role: ChatRole::User,
+            content: "Fix compile error".to_owned(),
+            tool_name: None,
+            status: None,
+            created_at: Utc::now(),
+        };
+
+        let evt2 = ChatEvent {
+            event_id: "evt-2".to_owned(),
+            session_id: "chat-sess-1".to_owned(),
+            turn_index: 2,
+            role: ChatRole::Tool,
+            content: "Executed cargo check".to_owned(),
+            tool_name: Some("Bash".to_owned()),
+            status: Some("success".to_owned()),
+            created_at: Utc::now(),
+        };
+
+        db.insert_chat_event(&evt1).expect("insert evt1");
+        db.insert_chat_event(&evt2).expect("insert evt2");
+
+        let events = db
+            .get_session_chat("chat-sess-1", None)
+            .expect("fetch chat");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event_id, "evt-1");
+        assert_eq!(events[0].role, ChatRole::User);
+        assert_eq!(events[1].event_id, "evt-2");
+        assert_eq!(events[1].tool_name.as_deref(), Some("Bash"));
+
+        // Hard deletion
+        let deleted = db.delete_session_chat("chat-sess-1").expect("hard delete");
+        assert_eq!(deleted, 2);
+
+        let after = db
+            .get_session_chat("chat-sess-1", None)
+            .expect("fetch empty");
+        assert!(after.is_empty());
     }
 }

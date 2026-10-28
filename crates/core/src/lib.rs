@@ -441,9 +441,79 @@ impl Default for UserSettings {
     }
 }
 
+/// Role of a message in a conversation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatRole {
+    /// Human user prompt.
+    User,
+    /// Agent/assistant textual or reasoning response.
+    Assistant,
+    /// Tool invocation or execution result.
+    Tool,
+    /// System or lifecycle notification.
+    System,
+}
+
+impl ChatRole {
+    /// Stable string identifier.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Assistant => "assistant",
+            Self::Tool => "tool",
+            Self::System => "system",
+        }
+    }
+
+    /// Parse from stored string representation.
+    #[must_use]
+    pub fn parse_role(s: &str) -> Option<Self> {
+        s.parse().ok()
+    }
+}
+
+impl std::str::FromStr for ChatRole {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "user" => Ok(Self::User),
+            "assistant" => Ok(Self::Assistant),
+            "tool" => Ok(Self::Tool),
+            "system" => Ok(Self::System),
+            _ => Err(()),
+        }
+    }
+}
+
+/// A local, redacted structured chat event in a session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatEvent {
+    /// Unique identifier for the event.
+    pub event_id: String,
+    /// Session identifier.
+    pub session_id: String,
+    /// Sequential turn index within the session.
+    pub turn_index: i64,
+    /// Message role (user, assistant, tool, system).
+    pub role: ChatRole,
+    /// Redacted textual content of the message or tool summary.
+    pub content: String,
+    /// Optional tool name for tool-role events.
+    pub tool_name: Option<String>,
+    /// Optional execution or approval status (e.g. "approved", "denied", "pending", "success", "error").
+    pub status: Option<String>,
+    /// Creation timestamp (UTC).
+    pub created_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{AgentId, Project, Session, TrustLevel, UsageRecord, UserSettings};
+    use super::{
+        AgentId, ChatEvent, ChatRole, Project, Session, TrustLevel, UsageRecord, UserSettings,
+    };
 
     #[test]
     fn trust_level_identifiers_are_stable() {
@@ -521,5 +591,36 @@ mod tests {
         assert!(s.notify_quota_reset);
         assert!(s.notify_context_bloat);
         assert!(s.notify_guardrail_breach);
+    }
+
+    #[test]
+    fn chat_role_string_round_trip() {
+        for role in [
+            ChatRole::User,
+            ChatRole::Assistant,
+            ChatRole::Tool,
+            ChatRole::System,
+        ] {
+            assert_eq!(ChatRole::parse_role(role.as_str()), Some(role));
+        }
+        assert_eq!(ChatRole::parse_role("invalid"), None);
+    }
+
+    #[test]
+    fn chat_event_serializes_and_deserializes() {
+        let event = ChatEvent {
+            event_id: "evt-123".to_owned(),
+            session_id: "claude-code:s1".to_owned(),
+            turn_index: 1,
+            role: ChatRole::User,
+            content: "Fix the build".to_owned(),
+            tool_name: None,
+            status: None,
+            created_at: chrono::Utc::now(),
+        };
+        let json = serde_json::to_string(&event).expect("json");
+        let parsed: ChatEvent = serde_json::from_str(&json).expect("parse");
+        assert_eq!(parsed.event_id, "evt-123");
+        assert_eq!(parsed.role, ChatRole::User);
     }
 }
