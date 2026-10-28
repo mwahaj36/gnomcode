@@ -120,11 +120,21 @@ pub fn session_file_path(session_id: &str) -> PathBuf {
     sessions_dir().join(format!("{session_id}.json"))
 }
 
+fn valid_session_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+}
+
 /// Saves a session record to disk with owner-only access.
 ///
 /// # Errors
 /// Returns [`Error`] if creating the directory or writing fails.
 pub fn save_session_record(record: &SessionRecord) -> Result<(), Error> {
+    if !valid_session_id(&record.session_id) {
+        return Err(Error::SessionNotFound(record.session_id.clone()));
+    }
     let dir = sessions_dir();
     fs::create_dir_all(&dir)?;
     let path = session_file_path(&record.session_id);
@@ -139,6 +149,9 @@ pub fn save_session_record(record: &SessionRecord) -> Result<(), Error> {
 /// # Errors
 /// Returns [`Error::SessionNotFound`] or [`Error`] if reading fails.
 pub fn load_session_record(session_id: &str) -> Result<SessionRecord, Error> {
+    if !valid_session_id(session_id) {
+        return Err(Error::SessionNotFound(session_id.to_owned()));
+    }
     let path = session_file_path(session_id);
     if !path.is_file() {
         return Err(Error::SessionNotFound(session_id.to_owned()));
@@ -150,6 +163,9 @@ pub fn load_session_record(session_id: &str) -> Result<SessionRecord, Error> {
 
 /// Removes a session record from disk.
 pub fn remove_session_record(session_id: &str) {
+    if !valid_session_id(session_id) {
+        return;
+    }
     let path = session_file_path(session_id);
     let _ = fs::remove_file(path);
 }
@@ -182,28 +198,7 @@ pub fn list_active_sessions() -> Vec<SessionRecord> {
 /// Checks whether a process ID is currently alive.
 #[must_use]
 pub fn is_pid_alive(pid: u32) -> bool {
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-        let script = format!(
-            "if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}"
-        );
-        Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .creation_flags(0x0800_0000)
-            .status()
-            .is_ok_and(|status| status.success())
-    }
-    #[cfg(unix)]
-    {
-        let res = unsafe { libc::kill(pid as libc::pid_t, 0) };
-        res == 0
-    }
-    #[cfg(not(any(windows, unix)))]
-    {
-        let _ = pid;
-        false
-    }
+    spawnt_platform::process_is_alive(pid)
 }
 
 /// Bounded in-memory terminal output buffer.
@@ -273,6 +268,9 @@ pub async fn run_pty_host(
     model: Option<&str>,
     override_command: Option<(&str, &[&str])>,
 ) -> Result<(), Error> {
+    if !valid_session_id(session_id) {
+        return Err(Error::SessionNotFound(session_id.to_owned()));
+    }
     let token = {
         let mut bytes = [0u8; 32];
         getrandom::fill(&mut bytes).map_err(|e| Error::Process(e.to_string()))?;
@@ -307,7 +305,7 @@ pub async fn run_pty_host(
     };
 
     #[cfg(unix)]
-    let (child_pid, mut writer, mut master, mut child) = {
+    let (child_pid, mut writer, master, mut child) = {
         let (cmd, args) = if let Some((c, a)) = override_command {
             (c.to_owned(), a.iter().map(|s| (*s).to_owned()).collect())
         } else {
@@ -447,18 +445,56 @@ pub async fn run_pty_host(
     Ok(())
 }
 
-async fn host_health_handler(State(state): State<Arc<HostState>>) -> impl IntoResponse {
+fn valid_loopback_headers(headers: &HeaderMap) -> bool {
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<axum::http::uri::Authority>().ok());
+    if !host.is_some_and(|h| matches!(h.host(), "localhost" | "127.0.0.1")) {
+        return false;
+    }
+    match headers.get("origin") {
+        None => true,
+        Some(value) => value
+            .to_str()
+            .ok()
+            .and_then(|v| v.parse::<axum::http::Uri>().ok())
+            .is_some_and(|u| {
+                matches!(u.scheme_str(), Some("http" | "https"))
+                    && matches!(u.host(), Some("localhost" | "127.0.0.1"))
+            }),
+    }
+}
+
+async fn host_health_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+) -> impl IntoResponse {
+    if !valid_loopback_headers(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let auth = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "));
+    if auth != Some(&state.token) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
     Json(serde_json::json!({
         "ok": true,
         "session_id": state.session_id,
         "child_pid": state.child_pid,
     }))
+    .into_response()
 }
 
 async fn host_stop_handler(
     headers: HeaderMap,
     State(state): State<Arc<HostState>>,
 ) -> impl IntoResponse {
+    if !valid_loopback_headers(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     let auth = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -468,21 +504,10 @@ async fn host_stop_handler(
         return StatusCode::UNAUTHORIZED;
     }
 
+    if spawnt_platform::stop_owned_process(state.child_pid).is_err() {
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
     state.stopping.store(true, Ordering::Relaxed);
-    #[cfg(windows)]
-    {
-        let pid = state.child_pid;
-        let _ = std::process::Command::new("taskkill")
-            .args(["/F", "/T", "/PID", &pid.to_string()])
-            .creation_flags(0x0800_0000)
-            .status();
-    }
-    #[cfg(unix)]
-    {
-        unsafe {
-            libc::kill(state.child_pid as libc::pid_t, libc::SIGTERM);
-        }
-    }
 
     StatusCode::OK
 }
@@ -493,6 +518,9 @@ async fn host_stream_handler(
     State(state): State<Arc<HostState>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
+    if !valid_loopback_headers(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let token = query.token.or_else(|| {
         headers
             .get("authorization")
@@ -553,6 +581,9 @@ pub async fn launch_session(
     repo: &Path,
     model: Option<&str>,
 ) -> Result<SessionRecord, Error> {
+    if !valid_session_id(session_id) {
+        return Err(Error::SessionNotFound(session_id.to_owned()));
+    }
     let _ = launch_command(agent, repo, model)?;
     let exe = std::env::current_exe().map_err(Error::Io)?;
 
@@ -605,27 +636,116 @@ pub async fn launch_session(
 /// Returns [`Error`] if the session cannot be contacted or stopped.
 pub async fn stop_session(session_id: &str) -> Result<(), Error> {
     let record = load_session_record(session_id)?;
+    send_stop(&record).await?;
+    Ok(())
+}
+
+async fn send_stop(record: &SessionRecord) -> Result<(), Error> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
         .map_err(|e| Error::Process(e.to_string()))?;
 
     let url = format!("http://127.0.0.1:{}/stop", record.port);
-    let _ = client
+    client
         .post(&url)
         .header("Authorization", format!("Bearer {}", record.token))
         .send()
-        .await;
-
-    // Verify cleanup
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    remove_session_record(session_id);
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|e| Error::Process(e.to_string()))?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owner_rejects_non_loopback_origin_and_host() {
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "evil.example".parse().expect("host"));
+        assert!(!valid_loopback_headers(&headers));
+        headers.insert("host", "127.0.0.1:1234".parse().expect("host"));
+        headers.insert("origin", "https://evil.example".parse().expect("origin"));
+        assert!(!valid_loopback_headers(&headers));
+        headers.insert("origin", "http://localhost:1234".parse().expect("origin"));
+        assert!(valid_loopback_headers(&headers));
+    }
+
+    #[test]
+    fn session_record_rejects_path_separators() {
+        let record = SessionRecord {
+            session_id: "../escape".to_owned(),
+            agent: "codex".to_owned(),
+            repo_path: ".".to_owned(),
+            model: None,
+            host_pid: 0,
+            child_pid: 0,
+            port: 0,
+            token: String::new(),
+            started_at: String::new(),
+        };
+        assert!(save_session_record(&record).is_err());
+        for id in [
+            "",
+            "..",
+            "../escape",
+            "..\\escape",
+            "C:\\escape",
+            "/absolute",
+        ] {
+            assert!(!valid_session_id(id), "accepted {id:?}");
+            assert!(load_session_record(id).is_err());
+        }
+        for id in ["codex-123", "claude-code-123", "test_session"] {
+            assert!(valid_session_id(id), "rejected {id:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn stop_rejects_unreachable_host() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let port = listener.local_addr().expect("address").port();
+        drop(listener);
+        let record = SessionRecord {
+            session_id: "test".to_owned(),
+            agent: "codex".to_owned(),
+            repo_path: ".".to_owned(),
+            model: None,
+            host_pid: 0,
+            child_pid: 0,
+            port,
+            token: "test".to_owned(),
+            started_at: String::new(),
+        };
+        assert!(send_stop(&record).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn stop_rejects_owner_error_response() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let port = listener.local_addr().expect("address").port();
+        let app = Router::new().route("/stop", post(|| async { StatusCode::UNAUTHORIZED }));
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.expect("serve") });
+        let record = SessionRecord {
+            session_id: "test".to_owned(),
+            agent: "codex".to_owned(),
+            repo_path: ".".to_owned(),
+            model: None,
+            host_pid: 0,
+            child_pid: 0,
+            port,
+            token: "wrong".to_owned(),
+            started_at: String::new(),
+        };
+        assert!(send_stop(&record).await.is_err());
+        server.abort();
+    }
 
     #[test]
     fn constructs_official_commands_without_permission_bypass() {
@@ -696,6 +816,28 @@ mod tests {
         let record = record.expect("session record should be created");
         assert_eq!(record.session_id, session_id);
         assert!(record.child_pid > 0);
+
+        let health_url = format!("http://127.0.0.1:{}/health", record.port);
+        let client = reqwest::Client::new();
+        assert_eq!(
+            client
+                .get(&health_url)
+                .send()
+                .await
+                .expect("health")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            client
+                .get(&health_url)
+                .bearer_auth(&record.token)
+                .send()
+                .await
+                .expect("health")
+                .status(),
+            StatusCode::OK
+        );
 
         // Verify child process is alive (fail-open invariant)
         assert!(is_pid_alive(record.child_pid));

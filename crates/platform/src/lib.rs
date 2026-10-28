@@ -43,6 +43,94 @@ pub fn default_db_path() -> PathBuf {
     spawnt_home().join("state.db")
 }
 
+/// Lists modified and untracked repository paths for a handoff.
+///
+/// # Errors
+/// Returns an error when Git cannot read the repository or a path is not UTF-8.
+pub fn handoff_files(repo: &Path) -> Result<Vec<String>, Error> {
+    let mut files = Vec::new();
+    for args in [
+        &["diff", "--name-only", "-z"][..],
+        &["diff", "--cached", "--name-only", "-z"][..],
+        &["ls-files", "--others", "--exclude-standard", "-z"][..],
+    ] {
+        let mut command = std::process::Command::new("git");
+        command.args(args).current_dir(repo);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt as _;
+            command.creation_flags(0x0800_0000);
+        }
+        let output = command.output()?;
+        if !output.status.success() {
+            return Err(io::Error::other("git could not inspect repository").into());
+        }
+        for path in output.stdout.split(|b| *b == 0).filter(|p| !p.is_empty()) {
+            files.push(
+                std::str::from_utf8(path)
+                    .map_err(|_| io::Error::other("repository path is not UTF-8"))?
+                    .to_owned(),
+            );
+        }
+    }
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
+/// Returns whether the operating system reports a process as alive.
+#[must_use]
+pub fn process_is_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    let mut system = sysinfo::System::new();
+    system.refresh_processes(
+        sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+        true,
+    );
+    system.process(sysinfo::Pid::from_u32(pid)).is_some()
+}
+
+/// Stops a process that was explicitly launched and owned by Spawnt.
+///
+/// # Errors
+/// Returns an error if the process cannot be stopped.
+pub fn stop_owned_process(pid: u32) -> Result<(), Error> {
+    if pid == 0 {
+        return Err(io::Error::other("invalid process ID").into());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        let status = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(0x0800_0000)
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other("process termination failed").into())
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let mut system = sysinfo::System::new();
+        system.refresh_processes(
+            sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+            true,
+        );
+        let process = system
+            .process(sysinfo::Pid::from_u32(pid))
+            .ok_or_else(|| io::Error::other("process not found"))?;
+        if process.kill_with(sysinfo::Signal::Interrupt) == Some(true) {
+            Ok(())
+        } else {
+            Err(io::Error::other("process termination failed").into())
+        }
+    }
+}
+
 /// Resolves the user's home directory across Windows, macOS, and Linux.
 #[must_use]
 pub fn user_home_dir() -> PathBuf {
@@ -652,6 +740,73 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn process_liveness_reports_current_process() {
+        assert!(super::process_is_alive(std::process::id()));
+        assert!(!super::process_is_alive(0));
+    }
+
+    #[test]
+    fn stopping_invalid_process_is_rejected() {
+        assert!(super::stop_owned_process(0).is_err());
+    }
+    #[test]
+    fn handoff_files_include_modified_and_untracked_paths() {
+        let repo = tempfile::tempdir().expect("repo");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo.path())
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        std::fs::write(repo.path().join("tracked file.txt"), "old").expect("write");
+        assert!(git(&["add", "."]).status.success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .status
+            .success()
+        );
+        std::fs::write(repo.path().join("tracked file.txt"), "new").expect("write");
+        std::fs::write(repo.path().join("new file.txt"), "new").expect("write");
+        let files = super::handoff_files(repo.path()).expect("files");
+        assert_eq!(files, ["new file.txt", "tracked file.txt"]);
+    }
+
+    #[test]
+    fn handoff_files_support_repository_without_commits() {
+        let repo = tempfile::tempdir().expect("repo");
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "-q"])
+                .current_dir(repo.path())
+                .status()
+                .expect("git")
+                .success()
+        );
+        std::fs::write(repo.path().join("staged.txt"), "x").expect("write");
+        assert!(
+            std::process::Command::new("git")
+                .args(["add", "staged.txt"])
+                .current_dir(repo.path())
+                .status()
+                .expect("git")
+                .success()
+        );
+        assert_eq!(
+            super::handoff_files(repo.path()).expect("files"),
+            ["staged.txt"]
+        );
+    }
     use super::{open_shared_read, read_from_offset};
     use std::io::Write as _;
     use tempfile::NamedTempFile;

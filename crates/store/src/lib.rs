@@ -720,16 +720,16 @@ impl Database {
                 event.session_id,
                 event.turn_index,
                 event.role.as_str(),
-                event.content,
-                event.tool_name,
-                event.status,
+                if event.role == ChatRole::Tool { String::new() } else { spawnt_core::redact::redact_chat_content(&event.content) },
+                event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content),
+                event.status.as_deref().map(spawnt_core::redact::redact_chat_content),
                 created_at,
             ],
         )?;
         Ok(())
     }
 
-    /// Retrieves structured chat events for a session in turn order.
+    /// Retrieves the most recent structured chat events for a session in turn order.
     ///
     /// # Errors
     /// Returns [`Error`] on SQLite query failure.
@@ -738,18 +738,35 @@ impl Database {
         session_id: &str,
         limit: Option<usize>,
     ) -> Result<Vec<ChatEvent>, Error> {
+        self.get_session_chat_before(session_id, limit, None)
+    }
+
+    /// Retrieves one page of a session's chat before an event ID, newest page first.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn get_session_chat_before(
+        &self,
+        session_id: &str,
+        limit: Option<usize>,
+        before: Option<&str>,
+    ) -> Result<Vec<ChatEvent>, Error> {
         let limit = limit.unwrap_or(1000).min(5000);
         let mut stmt = self.conn.prepare(
             r#"
             SELECT event_id, session_id, turn_index, role, content, tool_name, status, created_at
             FROM chat_event
             WHERE session_id = ?1
-            ORDER BY turn_index ASC, created_at ASC
+              AND (?3 IS NULL OR (turn_index, created_at, event_id) < (
+                SELECT turn_index, created_at, event_id FROM chat_event
+                WHERE session_id = ?1 AND event_id = ?3
+              ))
+            ORDER BY turn_index DESC, created_at DESC, event_id DESC
             LIMIT ?2
             "#,
         )?;
 
-        let rows = stmt.query_map(params![session_id, limit as i64], |row| {
+        let rows = stmt.query_map(params![session_id, limit as i64, before], |row| {
             let event_id: String = row.get(0)?;
             let session_id: String = row.get(1)?;
             let turn_index: i64 = row.get(2)?;
@@ -780,7 +797,41 @@ impl Database {
         for r in rows {
             events.push(r?);
         }
+        events.reverse();
         Ok(events)
+    }
+
+    /// Builds a handoff packet from a known session and its latest chat events.
+    ///
+    /// # Errors
+    /// Returns [`Error`] when the session or its history cannot be queried.
+    pub fn prepare_handoff(
+        &self,
+        session_id: &str,
+        target_model: &str,
+        touched_files: Vec<String>,
+    ) -> Result<Option<spawnt_core::HandoffPacket>, Error> {
+        let source_model: Option<Option<String>> = self
+            .conn
+            .query_row(
+                "SELECT model FROM session WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(source_model) = source_model else {
+            return Ok(None);
+        };
+        let events = self.get_session_chat(session_id, Some(50))?;
+        Ok(Some(spawnt_core::HandoffPacket {
+            session_id: session_id.to_owned(),
+            source_model: source_model.unwrap_or_else(|| "unknown".to_owned()),
+            target_model: target_model.to_owned(),
+            prompt_summary: spawnt_core::handoff_summary(&events),
+            touched_files,
+            turn_count: u32::try_from(events.len()).unwrap_or(u32::MAX),
+            created_at: Utc::now(),
+        }))
     }
 
     /// Hard-deletes all stored conversation events for a session.
@@ -1147,6 +1198,24 @@ impl Database {
         quota: &[QuotaSnapshot],
         checkpoint: &SourceCheckpoint,
     ) -> Result<(), Error> {
+        self.commit_batch_with_chat(projects, sessions, usage, activity, quota, checkpoint, &[])
+    }
+
+    /// Atomically commits parsed events, local conversation and the checkpoint.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if any insert or checkpoint update fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn commit_batch_with_chat(
+        &mut self,
+        projects: &[Project],
+        sessions: &[Session],
+        usage: &[UsageRecord],
+        activity: &[ActivityEvent],
+        quota: &[QuotaSnapshot],
+        checkpoint: &SourceCheckpoint,
+        chat: &[ChatEvent],
+    ) -> Result<(), Error> {
         let tx = self.conn.transaction()?;
 
         // 1. Upsert projects
@@ -1298,6 +1367,15 @@ impl Database {
                     q.observed_at.to_rfc3339(),
                 ])?;
             }
+        }
+
+        for event in chat {
+            let content = if event.role == ChatRole::Tool {
+                String::new()
+            } else {
+                spawnt_core::redact::redact_chat_content(&event.content)
+            };
+            tx.execute("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content), event.status.as_deref().map(spawnt_core::redact::redact_chat_content), event.created_at.to_rfc3339()])?;
         }
 
         // 6. Update source file checkpoint
@@ -3374,7 +3452,7 @@ mod tests {
             session_id: "chat-sess-1".to_owned(),
             turn_index: 1,
             role: ChatRole::User,
-            content: "Fix compile error".to_owned(),
+            content: "Fix compile error token=secret-value".to_owned(),
             tool_name: None,
             status: None,
             created_at: Utc::now(),
@@ -3385,7 +3463,7 @@ mod tests {
             session_id: "chat-sess-1".to_owned(),
             turn_index: 2,
             role: ChatRole::Tool,
-            content: "Executed cargo check".to_owned(),
+            content: "raw tool output that must not be stored".to_owned(),
             tool_name: Some("Bash".to_owned()),
             status: Some("success".to_owned()),
             created_at: Utc::now(),
@@ -3393,6 +3471,39 @@ mod tests {
 
         db.insert_chat_event(&evt1).expect("insert evt1");
         db.insert_chat_event(&evt2).expect("insert evt2");
+        let invalid = ChatEvent {
+            event_id: "invalid".into(),
+            session_id: "missing-session".into(),
+            ..evt1.clone()
+        };
+        let mut failed_checkpoint = cp.clone();
+        failed_checkpoint.last_read_offset = 999;
+        assert!(
+            db.commit_batch_with_chat(&[], &[], &[], &[], &[], &failed_checkpoint, &[invalid])
+                .is_err()
+        );
+        assert_eq!(
+            db.get_checkpoint(&cp.file_path)
+                .expect("checkpoint")
+                .expect("existing")
+                .last_read_offset,
+            cp.last_read_offset
+        );
+        db.commit_batch_with_chat(&[], &[], &[], &[], &[], &cp, &[evt1.clone(), evt2.clone()])
+            .expect("replay chat");
+        let recent = db
+            .get_session_chat(&evt1.session_id, Some(1))
+            .expect("recent");
+        assert_eq!(recent[0].event_id, evt2.event_id);
+        let older = db
+            .get_session_chat_before(&evt1.session_id, Some(1), Some(&evt2.event_id))
+            .expect("older page");
+        assert_eq!(older[0].event_id, evt1.event_id);
+        assert!(
+            db.get_session_chat_before(&evt1.session_id, Some(1), Some(&evt1.event_id))
+                .expect("end of history")
+                .is_empty()
+        );
 
         let events = db
             .get_session_chat("chat-sess-1", None)
@@ -3400,8 +3511,24 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].event_id, "evt-1");
         assert_eq!(events[0].role, ChatRole::User);
+        assert!(!events[0].content.contains("secret-value"));
         assert_eq!(events[1].event_id, "evt-2");
         assert_eq!(events[1].tool_name.as_deref(), Some("Bash"));
+        assert!(!events[1].content.contains("raw tool output"));
+        let packet = db
+            .prepare_handoff("chat-sess-1", "o3", vec!["src/main.rs".into()])
+            .expect("handoff")
+            .expect("session");
+        assert_eq!(packet.source_model, "claude-3-5-sonnet");
+        assert_eq!(packet.target_model, "o3");
+        assert!(packet.prompt_summary.contains("Fix compile error"));
+        assert!(!packet.prompt_summary.contains("secret-value"));
+        assert_eq!(packet.touched_files, ["src/main.rs"]);
+        assert!(
+            db.prepare_handoff("missing", "o3", vec![])
+                .expect("query")
+                .is_none()
+        );
 
         // Hard deletion
         let deleted = db.delete_session_chat("chat-sess-1").expect("hard delete");

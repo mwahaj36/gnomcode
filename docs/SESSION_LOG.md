@@ -1,28 +1,23 @@
-## 2026-10-28 — Phase 5: M9 Remote access, E2EE pairing, Cloudflare relay, and phone companion
+## 2026-10-28 — Phase 5: M9 Remote prototype (incomplete)
 
-- Completed ADR 0019 and security threat model (`docs/security/0001-remote-threat-model.md`).
-- Domain types (`crates/core`): Added `RemotePairingSession` and `EncryptedRemoteFrame`. Verified 6-digit SAS verification code derivation (`derive_verify_code`) with SHA-256 and salt.
-- Cloudflare Relay Worker (`workers/remote-relay`): Implemented zero-knowledge WebSocket Durable Object (`RelayRoom`) in TypeScript. Relays forward authenticated end-to-end encrypted frames without inspecting payloads or terminating encryption. Verified with automated mock tests (`workers/remote-relay/test/relay.test.mjs`).
-- Daemon API (`crates/daemon`):
-  - `GET /api/v1/remote/pairing`: generates ephemeral X25519 room and pairing parameters.
-  - `GET /api/v1/remote/status`: inspects active remote pairing and relay state.
-  - `POST /api/v1/remote/revoke`: revokes remote session tokens and breaks peer relay connections.
-  - Added unit test `remote_pairing_status_and_revoke_endpoints` in `crates/daemon/src/api.rs`.
-- Phone Companion Web App (`web/app/remote/page.tsx`): Built responsive mobile PWA interface with room code/QR input, 6-digit confirmation code verification, live session status inspection, and panic disconnect switch.
-- Quality gate checks passing across workspace: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo deny`, web/desktop/npm/worker test suites.
+- ADR 0019 and a preliminary threat model describe the intended protocol. They are design documents, not an independent security review.
+- Domain types (`crates/core`) describe pairing and frames but do not perform key agreement or encryption.
+- The Cloudflare Worker forwards opaque frames between two sockets and has mock tests. No encrypted desktop or phone peer is connected to it yet.
+- The original pairing, status, and revoke endpoints claimed operations that did not occur; they are disabled until those operations are implemented.
+- The original phone page simulated pairing locally; it was replaced with an honest unavailable state. End-to-end chat history, prompt submission, and live response streaming remain required.
 
 ## 2026-10-28 — Phase 4: M8 router, zero-token handoff, switch/resume, and policy controls
 
-- Implemented ADR 0018: model router, zero-token handoff compilation, switch/resume orchestration, and CLI policy controls.
+- Began ADR 0018: model router, handoff compilation, resume queue, and policy controls. Live switching and routing still required follow-up.
 - Domain types (`crates/core`): Added `RoutingPolicy` (`ask_first`, `automatic`, `deny_cross_provider`), `HandoffPacket` compiling prompt summaries, touched files, and turn counts for model transitions without raw log token replay. Added unit tests for serialization and parsing.
 - Storage layer (`crates/store`): Added `get_routing_policy` and `save_routing_policy` persisting to SQLite `context_relay_config` with unit tests.
 - Daemon API (`crates/daemon`):
-  - `POST /api/v1/sessions/{id}/switch`: compiles `HandoffPacket` from session history and records a `System` chat event documenting the switch.
+  - `POST /api/v1/sessions/{id}/switch`: initially recorded a `System` chat event without switching. Follow-up work replaced this with a target-session launch and prompt delivery.
   - `POST /api/v1/sessions/{id}/resume`: arms session in `ResumeQueue` for automatic execution on quota reset.
   - `GET /api/v1/routing/policy` & `POST /api/v1/routing/policy`: inspects and updates the active failover policy.
   - Unit tests in `crates/daemon/src/api.rs`.
 - CLI commands (`crates/cli`):
-  - `spawnt switch <session-id> --model <model>`: executes zero-token handoff.
+  - `spawnt switch <session-id> --model <model>`: initially only compiled a packet. Follow-up work added target-session launch and prompt delivery.
   - `spawnt resume <session-id> [--prompt <prompt>]`: arms session in Resume Queue.
   - `spawnt policy [--set <policy>]`: reads or updates active routing policy.
   - Integration tests in `crates/cli/tests/launch_lifecycle.rs` for `policy`, `switch`, and `resume`.
@@ -927,3 +922,15 @@ Phase 1 final pass completed and PR created.
 - Produce and sign release artifacts before enabling downloads on the site.
 - Make `mwahaj36/spawnt-releases` public at launch.
 - Submit Homebrew, Scoop, winget, AUR manifests after real artifacts exist.
+# Development license decision (2026-10-29)
+
+- Wahaj approved the terms in `docs/legal/EULA.txt` for development packaging. Public launch still requires review of the EULA, privacy policy, and refund policy under SPEC §10.
+
+- Review found that switching and remote pairing reported success without executing the operation. Disabled those paths pending a real handoff and independently reviewed encrypted pairing; resume now uses the stored session agent and repository.
+- PTY review found that session IDs could escape the session directory, query-token authentication could bypass Host/Origin checks, and failed stop requests discarded discovery records. Added validation and tests; stop errors now preserve the record, and the CLI no longer prints its bearer token.
+- Codex conversation IDs now use absolute log offsets, avoiding collisions when rollout messages omit ordinals or share timestamps. Raw byte lengths keep offsets stable across malformed UTF-8 lines. Chat retrieval now supports `before` cursor pagination beyond the 5,000-event page cap; store and adapter regression tests pass.
+- The local model switch endpoint and CLI now resolve a compatible target agent, compile redacted user objectives and changed paths, launch an independent session, and submit the handoff prompt through the authenticated local PTY stream. The source agent remains running. Unknown sessions and unsupported model/agent pairs fail. Live vendor-agent handoff still needs validation.
+- Remote development pairing now uses an opt-in outbound relay connection, ephemeral X25519 keys, a transcript-bound six-digit confirmation code on both devices, directional AES-256-GCM frames, and replay checks. The phone companion pages through locally redacted chat and polls for new turns. Prompting is limited to idle sessions with a unique Spawnt PTY binding. The relay has no content keys. Live two-device testing and independent security review remain before production availability; Wrangler is not authenticated on this machine, so no public relay has been deployed.
+- Removed the legacy unencrypted cloud `relay_commands` intake and its misleading web-console rotation button. Metadata snapshot publishing remains opt-in. Remote pairing now validates the account with the auth server and requires the primary Pro account or a server-controlled Pro/Team claim; a file named `session.json` alone no longer grants Remote access.
+- Generated Rust, Electron, and Chromium notices, staged the development EULA and release binary, and built the Windows Electron Forge installer and ZIP. The installer is an unsigned development artifact; the public legal and signing work remains for launch.
+- Windows workspace tests, clippy, formatting, cargo-deny, desktop tests/lint/typecheck, web tests/typecheck, npm shim tests, and relay tests pass after these changes. Cargo-deny reports duplicate-version warnings only.
