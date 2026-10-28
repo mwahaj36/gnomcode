@@ -638,7 +638,7 @@
               <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
             </div>
             <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
-              Desktop daemon is actively paired with cloud roaming and syncing private snapshots.
+              Account credentials are saved for this device. Sync retries automatically while the daemon runs.
             </p>
           </div>
           <button
@@ -659,7 +659,7 @@
         </p>
         <div style="display: flex; gap: 8px;">
           <input
-            type="text"
+            type="password"
             id="auth-token-input"
             placeholder="Paste pairing token or session JSON here..."
             style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
@@ -848,6 +848,7 @@
     </div>
   </main>
 
+  <p id="connection-status" role="alert" hidden style="position:sticky;bottom:12px;padding:16px;background:var(--card-bg);border:1px solid var(--red);color:var(--red)"></p>
   <script>
     let currentTimeline = 'all';
     let currentPage = 1;
@@ -958,6 +959,20 @@
         button.textContent = 'Resync local data';
         refreshBusy = false;
       }
+    }
+
+    async function apiJson(url, options = { headers }) {
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error(response.status === 401 ? 'Authorization expired. Reopen FleetHUD from its tray icon or shortcut.' : `FleetHUD request failed (${response.status}). Restart FleetHUD if this persists.`);
+      return response.json();
+    }
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+    }
+    function showConnectionError(error) {
+      const status = document.getElementById('connection-status');
+      status.textContent = error.message;
+      status.hidden = false;
     }
 
     function switchTab(tabName) {
@@ -1330,6 +1345,7 @@
         if (jsonStr === lastReportJson) return true;
         lastReportJson = jsonStr;
 
+        document.getElementById('connection-status').hidden = true;
         const tl = res.timeline;
         document.getElementById('total-spend').innerHTML = `$${tl.total_cost_usd.toFixed(2)} <span class="trust-mark">EST</span>`;
         document.getElementById('total-savings').innerHTML = `$${tl.total_cache_savings_usd.toFixed(2)} <span class="trust-mark">EST</span>`;
@@ -1425,7 +1441,9 @@
           return true;
         }
 
-        table.innerHTML = res.sessions.map(s => {
+        table.innerHTML = res.sessions.map(raw => {
+          const s = { ...raw };
+          for (const key of ['project_name', 'title', 'agent', 'surface', 'device_name', 'model', 'state']) s[key] = escapeHtml(s[key]);
           const dotClass = s.is_active ? (s.state === 'awaiting_approval' ? 'status-waiting' : 'status-running') : 'status-idle';
           const tokCount = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
           const cacheBadge = (s.cache_read_tokens && s.cache_read_tokens > 0)
@@ -1555,6 +1573,7 @@
         const pairedCard = document.getElementById('auth-paired-card');
         const unpairedCard = document.getElementById('auth-unpaired-card');
         const emailEl = document.getElementById('auth-paired-email');
+        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Desktop account paired. Desktop summary sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
         if (res && res.paired) {
           if (pairedCard) pairedCard.style.display = 'block';
           if (unpairedCard) unpairedCard.style.display = 'none';
@@ -1658,7 +1677,7 @@
 
     async function loadCustomPricingSettings() {
       try {
-        const res = await fetch('/api/v1/pricing/custom', { headers }).then(r => r.json());
+        const res = await apiJson('/api/v1/pricing/custom', { headers });
         const container = document.getElementById('settings-pricing-list');
         if (!res || !res.custom_pricing || res.custom_pricing.length === 0) {
           container.innerHTML = '<span style="color: var(--text-muted);">No custom rate overrides configured (using default catalog).</span>';
