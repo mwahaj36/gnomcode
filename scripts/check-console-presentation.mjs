@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../web/lib/console-presentation.js', import.meta.url));
-const { renderActivity, renderQuota, renderSessions, renderProjects, renderSummary } = await import(`data:text/javascript;base64,${source.toString('base64')}`);
+const { renderActivity, renderProviders, renderQuota, renderSessions, renderProjects, renderSummary, updateSummary } = await import(`data:text/javascript;base64,${source.toString('base64')}`);
 assert.match(renderSummary({ report: { cost_basis: 'unknown', total_cost_usd: 0 } }), /Unknown/);
 assert.doesNotMatch(renderSummary({ report: { cost_basis: 'unknown', total_cost_usd: 0 } }), /\$0\.00/);
 assert.match(renderActivity(null), /unavailable/);
@@ -21,3 +21,15 @@ assert.match(sessions, /Unknown/);
 assert.doesNotMatch(sessions, /\$0\.00/);
 assert.match(renderProjects(undefined), /remain local/);
 console.log('PASS: shared console escaping, unknown data, trust, reset and freshness states');
+
+const providers=renderProviders({cost_basis:'unknown',providers:[{provider:'<script>',total_cost_usd:0,models:[{model:'<img onerror=x>',input_tokens:100,output_tokens:10,cost_usd:0}]}]});
+assert.doesNotMatch(providers,/<script>|<img|\$0\.00/);
+assert.match(providers,/Unknown · UNKNOWN/);
+
+let writes=0, values=[];
+globalThis.document={activeElement:null};
+const element={ contains:()=>false, querySelector:()=>null, querySelectorAll:selector=>selector==='strong'?values:[], set innerHTML(markup){writes++;values=[...markup.matchAll(/<strong>([\s\S]*?)<\/strong>/g)].map(match=>({textContent:match[1],changed:false,classList:{add(){this.owner.changed=true;}}}));values.forEach(value=>value.classList.owner=value);} };
+updateSummary(element,{activeCount:1});
+assert.equal(writes,1);assert.equal(values.some(value=>value.changed),false);
+updateSummary(element,{activeCount:1});assert.equal(writes,1,'unchanged polling must not rewrite markup');
+updateSummary(element,{activeCount:2});assert.equal(writes,2);assert.equal(values.filter(value=>value.changed).length,1,'only changed values animate');
