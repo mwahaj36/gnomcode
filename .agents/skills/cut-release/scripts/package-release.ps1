@@ -12,6 +12,8 @@ $Cargo = (Get-Command cargo.exe -ErrorAction Stop).Source
 $Csc = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
 if (-not (Test-Path $Csc)) { throw ".NET Framework C# compiler is required" }
 $Out = Join-Path $RepoRoot "web/public/downloads"
+& node scripts/check-console.mjs
+if ($LASTEXITCODE -ne 0) { throw "Embedded console JavaScript is invalid" }
 
 & $Cargo build --locked -p fleethud --release
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
