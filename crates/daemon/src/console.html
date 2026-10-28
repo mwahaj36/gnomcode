@@ -517,6 +517,14 @@
         </div>
       </div>
     </div>
+    <section id="session-chat-panel" class="card" aria-labelledby="session-chat-heading" hidden>
+      <div class="table-header-controls"><h2 id="session-chat-heading" class="section-title">Conversation</h2><button type="button" class="btn-control" data-action="close-chat">Close</button></div>
+      <p id="chat-session-label"></p>
+      <p id="chat-status" role="status"></p>
+      <div id="chat-stream" aria-live="polite"></div>
+      <button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button>
+      <button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button>
+    </section>
   </main>
 
   <main id="view-projects" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-projects">

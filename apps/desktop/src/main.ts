@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
-import { daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayTooltip } from './security';
+import { daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip } from './security';
 import { readDaemon } from './daemon-client';
 
 let window: BrowserWindow | null = null;
@@ -34,19 +34,24 @@ async function connectDaemon(): Promise<string> {
 
 async function refreshTray(url: string): Promise<void> {
   const parsed = new URL(url);
-  const tooltip = await new Promise<string>(resolve => {
+  const status = await new Promise<unknown>(resolve => {
     const request = get({ hostname: '127.0.0.1', port: parsed.port, path: '/api/v1/sessions?status=ongoing&limit=1', headers: { Authorization: `Bearer ${parsed.searchParams.get('token')}`, Host: `127.0.0.1:${parsed.port}` }, timeout: 3000 }, response => {
-      if (response.statusCode !== 200) { response.resume(); resolve('Spawnt: daemon unavailable'); return; }
+      if (response.statusCode !== 200) { response.resume(); resolve(null); return; }
       let body = '';
       response.setEncoding('utf8');
       response.on('data', chunk => { body += chunk; if (body.length > 1024 * 1024) request.destroy(); });
-      response.on('end', () => { try { resolve(trayTooltip(JSON.parse(body))); } catch { resolve('Spawnt: daemon unavailable'); } });
-      response.on('error', () => resolve('Spawnt: daemon unavailable'));
+      response.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
+      response.on('error', () => resolve(null));
     });
     request.on('timeout', () => request.destroy());
-    request.on('error', () => resolve('Spawnt: daemon unavailable'));
+    request.on('error', () => resolve(null));
   });
-  tray?.setToolTip(tooltip);
+  tray?.setToolTip(trayTooltip(status));
+  if (tray) {
+    const badge = trayBadgeName(status);
+    const resource = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../scripts');
+    tray.setImage(path.join(resource, badge === 'spawnt-tray.ico' ? badge : path.join('tray-badges', badge)));
+  }
 }
 function showWindow(): void {
   if (!window) return;

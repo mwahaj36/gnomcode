@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS public.spawnt_sync_state (
 
 ALTER TABLE public.spawnt_sync_state ENABLE ROW LEVEL SECURITY;
 
+GRANT SELECT, INSERT, UPDATE ON public.spawnt_sync_state TO authenticated;
+
 DROP POLICY IF EXISTS "Users can read own sync state" ON public.spawnt_sync_state;
 CREATE POLICY "Users can read own sync state"
     ON public.spawnt_sync_state
