@@ -1,6 +1,6 @@
 # Spawnt End User License Agreement — draft for review
 
-This draft is not an approved license and must not be included in a release. The owner and qualified counsel should review it before distribution. Replace this notice only after approval.
+This draft is not approved for distribution. The rights holder should review the terms and obtain legal advice appropriate to the markets where Spawnt will be distributed before approving it.
 
 ## License
 
@@ -12,7 +12,7 @@ You may obtain Spawnt through its authorized distribution channels. Do not redis
 
 ## Optional services
 
-Remote and Teams are planned paid services and are not included in this draft. Existing optional cloud sync has a separate privacy boundary. Any paid service terms, prices, renewal terms, cancellation process, and refund policy must be presented before purchase.
+Remote access, Teams, and other optional services may be subject to separate terms presented before use or purchase. Existing optional cloud sync has a separate privacy boundary. Any paid service terms, prices, renewal terms, cancellation process, and refund policy must be presented before purchase.
 
 ## Privacy
 
@@ -24,4 +24,4 @@ Spawnt is provided as-is to the extent allowed by applicable law. The rights hol
 
 ## Contact
 
-The owner must supply a valid support contact and final legal entity details before publishing this agreement.
+For questions about Spawnt and this agreement, contact Wahaj at mwahaj25@gmail.com.

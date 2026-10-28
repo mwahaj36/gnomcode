@@ -11,9 +11,10 @@ use crate::{
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use spawnt_core::{
-    ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
+    Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
-    redact::redact_summary,
+    redact::{redact_chat_content, redact_summary},
 };
 use std::collections::HashSet;
 
@@ -78,6 +79,29 @@ impl SourceAdapter for AntigravityAdapter {
 
             let step_idx = obj.get("step_index").and_then(Value::as_u64).unwrap_or(0);
             let step_type = obj.get("type").and_then(Value::as_str).unwrap_or("");
+            let source = obj.get("source").and_then(Value::as_str).unwrap_or("");
+            let role = if step_type == "USER_INPUT" {
+                Some(ChatRole::User)
+            } else if source == "MODEL" && matches!(step_type, "GENERIC" | "PLANNER_RESPONSE") {
+                Some(ChatRole::Assistant)
+            } else {
+                None
+            };
+            if let (Some(role), Some(content)) = (role, obj.get("content").and_then(Value::as_str))
+            {
+                if !content.trim().is_empty() && !content.contains("<USER_SETTINGS_CHANGE>") {
+                    batch.chat_events.push(ChatEvent {
+                        event_id: format!("{session_id}:{step_idx}"),
+                        session_id: session_id.clone(),
+                        turn_index: i64::try_from(step_idx).unwrap_or(i64::MAX),
+                        role,
+                        content: redact_chat_content(content),
+                        tool_name: None,
+                        status: None,
+                        created_at: ts,
+                    });
+                }
+            }
 
             let sess = current_session.get_or_insert_with(|| Session {
                 id: session_id.clone(),

@@ -8,9 +8,10 @@ use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use spawnt_core::{
-    ActivityEvent, ActivityKind, AgentId, Project, Session, SessionState, Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
+    Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
-    redact::redact_summary,
+    redact::{redact_chat_content, redact_summary},
 };
 use std::collections::HashSet;
 
@@ -39,10 +40,13 @@ impl SourceAdapter for ClaudeAdapter {
 
     fn parse(&mut self, ctx: &FileCtx, chunk: &[u8]) -> ParsedBatch {
         let mut batch = ParsedBatch::default();
-        let text = String::from_utf8_lossy(chunk);
         let mut current_session: Option<Session> = None;
+        let mut line_offset = ctx.source_offset;
 
-        for raw_line in text.lines() {
+        for raw_line in chunk.split_inclusive(|byte| *byte == b'\n') {
+            let current_offset = line_offset;
+            line_offset = line_offset.saturating_add(raw_line.len() as u64);
+            let raw_line = String::from_utf8_lossy(raw_line);
             let line = raw_line.trim();
             if line.is_empty() {
                 continue;
@@ -108,6 +112,41 @@ impl SourceAdapter for ClaudeAdapter {
             }
             sess.surface = surface;
             let ts = sess.last_event_at;
+
+            let role = match obj.get("type").and_then(Value::as_str) {
+                Some("user") => Some(ChatRole::User),
+                Some("assistant") => Some(ChatRole::Assistant),
+                _ => None,
+            };
+            if let (Some(role), Some(message)) = (role, obj.get("message")) {
+                let content = message.get("content");
+                let text = match content {
+                    Some(Value::String(text)) => text.clone(),
+                    Some(Value::Array(blocks)) => blocks
+                        .iter()
+                        .filter(|block| block.get("type").and_then(Value::as_str) == Some("text"))
+                        .filter_map(|block| block.get("text").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    _ => String::new(),
+                };
+                if !text.is_empty() {
+                    let event_key = obj
+                        .get("uuid")
+                        .and_then(Value::as_str)
+                        .map_or_else(|| current_offset.to_string(), str::to_owned);
+                    batch.chat_events.push(ChatEvent {
+                        event_id: format!("{session_id}:{event_key}"),
+                        session_id: session_id.clone(),
+                        turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
+                        role,
+                        content: redact_chat_content(&text),
+                        tool_name: None,
+                        status: None,
+                        created_at: ts,
+                    });
+                }
+            }
 
             if obj.get("type").and_then(Value::as_str) == Some("assistant") {
                 if let Some(msg) = obj.get("message").and_then(Value::as_object) {

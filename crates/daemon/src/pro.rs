@@ -29,12 +29,7 @@ pub struct LicenseStatus {
 #[must_use]
 #[inline(always)]
 pub fn has_pro_license() -> bool {
-    // 1. Check if authenticated cloud account session is paired
-    if spawnt_home().join("session.json").exists() {
-        return true;
-    }
-
-    // 2. Fall back to offline signed license key
+    // Offline signed license keys remain usable without network access.
     let Ok(bytes) = fs::read(spawnt_home().join("license.key")) else {
         return false;
     };
@@ -45,6 +40,52 @@ pub fn has_pro_license() -> bool {
         verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX),
         Ok(Tier::Pro | Tier::Team)
     )
+}
+
+/// Checks a signed license or a live, server-validated Pro account before Remote pairing.
+pub async fn has_remote_access() -> bool {
+    if has_pro_license() {
+        return true;
+    }
+    let Ok(client) = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(Duration::from_secs(10))
+        .build()
+    else {
+        return false;
+    };
+    let path = spawnt_home().join("session.json");
+    let Ok(Some(auth)) = crate::sync::read_cloud_auth(&client, &path).await else {
+        return false;
+    };
+    let Ok(response) = client
+        .get(format!("{}/auth/v1/user", auth.base_url))
+        .header("apikey", auth.public_key)
+        .bearer_auth(auth.access_token)
+        .send()
+        .await
+    else {
+        return false;
+    };
+    let Ok(user) = response.error_for_status() else {
+        return false;
+    };
+    let Ok(user) = user.json::<serde_json::Value>().await else {
+        return false;
+    };
+    user.get("id").and_then(serde_json::Value::as_str) == Some(auth.user_id.as_str())
+        && cloud_user_is_pro(&user)
+}
+
+fn cloud_user_is_pro(user: &serde_json::Value) -> bool {
+    user.get("email")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|email| email.eq_ignore_ascii_case(obfstr::obfstr!("mwahaj25@gmail.com")))
+        || matches!(
+            user.pointer("/app_metadata/plan")
+                .and_then(serde_json::Value::as_str),
+            Some("pro" | "team")
+        )
 }
 
 /// Returns details on the local license status.
@@ -73,32 +114,34 @@ pub fn get_license_status() -> LicenseStatus {
         }
     }
 
-    // 2. Check if linked via cloud account pairing token
-    if let Ok(raw) = fs::read_to_string(spawnt_home().join("session.json")) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
-            let email = val
-                .pointer("/user/email")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_owned());
-            let uid = val
-                .pointer("/user/id")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_owned());
-            return LicenseStatus {
-                tier: "pro".to_owned(),
-                licensed: true,
-                license_id: uid.map(|id| format!("cloud-{}", &id[..8.min(id.len())])),
-                customer_name: email.or(Some("Cloud Account (Pro)".to_owned())),
-                expires_at: None,
-            };
-        }
-    }
-
     LicenseStatus {
         tier: "free".to_owned(),
         licensed: false,
         license_id: None,
         customer_name: None,
+        expires_at: None,
+    }
+}
+
+/// Returns license status after validating any cloud entitlement with the auth server.
+pub async fn get_verified_license_status() -> LicenseStatus {
+    let status = get_license_status();
+    if status.licensed || !has_remote_access().await {
+        return status;
+    }
+    let account = fs::read(spawnt_home().join("session.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok());
+    let email = account
+        .as_ref()
+        .and_then(|value| value.pointer("/user/email"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    LicenseStatus {
+        tier: "pro".to_owned(),
+        licensed: true,
+        license_id: None,
+        customer_name: email,
         expires_at: None,
     }
 }
@@ -188,7 +231,7 @@ pub fn run_resume_queue(db: &Database) -> Result<(), Box<dyn std::error::Error +
     for entry in entries {
         let matching_quota = snapshots.iter().find(|q| match entry.agent {
             AgentId::ClaudeCode => q.provider.eq_ignore_ascii_case("anthropic"),
-            AgentId::Codex => q.provider.eq_ignore_ascii_case("openai"),
+            AgentId::Codex => q.provider.eq_ignore_ascii_case("codex"),
             AgentId::Antigravity => q.provider.eq_ignore_ascii_case("google"),
             _ => false,
         });
@@ -404,4 +447,20 @@ pub fn is_session_blocked(session_id: &str) -> bool {
         return false;
     };
     blocked.iter().any(|s| s == session_id)
+}
+
+#[cfg(test)]
+mod remote_entitlement_tests {
+    #[test]
+    fn pro_claim_requires_server_controlled_metadata_or_primary_account() {
+        assert!(!super::cloud_user_is_pro(
+            &serde_json::json!({"email":"free@example.invalid","user_metadata":{"plan":"pro"}})
+        ));
+        assert!(super::cloud_user_is_pro(
+            &serde_json::json!({"email":"free@example.invalid","app_metadata":{"plan":"pro"}})
+        ));
+        assert!(super::cloud_user_is_pro(
+            &serde_json::json!({"email":"mwahaj25@gmail.com"})
+        ));
+    }
 }

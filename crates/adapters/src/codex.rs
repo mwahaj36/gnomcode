@@ -42,7 +42,6 @@ impl SourceAdapter for CodexAdapter {
 
     fn parse(&mut self, ctx: &FileCtx, chunk: &[u8]) -> ParsedBatch {
         let mut batch = ParsedBatch::default();
-        let text = String::from_utf8_lossy(chunk);
         let mut current_session: Option<Session> = None;
 
         if self.active_model.is_none() {
@@ -52,7 +51,11 @@ impl SourceAdapter for CodexAdapter {
         let default_cwd = ctx.fallback_cwd.as_deref().unwrap_or("/unknown");
         let default_project = Project::from_origin(None, default_cwd, None);
 
-        for raw_line in text.lines() {
+        let mut line_offset = ctx.source_offset;
+        for raw_line in chunk.split_inclusive(|byte| *byte == b'\n') {
+            let current_offset = line_offset;
+            line_offset = line_offset.saturating_add(raw_line.len() as u64);
+            let raw_line = String::from_utf8_lossy(raw_line);
             let line = raw_line.trim();
             if line.is_empty() {
                 continue;
@@ -157,6 +160,42 @@ impl SourceAdapter for CodexAdapter {
                     .as_deref()
                     .unwrap_or_else(|| codex_session_id_from_path(&ctx.source_path));
                 let session_id = Session::compose_id(AgentId::Codex, raw_sid);
+
+                if line_type == "response_item"
+                    && payload.get("type").and_then(Value::as_str) == Some("message")
+                {
+                    let role = match payload.get("role").and_then(Value::as_str) {
+                        Some("user") => Some(spawnt_core::ChatRole::User),
+                        Some("assistant") => Some(spawnt_core::ChatRole::Assistant),
+                        _ => None,
+                    };
+                    if let (Some(role), Some(content)) =
+                        (role, payload.get("content").and_then(Value::as_array))
+                    {
+                        let text = content
+                            .iter()
+                            .filter_map(|part| match part.get("type").and_then(Value::as_str) {
+                                Some("input_text" | "output_text") => {
+                                    part.get("text").and_then(Value::as_str)
+                                }
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if !text.is_empty() {
+                            batch.chat_events.push(spawnt_core::ChatEvent {
+                                event_id: format!("{}:{}", session_id, current_offset),
+                                session_id: session_id.clone(),
+                                turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
+                                role,
+                                content: spawnt_core::redact::redact_chat_content(&text),
+                                tool_name: None,
+                                status: None,
+                                created_at: ts,
+                            });
+                        }
+                    }
+                }
 
                 if batch.projects.is_empty() {
                     batch.projects.push(default_project.clone());
