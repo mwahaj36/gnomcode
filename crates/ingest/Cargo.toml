@@ -1,5 +1,5 @@
 [package]
-name = "fleethud-ingest"
+name = "spawnt-ingest"
 description = "File watching, reconciliation, tailing and checkpointing of agent logs."
 version.workspace = true
 edition.workspace = true
@@ -9,10 +9,10 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-fleethud-core = { workspace = true }
-fleethud-adapters = { workspace = true }
-fleethud-store = { workspace = true }
-fleethud-platform = { workspace = true }
+spawnt-core = { workspace = true }
+spawnt-adapters = { workspace = true }
+spawnt-store = { workspace = true }
+spawnt-platform = { workspace = true }
 chrono = { workspace = true }
 notify = { workspace = true }
 tokio = { workspace = true }

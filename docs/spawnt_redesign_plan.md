@@ -24,13 +24,13 @@ Audience: an implementing model that needs explicit instructions. Follow phases 
 ### Rename scope: split into two PRs
 
 1. **User-facing rename (Phase 1 to 6):** UI strings, window titles, tray labels, installer names, npm display name, docs, site copy, README.
-2. **Internal rename (Phase 7, separate PR, last):** crate names, binary `fleethud` to `spawnt`, env vars, data dir. This is breaking and risky. Requirements:
-   - Keep `fleethud` as a thin alias binary for at least one release.
-   - Accept both `SPAWNT_HOME` and `FLEETHUD_HOME` (new wins), likewise for the other env overrides.
+2. **Internal rename (Phase 7, separate PR, last):** crate names, binary `spawnt` to `spawnt`, env vars, data dir. This is breaking and risky. Requirements:
+   - Keep `spawnt` as a thin alias binary for at least one release.
+   - Accept both `SPAWNT_HOME` and `SPAWNT_HOME` (new wins), likewise for the other env overrides.
    - Migrate the data dir on first run: if the old dir exists and the new one does not, move it. Add a store/platform test for this. Never delete the old data.
    - Rewrite hook and integration entries that `integrate` wrote earlier (keep the backup-first and `--remove` guarantees).
    - Add an ADR (`docs/adr/0004-rename-to-spawnt.md`) and a row in SPEC section 9.
-   - Update the `cut-release` skill scripts that hardcode `fleethud` paths.
+   - Update the `cut-release` skill scripts that hardcode `spawnt` paths.
 
 ## 2. Design tokens (Phase 1)
 
@@ -120,7 +120,7 @@ Source: `C:\Users\Wahaj\Desktop\fleethub.svg`.
    - Tray icons: monochrome template images (macOS needs a black-with-alpha template, 22px at 1x/2x; Windows 16/20/24 `primary`; Linux 22/24 `primary`). A status dot variant (`RUN`/`WAIT`/`LIMIT`) is drawn as a small badge in the corner.
    - Open Graph image 1200x630: dark canvas, mark, wordmark `spawnt`, tagline.
 4. Wordmark: text `spawnt` set in Inter 600, lowercase tracking -1%. Lockup = mark + 12px gap + wordmark, mark height equals cap height x 1.3. Clear space equals the mark's width / 2. Minimum mark size 16px.
-5. Update the daemon's `/favicon.ico` and `/fleethud.svg` routes (rename route to `/spawnt.svg`, keep the old path as an alias).
+5. Update the daemon's `/favicon.ico` and `/spawnt.svg` routes (rename route to `/spawnt.svg`, keep the old path as an alias).
 6. Document usage in `DESIGN.md` (do and don't: no recolor beyond `#FF2544`, `#0C1119`, `#F6F7F8`, no stretching, no effects).
 
 ## 4. Console information architecture (Phase 2 to 3)
@@ -358,7 +358,7 @@ Goal: pixel-identical console on Windows, macOS and Linux, by construction.
 
 ## 8. Installers (Phase 6)
 
-- **Windows** (`scripts/Setup.cs`, `Install-FleetHUD.bat`, `install.ps1`): rename to `spawnt-Setup`, new icon, product name, window text, install dir `spawnt`, Start Menu shortcut `spawnt`, uninstaller entry. Installer UI uses the palette: dark canvas, mark, one primary button. Keep the old uninstall entry detectable so upgrades from FleetHUD replace the old install and keep data.
+- **Windows** (`scripts/Setup.cs`, `Install-Spawnt.bat`, `install.ps1`): rename to `spawnt-Setup`, new icon, product name, window text, install dir `spawnt`, Start Menu shortcut `spawnt`, uninstaller entry. Installer UI uses the palette: dark canvas, mark, one primary button. Keep the old uninstall entry detectable so upgrades from Spawnt replace the old install and keep data.
 - **macOS**: `.dmg` background in `dark` with the mark and an arrow to Applications; `.icns`. Note the un-notarized flow (SPEC 7.4) in the first-run help text.
 - **Linux**: `.deb`/`.AppImage` with desktop file (`Name=spawnt`, `Icon=spawnt`), icon set 16 to 512.
 - `install.sh` / `install.ps1` / `npm/` shims: update printed text, name and ASCII banner (no emojis, no box art), keep URLs as they are today.
@@ -373,14 +373,14 @@ Goal: pixel-identical console on Windows, macOS and Linux, by construction.
 | 3 | `feat(console): new shell and pages` | All 7 pages from 4.3 work in light and dark with all states, filters, deep links, keyboard nav, zero axe-core violations, bundle embedded in daemon, `console.html` removed |
 | 4 | `feat(web): new marketing site and copy` | All pages in section 6 redesigned, Daytona assets deleted, `docs/COPY.md` added, Lighthouse targets met |
 | 5 | `feat(tray): tauri app loads console` | Parity test passes on all three OSes (CI matrix), `tray.ps1` and `.vbs` removed |
-| 6 | `feat(installers): spawnt branding` | Installers build on all three platforms, upgrade from FleetHUD keeps data |
+| 6 | `feat(installers): spawnt branding` | Installers build on all three platforms, upgrade from Spawnt keeps data |
 | 7 | `refactor: rename internals to spawnt` | ADR 0004 merged, aliases and migration tested, `AGENTS.md` and `README.md` updated |
 
 For each PR run the `rust-quality-gate` skill, and `cross-platform-review` for Phases 5 to 7. Use `impeccable` (critique, polish, audit) on Phases 3 and 4 before opening the PR. Use `verification-before-completion`: do not claim done without command output.
 
 ## 10. Definition of done (global)
 
-- No remaining user-facing "FleetHUD", "cockpit", "mission control" strings (grep check in CI, allow-list only for the migration code and the changelog).
+- No remaining user-facing "Spawnt", "cockpit", "mission control" strings (grep check in CI, allow-list only for the migration code and the changelog).
 - No emojis. No gradients. No leftover Daytona branding or green (`daytona`, `#2ecc71`, `#4ade80`) anywhere: grep check. The Daytona visual language (hairline grid, square badges, mono labels, island navbar) stays.
 - Every number shows a trust badge. Every status has text, not just color.
 - Light and dark both pass AA. Keyboard-only use covers every action. `prefers-reduced-motion` honored.

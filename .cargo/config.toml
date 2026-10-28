@@ -1,7 +1,7 @@
-# Cargo build configuration for FleetHUD.
+# Cargo build configuration for Spawnt.
 # Strips local source paths and usernames from panic messages and debug strings (SPEC §6.8).
 
 [build]
 rustflags = [
-    "--remap-path-prefix", "crates=/fleethud/crates",
+    "--remap-path-prefix", "crates=/spawnt/crates",
 ]

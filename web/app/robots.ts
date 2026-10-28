@@ -1,3 +1,4 @@
+import branding from "../branding.json";
 import { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
@@ -7,6 +8,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/api/", "/auth/callback"],
     },
-    sitemap: "https://fleethud.vercel.app/sitemap.xml",
+    sitemap: `${branding.baseUrl}/sitemap.xml`,
   };
 }

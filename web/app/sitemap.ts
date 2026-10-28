@@ -1,7 +1,8 @@
+import branding from "../branding.json";
 import { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://fleethud.vercel.app";
+  const baseUrl = branding.baseUrl;
   const now = new Date();
 
   return [

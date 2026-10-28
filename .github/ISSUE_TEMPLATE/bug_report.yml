@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug, parsing error, or platform issue in FleetHUD
+description: Report a bug, parsing error, or platform issue in Spawnt
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -44,8 +44,8 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `fleethud doctor`
+      label: Output of `spawnt doctor`
       render: shell
-      placeholder: Paste the output of `fleethud doctor` here...
+      placeholder: Paste the output of `spawnt doctor` here...
     validations:
       required: false

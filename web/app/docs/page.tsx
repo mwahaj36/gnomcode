@@ -1,3 +1,4 @@
+import branding from "../../branding.json";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CopyCommand } from "../components/CopyCommand";
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   description:
     "Complete technical guide for spawnt: quickstart, agent support, CLI commands, and REST APIs.",
   alternates: {
-    canonical: "https://fleethud.vercel.app/docs",
+    canonical: `${branding.baseUrl}/docs`,
   },
 };
 
@@ -17,11 +18,11 @@ const docsJsonLd = {
   "@type": "TechArticle",
   headline: "spawnt Technical Documentation and Architecture Guide",
   description:
-    "Complete manual for monitoring AI coding agents with zero content storage: setup, log adapters, CLI usage, and REST API.",
+    "Complete manual for monitoring AI coding agents: setup, log adapters, CLI usage, and REST API.",
   author: {
     "@type": "Organization",
     name: "spawnt",
-    url: "https://fleethud.vercel.app",
+    url: branding.baseUrl,
   },
   dependencies: "Windows 10/11, Linux x86_64 and ARM64, WSL2",
   articleSection: "Developer Tools",
@@ -67,7 +68,7 @@ export default function DocsPage() {
               spawnt Documentation
             </h1>
             <p>
-              spawnt is live mission control for AI coding agents. It reads local agent activity and reports usage and quota without storing prompts, source code, or tool responses.
+              spawnt is live mission control for AI coding agents. Current monitoring reads local agent activity and stores redacted metadata. Local conversation history is planned for model switching.
             </p>
           </header>
 
@@ -85,7 +86,7 @@ export default function DocsPage() {
             <p className="text-muted text-xs mt-4">
               Once installed, verify the installation by running:
             </p>
-            <CopyCommand command="fleethud status" />
+            <CopyCommand command="spawnt status" />
           </section>
 
           {/* Section 2: Supported Agents */}
@@ -106,7 +107,7 @@ export default function DocsPage() {
                   </span>
                 </div>
                 <p className="text-muted text-[11px] mb-3 leading-relaxed">
-                  Extracts token usage, cached input reads, and thinking tokens from <code className="text-foreground">~/.claude/projects/</code>. Detects subscription tier ($20 Pro or $100 Max 5x) from credentials metadata without touching auth keys.
+                  Extracts token usage, cached input reads, and thinking tokens from <code className="text-foreground">~/.claude/projects/</code>. Set your Claude subscription plan manually in Settings; spawnt does not read Claude credentials.
                 </p>
                 <div className="text-[10px] text-muted">
                   Log Path: <code className="text-foreground">~/.claude/projects/*/*.jsonl</code>
@@ -171,9 +172,9 @@ export default function DocsPage() {
 
             <div className="space-y-3 font-mono text-xs">
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="text-accent font-semibold mb-1">Zero content storage</div>
+                <div className="text-accent font-semibold mb-1">Local-first history</div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Prompts, completions, code snippets, diffs, and tool output payloads NEVER touch disk or network. spawnt only persists metadata such as turn counts, token counts, timestamps, status, and scrubbed project identifiers.
+                  Current monitoring stores redacted activity and usage metadata. A future console will keep local conversation history for session continuity and model switching. Existing optional metadata sync is not end-to-end encrypted and must not carry chat content.
                 </div>
               </div>
 
@@ -211,28 +212,28 @@ export default function DocsPage() {
 
             <div className="space-y-4 font-mono text-xs">
               <div className="bg-card border border-border rounded-lg p-4">
-                <CopyCommand command="fleethud status" />
+                <CopyCommand command="spawnt status" />
                 <div className="text-muted text-[11px] mb-2">
                   Inspect currently active and idle agent sessions across all installed tools.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
-                <CopyCommand command="fleethud report --range 7d" />
+                <CopyCommand command="spawnt report --range 7d" />
                 <div className="text-muted text-[11px] mb-2">
                   Shows a seven-day API-equivalent usage report with trust levels supplied by the local engine.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
-                <CopyCommand command="fleethud daemon" />
+                <CopyCommand command="spawnt daemon" />
                 <div className="text-muted text-[11px] mb-2">
                   Starts the local HTTP and WebSocket service on port 41738 for tray app and web console polling.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
-                <CopyCommand command="fleethud install" />
+                <CopyCommand command="spawnt install" />
                 <div className="text-muted text-[11px] mb-2">
                   Configures autostart, system tray, shortcuts, and background execution on Windows, macOS, or Linux.
                 </div>
@@ -320,7 +321,7 @@ export default function DocsPage() {
             <dl className="sp-docs-label-list">
               <div><dt>Frontier</dt><dd>A model family or capability tier label. It is not a price or a measurement-confidence level.</dd></div>
               <div><dt>Tiered</dt><dd>The provider rate depends on a tier or request conditions such as context length, volume, or service level. A rate-based cost remains estimated unless usage is reconciled against an API or invoice.</dd></div>
-              <div><dt>Exact</dt><dd>In a provider pricing catalog, the rate is listed by the provider for the named model and conditions. In spawnt's live views, <code>EXACT</code> separately means the measurement came directly from an exact local record or provider limit response.</dd></div>
+              <div><dt>Exact</dt><dd>In a provider pricing catalog, the rate is listed by the provider for the named model and conditions. In spawnt&apos;s live views, <code>EXACT</code> separately means the measurement came directly from an exact local record or provider limit response.</dd></div>
             </dl>
             <div className="sp-docs-trust-grid" aria-label="Measurement trust levels">
               <div><strong>EXACT</strong><p>Measured from local usage records or an exact provider limit response.</p></div>
@@ -339,7 +340,7 @@ export default function DocsPage() {
             <div className="space-y-4 font-mono text-xs">
               <div className="bg-card border border-border rounded-lg p-4">
                 <div className="text-foreground font-semibold mb-1">
-                  Q: Why did an agent turn status switch from "Thinking" to "Idle"?
+                  Q: Why did an agent turn status switch from &quot;Thinking&quot; to &quot;Idle&quot;?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
                   spawnt marks an agent session idle if no new turn events or tool calls are detected within 15 minutes. New activity changes the session state again.
@@ -351,7 +352,7 @@ export default function DocsPage() {
                   Q: How is prompt cache savings computed?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Prompt caching may reduce provider token rates. The local Rust pricing engine calculates cache savings using the selected model's rates: <br />
+                  Prompt caching may reduce provider token rates. The local Rust pricing engine calculates cache savings using the selected model&apos;s rates: <br />
                   <code className="text-accent">(cached_tokens * raw_input_rate) - (cached_tokens * cached_rate)</code>.
                   The result is API-equivalent savings, not a subscription invoice or a guaranteed billed amount.
                 </div>

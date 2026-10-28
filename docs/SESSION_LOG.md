@@ -1,4 +1,4 @@
-# FleetHUD Engineering Session Log
+# Spawnt Engineering Session Log
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
@@ -170,7 +170,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | Area | Decision | Rationale |
 | :--- | :--- | :--- |
 | Core language | Rust workspace (`crates/core`, `adapters`, `store`, `platform`, `ingest`, `daemon`, `cli`) | ~5 ms hook startup (vs ~100 ms in Node), zero native-addon ABI breakage under `npx`, shared code with Tauri v2 tray. |
-| Source licensing | Proprietary, closed-source (`LICENSE`, private source repo `mwahaj36/fleethud`, public binary repo `mwahaj36/fleethud-releases`) | Protects adapter, guardrail, and UI IP while shipping freeware + Pro ($19) + Teams ($12/seat/mo) in a single binary unlocked by an offline Ed25519 license file. |
+| Source licensing | Proprietary, closed-source (`LICENSE`, private source repo `mwahaj36/spawnt`, public binary repo `mwahaj36/spawnt-releases`) | Protects adapter, guardrail, and UI IP while shipping freeware + Pro ($19) + Teams ($12/seat/mo) in a single binary unlocked by an offline Ed25519 license file. |
 | Binary protection | `lto = "fat"`, `strip = "symbols"`, `panic = "abort"`, `--remap-path-prefix`, `obfstr!`, zero frontend business logic, no sourcemaps, no UPX/packers | Prevents casual `strings`/DevTools inspection and path leaks without triggering Windows Defender false positives. |
 | Visual rule | Zero emojis anywhere (CLI, UI, tray, docs, commit messages, repo description) | Enforced as Invariant 9 in `AGENTS.md`. Use geometric vector icons, colored status dots, and monospace text badges. |
 | Per-model quota pools | Keyed by `(provider, limit_id, window)` | Tracks independent model limits within one subscription (e.g., Claude vs Gemini/Argon vs Fable in Antigravity; `codex` vs `premium` in Codex; Opus vs Sonnet in Claude Code). |
@@ -187,7 +187,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | :--- | :--- | :--- |
 | Antigravity transcript lacked a `model` field on `PLANNER_RESPONSE` steps | Model selection is logged as a state transition inside `USER_INPUT` steps rather than repeated on every response | Inspected live `transcript_full.jsonl` and confirmed `<USER_SETTINGS_CHANGE>` tags record exact `Model Selection` changes (`Claude Opus 5.5 (Medium)` -> `Gemini 4 Argon (Medium)`), with `antigravity_state.pbtxt` as fallback. |
 | `cargo test` failed with `linker link.exe not found` on Windows | Machine had VS Code installed but no Visual Studio C++ Build Tools, and `rust-toolchain.toml` defaulted to the `x86_64-pc-windows-msvc` host | Installed `WinLibs MinGW-w64 (GCC 16.2.0)` via winget and set `rustup set default-host x86_64-pc-windows-gnu` + `default stable-x86_64-pc-windows-gnu`. |
-| `.agents/skills/rust-quality-gate/scripts/check.ps1` false-positive failure on `crates/core/Cargo.toml` | Regex matched `name = "fleethud-core"` in `[package]` when checking for forbidden `fleethud-*` internal dependencies | Scoped the purity check regex in `check.ps1` and `check.sh` to match dependency assignments (`^\s*(fleethud-\|tokio\|rusqlite\|notify\|axum)\s*=`) excluding `name =`. |
+| `.agents/skills/rust-quality-gate/scripts/check.ps1` false-positive failure on `crates/core/Cargo.toml` | Regex matched `name = "spawnt-core"` in `[package]` when checking for forbidden `spawnt-*` internal dependencies | Scoped the purity check regex in `check.ps1` and `check.sh` to match dependency assignments (`^\s*(spawnt-\|tokio\|rusqlite\|notify\|axum)\s*=`) excluding `name =`. |
 | `anonymize-fixture.mjs` left Line 1 of JSONL files un-scrubbed when piped from PowerShell | PowerShell `Set-Content -Encoding UTF8` prepended a UTF-8 BOM (`\uFEFF`), causing `JSON.parse(line)` on line 1 to throw and hit the `catch { return line; }` fallback | Stripped leading `\uFEFF` BOM before `JSON.parse`, removed the silent `catch` fallback so malformed lines fail loudly during fixture creation, and added a PII/JSON validation test in `crates/adapters`. |
 
 ### 4. Outcomes & Verification
@@ -208,14 +208,14 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
   2. **M1 PR 2 (`feat/m1-core-redact-pricing`):** Secret redaction engine (`core::redact`) and model pricing/ROI engine (`core::pricing`).
   3. **M1 PR 3 (`feat/m1-adapters`):** Pure, infallible log adapters for Claude Code, OpenAI Codex (CLI + Desktop App), Google Antigravity, and Gemini CLI tested against golden fixtures.
   4. **M1 PR 4 (`feat/m1-store-ingest`):** SQLite WAL schema v1 (`crates/store`), cross-platform path discovery & Windows shared-mode reader (`crates/platform`), and incremental checkpoint tailer (`crates/ingest`).
-  5. **M1 PR 5 (`feat/m1-cli`):** `fleethud status`, `fleethud report`, and `fleethud doctor` CLI subcommands (`crates/cli`).
+  5. **M1 PR 5 (`feat/m1-cli`):** `spawnt status`, `spawnt report`, and `spawnt doctor` CLI subcommands (`crates/cli`).
 
 ### 2. Outcomes & Verification (In Progress)
 - **M1 PR 1 (`2359df3`, PR #9 — `feat/m1-core-domain`):** Implemented `crates/core/src/lib.rs` with 6 unit tests covering `TrustLevel`, Git SSH/HTTPS remote URL normalization (`Project::from_origin`), folder path fallback, session ID composition, context window fill percentage (`u32::try_from` lossless conversion), and `UserSettings::default()`. All 5 quality gates passed (`check.ps1`).
-- **M1 PR 2 (`8f96472`, PR #10 — `feat/m1-core-redact-pricing`):** Implemented `crates/core/src/redact.rs` (`redact_summary` stripping Bearer/JWT tokens, `sk-`/`ghp_`/`AKIA` keys, sensitive `KEY=secret` assignments, and truncating to `<= 120` chars) and `crates/core/src/pricing.rs` (bundled model catalog for Claude Opus/Sonnet/Haiku, OpenAI GPT/Codex, and Gemini/Argon/Flash; `calculate_cost` with 5m/1h cache write rates and cache read savings; `calculate_plan_roi` for Subscription Plan Value). Added 8 unit tests (14 total in `fleethud-core`). All 5 quality gates passed (`check.ps1`).
-- **M1 PR 3 (`217f785`, PR #11 — `feat/m1-adapters`):** Implemented `SourceAdapter` trait, `FileCtx`, `FileKind`, and `ParsedBatch` in `crates/adapters`, plus pure, infallible parsers for Claude Code (`claude.rs`, deduplicating multi-block assistant lines via `message.id:requestId`), OpenAI Codex CLI & Desktop App (`codex.rs`, parsing `last_token_usage` deltas, `originator: "Codex Desktop"` surface, and `rate_limits` primary/secondary quota pools), Google Antigravity (`antigravity.rs`, tracking `<USER_SETTINGS_CHANGE>` model selection transitions and `PLANNER_RESPONSE` steps), and Gemini CLI (`gemini.rs`, rewritten session JSON). Added 5 golden/property tests (6 total in `fleethud-adapters`). All 5 quality gates passed (`check.ps1`).
+- **M1 PR 2 (`8f96472`, PR #10 — `feat/m1-core-redact-pricing`):** Implemented `crates/core/src/redact.rs` (`redact_summary` stripping Bearer/JWT tokens, `sk-`/`ghp_`/`AKIA` keys, sensitive `KEY=secret` assignments, and truncating to `<= 120` chars) and `crates/core/src/pricing.rs` (bundled model catalog for Claude Opus/Sonnet/Haiku, OpenAI GPT/Codex, and Gemini/Argon/Flash; `calculate_cost` with 5m/1h cache write rates and cache read savings; `calculate_plan_roi` for Subscription Plan Value). Added 8 unit tests (14 total in `spawnt-core`). All 5 quality gates passed (`check.ps1`).
+- **M1 PR 3 (`217f785`, PR #11 — `feat/m1-adapters`):** Implemented `SourceAdapter` trait, `FileCtx`, `FileKind`, and `ParsedBatch` in `crates/adapters`, plus pure, infallible parsers for Claude Code (`claude.rs`, deduplicating multi-block assistant lines via `message.id:requestId`), OpenAI Codex CLI & Desktop App (`codex.rs`, parsing `last_token_usage` deltas, `originator: "Codex Desktop"` surface, and `rate_limits` primary/secondary quota pools), Google Antigravity (`antigravity.rs`, tracking `<USER_SETTINGS_CHANGE>` model selection transitions and `PLANNER_RESPONSE` steps), and Gemini CLI (`gemini.rs`, rewritten session JSON). Added 5 golden/property tests (6 total in `spawnt-adapters`). All 5 quality gates passed (`check.ps1`).
 - **M1 PR 4 (`e2cdc1d`, PR #12 — `feat/m1-store-ingest`):** Implemented `crates/store` (SQLite schema v1 in WAL mode with normalized tables `project`, `session`, `usage_record`, `activity_event`, `quota_snapshot`, `source_file`, idempotent `commit_batch`, checkpoint management, and aggregation queries `list_active_sessions`, `generate_usage_report`, `get_latest_quota_snapshots`), `crates/platform` (OS path discovery for Claude, Codex, Antigravity, and Gemini CLI, fallback model extraction from `antigravity_state.pbtxt`, and Windows shared-mode reader `FILE_SHARE_READ | WRITE | DELETE` with truncation detection), and `crates/ingest` (recursive agent log scanner, file filtering, and `ingest_all` incremental commit pipeline). Added unit tests in `store`, `platform`, and `ingest`. All 5 quality gates passed (`check.ps1`).
-- **M1 PR 5 (`be2e9c8`, PR #13 — `feat/m1-cli`):** Implemented CLI binary subcommands in `crates/cli` (`fleethud status`, `fleethud report --plan-usd`, `fleethud doctor --network`) with token formatting, session truncation, and Plan Value ROI calculation. Verified live on local agent logs across Claude Code, OpenAI Codex, and Antigravity. Marked M1 complete in `docs/SPEC.md`. All 5 quality gates passed (`check.ps1`).
+- **M1 PR 5 (`be2e9c8`, PR #13 — `feat/m1-cli`):** Implemented CLI binary subcommands in `crates/cli` (`spawnt status`, `spawnt report --plan-usd`, `spawnt doctor --network`) with token formatting, session truncation, and Plan Value ROI calculation. Verified live on local agent logs across Claude Code, OpenAI Codex, and Antigravity. Marked M1 complete in `docs/SPEC.md`. All 5 quality gates passed (`check.ps1`).
 - **M2 PR 1 (`77ffb1f`, PR #14 — `feat/m2-daemon-orchestrator`):** Implemented `crates/daemon` (`DaemonLock` exclusive single-instance process lock on `daemon.lock` with Windows zero share mode and `daemon.json` bearer token metadata, and `DaemonOrchestrator` running background async periodic reconciler on top of `Database`). Added unit tests for bearer token entropy and async reconciler task loop. All 5 quality gates passed (`check.ps1`).
 - **M2 PR 2 (`b8bd22a`, PR #15 — `feat/m2-daemon-api`):** Implemented `crates/daemon/src/api.rs` (axum HTTP router with `/health`, `/api/v1/sessions`, `/api/v1/report`, `/api/v1/quota`, bearer token authentication, and strict `Host`/`Origin` loopback validation against DNS rebinding). Added unit tests covering missing tokens, evil Host headers, and authorized requests. All 5 quality gates passed (`check.ps1`). Tagged `v0.1.0` on GitHub releases marking M1 completion.
 - **M2 PR 3 (`da04c27`, PR #16 — `feat/m2-web-dashboard`):** Implemented typography-driven zero-emoji HTML/CSS/JS dashboard embedded directly in the daemon binary (`crates/daemon/src/dashboard.html` served at `GET /`) displaying live sessions, token burn, and per-model quota pools. Marked M2 complete in `docs/SPEC.md`. All 5 quality gates passed (`check.ps1`). Tagged and published GitHub Release `v0.2.0`.
@@ -226,7 +226,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - **M6 PR 1 (`bcc231f`, PR #21 — `feat/m6-supabase-cloud-sync`):** Implemented Supabase cloud sync foundation: `crates/store/migrations/supabase_cloud_sync_v1.sql` (multi-tenant Postgres schema with RLS policies, tenant isolation, and audit triggers for `organizations`, `org_members`, `devices`, `usage_hourly_sync`, `quota_pool_sync`, and `team_budget_rules`) and `crates/daemon/src/sync.rs` (privacy-preserving HMAC-SHA256 project key hashing `hash_project_key` and sync structures). Marked M5/M6 cloud sync complete in `docs/SPEC.md`. All 5 quality gates passed (`check.ps1`). Tagged and published GitHub Release `v0.6.0`.
 - **M7 PR 1 (`503aed8`, PR #22 — `feat/m7-packaging-launch`):** Added Unix install script (`scripts/install.sh`), Windows PowerShell install script (`scripts/install.ps1`), npm distribution shim (`npm/package.json`), verified all 5 quality gates, marked v1.0.0 criteria complete in `docs/SPEC.md`, and published final production GitHub Release `v1.0.0`.
 - **Chore (`chore/supabase-agent-skills`):** Installed official Supabase agent skills (`supabase/agent-skills`) into `.agents/skills/supabase` and `.agents/skills/supabase-postgres-best-practices` via `npx skills add supabase/agent-skills`.
-- **Feature (`feat/cli-daemon-command`):** Added `fleethud daemon` and `fleethud dashboard` commands to CLI binary with loopback HTTP binding, token query param auto-auth, and browser auto-launch. All 5 quality gates passed.
+- **Feature (`feat/cli-daemon-command`):** Added `spawnt daemon` and `spawnt dashboard` commands to CLI binary with loopback HTTP binding, token query param auto-auth, and browser auto-launch. All 5 quality gates passed.
 
 ---
 
@@ -236,14 +236,14 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Fix incremental foreign key cascades that caused active agents to freeze and quota pools to stick at 99.0%.
 - Track mid-session model shifts in Codex and Antigravity.
 - Transition legacy static dashboard to a unified, production-grade Next.js 15 Web & Native Console (`/console`, `/docs`, `/pricing`, `/downloads`, `/settings`, `/auth`).
-- Unify command naming: `fleethud console` replacing legacy `dashboard`.
+- Unify command naming: `spawnt console` replacing legacy `dashboard`.
 - Build native Windows installer with system tray background service and autostart.
 
 ### 2. Problems & Root Causes
 | Problem | Root Cause | Fix |
 | :--- | :--- | :--- |
 | Zero active agents & stale 99.0% quota | Incremental chunks lacked line 1 `session_meta`, triggering foreign key rollbacks in SQLite and aborting subsequent scans | Extracted exact 36-char session UUID from file path in `codex_session_id_from_path()`; updated `fallback_model` in ingest to preserve prior turn model. |
-| Dashboard was disconnected static HTML | Legacy M2 used static `dashboard.html` instead of the Next.js app | Unified on Next.js 15 Console at `/console`, added `fleethud console` CLI command, and configured native tray/shortcuts to launch the unified console with token authentication. |
+| Dashboard was disconnected static HTML | Legacy M2 used static `dashboard.html` instead of the Next.js app | Unified on Next.js 15 Console at `/console`, added `spawnt console` CLI command, and configured native tray/shortcuts to launch the unified console with token authentication. |
 | CLI command produced no output on Windows | `#![windows_subsystem = "windows"]` detached stdout before CRT startup | Removed GUI subsystem flag from CLI; background tasks use `wscript.exe` with `0, False` for zero-window execution. |
 
 ### 3. Verification
@@ -251,7 +251,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo fmt --all -- --check`: 100% formatted.
 - `npm run build --prefix web`: 12/12 static routes compiled cleanly in 1.5s.
-- Live test: `fleethud status` and `fleethud report` correctly detect running agents and display updated quota pools (93.0% / 30.0%).
+- Live test: `spawnt status` and `spawnt report` correctly detect running agents and display updated quota pools (93.0% / 30.0%).
 
 ---
 
@@ -272,7 +272,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | Problem | Root Cause | Fix |
 | :--- | :--- | :--- |
 | `TypeError: Cannot read properties of undefined (reading 'toFixed')` | `prov.cache_savings_usd` was accessed instead of API field `prov.total_cache_savings_usd`, crashing React when undefined | Updated `web/app/console/page.tsx` with `prov.total_cache_savings_usd ?? prov.cache_savings_usd ?? 0` and guarded all `.toFixed` calls with nullish coalescing `(val ?? 0).toFixed(...)`. |
-| `irm` and `curl` 404 on `raw.githubusercontent.com` | `fleethud` is a private repository; raw GitHub URLs require private authentication | Moved install scripts and release packages directly to Next.js public routes (`/win` -> `/downloads/install.ps1`, `/sh` -> `/downloads/install.sh`), removing all private GitHub URLs from web headers, footers, and docs. |
+| `irm` and `curl` 404 on `raw.githubusercontent.com` | `spawnt` is a private repository; raw GitHub URLs require private authentication | Moved install scripts and release packages directly to Next.js public routes (`/win` -> `/downloads/install.ps1`, `/sh` -> `/downloads/install.sh`), removing all private GitHub URLs from web headers, footers, and docs. |
 | ROI collapsed on "today" filter | Daily API spend was being compared against a full 30-day monthly plan price ($20 or $100), making profitable days appear as losses | Scaled plan costs by time factor in `crates/daemon/src/api.rs` (`today` = 1/30th, `7d` = 7/30th, `30d` = 1.0) and displayed per-period labels (`$0.67/day`, `$4.67/7d`). |
 | Repeated model rows in provider breakdown | `generate_usage_report_timeline` grouped SQL by project, agent, and model, then appended rows directly to provider lists | Replaced with nested `BTreeMap<Provider, BTreeMap<Model, ModelReport>>` to aggregate turns and tokens across all projects, sorting models by spend descending. |
 | Antigravity stuck in `Thinking` for 15 minutes after completion | `PLANNER_RESPONSE` set `sess.state = SessionState::Thinking` unconditionally | If `tool_calls` is empty or missing, set `sess.state = SessionState::Idle` immediately; set `SessionState::Tool` only when active tool calls exist. |
@@ -302,7 +302,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Fix timeline filtering buttons (`Today`, `Last 7 Days`, `Last 30 Days`, `All Time`) so range switching updates immediately without errors.
 - Resolve 67% cache hit rate questions: clarify why 7d and 30d periods show 67% (due to historical log bounds starting Oct 12) vs Today (82%).
 - Implement zero-friction Quick Pairing / Browser-to-Desktop auth transfer (eliminate re-entering GitHub credentials in the desktop app).
-- Isolate desktop native window via dedicated `--user-data-dir` (`%LOCALAPPDATA%\FleetHUD\AppProfile`) and configure proper system tray behavior (close minimizes to tray, click restores, quit terminates).
+- Isolate desktop native window via dedicated `--user-data-dir` (`%LOCALAPPDATA%\Spawnt\AppProfile`) and configure proper system tray behavior (close minimizes to tray, click restores, quit terminates).
 - Render live dynamic active-agent badge and hover metrics directly on the white squircle system tray icon.
 - Delete stale installer packages from user Downloads directory.
 
@@ -322,14 +322,14 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo fmt --all`: clean.
 - `npm run build --prefix web`: 13 static pages generated cleanly.
-- `C:\Users\Wahaj\Downloads`: verified old `FleetHUD-Setup.exe` and `.zip` deleted cleanly.
+- `C:\Users\Wahaj\Downloads`: verified old `Spawnt-Setup.exe` and `.zip` deleted cleanly.
 
 ---
 
 ## Session 6 — Native GUI Installer, Exact Branding, Antigravity Project Resolution, and Tray Active Sessions (Oct 26, 2026)
 
 ### 1. Goals & User Requests
-- Fix installer UX: replace console PowerShell window with a native, dark-themed GUI installer (`FleetHUD-Setup.exe`) matching Antigravity and VS Code.
+- Fix installer UX: replace console PowerShell window with a native, dark-themed GUI installer (`Spawnt-Setup.exe`) matching Antigravity and VS Code.
 - Fix brand icon: restore exact Illustrator SVG geometry (`fill="#0d1117"` polyline triangle and rect inside white squircle), replace wireframe/diamond logo in console and tray badge, and add favicon routes so native app window displays the icon.
 - Fix Antigravity `unknown` project names in sessions table by reconciling from `conversation_summaries.db`.
 - Clean up legacy `model-placeholder-m319` records and remove fabricated 69.8% estimations for Antigravity, while keeping exact Codex 5h/weekly pools with date/countdown formatting (`in 6d 14h (Nov 2, 11:51 AM)`).
@@ -341,8 +341,8 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | Problem | Root Cause | Fix |
 | :--- | :--- | :--- |
 | Installer opened a PowerShell terminal window | Packaging ran `install.ps1` in console mode | Built `scripts/Setup.cs` as a native Windows GUI executable (`/target:winexe`) via `csc.exe` with dark `#0d1117` UI, squircle logo, smooth progress indicators, auto-shortcuts, and zero terminal popups. |
-| App icon differed from user SVG | Previous edit added `fill="none" stroke="..."` and diamond polygon | Restored solid Illustrator geometry: `<polyline points="290.67 1756.53 290.67 291.47 1755.73 291.47" fill="#0d1117"/>` and `<rect ... fill="#0d1117"/>` in `fleethud.svg`, regenerated multi-res `fleethud.ico`, and served `/favicon.ico` + `/fleethud.svg` via daemon axum routes. |
-| Antigravity sessions showed `unknown` project | Prompt parser checked only `Active Workspaces:\n- ` in user requests; conversation metadata is stored in Antigravity's local DB | Added `find_antigravity_workspace` in ingest and `reconcile_antigravity_projects` in store, reading `~/.gemini/antigravity/conversation_summaries.db` to resolve all historical and live sessions to `fleethud`, `notii`, `discount-daddy`. |
+| App icon differed from user SVG | Previous edit added `fill="none" stroke="..."` and diamond polygon | Restored solid Illustrator geometry: `<polyline points="290.67 1756.53 290.67 291.47 1755.73 291.47" fill="#0d1117"/>` and `<rect ... fill="#0d1117"/>` in `spawnt.svg`, regenerated multi-res `spawnt.ico`, and served `/favicon.ico` + `/spawnt.svg` via daemon axum routes. |
+| Antigravity sessions showed `unknown` project | Prompt parser checked only `Active Workspaces:\n- ` in user requests; conversation metadata is stored in Antigravity's local DB | Added `find_antigravity_workspace` in ingest and `reconcile_antigravity_projects` in store, reading `~/.gemini/antigravity/conversation_summaries.db` to resolve all historical and live sessions to `spawnt`, `notii`, `discount-daddy`. |
 | Leaked `model-placeholder-m319` and fake 69.8% quota | Synthetic `stmt_roll` divided token sums by hardcoded 10M caps, including context cache hits | Removed synthetic estimation loop; cleaned legacy placeholder rows in SQLite to `Gemini 3.8 Flash (Default)`. Only confirmed exact pools (OpenAI Codex) and rate-limit events are surfaced. Added `formatResetCountdown` (`in 6d 14h (Nov 2, 11:51 AM)`). |
 | Tray lacked active session details and pin did nothing | Tray menu had static text and used `ShowBalloonTip` which Focus Assist silences | Added dynamic active session slots (up to 5) with `[RUN]` / `[WAIT]`, repo names, and `POST /api/v1/sessions/:id/focus` dispatch. Replaced pin hint with an explicit WinForms `MessageBox`. |
 | Desktop app lacked token paste mechanism | Auth view only offered external OAuth links | Added Quick Account Pairing input card with `pairTokenDirectly()` and `[Copy Pairing Token for Desktop App]` button on web console. |
@@ -352,7 +352,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo fmt --all -- --check`: clean.
 - `npm run build --prefix web`: Next.js 15.5 production build clean.
-- Native GUI installer `FleetHUD-Setup.exe` compiled cleanly (3.9 MB) with embedded payload and zero console popups.
+- Native GUI installer `Spawnt-Setup.exe` compiled cleanly (3.9 MB) with embedded payload and zero console popups.
 - Verified clean uninstallation of previous local files, shortcuts, and registry entries.
 
 ## 2026-10-26 — Session 7: Product Integrity, Tray Polish & Complete Pro Feature Implementation
@@ -367,19 +367,19 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
   - Complete adapter coverage for Cline/Roo Code, Cursor, and Aider.
   - Resolve cross-agent project fragmentation via Git worktree and remote canonicalization.
   - Eliminate duplicate tray instances and desktop freezes (named mutex, old PowerShell cleanup, single-instance guard).
-  - Invert FleetHUD logo colors while preserving exact original vector geometry.
+  - Invert Spawnt logo colors while preserving exact original vector geometry.
 
 ### 2. Implementation & Root Causes
 | Area | Problem / Gap | Resolution |
 | :--- | :--- | :--- |
 | **Resume Queue (Pro)** | Quota resets required manual resume commands | Implemented `resume_queue` table in SQLite with arm/disarm API (`/api/v1/resume-queue`), UI controls, and daemon background executor (`pro::run_resume_queue`) running non-escalated headless CLI resumes (`claude --resume` / `codex resume`). |
-| **Guardrails & Hook (Pro)** | Hook could block agent if FleetHUD was down | Implemented strict fail-open guardrail hook (`fleethud hook`) checking `blocked-sessions.json` with a 30s mtime freshness check. If daemon is down or stale, hook exits 0 immediately. Integration removal handles upgrades by matching binary path suffixes. |
+| **Guardrails & Hook (Pro)** | Hook could block agent if Spawnt was down | Implemented strict fail-open guardrail hook (`spawnt hook`) checking `blocked-sessions.json` with a 30s mtime freshness check. If daemon is down or stale, hook exits 0 immediately. Integration removal handles upgrades by matching binary path suffixes. |
 | **Adapters Coverage** | Missing Cline, Cursor, and Aider parsers | Added `cline.rs` (infallible parser for `ui_messages.json` with approval tracking), `cursor.rs` (transcript role & token metrics), and `aider.rs` (append-only JSONL analytics reader). |
 | **Agent State Inaccuracies** | Antigravity and Codex remained stuck in `Thinking` | Antigravity parser switches to `Idle` on `step_type == "GENERIC"` or `status == "DONE"`, and `AwaitingApproval` on `ask_question`. Codex switches to `Idle` on token generation completion. |
 | **Project Canonicalization** | Git worktrees fragmented single projects into separate folders | Implemented `resolve_git_repo_and_remote` resolving `.git` file pointers and `commondir` back to the parent repository root and remote URL. |
-| **Tray & Desktop Stability** | Multiple tray processes running concurrently caused freezes | Added named Mutex `Global\FleetHUD_Tray_Mutex` and killed legacy PowerShell tray processes before launching. Restored high-contrast dark menu and single live poll. |
+| **Tray & Desktop Stability** | Multiple tray processes running concurrently caused freezes | Added named Mutex `Global\Spawnt_Tray_Mutex` and killed legacy PowerShell tray processes before launching. Restored high-contrast dark menu and single live poll. |
 | **Branding & Assets** | Previous attempt inverted into outline wireframe | Restored exact solid squircle and polyline/rect geometry, inverting colors to crisp white glyph on dark squircle across SVGs, ICOs, and console. |
-| **License & Exports (Pro)** | Missing UI and CLI for license management and CSV export | Added `fleethud license` (`status`, `activate`, `remove`), `/api/v1/license` endpoints, `/api/v1/export?format=csv` generator, and Pro & Guardrails console interface. |
+| **License & Exports (Pro)** | Missing UI and CLI for license management and CSV export | Added `spawnt license` (`status`, `activate`, `remove`), `/api/v1/license` endpoints, `/api/v1/export?format=csv` generator, and Pro & Guardrails console interface. |
 
 ### 3. Verification & Quality Gate
 - `cargo test --workspace`: 41 tests passed across all crates with 0 failures.
@@ -394,39 +394,39 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Fix Desktop Cockpit JavaScript syntax error breaking tab navigation and controls.
 - Fix brandmark glyph proportion: scale down oversized mark to approved Option A (0.65x scale) with generous margins.
 - Fix tray badge legibility: replace unreadable small badge text with large, high-visibility 18px badge using Arial bold typography.
-- Remove tray context menu clutter: delete "Copy Local Bearer Token" and "Pin FleetHUD to Taskbar Tray".
+- Remove tray context menu clutter: delete "Copy Local Bearer Token" and "Pin Spawnt to Taskbar Tray".
 - Modernize tray context menu styling: user explicitly requested a sleek dark theme while enforcing **"keep it square, not rounded"** — implemented `DarkMenuColorTable` with `#0d1117` background, 1px `#30363d` hairline border, and `#21262d` subtle dark hover.
 - Fix Antigravity agent state flapping: tool outputs (`GENERIC` step) were incorrectly transitioning session to `Idle` while agent was actively working.
-- Recompile native Windows release binary `fleethud.exe`, installer `FleetHUD-Setup.exe`, and distribution zip.
+- Recompile native Windows release binary `spawnt.exe`, installer `Spawnt-Setup.exe`, and distribution zip.
 
 ### 2. Implementation & Root Causes
 | Area | Problem / Gap | Resolution |
 | :--- | :--- | :--- |
 | **Cockpit Navigation** | Duplicate closing brace `}` at line 909 broke console script evaluation | Removed rogue brace from `crates/daemon/src/console.html`; verified clean compilation with JS AST/Function parser. |
 | **Antigravity State** | Antigravity showed `Idle` mid-task during tool runs | Removed faulty `sess.state = SessionState::Idle` on `GENERIC` steps in `crates/adapters/src/antigravity.rs`. End-of-turn is now properly triggered by empty `tool_calls` on `PLANNER_RESPONSE`. |
-| **Brandmark Icon** | Glyph scaled edge-to-edge looked distorted and cramped | Generated visual approval showcase; user approved Option A (0.65x scale). Regenerated `fleethud.ico`, updated SVGs, `Setup.cs` coordinates, and `console.html` header. |
+| **Brandmark Icon** | Glyph scaled edge-to-edge looked distorted and cramped | Generated visual approval showcase; user approved Option A (0.65x scale). Regenerated `spawnt.ico`, updated SVGs, `Setup.cs` coordinates, and `console.html` header. |
 | **Tray Badge Visibility** | Small 7.5pt badge was illegible when downscaled to 16x16 by Windows taskbar | Enlarged badge circle to 18x18 at (13,13), switched font to Arial 9.5pt Bold, and enabled `SingleBitPerPixelGridFit` for sharp sub-pixel contrast. |
 | **Tray Context Menu** | WinForms default menu used blue gradient highlights and lacked padding; user requested square theme | Created `DarkMenuColorTable` in `scripts/tray.ps1` with `#0d1117` solid background, 1px `#30363d` hairline border, and `#21262d` dark hover highlight. Strictly maintained square geometry. Removed redundant token/pin items. |
 | **Windows Compilation** | `aws-lc-sys` failed on Windows MinGW with undefined `nanosleep64` | Switched `reqwest` in `Cargo.toml` to `native-tls` (SChannel on Windows), eliminating C crypto dependencies and linking cleanly. |
-| **Add or Remove Programs** | Windows lacked uninstaller entry in Settings / Control Panel | Added dual-mode uninstaller in `scripts/Setup.cs` registering `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\FleetHUD` with `DisplayName`, `DisplayVersion`, `Publisher`, `DisplayIcon`, and `UninstallString` (`FleetHUD-Uninstall.exe --uninstall`). Cleanly terminates services, removes autostart, cleans PATH, removes shortcuts, and purges files. |
+| **Add or Remove Programs** | Windows lacked uninstaller entry in Settings / Control Panel | Added dual-mode uninstaller in `scripts/Setup.cs` registering `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Spawnt` with `DisplayName`, `DisplayVersion`, `Publisher`, `DisplayIcon`, and `UninstallString` (`Spawnt-Uninstall.exe --uninstall`). Cleanly terminates services, removes autostart, cleans PATH, removes shortcuts, and purges files. |
 | **Favicon & Web Icons** | Web favicon needed sync with approved 0.65x geometry | Copied approved 0.65x icon to `web/app/favicon.ico`, `web/public/favicon.ico`, and added explicit `icons` metadata in `web/app/layout.tsx`. |
 
 ### 3. Verification & Quality Gate
-- `cargo test -p fleethud-core -p fleethud-adapters -p fleethud-store`: 32 tests passed with 0 failures.
-- `cargo.exe build -p fleethud --release`: Clean native Windows compilation (5.18 MB).
+- `cargo test -p spawnt-core -p spawnt-adapters -p spawnt-store`: 32 tests passed with 0 failures.
+- `cargo.exe build -p spawnt --release`: Clean native Windows compilation (5.18 MB).
 - `npm run build --prefix web`: Next.js 15.5 production build clean with all 13 routes.
-- `csc.exe Setup.cs`: Clean .NET Windows GUI installer compilation (`FleetHUD-Setup.exe`, 5.42 MB).
-- `Compress-Archive`: Updated `FleetHUD-v1.1.1-windows-x64.zip` (5.08 MB).
+- `csc.exe Setup.cs`: Clean .NET Windows GUI installer compilation (`Spawnt-Setup.exe`, 5.42 MB).
+- `Compress-Archive`: Updated `Spawnt-v1.1.1-windows-x64.zip` (5.08 MB).
 
 ## 2026-10-27 — Session 9: Phase 1 Master Plan Foundation, Chat Topic Attribution & Release v1.1.3
 
 ### 1. Goals & User Requests
-- Execute Phase 1 of the FleetHUD Master Plan (`fleethud_master_plan_fixes_and_context_relay.md`):
+- Execute Phase 1 of the Spawnt Master Plan (`spawnt_master_plan_fixes_and_context_relay.md`):
   - Fix Web Console context saturation progress bar rendering (100% and >=85% fill rendered transparent instead of red).
   - Implement Desktop Auth Session Pairing UX & Unpair Flow: display paired email status and add 1-click unpair capability in Desktop Cockpit.
   - Implement Session Attribution: display physical machine / cloud device name under Surface column (`WORKSTATION-PC`, `local`).
   - Implement Chat Topic Display (User Request): display conversation / chat topic underneath project name on both Native Cockpit and Web Console to distinguish parallel sessions under the same repository.
-  - Fix Windows Uninstaller orphaned browser windows: terminate any Edge app window instances running `--user-data-dir=...\\FleetHUD\\AppProfile` or on `127.0.0.1:41738`.
+  - Fix Windows Uninstaller orphaned browser windows: terminate any Edge app window instances running `--user-data-dir=...\\Spawnt\\AppProfile` or on `127.0.0.1:41738`.
   - Add Desktop System Notifications: context saturation reserve alert (>=90%) and quota pool reset alert with single-shot debouncing.
 - Execute full quality gate, update versions to `v1.1.3`, package standalone Windows installer/zip, and merge to `main`.
 
@@ -434,10 +434,10 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | Area | Problem / Gap | Resolution |
 | :--- | :--- | :--- |
 | **Web Console Bar Color** | Tailwind configuration lacked default numeric color keys (`bg-red-500`, `bg-amber-400`) | Updated `web/app/console/page.tsx` line 624 to use custom palette keys `bg-red` (`#f85149`) and `bg-yellow` (`#d29922`). Saturated bars now render solid high-contrast red. |
-| **Auth Session Pairing & Unpair** | Local daemon did not reflect pairing status and lacked an unpair flow | Updated `GET /api/v1/auth/session` to return `{ paired, email }` extracted from `~/.fleethud/session.json`. Added `#auth-paired-card` with active green indicator and `[Unpair / Disconnect]` calling `DELETE /api/v1/auth/session`. |
-| **Chat Topic Attribution** | Multiple sessions under the same repository all displayed identical "fleethud" project names | Exposed `title` and `device_name` on `SessionListItem`. Enhanced `reconcile_antigravity_projects` to query and sync titles for all Antigravity sessions from `~/.gemini/antigravity/conversation_summaries.db`. Rendered chat topic stacked cleanly under project name in both Native and Web consoles. |
-| **Device Attribution** | Local daemon and Web Console lacked origin machine attribution | Added `fleethud_platform::hostname()` helper and attached `device_name` to session lists in `/api/v1/sessions` and `/api/v1/live`. Displayed device name in muted monospace under the Surface column. |
-| **Uninstaller Cleanup** | Running `FleetHUD-Uninstall.exe` terminated the tray process but left the Edge app window open | Updated `KillFleetHUDProcesses()` in `scripts/Setup.cs` to terminate processes matching `FleetHUD\AppProfile` or `127.0.0.1:41738`. |
+| **Auth Session Pairing & Unpair** | Local daemon did not reflect pairing status and lacked an unpair flow | Updated `GET /api/v1/auth/session` to return `{ paired, email }` extracted from `~/.spawnt/session.json`. Added `#auth-paired-card` with active green indicator and `[Unpair / Disconnect]` calling `DELETE /api/v1/auth/session`. |
+| **Chat Topic Attribution** | Multiple sessions under the same repository all displayed identical "spawnt" project names | Exposed `title` and `device_name` on `SessionListItem`. Enhanced `reconcile_antigravity_projects` to query and sync titles for all Antigravity sessions from `~/.gemini/antigravity/conversation_summaries.db`. Rendered chat topic stacked cleanly under project name in both Native and Web consoles. |
+| **Device Attribution** | Local daemon and Web Console lacked origin machine attribution | Added `spawnt_platform::hostname()` helper and attached `device_name` to session lists in `/api/v1/sessions` and `/api/v1/live`. Displayed device name in muted monospace under the Surface column. |
+| **Uninstaller Cleanup** | Running `Spawnt-Uninstall.exe` terminated the tray process but left the Edge app window open | Updated `KillSpawntProcesses()` in `scripts/Setup.cs` to terminate processes matching `Spawnt\AppProfile` or `127.0.0.1:41738`. |
 | **System Notifications** | Users had no alert when reaching 90% context saturation or when rate-limited quotas reset | Added balloon notifications for >=90% context saturation (`[WAIT] Context Saturation Warning`) and quota reset (`[READY] Quota Pool Reset`) in `scripts/tray.ps1` with in-memory single-shot latching. |
 
 ### 3. Verification & Quality Gate
@@ -445,15 +445,15 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo test --workspace`: 47 tests passed across all 9 crates with 0 failures.
 - `npm run build --prefix web`: Next.js 15.5 production build verified (14 static routes compiled cleanly).
-- Release Packager: Built native release `fleethud.exe`, compiled `FleetHUD-Setup.exe` (5.42 MB), and packaged `FleetHUD-v1.1.3-windows-x64.zip` (5.08 MB).
+- Release Packager: Built native release `spawnt.exe`, compiled `Spawnt-Setup.exe` (5.42 MB), and packaged `Spawnt-v1.1.3-windows-x64.zip` (5.08 MB).
 
 ---
 
 ## 2026-10-27 — Session 10: Phase 2 Pro Labs Context Relay Engine, Cross-Platform Alerts & Remote Cloud Handoff (Release v1.2.0)
 
 ### 1. Goals & User Requests
-- Implement Phase 2 of the FleetHUD Master Plan (`fleethud_master_plan_fixes_and_context_relay.md`) using the Ponytail Ultra methodology:
-  - Context Relay Engine: Detect context exhaustion (>=90% saturation or configurable threshold 80-95%), generate zero-knowledge project checkpoints (`.fleethud/HANDOFF.md`), and orchestrate seamless session rotation.
+- Implement Phase 2 of the Spawnt Master Plan (`spawnt_master_plan_fixes_and_context_relay.md`) using the Ponytail Ultra methodology:
+  - Context Relay Engine: Detect context exhaustion (>=90% saturation or configurable threshold 80-95%), generate zero-knowledge project checkpoints (`.spawnt/HANDOFF.md`), and orchestrate seamless session rotation.
   - Invariant Enforcement: Never store prompt or tool output content (`AGENTS.md` Invariant 1); never escalate agent permissions (`AGENTS.md` Invariant 7, `--dangerously-skip-permissions` forbidden); fail open if daemon is unresponsive.
   - Cross-Platform Desktop Notifications: Centralize native alert dispatching in Rust across Windows (PowerShell balloon), macOS (`osascript` notification), and Linux (`notify-send`).
   - Remote Web Console Handoff: Allow triggering context handoff from mobile/remote web console when away from workstation via Supabase Cloud Sync command queueing, executed locally by desktop daemon.
@@ -464,11 +464,11 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 ### 2. Implementation & Root Causes
 | Area | Problem / Gap | Resolution |
 | :--- | :--- | :--- |
-| **Context Relay Engine** | Agent sessions hitting 100% context saturation lose working context, degrade code output, and waste tokens | Built `crates/daemon/src/pro.rs` with `run_context_relay` and `execute_relay_handoff`. Evaluates session saturation on every 5s tick. When threshold is crossed, writes `.fleethud/HANDOFF.md` containing zero-knowledge metadata (repo path, session ID, saturation percentage, model quota status, instruction checklist) and records entry in SQLite. |
+| **Context Relay Engine** | Agent sessions hitting 100% context saturation lose working context, degrade code output, and waste tokens | Built `crates/daemon/src/pro.rs` with `run_context_relay` and `execute_relay_handoff`. Evaluates session saturation on every 5s tick. When threshold is crossed, writes `.spawnt/HANDOFF.md` containing zero-knowledge metadata (repo path, session ID, saturation percentage, model quota status, instruction checklist) and records entry in SQLite. |
 | **Cross-Platform Alerts** | Only Windows tray had basic alerts; macOS and Linux lacked native desktop notifications | Implemented `send_desktop_notification(title, body)` in `crates/platform/src/lib.rs` supporting Windows (WinForms balloon), macOS (`osascript -e 'display notification ...'`), and Linux (`notify-send`). Dispatches saturation warnings across all 3 platforms directly from daemon. |
 | **Relay Store & State** | Daemon lacked persistent configuration and ledger for context relays | Added `ContextRelayConfig` and `ContextRelayEntry` to `crates/store/src/lib.rs`. Created SQLite tables `context_relay_config` and `context_relay` with CRUD queries (`get_context_relay_config`, `save_context_relay_config`, `list_context_relays`, `record_context_relay`, `update_context_relay_status`). |
 | **Daemon Pro API** | Frontends had no endpoints to query relay state or trigger handoffs | Added `/api/v1/pro/relay` (GET config & entries), `/api/v1/pro/relay/config` (POST update), `/api/v1/pro/relay/execute` (POST execute handoff), and `/api/v1/pro/relay/dismiss` (POST dismiss) in `crates/daemon/src/api.rs`. |
-| **Remote Web Console Execution** | Remote devices cannot reach loopback `127.0.0.1:41738` to trigger local desktop actions | Extended Supabase cloud sync in `crates/daemon/src/sync.rs`. Included `context_relays` and `relay_config` in cloud snapshots. In `push_snapshot`, the local daemon checks for incoming `relay_commands` in `fleethud_sync_state`, executes the handoff locally on the workstation, and records completion in cloud state. |
+| **Remote Web Console Execution** | Remote devices cannot reach loopback `127.0.0.1:41738` to trigger local desktop actions | Extended Supabase cloud sync in `crates/daemon/src/sync.rs`. Included `context_relays` and `relay_config` in cloud snapshots. In `push_snapshot`, the local daemon checks for incoming `relay_commands` in `spawnt_sync_state`, executes the handoff locally on the workstation, and records completion in cloud state. |
 | **Web Console UI** | Web console lacked visibility into context saturation reserve and handoff action | Added `[PRO LABS]` Context Saturation Reserve Warning banner (>=90%) with quick action, row-level `[Handoff & Rotate]` button, and `handleRemoteRelay` dispatching to local daemon or queueing via Supabase sync state for remote execution. |
 | **Desktop Cockpit UI** | Cockpit needed configuration and ledger visibility | Added Pro Labs Context Relay card to `crates/daemon/src/console.html` with terminal launch explainer, policy/strategy/threshold selectors, pending relays table, and manual `[Handoff & Rotate]` triggers. |
 | **Specification** | `docs/SPEC.md` lacked official technical specification for Context Relay | Added §3.14.1 to `docs/SPEC.md` documenting Context Relay triggers, zero-knowledge checkpointing, cross-platform notifications, cloud sync command relay, and security guarantees. |
@@ -478,8 +478,8 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo test --workspace`: 49 tests passed across all 9 crates with 0 failures (added `test_context_relay_crud` in `crates/store`).
 - `npm run build --prefix web`: Next.js 15.5 production build verified (14 static routes compiled cleanly).
-- Version Lockstep: Bumped version to `1.2.0` in `Cargo.toml`, `scripts/Setup.cs`, `web/package.json`, `npm/package.json`, `npm/fleethud/package.json`, `scripts/install.ps1`, `web/public/downloads/install.ps1`, and `web/app/downloads/page.tsx`.
-- Release Packager: Compiled native release `fleethud.exe` (5.22 MB), compiled installer `FleetHUD-Setup.exe` (5.47 MB), and packaged `FleetHUD-v1.2.0-windows-x64.zip` (5.12 MB).
+- Version Lockstep: Bumped version to `1.2.0` in `Cargo.toml`, `scripts/Setup.cs`, `web/package.json`, `npm/package.json`, `npm/spawnt/package.json`, `scripts/install.ps1`, `web/public/downloads/install.ps1`, and `web/app/downloads/page.tsx`.
+- Release Packager: Compiled native release `spawnt.exe` (5.22 MB), compiled installer `Spawnt-Setup.exe` (5.47 MB), and packaged `Spawnt-v1.2.0-windows-x64.zip` (5.12 MB).
 
 ---
 
@@ -497,7 +497,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | :--- | :--- | :--- |
 | **Antigravity Token Accounting** | Google Antigravity logs prompt tokens split between `input_tokens` (uncached delta) and `cache_read_tokens` (cached history). Adapter set `context_tokens: input_tokens`, completely ignoring cached history. Pre-cache turn 20 recorded 17,752, while subsequent cached turns recorded only 2k-3k, freezing `MAX(context_tokens)` at 17.8k. | Updated `crates/adapters/src/antigravity.rs` to compute `context_tokens: input_tokens.saturating_add(cache_read)`. Live context immediately updated to accurate >140k load. |
 | **SQLite Session Query** | `list_sessions_paginated` queried `COALESCE(MAX(u.context_tokens), 0)`, which preserved historical pre-compaction peaks rather than current active context. | Updated query in `crates/store/src/lib.rs` to fetch latest turn `context_tokens` via subquery `ORDER BY u2.rowid DESC LIMIT 1`. Added schema migration `v7` to retroactively update `context_tokens = input_tokens + cache_read_tokens` for past rows. |
-| **Terminal Process Spawning** | Headless `Command::new("claude").spawn()` executed invisibly in the background without a console window and failed to resolve Windows `.cmd` files. | Added `spawn_agent_in_terminal` in `crates/platform/src/lib.rs`. On Windows, launches in an interactive Command Prompt (`cmd /c start "FleetHUD Relay" cmd.exe /k ...`); on macOS, uses AppleScript Terminal tab; on Linux, uses `x-terminal-emulator`. Focuses editor for IDE agents. |
+| **Terminal Process Spawning** | Headless `Command::new("claude").spawn()` executed invisibly in the background without a console window and failed to resolve Windows `.cmd` files. | Added `spawn_agent_in_terminal` in `crates/platform/src/lib.rs`. On Windows, launches in an interactive Command Prompt (`cmd /c start "Spawnt Relay" cmd.exe /k ...`); on macOS, uses AppleScript Terminal tab; on Linux, uses `x-terminal-emulator`. Focuses editor for IDE agents. |
 | **Relay Dismiss Latching** | Dismissing a relay set status to `"dismissed"`, but ticker check only skipped `"pending"` and `"executed"`, immediately recreating the alert. | Updated `crates/daemon/src/pro.rs` line 282 to include `r.status == "dismissed"`. |
 | **Session Root Resolution** | CWD lookup checked only Antigravity SQLite DB, defaulting CLI agents to daemon root. | Updated `crates/daemon/src/pro.rs`, `sync.rs`, and `api.rs` to query `db.get_session_focus_target(&s.id)` to obtain the canonical `project.repo_root`. |
 
@@ -506,8 +506,8 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings, 0 errors.
 - `cargo test --workspace`: 49 tests passed across all 9 crates with 0 failures.
 - `npm run build --prefix web`: Next.js 15.5 production build verified (14 static routes compiled cleanly).
-- Version Lockstep: Bumped version to `1.2.1` in `Cargo.toml`, `scripts/Setup.cs`, `web/package.json`, `npm/package.json`, `npm/fleethud/package.json`, `scripts/install.ps1`, `web/public/downloads/install.ps1`, and `web/app/downloads/page.tsx`.
-- Release Packager: Compiled native release `fleethud.exe`, compiled installer `FleetHUD-Setup.exe`, and packaged `FleetHUD-v1.2.1-windows-x64.zip`.
+- Version Lockstep: Bumped version to `1.2.1` in `Cargo.toml`, `scripts/Setup.cs`, `web/package.json`, `npm/package.json`, `npm/spawnt/package.json`, `scripts/install.ps1`, `web/public/downloads/install.ps1`, and `web/app/downloads/page.tsx`.
+- Release Packager: Compiled native release `spawnt.exe`, compiled installer `Spawnt-Setup.exe`, and packaged `Spawnt-v1.2.1-windows-x64.zip`.
 - Live Verification: Daemon reloaded locally; live session API immediately reflected dynamic context window (`158,723 / 128,000`).
 
 
@@ -555,7 +555,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 ### 1. Goals & User Requests
 - Resolve date boundary issue: "Today" filter was dropping nighttime spend and jumping between dates upon restart because it used UTC midnight (`00:00:00+00:00` = 05:00 AM local time).
 - Resolve Gemini Flash model attribution: evaluate why Gemini 3.8 Flash (Medium) in Antigravity was showing a saturated red context bar (`148.5k / 128.0k (100%)`) and inflated cost ($0.91).
-- Compile fresh native release binary `fleethud.exe`, build `FleetHUD-Setup.exe` with verified installer payload, and push updates.
+- Compile fresh native release binary `spawnt.exe`, build `Spawnt-Setup.exe` with verified installer payload, and push updates.
 
 ### 2. Implementation & Root Causes
 | Area | Problem / Gap | Resolution |
@@ -563,14 +563,14 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 | **Store / Timeline Date Boundaries** | "Today" calculated start-of-day using `Utc::now().date_naive().and_hms_opt(0,0,0)`, which evaluates to UTC midnight (05:00 AM in UTC+5). Work done between 00:00 and 05:00 AM local was grouped under "yesterday", and upon 05:00 AM rollover, "Today" dropped to $0.smth. Explicit `from_ts` was also ignored for "today", "7d", and "30d". | Updated `generate_usage_report_timeline` in `crates/store/src/lib.rs` to compute start-of-day using `chrono::Local::now().date_naive().and_hms_opt(0,0,0)` converted to UTC, and prioritize explicit `from_ts` across all range queries. Added unit test. |
 | **Model Matching Collision** | `lookup_model_pricing` matched `lower.contains("mini")` under OpenAI before checking Google Gemini models. Since `"gemini"` contains `"mini"`, `Gemini 3.8 Flash (Medium)` was mistakenly resolved as `OPENAI_MINI` (128k context window, $0.15/$0.075/$0.60 pricing). | Reordered model catalog in `crates/core/src/pricing.rs` so Google Gemini models are resolved before OpenAI reasoning/flagship generic `"mini"` checks. Added unit test assertion. |
 | **Console & Web Range Filtering** | `console.html` and `web/app/console/page.tsx` lacked precise local date span display, showing awkward spans like `Today (Oct 26 — Oct 27)`. | Formatted date spans to condense identical local start/end dates (`Today (Oct 27, 2026)`), and passed browser-local start-of-day ISO string in `from` query param. |
-| **CLI Range Filter** | `fleethud report` lacked `--range` CLI argument documented in web docs. | Added `--range` option to `Report` subcommand in `crates/cli/src/main.rs` routing to `generate_usage_report_timeline`. |
+| **CLI Range Filter** | `spawnt report` lacked `--range` CLI argument documented in web docs. | Added `--range` option to `Report` subcommand in `crates/cli/src/main.rs` routing to `generate_usage_report_timeline`. |
 
 ### 3. Verification & Packaging
 - Rust Quality Gate: 57 tests passed across all 9 crates with 0 failures, 0 clippy warnings, clean formatting.
-- Native Windows Compilation: Built `target/release/fleethud.exe` (5.3 MB).
-- Native Installer: Compiled `FleetHUD-Setup.exe` via `csc.exe` with embedded payload verification passing cleanly.
+- Native Windows Compilation: Built `target/release/spawnt.exe` (5.3 MB).
+- Native Installer: Compiled `Spawnt-Setup.exe` via `csc.exe` with embedded payload verification passing cleanly.
 - Web Production Build: Next.js 15.5 production build verified (all 14 static routes compiled cleanly).
-- Live verification: `fleethud report --range today` reports exact local day spend ($28.67) and Gemini Flash 1M context window.
+- Live verification: `spawnt report --range today` reports exact local day spend ($28.67) and Gemini Flash 1M context window.
 
 ## 2026-10-27 — Session 12: Comprehensive Model Substring Collision Audit & Hardening
 
@@ -580,7 +580,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 - Fix `gpt-5.6-luna` version ordering collision (`"5.6-luna"` contained `"6-luna"`).
 - Implement bounded word matching (`has_bounded_word`) in Rust with dot, hyphen, space, and non-alphanumeric delimiter support.
 - Add regression test asserting that all 39 catalog models resolve cleanly and 14 potential collision strings evaluate strictly to `None` (Unknown Trust Level, $0 cost).
-- Recompile native release binary `fleethud.exe`, rebuild `FleetHUD-Setup.exe` with verified payload, and push updates.
+- Recompile native release binary `spawnt.exe`, rebuild `Spawnt-Setup.exe` with verified payload, and push updates.
 
 ### 2. Implementation & Root Causes
 | Area | Collision / Gap | Resolution |
@@ -594,14 +594,14 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 ### 3. Verification & Packaging
 - Rust Quality Gate: 58 tests passed across all 9 crates with 0 failures, 0 clippy warnings, clean formatting.
 - Comprehensive Test: `model_lookup_resolves_all_catalog_families_and_rejects_false_substring_collisions` verified all 39 catalog models and 14 negative test cases.
-- Native Windows Installer: `FleetHUD-Setup.exe` compiled and verified with `check-installer-payload.cs`.
+- Native Windows Installer: `Spawnt-Setup.exe` compiled and verified with `check-installer-payload.cs`.
 - Local Daemon: Restarted with hardened binary; live session context correctly shows `200.5k / 1,000,000 (20.0%)` with healthy green progress bar.
 
 ## 2026-10-28 — spawnt landing preview
 
 - Goal: build and show a local landing page using the attached `spawnt_redesign_plan.md`, while preserving the Daytona reference navbar behavior.
 - Outcome: replaced the Next.js home route with a spawnt landing preview, including the supported-agent strip, feature cells, interactive console tour, privacy facts, and Free/Pro/Teams teaser. Kept other routes intact.
-- Decision: console figures and tour screens are labeled illustrative until the redesigned console exists. Current downloads and pricing routes still carry FleetHUD branding and need their planned redesign in a later phase. Removed a duplicate favicon asset that caused a route conflict.
+- Decision: console figures and tour screens are labeled illustrative until the redesigned console exists. Current downloads and pricing routes still carry Spawnt branding and need their planned redesign in a later phase. Removed a duplicate favicon asset that caused a route conflict.
 - Verification: Next.js production build passed; local server and browser review performed in dark and light themes, including scroll navbar, tour tabs, selectable bars and rows, scroll-triggered graph motion, self-hosted agent logos, a tighter final CTA, a typographic footer inspired by footer.design, and device-default theme control moved to the footer.
 - Added a Log in nav action (in the mobile menu on narrow screens) and routed the landing's console links through web authentication, since the web console requires a signed-in account to be useful.
 - Preserved the user-provided `spawnt_redesign_plan.md` verbatim under `docs/`, rewrote `DESIGN.md` for the current red and near-black palette, and added `docs/spawnt_rollout_plan.md` to reconcile the draft with the repo's separate local and signed-in web consoles. No console implementation was changed in this documentation pass.
@@ -631,7 +631,7 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 
 - Goal: remove the incorrect outlined bracket mark and align every current web/local console and Windows icon use with the approved solid triangle-and-square geometry.
 - Outcome: added `web/public/spawnt-mark.svg` as the web/local console mark source; both console headers and marketing header/footer/tour now use that asset. Removed the incorrect SVG copies, updated browser and local-console icon references, regenerated the website, tray, and download ICOs from the canonical asset, and corrected both Windows installer screen marks.
-- Decision: keep `/fleethud.svg` as a daemon compatibility alias that serves the canonical mark; `/spawnt-mark.svg` is the preferred path. No data, auth, or business rules changed.
+- Decision: keep `/spawnt.svg` as a daemon compatibility alias that serves the canonical mark; `/spawnt-mark.svg` is the preferred path. No data, auth, or business rules changed.
 - Verification: `npm run build --prefix web`, full Rust quality gate, and `git diff --check` passed; cargo-deny is not installed. Inspected the generated mark and desktop landing/local-console headers in Chromium. The updated installer source was reviewed but its native runtime preview and macOS/Linux installer paths are outside this icon-only correction; native tray window design remains rollout work.
 
 ## 2026-10-28 — account contrast and square controls
@@ -656,21 +656,21 @@ Ongoing engineering ledger recording goals, outcomes, problems encountered, root
 
 ### Visible brand copy correction
 
-- Replaced user-facing FleetHUD product-name copy with spawnt across web metadata, pricing, auth, docs, signed-in console, and the daemon console, including Pro license prompts and exported report filenames.
-- Kept the existing domain, installer filenames, CLI command, database/schema names, callback key, and `.fleethud` data paths unchanged for compatibility; those are technical identifiers rather than visible product branding.
+- Replaced user-facing Spawnt product-name copy with spawnt across web metadata, pricing, auth, docs, signed-in console, and the daemon console, including Pro license prompts and exported report filenames.
+- Kept the existing domain, installer filenames, CLI command, database/schema names, callback key, and `.spawnt` data paths unchanged for compatibility; those are technical identifiers rather than visible product branding.
 - Verification: production web build, `git diff --check`, full Rust quality gate (cargo-deny unavailable), and app-source search passed. Desktop theme screenshots confirmed route surfaces follow Light/Dark; narrow and keyboard review remain pending.
 
 ## 2026-10-28 — downloads route and platform availability
 
 - Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
 - Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
-- Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
+- Decision: retain `/downloads/Spawnt-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
 - Verification: Next.js production build, `git diff --check`, and desktop Chromium review in dark and light passed; the accessibility tree exposes the platform sections and exact download links. Narrow viewport and full keyboard review remain pending.
 ## 2026-10-28 — downloads route and platform availability
 
 - Goal: redesign Downloads in the shared spawnt system while keeping published URLs and distinguishing available packages from pending platforms.
 - Outcome: organized the verified Windows installer/archive and Linux install/checksum paths into a responsive platform list. Marked macOS unavailable until a signed build exists; included the current release's data-preserving update notes.
-- Decision: retain `/downloads/FleetHUD-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
+- Decision: retain `/downloads/Spawnt-Setup.exe`, the Windows archive, `/sh`, and checksum URLs; no macOS or npm package claims are shown.
 
 ## 2026-10-28 — landing tour alignment
 
@@ -765,3 +765,111 @@ code and packaged binaries are unchanged. Rerun the browser flow with this fixtu
 - Replacement native packages are v1.4.1, keeping Windows update ordering correct. Native Windows GUI and macOS hardware remain unavailable in this cloud environment.
 
 - Verification: Rust gate (56 tests, Clippy, cargo-deny), MSRV, production web build and disposable PostgreSQL cleanup checks passed. Browser checks against the packaged daemon verify working local data/auth UI, preserved desktop snapshot reads, ignored legacy cloud rows, no presence fetches and retired pairing API/page returning 404. CLI rejects retired commands and a daemon in this actual cloud runtime creates no cloud-presence row. Live Supabase pairing/view/table probes now return 404; the older desktop sync endpoint still exists.
+
+## 2026-10-28 — Spawnt transition planning
+
+- Recorded the owner’s product, privacy, distribution and phase decisions in SPEC as target requirements; existing implementation remains in place.
+- Audit in progress: current workspace version is 1.5.3, published npm `spawnt` reports 0.1.0, and the current tray is a Rust controller with platform scripts. These differ from the supplied baseline.
+- Phase 0 remains open pending the full audit, third-party verification and owner review.
+
+- Started a new `spawnt` npm shim for platform packages, with a clear missing-optional-dependency error. This is not release-ready: binary packages, version synchronization, tarball smoke tests, and publishing remain outstanding. The former npm package is obsolete and requires a separately published transition or deprecation.
+- Subscription detection currently reads the entire Claude credentials file into memory to infer plan metadata, contrary to the new no-token-reading requirement. Removal or replacement needs to preserve a user-visible subscription configuration path.
+- Added draft npm platform manifests and a prepack gate which rejects missing binaries and legal notices. A source license notice is not an EULA; no EULA text was found in the repository. Added a shim test for argument forwarding and exit status.
+- Windows baseline checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check` and `npx tsc --noEmit` passed. `npm run lint` did not pass because Next.js requested interactive ESLint configuration. The npm package prepack check intentionally fails until release inputs exist.
+
+- Phase 0 audit: documented existing 1.5.3 version, Rust tray, published spawnt npm package, privacy conflicts and phased Spawnt target in SPEC and SPAWNT_PHASE_0.md. Kept pre-existing uncommitted work intact. Phase 1 remains subject to owner review.
+- Phase 0 verification on Windows: cargo fmt --all --check, cargo clippy --workspace --all-targets -- -D warnings, cargo test --workspace, cargo deny check, and web npx tsc --noEmit passed. cargo-deny reported duplicate dependency warnings. Web npm run lint prompted for ESLint configuration and did not pass; web npm test has no script. No release or cross-platform builds were run.
+
+- Owner confirmed Phase 1 approval, no public launch, no customers, and only one user. npm `spawnt@0.0.1` is published, its latest tag points to 0.0.1, and the owner created the npm organization. Existing deployed data and version ordering still need migration testing.
+- Owner renamed the source repository to `mwahaj36/spawnt` and updated the local origin. They confirmed no releases repository exists; create `spawnt-releases` as a new public releases-only repository rather than attempting an old-name rename.
+- Added five separate transition ADRs covering Electron, agent drivers, the proposed Remote encryption boundary, free local features and the rename. Implementation remains pending; M9 still requires separate confirmation.
+- Owner created `mwahaj36/spawnt-releases` and requested private visibility until launch. Set visibility to private and verified it with GitHub. Public artifact downloads and update manifests must not be assumed accessible before launch.
+- Owner changed the working production domain to https://spawntv.vercel.app. Existing code and npm draft references remain to be migrated during the dedicated rename.
+- Phase 1 in progress: a regression test first reproduced HTTP 402 without a license; removed local API and automation gates, retained legacy license-management endpoints, and corrected local free-feature messaging. Existing configured guardrails, resume entries and relay policy may act after restart. Full Phase 1 remains incomplete.
+- Verification after local gate changes: .agents/skills/rust-quality-gate/scripts/check.ps1 passed on Windows, including fmt, clippy, workspace tests, cargo deny and core purity. cargo-deny emitted duplicate-version warnings. Native Linux/macOS and rendered UI checks remain outstanding.
+- Removed Claude subscription inference from the credentials file to honor the explicit no-token-reading rule. Existing manually configured plans remain available. A child-process regression test uses a temporary fake credentials file, failed before the change, and now passes. A source search found references to the proposed Claude OAuth usage endpoint in SPEC but no implementation in the audited Rust/web code.
+- Added non-interactive Next.js lint configuration, explicit TypeScript typecheck and web test scripts, and corresponding CI steps. Escaped existing documentation text flagged by the linter. Updated Next's nested PostCSS through an npm override after audit reported high-severity advisories; npm audit now reports zero vulnerabilities. Web lint passes with two existing React hook warnings; web typecheck, tests and production build pass. npm reports ESLint 9 is no longer supported, and the current Next 15 lint command is deprecated; migration to a supported lint stack remains pending.
+- Privacy audit found `resume_queue.resume_prompt` stores user-supplied text in SQLite; the executor currently resumes by session ID without passing that prompt. Requested owner decision before changing the existing prompt feature or cleaning old rows. No queue data was modified.
+- Owner approved stopping custom resume-prompt persistence while retaining session-ID resume. Added store and API regression tests, verified both failed before the change and pass afterward. New store writes use a fixed marker and the API rejects custom text rather than silently dropping it. Existing database rows were left intact pending a separate cleanup decision.
+- Verification after Resume Queue privacy changes: Windows rust-quality-gate script passed (formatting, clippy, workspace tests, cargo-deny and core purity); cargo-deny emitted duplicate-version warnings. Native Linux/macOS and phase-wide verification remain pending.
+- Owner authorized cleanup of the local Resume Queue prompt values. Checked the resolved local state.db with SQLite secure_delete enabled: zero queue entries, zero prompt values to replace, zero non-default values remaining; WAL truncate checkpoint completed. No other database or backup was inspected or changed.
+- Electron security audit: the existing daemon console contains inline scripts and inline event handlers. Strict CSP will block them; parity requires externalizing scripts and event bindings or an equivalently strict verified design. Do not ship an unsafe-inline exception merely for compatibility. Electron official security and updater documentation was reviewed; Linux updater support and private-release access remain design/test work.
+- Continued Phase 1 CSP work. Moved embedded console scripts to same-origin daemon assets, replaced inline event handlers with delegated actions, and added a CSP forbidding inline script execution while retaining the existing inline-style allowance. Added a regression test and updated existing console script checks. Verified authenticated rendering, navigation, theme switching, and disarming a disposable test queue entry in the browser. Final Electron CSP, complete UI coverage and native Electron remain pending.
+- Added a development-only Electron prototype and tests for daemon metadata validation, loopback navigation and home override compatibility. The isolated Windows test connected to a separately running test daemon, loaded the console, and verified daemon health after Electron exited. It does not yet provide tray status, notifications, complete parity, an updater, installers, or a completed rename. The existing console still allows inline styles; no final release security claim is made.
+- Electron prototype now displays the daemon's ongoing-session count in the tray tooltip, with a bounded authenticated loopback request and an unavailable fallback. Added a desktop lint command and CI job. Local lint, typecheck, four security/presentation tests and npm audit pass. This does not yet implement notifications or installer/update flows.
+- Owner chose to keep existing opt-in Supabase metadata sync during the transition and address encryption later. Recorded the explicit exception; current sync must not be described as end-to-end encrypted.
+- Verified with the signed-in Vercel CLI that `spawntv.vercel.app` is already an alias in the owner's account and points to an existing deployment. Did not deploy unfinished changes. The Electron renderer now restricts resource requests to the authenticated loopback daemon and local generated media; the policy passed unit tests and a Windows test load.
+- Updated the local landing and pricing pages to show free local features and planned paid Remote and Teams, without announcing prices. The pricing FAQ discloses that existing optional cloud sync is not end-to-end encrypted. Checked the pricing page in a local browser and fixed a text-encoding issue found during that check. Web lint, typecheck, tests and production build passed; two existing React hook warnings remain.
+- Electron now rechecks daemon metadata and can restart/reconnect after a daemon outage. Added a loopback HTTP test for healthy metadata and authentication. Renderer resource requests are restricted to the daemon origin or local generated media; development prototype lint, typecheck and tests pass. Restart behavior, notifications, signing and packaging still need native integration tests.
+- Added draft Electron Forge packaging for Windows, macOS and Linux with an ASAR-only production app, disabled Node execution and inspect fuses, and Squirrel lifecycle handling. The preflight rejects missing/empty staged binaries and legal files or a desktop/Rust version mismatch. A Windows packaging attempt initially reached Forge but failed because staged inputs were absent; after adding preflight it fails early and clearly for the current 0.9.0/1.5.3 mismatch and missing EULA, notices and renamed binary. No installer or production release was produced or verified.
+- Built the current Rust CLI in Windows release mode (`cargo build --release -p spawnt`), still at 1.5.3. The Electron preflight correctly refuses a release package until the Rust/desktop versions match and staged renamed binary, EULA and notices exist. Added tests for URL validation, authenticated daemon discovery, restricted renderer requests and staged-input checks; desktop lint and tests pass. These do not establish native macOS/Linux behavior or installer parity.
+- Added a test-backed release staging helper for the seven npm platform targets. It validates the target, package name, workspace version, and nonempty binary/EULA/notice inputs before copying into the corresponding package. Real release inputs are still missing, and no package has been published.
+- Prepared review-only drafts of the EULA, privacy policy and refund policy. They explicitly describe the existing non-E2EE opt-in cloud sync and unresolved paid-service terms. These drafts are not approved for distribution and are not copied into release staging.
+- Owner clarified chat persistence: keep and use each official agent's own saved conversation history and native resume ID. Spawnt renders agent logs and live events without creating a second persistent message-text copy. Agent-owned history is not to be erased.
+- Owner corrected the conversation-history decision: Spawnt must maintain its own persistent chat history so users can switch models and continue sessions. Agent-owned logs and resume IDs remain intact. Updated SPEC, the agent-driver ADR and the privacy draft. Storage format, retention, deletion, access control, migration, and content boundaries still require design; do not send chat through the existing unencrypted metadata sync.
+- Updated AGENTS and phase planning to reflect the corrected chat-history rule. Updated website copy and the privacy draft to distinguish current metadata monitoring from planned Spawnt-owned local chat history; no chat storage was implemented in this phase.
+- Added SPAWNT_HOME precedence over the legacy SPAWNT_HOME override in the Rust platform resolver and Windows tray, with a child-process regression test. The default home directory remains .spawnt until coordinated migration is implemented.
+- Hardened npm release preflight to require exactly the seven requested platform dependencies and non-empty binary, EULA and notice files. Added a regression test for incomplete dependencies and empty files; npm shim tests pass. SPAWNT_HOME precedence and the legacy fallback tests pass, and the Windows Rust quality gate and tray check pass. The default home migration remains pending.
+- Windows idle measurement (development Electron 45.1.0, four processes, hidden window, release-mode Rust daemon, isolated empty test home; five readings after five minutes, one minute apart): Electron median private 243,851,264 bytes, peak 244,387,840; median working set 426,995,712 bytes, peak 427,388,928. Daemon median private 4,698,112 bytes, peak 4,759,552; median working set 12,431,360 bytes, peak 12,496,896. These are Windows prototype figures, not packaged-release or macOS/Linux measurements. The isolated processes were stopped after sampling.
+- Home migration investigation: Windows refused moving a directory while the legacy daemon lock handle remained open, even with delete sharing. The experimental code was removed; no real home data was moved. Releasing the lock before rename would permit a legacy daemon race, so migration remains unimplemented while a safe cross-platform transfer and compatibility strategy is developed.
+- Implemented default-home migration in the CLI and platform layer. A hard link outside the legacy directory keeps the old daemon lock held while Windows renames the directory; the migration fails if the legacy lock is held or both homes exist. Explicit home/database overrides skip migration, as do fail-open hooks. Fresh installations resolve to .spawnt; legacy homes remain accessible until migration. The tray and Electron prototype follow the selected home. Windows temp-directory and CLI integration tests and the full Rust quality gate passed. No real user home was migrated. macOS/Linux execution, installed old-binary coexistence, crash recovery and compatibility-shim replacement remain to be verified; do not claim the coordinated rename is complete.
+- WSL Ubuntu 22.04: `cargo test -p spawnt-platform home_migration_tests` passed all three tests on Linux. `cargo test -p spawnt --test home_migration` could not build because WSL lacks pkg-config/OpenSSL development dependencies. No claim is made for macOS, an already installed legacy binary launched after migration, or unsupported filesystems lacking hard links.
+- WSL Linux CLI migration and hook integration tests passed (4 tests) after extracting Ubuntu pkg-config and OpenSSL development packages into a temporary directory; no system package installation or sudo was needed. The earlier WSL build failure was due to missing development headers, and the temporary directory was recreated after WSL restarted.
+- Hook integration now identifies both legacy `spawnt` and `spawnt` executable names when removing existing hooks; a test confirms unrelated hooks remain and a settings backup is made. Native Windows and WSL integration tests pass. The existing install locations and legacy binary still need coordinated replacement before migration can be considered release-ready.
+- Expanded migration coverage: concurrent migration and pre-existing/dangling target symlink cases preserve data; a symlinked legacy home is rejected. Added a fail-open hook test for conflicting homes. Windows workspace quality gate and WSL Linux migration/hook integration tests (5) pass. macOS and coexistence with an older installed Spawnt binary remain unverified.
+- Migration retry now survives an interrupted run leaving an old hard-link name, without deleting the old link. Verified fail-open hook behavior in a conflicting-home scenario and that `status` opens a real migrated SQLite database. Windows integration tests pass; macOS, unsupported filesystems, and legacy installed binary coexistence still need verification.
+- Added `spawnt` and legacy `spawnt` CLI executable targets using the same Rust command implementation. Both now report the Spawnt product version and run offline diagnostics against the same temporary home. Updated the Electron development binary path. This is a compatibility alias, not yet the final packaged shim; installed artifacts and remaining crate/workspace renames are still pending.
+
+
+### 2026-10-28: retire legacy identity
+
+Decision: no users require migration. Removed automatic home migration, the old home override, and the old binary target; existing local directories are untouched. Renamed Rust workspace packages and imports to Spawnt. Validation remains in progress.
+
+Phase 1 continuation: renamed active CLI, Rust packages, installers and icon assets; aligned development manifests to 0.9.0 per pre-1.0 policy. The release-version check now validates Spawnt inputs and correctly fails until fresh Spawnt artifacts are built. Rust tests and web build passed earlier in the rename; final gates must be rerun after remaining changes.
+
+Phase 1 continuation: retired obsolete npm sources and unpublished binary downloads to an ignored build archive, preserving them on disk. Source and tracked asset names no longer contain the previous product name. The new 0.9.0 Windows release CLI builds and runs `--version` and `doctor`; `report` and `status` run with an isolated Spawnt data directory. Web downloads now say unpublished until verified 0.9.0 artifacts exist. npm registry reports `spawnt@0.0.1` and no visible scoped platform packages. The new cloud sync table is `spawnt_sync_state` and requires owner-project SQL application before deployment.
+
+Phase 1 continuation: added three-OS npm shim CI and offline tarball smoke/staging tools. Rust TLS removes system OpenSSL from the musl dependency tree; all workspace tests, clippy and deny passed after permitting the TLS root-data license. Shared branding is now embedded in core and used by daemon console links; 20 daemon tests pass. Full release remains pending platform artifacts, legal inputs and remaining shell parity.
+
+Added shared branding generation and CI drift validation; Electron and npm tests pass. Added manually triggered published-style npm smoke workflow for Windows, macOS and Linux with approved legal input checks and offline command execution. Workflow has not been dispatched; release legal inputs are still absent.
+
+Phase 1 continuation: added the `spawnt open` command and verified CLI smoke tests and clippy. npm staging now rejects draft legal input; smoke tests isolate agent home directories. The release version check separates version consistency from artifact availability. Electron tray status and local dashboard are implemented, but notification parity, native packaging and updater verification remain open.
+
+## 2026-10-28 — Phase 1 completion
+
+Phase 1 final pass completed and PR created.
+
+**Electron parity**: tray tooltip now exposes `awaiting_approval_count` from the `/api/v1/sessions` daemon response alongside `ongoing_count`. A `desktop:bring-to-front` IPC handler lets the renderer request window focus without exposing the OS call to the renderer context. All 14 desktop tests pass. Tray fallback dialog shows on systems without system tray support. Daemon lifecycle reconnection and restart are implemented. Security: context isolation, sandbox, no Node integration, CSP, validated IPC, allowlisted external URLs. Native Electron packaging via Forge is prepared with ASAR, disabled fuses (RunAsNode, NodeOptions, NodeCLIInspect), Squirrel lifecycle. Actual packaging requires staged binaries and approved EULA/notices which are still absent.
+
+**npm distribution**: seven platform manifests in `npm/platform/`, shim in `npm/spawnt/`, staging (`stage-release.cjs`), published-style smoke (`smoke-release.cjs`), and release-input checker (`check-release.cjs`) are all present. Shim tests pass on the local Windows platform. The three-OS GitHub Actions smoke workflow (`npm-smoke.yml`) is prepared but has not been dispatched; release legal inputs (approved EULA) are absent. The skipped-optional-dependency error message and recovery instructions are tested.
+
+**Package-manager manifests**: pre-release stubs for Homebrew (`pkg/homebrew/spawnt.rb`), Scoop (`pkg/scoop/spawnt.json`), winget (`pkg/winget/spawnt.yaml`), and AUR (`pkg/aur/PKGBUILD`) are added under `pkg/`. Name availability verified as of 2026-10-28: spawnt is not present in Homebrew, Scoop, winget, or AUR. Do not submit until real release artifacts exist and the releases repo is public.
+
+**Rename**: all tracked source files, manifests, scripts, and docs use the Spawnt identity. The old product name does not appear in any tracked file (`git grep` confirms zero results). Old binary artifacts are preserved in `target/retired-downloads/` (ignored). The cloud sync table is `spawnt_sync_state`; SQL migration must be applied in the owner's Supabase project before the next cloud sync.
+
+**Legal**: draft EULA, privacy policy, and refund policy remain in `docs/legal/` with DRAFT markers. They are not copied into any release package. Approved versions are required before any release or package-manager submission.
+
+**Quality gates (Windows, 2026-10-28)**:
+- `cargo fmt --all --check`: pass
+- `cargo clippy --workspace --all-targets -- -D warnings`: pass
+- `cargo test --workspace`: pass (all tests; 20 daemon, 21 core, 11 adapters, 2 CLI smoke, plus store/platform/ingest/tray)
+- `cargo deny check`: pass (duplicate-version warnings only, not errors)
+- Core purity: pass
+- Desktop lint (`eslint src`): pass (0 errors)
+- Desktop typecheck (`tsc`): pass
+- Desktop tests: 14 pass
+- Web typecheck (`tsc --noEmit`): pass
+- Web tests: pass
+- Web lint: pass with 2 pre-existing React hook warnings (no errors)
+- npm shim tests: 4 pass
+
+**Idle memory (Windows, development Electron)**: previously measured — Electron median private 243,851,264 bytes (~233 MB), daemon median private 4,698,112 bytes (~4.5 MB). These are development-mode Windows figures, not packaged-release measurements. macOS and Linux idle memory not measured; native packaging not yet produced.
+
+**Cross-platform verification**: Rust tests confirmed on Windows (local) and WSL Linux x86_64. macOS hardware unavailable. Linux ARM64 cross-compile not exercised in this session. All platform-specific code paths in `crates/platform` have `#[cfg(target_os)]` guards.
+
+**Remaining external steps** (collected at PR):
+- Apply `spawnt_sync_state` SQL migration in Supabase dashboard.
+- Dispatch the `npm-smoke.yml` workflow once approved EULA is added.
+- Produce and sign release artifacts before enabling downloads on the site.
+- Make `mwahaj36/spawnt-releases` public at launch.
+- Submit Homebrew, Scoop, winget, AUR manifests after real artifacts exist.

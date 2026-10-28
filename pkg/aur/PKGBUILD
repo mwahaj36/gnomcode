@@ -1,0 +1,26 @@
+# AUR PKGBUILD for spawnt-bin — https://aur.archlinux.org
+#
+# PRE-RELEASE STUB. Do not submit to AUR until:
+#   1. A real glibc Linux x86_64 tarball is available from the public releases repo.
+#   2. SHA-256 is computed from the actual artifact.
+#   3. AUR account 'mwahaj36' is prepared to maintain it.
+#
+# Install (future): yay -S spawnt-bin
+
+pkgname=spawnt-bin
+pkgver=PLACEHOLDER
+pkgrel=1
+pkgdesc="Mission control for AI coding agents"
+arch=('x86_64')
+url="https://spawntv.vercel.app"
+license=('custom:BUSL-1.1')
+provides=('spawnt')
+conflicts=('spawnt')
+
+source_x86_64=("https://github.com/mwahaj36/spawnt-releases/releases/download/v${pkgver}/spawnt-v${pkgver}-linux-x86_64.tar.gz")
+sha256sums_x86_64=('PLACEHOLDER_SHA256_LINUX_X86_64')
+
+package() {
+    install -Dm755 "${srcdir}/spawnt" "${pkgdir}/usr/bin/spawnt"
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

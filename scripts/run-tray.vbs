@@ -3,7 +3,7 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 
 ' Start background daemon
-WshShell.Run """" & scriptDir & "\fleethud.exe"" daemon", 0, False
+WshShell.Run """" & scriptDir & "\spawnt.exe"" daemon", 0, False
 
 ' Start system tray icon
 ps1Path = scriptDir & "\tray.ps1"
