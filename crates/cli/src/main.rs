@@ -56,7 +56,7 @@ enum Commands {
         #[arg(long)]
         network: bool,
     },
-    /// Start the FleetHUD background daemon and local web console.
+    /// Start the spawnt background daemon and local web console.
     Daemon {
         /// Port to bind the local HTTP server to.
         #[arg(long, default_value_t = 41738)]
@@ -65,7 +65,7 @@ enum Commands {
         #[arg(long)]
         open: bool,
     },
-    /// Convenience shortcut: start the daemon and open the Next.js Mission Control Console in your browser.
+    /// Convenience shortcut: start the daemon and open the local console in your browser.
     Console {
         /// Port to bind the local HTTP server to.
         #[arg(long, default_value_t = 41738)]
@@ -78,17 +78,17 @@ enum Commands {
         #[arg(long, default_value_t = 41738)]
         port: u16,
     },
-    /// Install FleetHUD to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
+    /// Install spawnt to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
     Install,
     /// Add or remove the optional Claude Code guardrail hook.
     Integrate {
         /// Agent to integrate (currently `claude`).
         agent: String,
-        /// Remove FleetHUD's hook without changing other hooks.
+        /// Remove spawnt's hook without changing other hooks.
         #[arg(long)]
         remove: bool,
     },
-    /// Manage FleetHUD offline Pro / Team license.
+    /// Manage spawnt offline Pro / Team license.
     License {
         #[command(subcommand)]
         action: LicenseCommands,
@@ -304,7 +304,7 @@ fn cmd_hook() -> Result<()> {
     };
     if blocked.iter().any(|session| session == &session_key) {
         eprintln!(
-            "FleetHUD guardrail: session threshold reached. Remove or raise the rule to continue."
+            "spawnt guardrail: session threshold reached. Remove or raise the rule to continue."
         );
         std::process::exit(2);
     }
@@ -371,9 +371,7 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
 
         let license_path = fleethud_home().join("license.key");
         if !license_path.exists() {
-            println!(
-                "FleetHUD: Guardrails require an active Pro or Team license to enforce limits."
-            );
+            println!("spawnt: Guardrails require an active Pro or Team license to enforce limits.");
             println!("Run `fleethud license activate <key>` or activate via the Console.");
         }
     }
@@ -657,7 +655,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
                 );
                 let console_url =
                     std::env::var("FLEETHUD_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
-                println!("FleetHUD is already active (PID {}).", existing.pid);
+                println!("spawnt is already active (PID {}).", existing.pid);
                 println!("Opened Native Mission Control Console: {console_url}");
                 if open {
                     open_browser(&console_url);
@@ -846,13 +844,13 @@ foreach ($lnkPath in @("$DesktopDir\FleetHUD Console.lnk", "$DesktopDir\FleetHUD
     $Shortcut.Arguments = "`"$InstallDir\open-console.vbs`""
     $Shortcut.WorkingDirectory = $InstallDir
     $Shortcut.IconLocation = "$IcoDest,0"
-    $Shortcut.Description = "FleetHUD Mission Control Console"
+    $Shortcut.Description = "spawnt console"
     $Shortcut.Save()
 }}
 Start-Process -FilePath "wscript.exe" -ArgumentList "//B `"$InstallDir\run-tray.vbs`"" -WindowStyle Hidden
 Start-Process -FilePath "wscript.exe" -ArgumentList "//B `"$InstallDir\open-console.vbs`"" -WindowStyle Hidden
 Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.MessageBox]::Show("FleetHUD has been installed to $InstallDir.`n`n- Desktop & Start Menu shortcuts created for FleetHUD Console`n- Configured to start automatically on login`n- Mission Control is now running in your system tray.", "FleetHUD Setup Complete", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+[System.Windows.Forms.MessageBox]::Show("spawnt has been installed to $InstallDir.`n`n- Desktop & Start Menu shortcuts created for spawnt Console`n- Configured to start automatically on login`n- Mission Control is now running in your system tray.", "spawnt Setup Complete", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 "#
         );
 
@@ -867,7 +865,7 @@ Add-Type -AssemblyName System.Windows.Forms
             .creation_flags(CREATE_NO_WINDOW)
             .status();
 
-        println!("Installed FleetHUD to {}", install_dir.display());
+        println!("Installed spawnt to {}", install_dir.display());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -879,7 +877,7 @@ Add-Type -AssemblyName System.Windows.Forms
         if current_exe != dest {
             std::fs::copy(&current_exe, &dest)?;
         }
-        println!("Installed FleetHUD to {}", dest.display());
+        println!("Installed spawnt to {}", dest.display());
     }
 
     Ok(())
@@ -929,7 +927,7 @@ async fn cmd_cloud_session(
         "Cloud collector: {agent_name}. Activity is unknown; usage and cost require measured events."
     );
     if !pairing_file.exists() {
-        println!("Local registration only: pair a FleetHUD account to publish to the web console.");
+        println!("Local registration only: pair a spawnt account to publish to the web console.");
     }
     loop {
         let path = db_path.clone();

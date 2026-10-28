@@ -13,8 +13,21 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("spawnt Setup")]
 [assembly: AssemblyProduct("spawnt")]
 [assembly: AssemblyCompany("spawnt")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
+
+public static class DeviceTheme
+{
+    public static void Apply(Control root) {
+        bool light = false;
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")) { light = key != null && Convert.ToInt32(key.GetValue("AppsUseLightTheme", 0)) == 1; }
+        if (!light) return;
+        root.BackColor = Color.FromArgb(246, 247, 248);
+        foreach (Control child in root.Controls) {
+            if (child is Label) child.ForeColor = child.ForeColor.R > 240 && child.ForeColor.G < 120 ? Color.FromArgb(212, 16, 46) : Color.FromArgb(74, 85, 101);
+        }
+    }
+}
 
 public class BrandProgressBar : Control
 {
@@ -100,7 +113,7 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v1.3.0  ·  64-bit Native";
+        lblVer.Text = "v1.4.0  ·  64-bit Native";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
         lblVer.ForeColor = Color.FromArgb(141, 153, 170);
         lblVer.Location = new Point(36, 225);
@@ -110,6 +123,7 @@ public class SetupForm : Form
         timer = new System.Windows.Forms.Timer();
         timer.Interval = 120;
         timer.Tick += OnTick;
+        DeviceTheme.Apply(this);
         if (!preview) timer.Start();
         else { lblStatus.Text = "Installing spawnt"; progressBar.Value = 60; }
     }
@@ -159,7 +173,7 @@ public class SetupForm : Form
             progressBar.Value = 100;
         } else if (step == 14) {
             timer.Stop();
-            LaunchFleetHUD();
+            if (Environment.GetEnvironmentVariable("FLEETHUD_SETUP_NO_LAUNCH") != "1") LaunchFleetHUD();
             this.Close();
         }
     }
@@ -178,7 +192,7 @@ public class SetupForm : Form
             }
             using (Process cleanup = Process.Start(new ProcessStartInfo {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*') -or ($_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like ('*' + $env:LOCALAPPDATA + '\\FleetHUD\\tray.ps1*')) -or ($_.CommandLine -like ('*' + $env:LOCALAPPDATA + '\\FleetHUD\\AppProfile*')) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -222,7 +236,7 @@ public class SetupForm : Form
                     string uninstallExe = Path.Combine(installDir, "FleetHUD-Uninstall.exe");
                     string ico = Path.Combine(installDir, "fleethud.ico");
                     key.SetValue("DisplayName", "spawnt");
-                    key.SetValue("DisplayVersion", "1.3.0");
+                    key.SetValue("DisplayVersion", "1.4.0");
                     key.SetValue("Publisher", "spawnt");
                     key.SetValue("DisplayIcon", ico + ",0");
                     key.SetValue("InstallLocation", installDir);
@@ -246,9 +260,14 @@ public class SetupForm : Form
             string vbs = Path.Combine(installDir, "open-console.vbs");
             string ico = Path.Combine(installDir, "fleethud.ico");
 
+            // Replace legacy shortcuts without changing the installation or data directory.
+            foreach (string folder in new string[] { Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs") }) {
+                foreach (string name in new string[] { "FleetHUD.lnk", "FleetHUD Console.lnk" }) { string old = Path.Combine(folder, name); if (File.Exists(old)) File.Delete(old); }
+            }
+
             // Desktop shortcut
             string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            string desktopLnk = Path.Combine(desktopDir, "FleetHUD.lnk");
+            string desktopLnk = Path.Combine(desktopDir, "spawnt.lnk");
             dynamic scDesktop = shell.CreateShortcut(desktopLnk);
             scDesktop.TargetPath = "wscript.exe";
             scDesktop.Arguments = "\"" + vbs + "\"";
@@ -259,7 +278,7 @@ public class SetupForm : Form
 
             // Start Menu shortcut
             string startMenuDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs");
-            string startLnk = Path.Combine(startMenuDir, "FleetHUD.lnk");
+            string startLnk = Path.Combine(startMenuDir, "spawnt.lnk");
             dynamic scStart = shell.CreateShortcut(startLnk);
             scStart.TargetPath = "wscript.exe";
             scStart.Arguments = "\"" + vbs + "\"";
@@ -383,6 +402,7 @@ public class UninstallForm : Form
 
         timer = new System.Windows.Forms.Timer();
         timer.Interval = 140;
+        DeviceTheme.Apply(this);
         timer.Tick += OnTick;
         timer.Start();
     }
@@ -438,12 +458,12 @@ public class UninstallForm : Form
     {
         try {
             foreach (Process p in Process.GetProcessesByName("fleethud")) {
-                try { p.Kill(); p.WaitForExit(2000); } catch {}
+                try { if (String.Equals(p.MainModule.FileName, Path.Combine(installDir, "fleethud.exe"), StringComparison.OrdinalIgnoreCase)) { p.Kill(); p.WaitForExit(2000); } } catch {}
                 p.Dispose();
             }
             using (Process cleanup = Process.Start(new ProcessStartInfo {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like '*tray.ps1*') -or ($_.CommandLine -like '*FleetHUD\\AppProfile*') -or ($_.Name -like 'msedge*' -and $_.CommandLine -like '*127.0.0.1:41738*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
+                Arguments = "-NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object { (($_.Name -like 'powershell*' -or $_.Name -like 'pwsh*') -and $_.ProcessId -ne $PID -and $_.CommandLine -like ('*' + $env:LOCALAPPDATA + '\\FleetHUD\\tray.ps1*')) -or ($_.CommandLine -like ('*' + $env:LOCALAPPDATA + '\\FleetHUD\\AppProfile*')) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
@@ -481,10 +501,10 @@ public class UninstallForm : Form
     private void RemoveShortcuts()
     {
         try {
-            string desktopLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "FleetHUD.lnk");
+            string desktopLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "spawnt.lnk");
             if (File.Exists(desktopLnk)) File.Delete(desktopLnk);
 
-            string startLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\FleetHUD.lnk");
+            string startLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\spawnt.lnk");
             if (File.Exists(startLnk)) File.Delete(startLnk);
         } catch {}
     }

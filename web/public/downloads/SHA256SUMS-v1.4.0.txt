@@ -1,0 +1,3 @@
+02fe6c5c92da5a08fb5ff6f65e6f75682467d238c266c52fd369ae5f6dbd9bab  fleethud.exe
+85d17b2726fb26654bd7cb2a580585e28e03bd3ff6787cb06e25a2e20d6d78a4  FleetHUD-Setup.exe
+8814ff889df49dbd032867ae53924cea1c86c431eb95da7d11a42ee22c005a9d  FleetHUD-v1.4.0-windows-x64.zip

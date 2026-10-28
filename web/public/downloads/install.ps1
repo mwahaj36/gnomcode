@@ -1,11 +1,11 @@
 # FleetHUD Windows updater: use the same native installer as the download page.
 $ErrorActionPreference = "Stop"
-$Version = "1.3.0"
+$Version = "1.4.0"
 $BaseUrl = "https://fleethud.vercel.app/downloads"
 if (-not [Environment]::Is64BitOperatingSystem) {
-    throw "FleetHUD requires 64-bit Windows. The existing installation was not changed."
+    throw "spawnt requires 64-bit Windows. The existing installation was not changed."
 }
-$Asset = "FleetHUD-v1.3.0-windows-x64.zip"
+$Asset = "FleetHUD-v1.4.0-windows-x64.zip"
 $Stage = Join-Path ([IO.Path]::GetTempPath()) ("fleethud-update-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $Stage | Out-Null
 try {
@@ -22,9 +22,9 @@ try {
     if (-not (Test-Path $Setup)) { throw "Release archive has no native installer." }
     $SetupVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Setup).FileVersion
     if ($SetupVersion -ne "$Version.0") { throw "Installer version does not match the requested release." }
-    Write-Output "Starting verified FleetHUD v$Version installer. Your account and recorded sessions are preserved."
+    Write-Output "Starting verified spawnt v$Version installer. Your account and recorded sessions are preserved."
     $Process = Start-Process -FilePath $Setup -Wait -PassThru
-    if ($Process.ExitCode -ne 0) { throw "FleetHUD installer exited with code $($Process.ExitCode)." }
+    if ($Process.ExitCode -ne 0) { throw "spawnt installer exited with code $($Process.ExitCode)." }
 } finally {
     Remove-Item -Path $Stage -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -2,15 +2,11 @@
 
 Status: proposed implementation sequence, updated 2026-10-28 for the current repository and the reviewed landing preview. The user-supplied [original redesign plan](spawnt_redesign_plan.md) is preserved verbatim alongside this update. Use this rollout plan for implementation order, [DESIGN.md](../DESIGN.md) for current visual tokens, and [SPEC.md](SPEC.md) for product scope, security, and behavior. A phase that changes architecture or deliverables must update SPEC and, when architectural, add an ADR in the same PR.
 
-## What exists now
+## Current rollout state
 
-- `web/app/page.tsx` and `web/app/LandingClient.tsx` show the new `spawnt` landing preview. It has the near-black `#070708` canvas, red `#FF2544`, agent marks, animated navbar, interactive tour, footer theme control, and Log in action. The tour data are illustrative.
-- Other Next.js routes still use the old FleetHUD design. `web/app/console/page.tsx` is the signed-in/cloud web console, with Supabase auth and desktop snapshot data. The landing's console links go through `/auth`.
-- `crates/daemon/src/console.html` is a separate local console embedded via `include_str!` in `crates/daemon/src/api.rs` and served by the loopback daemon. It has a different data source and currently uses old colors and layout.
-- `web/app/globals.css` and `web/tailwind.config.js` still define the old GitHub-like palette. The new landing CSS is scoped, so it has not yet changed other routes.
-- The repo does not currently contain `apps/tray`. SPEC describes the intended Tauri surface, while existing tray scripts are the current implementation. Verify current files and SPEC status at the start of each phase.
+The native GitHub stack #66 contains the redesign phases. Marketing, Docs, Auth and Settings use shared tokens and controls. Both consoles share neutral summary/activity/quota/session/project presenters and the same rail/content layout, with independent authenticated data adapters. The landing tour uses those completed presenters with explicit illustrative data. Rust provides daily/project/session totals, chart proportions and quota provenance/freshness.
 
-The old draft's claim that there is only one console is outdated. Achieve parity through shared visual components and route layouts, with separate local and cloud data adapters. Keep local-only information local; do not make the signed-in site a proxy for private daemon data.
+Windows retains its script tray and authenticated browser app window. Linux/macOS use the same local console through browser launchers (ADR 0007); a Tauri migration remains separate. Canonical generated PNG/ICO/ICNS assets and self-hosted fonts are present. v1.4 native packaging and final review are in progress. Browser visual QA remains unavailable because the tool reports disabled. Live cloud quota publication requires the user's deferred desktop re-pairing. Do not call pending visual/platform checks passed.
 
 ## Rollout order
 
