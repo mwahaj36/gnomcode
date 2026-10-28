@@ -10,8 +10,8 @@ pub mod codex;
 pub mod cursor;
 pub mod gemini;
 
-use fleethud_core::{ActivityEvent, AgentId, Project, QuotaSnapshot, Session, UsageRecord};
 use serde::{Deserialize, Serialize};
+use spawnt_core::{ActivityEvent, AgentId, Project, QuotaSnapshot, Session, UsageRecord};
 
 /// How an agent writes its log files on disk (`SPEC §3.5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,7 +58,7 @@ pub trait SourceAdapter {
     /// The file write pattern used by this agent.
     fn file_kind(&self) -> FileKind;
 
-    /// Parses a raw byte chunk into normalized FleetHUD records.
+    /// Parses a raw byte chunk into normalized Spawnt records.
     ///
     /// Must never panic or fail on malformed, truncated, or unknown-schema input:
     /// skip bad lines, increment `parse_errors`, and continue (`AGENTS.md` §5).
@@ -71,7 +71,7 @@ mod tests {
         FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
         codex::CodexAdapter, gemini::GeminiAdapter,
     };
-    use fleethud_core::{AgentId, Surface, TrustLevel};
+    use spawnt_core::{AgentId, Surface, TrustLevel};
     use std::fs;
     use std::path::PathBuf;
 
@@ -154,7 +154,7 @@ mod tests {
             "{\"timestamp\":\"2026-10-26T10:00:01Z\",\"type\":\"assistant\",\"sessionId\":\"s1\",\"cwd\":\"/workspace/test\",\"message\":{\"model\":\"claude-sonnet-5\",\"stop_reason\":\"end_turn\",\"content\":[]}}\n",
         );
         let batch = ClaudeAdapter::new().parse(&FileCtx::default(), lines.as_bytes());
-        assert_eq!(batch.sessions[0].state, fleethud_core::SessionState::Idle);
+        assert_eq!(batch.sessions[0].state, spawnt_core::SessionState::Idle);
     }
 
     #[test]
@@ -208,7 +208,7 @@ mod tests {
         );
         let mut adapter = CodexAdapter::new();
         let batch = adapter.parse(&FileCtx::default(), lines.as_bytes());
-        assert_eq!(batch.sessions[0].state, fleethud_core::SessionState::Idle);
+        assert_eq!(batch.sessions[0].state, spawnt_core::SessionState::Idle);
     }
 
     #[test]
@@ -232,7 +232,7 @@ mod tests {
             batch.sessions[0].model.as_deref(),
             Some("Gemini 4 Argon (Medium)")
         );
-        assert_eq!(batch.sessions[0].state, fleethud_core::SessionState::Idle);
+        assert_eq!(batch.sessions[0].state, spawnt_core::SessionState::Idle);
     }
 
     #[test]
@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(batch.sessions.len(), 1);
         assert_eq!(
             batch.sessions[0].state,
-            fleethud_core::SessionState::AwaitingApproval
+            spawnt_core::SessionState::AwaitingApproval
         );
         assert_eq!(batch.usage_records.len(), 1);
         assert_eq!(batch.usage_records[0].input_tokens, 1000);
@@ -310,7 +310,7 @@ mod tests {
         let c_batch = cursor.parse(&c_ctx, c_sample);
         assert_eq!(c_batch.parse_errors, 0);
         assert_eq!(c_batch.sessions.len(), 1);
-        assert_eq!(c_batch.sessions[0].state, fleethud_core::SessionState::Idle);
+        assert_eq!(c_batch.sessions[0].state, spawnt_core::SessionState::Idle);
         assert_eq!(c_batch.usage_records.len(), 1);
 
         let mut aider = AiderAdapter::new();
@@ -322,7 +322,7 @@ mod tests {
         let a_batch = aider.parse(&a_ctx, a_sample);
         assert_eq!(a_batch.parse_errors, 0);
         assert_eq!(a_batch.sessions.len(), 1);
-        assert_eq!(a_batch.sessions[0].state, fleethud_core::SessionState::Idle);
+        assert_eq!(a_batch.sessions[0].state, spawnt_core::SessionState::Idle);
         assert_eq!(a_batch.usage_records.len(), 1);
         assert_eq!(a_batch.usage_records[0].cost_usd, 0.005);
     }

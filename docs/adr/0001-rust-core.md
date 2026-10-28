@@ -5,7 +5,7 @@
 
 ## Context
 
-FleetHUD needs:
+Spawnt needs:
 - a hook handler that runs on every Claude Code tool call,
 - an always-on background daemon,
 - painless `npx` installs on Windows, macOS and Linux,

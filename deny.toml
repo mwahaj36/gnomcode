@@ -20,11 +20,12 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "CC0-1.0",
+    "CDLA-Permissive-2.0", # TLS root certificate data; include license in notices.
     "MPL-2.0",
 ]
 confidence-threshold = 0.9
 
-# FleetHUD is proprietary and all workspace crates have publish = false.
+# Spawnt is proprietary and all workspace crates have publish = false.
 # Third-party dependency licenses are still checked against the allow-list above.
 [licenses.private]
 ignore = true

@@ -6,10 +6,10 @@ pub mod pro;
 pub mod sync;
 
 use chrono::Utc;
-use fleethud_ingest::ingest_all;
-use fleethud_platform::fleethud_home;
-use fleethud_store::Database;
 use serde::{Deserialize, Serialize};
+use spawnt_ingest::ingest_all;
+use spawnt_platform::spawnt_home;
+use spawnt_store::Database;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -21,21 +21,21 @@ use tokio::task::JoinHandle;
 /// Daemon subsystem error type.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Another instance of FleetHUD daemon is already running.
+    /// Another instance of Spawnt daemon is already running.
     #[error("daemon is already running (locked by another process)")]
     AlreadyRunning,
     /// Store error.
     #[error("store error: {0}")]
-    Store(#[from] fleethud_store::Error),
+    Store(#[from] spawnt_store::Error),
     /// Ingest error.
     #[error("ingest error: {0}")]
-    Ingest(#[from] fleethud_ingest::Error),
+    Ingest(#[from] spawnt_ingest::Error),
     /// I/O error.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
 
-/// Metadata written to `~/.fleethud/daemon.json` for local API clients (`SPEC §3.1`).
+/// Metadata written to `~/.spawnt/daemon.json` for local API clients (`SPEC §3.1`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonInfo {
     /// Process ID of the running daemon.
@@ -48,10 +48,10 @@ pub struct DaemonInfo {
     pub started_at: String,
 }
 
-/// Reads `~/.fleethud/daemon.json` if present to connect to a running daemon.
+/// Reads `~/.spawnt/daemon.json` if present to connect to a running daemon.
 #[must_use]
 pub fn read_daemon_info() -> Option<DaemonInfo> {
-    let path = fleethud_home().join("daemon.json");
+    let path = spawnt_home().join("daemon.json");
     let bytes = fs::read(path).ok()?;
     serde_json::from_slice(&bytes).ok()
 }
@@ -63,19 +63,19 @@ pub struct DaemonLock {
 }
 
 impl DaemonLock {
-    /// Attempts to acquire an exclusive lock on `~/.fleethud/daemon.lock`
+    /// Attempts to acquire an exclusive lock on `~/.spawnt/daemon.lock`
     /// and persists `daemon.json` with the generated bearer token.
     ///
     /// # Errors
     /// Returns [`Error::AlreadyRunning`] if another process holds the lock.
     pub fn acquire(port: u16) -> Result<(Self, DaemonInfo), Error> {
-        let home = fleethud_home();
+        let home = spawnt_home();
         fs::create_dir_all(&home)?;
 
         let lock_path = home.join("daemon.lock");
         let info_path = home.join("daemon.json");
 
-        let file = match fleethud_platform::open_exclusive_lock(&lock_path) {
+        let file = match spawnt_platform::open_exclusive_lock(&lock_path) {
             Ok(file) => file,
             Err(_) => return Err(Error::AlreadyRunning),
         };
@@ -89,7 +89,7 @@ impl DaemonLock {
         };
 
         let json_bytes = serde_json::to_vec_pretty(&info).map_err(std::io::Error::other)?;
-        fleethud_platform::write_private_file(&info_path, &json_bytes)
+        spawnt_platform::write_private_file(&info_path, &json_bytes)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
 
         Ok((

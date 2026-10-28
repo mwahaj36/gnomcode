@@ -1,5 +1,5 @@
-# spawnt Windows system tray - https://fleethud.pro
-$trayMutex = New-Object System.Threading.Mutex($false, "Local\FleetHUDTray")
+# spawnt Windows system tray - https://spawntv.vercel.app
+$trayMutex = New-Object System.Threading.Mutex($false, "Local\SpawntTray")
 try {
     $ownsTray = $trayMutex.WaitOne(0)
 } catch [System.Threading.AbandonedMutexException] {
@@ -13,7 +13,7 @@ if (-not $ownsTray) {
 # Older tray scripts predate the mutex and can survive an upgrade.
 try {
     Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
-        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*FleetHUD*tray.ps1*' } |
+        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*Spawnt*tray.ps1*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 } catch {}
 
@@ -21,13 +21,13 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $Port = 41738
-$FleetHudHome = if ($env:FLEETHUD_HOME) { $env:FLEETHUD_HOME } else { Join-Path $env:USERPROFILE ".fleethud" }
-$DaemonInfoPath = Join-Path $FleetHudHome "daemon.json"
+$SpawntHome = if ($env:SPAWNT_HOME -and $env:SPAWNT_HOME.Trim()) { $env:SPAWNT_HOME.Trim() } else { Join-Path $env:USERPROFILE '.spawnt' }
+$DaemonInfoPath = Join-Path $SpawntHome "daemon.json"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $IconPath = Join-Path $ScriptDir "spawnt-tray.ico"
 if (-not (Test-Path $IconPath)) {
-    $IconPath = "$env:LOCALAPPDATA\FleetHUD\spawnt-tray.ico"
-    if (-not (Test-Path $IconPath)) { $IconPath = Join-Path $ScriptDir "fleethud.ico" }
+    $IconPath = "$env:LOCALAPPDATA\Spawnt\spawnt-tray.ico"
+    if (-not (Test-Path $IconPath)) { $IconPath = Join-Path $ScriptDir "spawnt.ico" }
 }
 
 Add-Type @"
@@ -71,10 +71,10 @@ function Get-ConsoleUrl {
     return "http://127.0.0.1:$Port/"
 }
 
-function Find-FleetHUDWindow {
+function Find-SpawntWindow {
     $procs = Get-Process -Name "msedge", "chrome" -ErrorAction SilentlyContinue
     foreach ($p in $procs) {
-        if (($p.MainWindowTitle -like "*spawnt*" -or $p.MainWindowTitle -like "*FleetHUD*") -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
+        if (($p.MainWindowTitle -like "*spawnt*" -or $p.MainWindowTitle -like "*Spawnt*") -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
             return $p.MainWindowHandle
         }
     }
@@ -83,13 +83,13 @@ function Find-FleetHUDWindow {
 
 function Open-Console {
     try {
-        $engine = Join-Path $ScriptDir "fleethud.exe"
+        $engine = Join-Path $ScriptDir "spawnt.exe"
         Start-Process -FilePath $engine -ArgumentList "daemon" -WindowStyle Hidden -ErrorAction Stop
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("FleetHUD could not start. Reinstall the latest build from fleethud.vercel.app/downloads.", "FleetHUD") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("Spawnt could not start. Reinstall the latest build from spawntv.vercel.app/downloads.", "Spawnt") | Out-Null
         return
     }
-    $existingHwnd = Find-FleetHUDWindow
+    $existingHwnd = Find-SpawntWindow
     if ($existingHwnd -ne [IntPtr]::Zero -and $script:lastConsoleUrl -eq (Get-ConsoleUrl)) {
         if ([Win32]::IsIconic($existingHwnd)) {
             [Win32]::ShowWindow($existingHwnd, 9) | Out-Null # SW_RESTORE
@@ -102,7 +102,7 @@ function Open-Console {
     $url = Get-ConsoleUrl
     $script:lastConsoleUrl = $url
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    $profileArg = "--user-data-dir=`"$localAppData\FleetHUD\AppProfile`""
+    $profileArg = "--user-data-dir=`"$localAppData\Spawnt\AppProfile`""
     $windowArg = "--window-name=spawnt"
     $candidateExes = @(
         "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",

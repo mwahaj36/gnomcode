@@ -1,0 +1,27 @@
+{
+  "_comment": "Scoop manifest for Spawnt — https://spawntv.vercel.app. PRE-RELEASE STUB. Do not submit to any bucket until a real signed release exists with verified checksums and the releases repository is made public.",
+  "_hosting": "https://github.com/mwahaj36/scoop-bucket",
+  "_install_future": "scoop bucket add spawnt https://github.com/mwahaj36/scoop-bucket && scoop install spawnt",
+  "version": "PLACEHOLDER",
+  "description": "Mission control for AI coding agents",
+  "homepage": "https://spawntv.vercel.app",
+  "license": "BUSL-1.1",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/mwahaj36/spawnt-releases/releases/download/vPLACEHOLDER/Spawnt-vPLACEHOLDER-windows-x64.zip",
+      "hash": "PLACEHOLDER_SHA256_WIN32_X64",
+      "extract_dir": "."
+    }
+  },
+  "bin": "spawnt.exe",
+  "checkver": {
+    "github": "https://github.com/mwahaj36/spawnt-releases"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/mwahaj36/spawnt-releases/releases/download/v$version/Spawnt-v$version-windows-x64.zip"
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const require=createRequire(new URL('../web/package.json',import.meta.url));
 const ts=require('typescript');
 const html=readFileSync(new URL('../crates/daemon/src/console.html',import.meta.url),'utf8');
-const source=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match=>match[1]).join('\n');
+const source=readFileSync(new URL('../crates/daemon/src/console-app.js',import.meta.url),'utf8');
 const file=ts.createSourceFile('console.js',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
 const fn=name=>file.statements.filter(ts.isFunctionDeclaration).find(node=>node.name?.text===name)?.getText(file)||'';
 const window={location:new URL('http://127.0.0.1:41738/?token=unit-local-token#overview')};

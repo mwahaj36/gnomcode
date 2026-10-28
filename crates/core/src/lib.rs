@@ -2,6 +2,7 @@
 //!
 //! See `docs/SPEC.md` §3.6–§3.9 for the data model and invariants.
 
+pub mod branding;
 pub mod license;
 pub mod presence;
 pub mod pricing;
@@ -20,7 +21,7 @@ use sha2::{Digest, Sha256};
 pub enum TrustLevel {
     /// Read directly from agent data (e.g. token counts in a log line).
     Exact,
-    /// Derived by FleetHUD heuristics (e.g. Claude 5-hour window estimate).
+    /// Derived by Spawnt heuristics (e.g. Claude 5-hour window estimate).
     Estimated,
     /// Obtained from an opt-in, possibly unofficial vendor API.
     Api,
@@ -143,7 +144,7 @@ pub struct Project {
     pub canonical_key: String,
     /// Most recently observed working directory path on disk.
     pub repo_root: String,
-    /// Short human-readable project name (e.g. `fleethud`).
+    /// Short human-readable project name (e.g. `spawnt`).
     pub name: String,
     /// Last active Git branch, if known.
     pub git_branch: Option<String>,
@@ -455,18 +456,18 @@ mod tests {
     #[test]
     fn project_from_git_remote_merges_ssh_and_https_clones() {
         let ssh = Project::from_origin(
-            Some("git@github.com:mwahaj36/FleetHUD.git"),
+            Some("git@github.com:mwahaj36/Spawnt.git"),
             "C:\\Users\\dev\\worktree-1",
             Some("feat/a"),
         );
         let https = Project::from_origin(
-            Some("https://github.com/mwahaj36/fleethud/"),
-            "/Users/dev/code/fleethud",
+            Some("https://github.com/mwahaj36/spawnt/"),
+            "/Users/dev/code/spawnt",
             Some("main"),
         );
         assert_eq!(ssh.id, https.id);
-        assert_eq!(ssh.canonical_key, "github.com/mwahaj36/fleethud");
-        assert_eq!(ssh.name, "fleethud");
+        assert_eq!(ssh.canonical_key, "github.com/mwahaj36/spawnt");
+        assert_eq!(ssh.name, "spawnt");
     }
 
     #[test]

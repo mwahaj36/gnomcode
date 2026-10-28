@@ -10,7 +10,7 @@ $fn=[regex]::Match($source,'(?s)function Update-TrayIconBadge\(.*?\n}\r?\n').Val
 if (!$fn) { throw 'Badge function absent' }
 Invoke-Expression ($fn.Replace('catch {}','catch { throw }'))
 $notifyIcon=New-Object System.Windows.Forms.NotifyIcon
-$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/fleethud.ico'),32,32)
+$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/spawnt.ico'),32,32)
 $baseBitmap=$baseIcon.ToBitmap()
 $corner=$baseBitmap.GetPixel(0,0)
 if ($corner.R -ne 7 -or $corner.G -ne 7 -or $corner.B -ne 8 -or $corner.A -ne 255) { throw 'Windows icon must have an opaque brand-black canvas' }
