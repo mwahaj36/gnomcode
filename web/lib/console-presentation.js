@@ -126,3 +126,36 @@ export function renderQuota(pools, publishedAt, { illustrative = false, compact 
       return `<article><header><strong>${escape(pool.provider)} / ${escape(pool.limit_id)}</strong><span>${escape(pool.window?.replaceAll('_', ' '))}</span></header><div class="sp-quota-number">${known ? used.toFixed(1) + '%' : 'Unknown'}<span class="sp-data-trust">${known ? ({exact:'Provider measured',api:'Provider API',estimated:'Estimate'}[pool.basis] || 'Unavailable') : 'Unavailable'} · used</span></div><div class="sp-quota-track" aria-hidden="true"><i style="width:${used}%"></i></div><p>${Number.isFinite(pool.remaining_pct) ? pool.remaining_pct.toFixed(1) + '% remaining' : 'Remaining capacity unknown'}</p><p>${illustrative ? "Resets " + escape(pool.reset_label || "unknown") : Number.isFinite(reset) ? reset <= Date.now() ? 'Reset passed · awaiting provider update' : 'Resets ' + escape(new Date(reset).toLocaleString()) : 'Reset time unknown'}</p><small>Observed ${illustrative ? "sample" : observation && Number.isFinite(observation.getTime()) ? escape(observation.toLocaleString()) : 'unknown'}</small></article>`;
     }).join('')}</div>` : '<p>No measured quota pools are available. Remaining capacity is unknown.</p>'}</section>`;
 }
+
+
+export function renderChatCards(events) {
+  if (!Array.isArray(events) || !events.length) {
+    return '<div class="sp-chat-empty"><p>No conversation history recorded for this session.</p></div>';
+  }
+  return `<div class="sp-chat-stream">${events.map(evt => {
+    const role = evt.role || 'system';
+    const roleLabel = role === 'user' ? 'User' : role === 'assistant' ? 'Agent' : role === 'tool' ? (evt.tool_name ? `Tool: ${evt.tool_name}` : 'Tool') : 'System';
+    const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';
+    const approvalPrompt = evt.status === 'pending' ? `
+      <div class="sp-approval-banner" data-tool-call="${escape(evt.tool_name || '')}">
+        <p><strong>Action requires approval:</strong> ${escape(evt.content)}</p>
+        <div class="sp-approval-actions">
+          <button type="button" class="btn btn-primary" data-chat-action="approve" data-event-id="${escape(evt.event_id)}">Approve</button>
+          <button type="button" class="btn btn-secondary" data-chat-action="deny" data-event-id="${escape(evt.event_id)}">Deny</button>
+        </div>
+      </div>` : '';
+    return `<article class="sp-chat-card sp-chat-${escape(role)}">
+      <header>
+        <strong>${escape(roleLabel)}</strong>
+        ${statusBadge}
+        <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
+      </header>
+      <div class="sp-chat-body">${escape(evt.content)}</div>
+      ${approvalPrompt}
+    </article>`;
+  }).join('')}</div>`;
+}
+
+export function updateChat(element, events) {
+  updateMarkup(element, renderChatCards(events));
+}
