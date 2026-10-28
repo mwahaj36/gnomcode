@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import shutil
+import subprocess
 import tarfile
 import re
 import zipfile
