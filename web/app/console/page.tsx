@@ -1,8 +1,38 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
+import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary } from "../../lib/console-presentation.js";
+
+function SummaryPanel({ activeCount, report, quotaCount }: { activeCount: number | null; report: unknown; quotaCount: number | null }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateSummary(element.current, { activeCount, report, quotaCount }); }, [activeCount, report, quotaCount]);
+  return <div ref={element} />;
+}
+
+function ActivityPanel({ report }: { report: unknown }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateActivity(element.current, report); }, [report]);
+  return <div ref={element} />;
+}
+
+function ProvidersPanel({ report }: { report: unknown }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateProviders(element.current, report); }, [report]);
+  return <div ref={element} />;
+}
+
+function SessionsPanel({ sessions, onRotate }: { sessions: SessionItem[]; onRotate: (session: SessionItem) => Promise<void> }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateSessions(element.current, sessions, { rotate: true }); }, [sessions]);
+  return <div ref={element} className="overflow-x-auto" role="region" aria-label="Agent sessions" tabIndex={0} onClick={event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-session-action="rotate"]');
+    const session = sessions.find(session => session.id === button?.dataset.sessionId);
+    if (session) void onRotate(session);
+  }} />;
+}
 
 interface SessionItem {
   id: string;
@@ -53,8 +83,15 @@ interface ProviderSpend {
 }
 
 interface TimelineReport {
+  cost_basis?: string;
+  cache_share_pct?: number | null;
+  total_tokens?: number;
+  daily?: unknown[];
   total_cost_usd: number;
   total_cache_savings_usd: number;
+  total_input_tokens: number;
+  total_cache_read_tokens: number;
+  total_output_tokens: number;
   providers: ProviderSpend[];
   range_label?: string;
   earliest_at?: string | null;
@@ -85,6 +122,7 @@ interface UserProfile {
 function formatResetCountdown(resetsAtIso?: string | null, _windowKind?: string) {
   if (!resetsAtIso) return "Rolling";
   const target = new Date(resetsAtIso);
+  if (!Number.isFinite(target.getTime())) return "Unknown";
   const now = new Date();
   const diffMs = target.getTime() - now.getTime();
   if (diffMs <= 0) return "Resetting now";
@@ -115,20 +153,53 @@ export default function ConsolePage() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
+  const [copyFeedback, setCopyFeedback] = useState("");
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quota, setQuota] = useState<QuotaItem[]>([]);
+  const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
   const [roiByProvider, setRoiByProvider] = useState<PlanRoiInfo[]>([]);
   const [combinedRoi, setCombinedRoi] = useState<PlanRoiInfo | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [activeCount, setActiveCount] = useState<number>(0);
+  const [activeCount, setActiveCount] = useState<number | null>(null);
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [copyFeedback, setCopyFeedback] = useState("");
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState<Date | null>(null);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const refreshInFlight = useRef(false);
+  const metricsGeneration = useRef(0);
+  const manualRefreshInFlight = useRef(false);
+  const [activeView, setActiveView] = useState("overview");
+  const [viewError, setViewError] = useState("");
+  const lastDesktopSnapshot = useRef<any>(null);
+
+  useEffect(() => {
+    lastDesktopSnapshot.current = null;
+    setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
+    setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
+    setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
+    setRefreshMessage(""); setConnectedSource(user ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
+  }, [user?.id]);
+
+  useEffect(() => {
+    const restore = () => {
+      const view = new URLSearchParams(window.location.search).get("view") || "overview";
+      if (["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].includes(view)) setActiveView(view);
+    };
+    restore();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+
+  const changeConsoleView = (view: string) => {
+    setActiveView(view);
+    window.history.pushState(null, "", view === "overview" ? "/console" : `/console?view=${view}`);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -144,73 +215,142 @@ export default function ConsolePage() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Live 2-second fetch loop
-  const fetchLiveMetrics = useCallback(async () => {
+  // Live metrics polling
+  const fetchLiveMetrics = useCallback(async (force = false) => {
+    const generation = metricsGeneration.current;
+    if (refreshInFlight.current && !force) return false;
+    if (refreshInFlight.current && force) await new Promise<void>((resolve) => {
+      const check = () => refreshInFlight.current ? window.setTimeout(check, 50) : resolve();
+      check();
+    });
+    if (refreshInFlight.current || generation !== metricsGeneration.current) return false;
+    refreshInFlight.current = true;
+    setViewError("");
+    let refreshed = false;
+    try {
     if (user) {
       try {
-        const {data, error} = await supabase.from("fleethud_sync_state").select("*").eq("user_id",user.id).maybeSingle();
-        const snap = data?.live_snapshot;
-        const filtered = (snap?.sessions || []).filter((session: SessionItem) => session.surface !== "cloud" &&
+        const desktop = await supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle();
+        if (generation !== metricsGeneration.current) return false;
+        if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
+        const snap = lastDesktopSnapshot.current;
+        if (desktop.error) setViewError("Desktop snapshot unavailable. Last received data remains visible.");
+        refreshed = !desktop.error;
+        if (refreshed) setLastSuccessfulUpdate(new Date());
+        const allSessions: SessionItem[] = [...(snap?.sessions || [])];
+        const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
           (agentFilter === "all" || session.agent === agentFilter) &&
           (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
         setSessions(filtered.slice((page-1)*10,page*10));
         setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
         setQuota(snap?.quota || []);
+        setSnapshotGeneratedAt(snap?.generated_at || null);
         setRoiByProvider(snap?.roi_by_provider || []);
         setCombinedRoi(snap?.combined_roi || null);
         setUserProfile(snap?.user_profile || null);
-        setActiveCount(snap?.active_count || 0);
+        setSnapshotLoaded(Boolean(snap));
+        setActiveCount(snap?.active_count ?? null);
         setTotalCount(filtered.length);
-        setTotalPages(Math.max(1,Math.ceil(filtered.length/10)));
-        const fresh = data && Date.now()-Date.parse(data.updated_at)<120000;
-        setConnectedSource(error ? "Desktop sync unavailable" : !snap ? "No paired desktop data yet" : fresh ? "Desktop connected" : "Desktop data stale");
+        setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
+        if (snap) {
+          const ageMs = snap.generated_at ? Date.now() - Date.parse(snap.generated_at) : Infinity;
+          setConnectedSource(ageMs < 120000 ? "Desktop connected" : "Desktop data stale");
+        } else setConnectedSource(desktop.error ? "Desktop unavailable" : "No paired desktop snapshot received");
       } catch {
+        if (generation !== metricsGeneration.current) return false;
         setConnectedSource("Offline");
+        setViewError("Connection failed. Showing the last data held in this page.");
       }
     } else {
       setConnectedSource("Sign in to monitor your desktop remotely");
+      setSnapshotLoaded(false);
+      setActiveCount(null);
+      setSessions([]);
+      setQuota([]);
+      setReport(null);
+      setRoiByProvider([]);
+      setCombinedRoi(null);
+      setUserProfile(null);
+      setSnapshotGeneratedAt(null);
     }
+    } finally {
+    refreshInFlight.current = false;
+    }
+    return refreshed;
   }, [user, timeline, agentFilter, statusFilter, page]);
 
+  const refreshCloudSnapshot = async () => {
+    if (manualRefreshInFlight.current || refreshing) return;
+    if (!user) {
+      setRefreshMessage("Sign in to reload the cloud view.");
+      return;
+    }
+    manualRefreshInFlight.current = true;
+    setRefreshing(true);
+    setRefreshMessage("Refreshing cloud view...");
+    try {
+      const refreshed = await fetchLiveMetrics(true);
+      if (refreshed) {
+        setLastSuccessfulUpdate(new Date());
+        setRefreshMessage("Cloud view refreshed. New desktop snapshots are published by the paired daemon.");
+      } else {
+        setRefreshMessage("Refresh failed. One or more cloud reads did not complete; showing available data.");
+      }
+    } catch {
+      setRefreshMessage("Refresh failed. Showing the last available data.");
+    } finally {
+      manualRefreshInFlight.current = false;
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    fetchLiveMetrics();
-    const timer = setInterval(fetchLiveMetrics, 15000);
-    return () => clearInterval(timer);
+    metricsGeneration.current += 1;
+    void fetchLiveMetrics(true);
+    const timer = setInterval(() => { if (!document.hidden) void fetchLiveMetrics(); }, 15000);
+    return () => { clearInterval(timer); metricsGeneration.current += 1; };
   }, [fetchLiveMetrics]);
 
   const formatTokens = (num: number | undefined | null) => {
-    const val = num ?? 0;
+    if (typeof num !== "number" || !Number.isFinite(num)) return "Unknown";
+    const val = num;
     if (val >= 1_000_000) return (val / 1_000_000).toFixed(1) + "M";
     if (val >= 1_000) return (val / 1_000).toFixed(1) + "k";
     return val.toString();
   };
 
   const formatTimeAgo = (iso: string) => {
-    const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    const timestamp = new Date(iso).getTime();
+    if (!Number.isFinite(timestamp)) return "Unknown";
+    const diff = (Date.now() - timestamp) / 1000;
     if (diff < 60) return "Just now";
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
-  const handleRemoteRelay = async (session: SessionItem) => {
-    // 1. Try local daemon endpoint if running on this device
+  const copyQuickToken = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:41738/api/v1/pro/relay/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: `relay-${session.id}` }),
-      });
-      if (res.ok) {
-        alert("Context Relay handoff executed locally! Clean session starting with 0 tokens.");
-        fetchLiveMetrics();
-        return;
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        const tokenStr = btoa(JSON.stringify(data.session));
+        await navigator.clipboard.writeText(tokenStr);
+        setCopyFeedback("Copied pairing token!");
+        setTimeout(() => setCopyFeedback(""), 3500);
       }
-    } catch {}
+    } catch {
+      setCopyFeedback("Failed to copy");
+    }
+  };
 
+  const relayBusy = useRef(false);
+  const handleRemoteRelay = async (session: SessionItem) => {
+    if (relayBusy.current || !window.confirm("Request a clean session on the paired desktop? The daemon applies your existing permissions.")) return;
+    relayBusy.current = true;
     // 2. If remote (away from laptop), communicate via Supabase sync state to local daemon
     if (!user) {
-      alert("Sign in to execute remote relay handoff to your desktop daemon.");
+      setRefreshMessage("Sign in to request a session rotation.");
+      relayBusy.current = false;
       return;
     }
 
@@ -245,106 +385,69 @@ export default function ConsolePage() {
         .eq("user_id", user.id);
 
       if (error) throw error;
-      alert("Handoff command transmitted to your desktop daemon! Rotation in progress.");
+      setRefreshMessage("Rotation requested. Awaiting execution by the paired desktop.");
     } catch (err: any) {
-      alert("Failed to transmit handoff command: " + err.message);
+      setRefreshMessage("Rotation request failed. Check account connectivity and try again.");
+    } finally {
+      relayBusy.current = false;
     }
   };
-
-  const activeAgents = (report?.providers || []).filter(
-    (p) => (p.total_cost_usd > 0) || (p.models && p.models.some((m) => (m.input_tokens ?? 0) > 0 || (m.cost_usd ?? 0) > 0))
-  );
 
   const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
 
   if (!authChecked) {
     return (
       <div className="flex h-96 items-center justify-center font-mono text-xs text-muted">
-        Connecting to FleetHUD Mission Control...
+        Connecting to spawnt Mission Control...
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 font-sans">
-      {/* Top Banner if not authenticated */}
-      {!user ? (
-        <div className="mb-6 p-4 rounded-lg bg-card border border-accent/40 font-mono text-xs flex justify-between items-center flex-wrap gap-3">
-          <div>
-            <span className="text-accent font-semibold">[CLOUD CONSOLE]</span> Sign in to view reports from your paired desktop.
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/auth"
-              className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
-            >
-              Sign In with GitHub &rarr;
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-6 p-3 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green animate-pulse"></span>
-            <span>Cloud Account: <strong className="text-foreground">{user.email}</strong></span>
-          </div>
-          <button
-            onClick={async () => {
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session) {
-                await navigator.clipboard.writeText(JSON.stringify(session));
-                setCopyFeedback("Pairing token copied! Paste into Desktop App -> Auth tab.");
-                setTimeout(() => setCopyFeedback(""), 4000);
-              }
-            }}
-            className="px-3 py-1 bg-accent/20 border border-accent/40 text-accent font-semibold rounded hover:bg-accent hover:text-bg transition-colors text-xs"
-          >
-            {copyFeedback || "[Copy Pairing Token for Desktop App]"}
-          </button>
-        </div>
-      )}
-
-      {/* Pairing help when no desktop has uploaded a snapshot */}
-      {!report && (
-        <div className="mb-6 p-4 rounded-lg bg-card border border-border font-mono text-xs flex justify-between items-center flex-wrap gap-3">
-          <div>
-            <span className="text-accent font-semibold">[NOTICE]</span> Pair FleetHUD Desktop with this account to monitor it from this device. Desktop summaries upload every minute while the daemon runs.
-          </div>
-          <a
-            href="/downloads"
-            className="px-3 py-1.5 bg-accent text-bg font-semibold rounded hover:opacity-90 transition-opacity text-xs"
-          >
-            Download Desktop App &rarr;
-          </a>
-        </div>
-      )}
-
+    <main className="sp-console-shell sp-console-app mx-auto py-10 font-sans">
       {/* Header Controls */}
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-4 font-mono">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0d1117] p-1 flex items-center justify-center shadow-sm">
-            <img src="/fleethud.svg" alt="FleetHUD Logo" className="w-full h-full object-contain" />
-          </div>
+      <header className="sp-console-heading">
+        <div className="sp-console-brand-lockup">
+          <span className="sp-console-mark sp-brand-mark" aria-hidden="true" />
           <div>
-            <div className="text-xl font-bold text-foreground">Mission Control Console</div>
-            <div className="text-xs text-muted flex items-center gap-2 mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
-              <span>Status: {connectedSource}</span>
+            <h1 className="sp-console-title">{activeView === "overview" ? "Your agent fleet" : activeView[0].toUpperCase() + activeView.slice(1)}</h1>
+            <div className="sp-console-status">
+              <span className={`w-2 h-2 ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
+              <span>{connectedSource}</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/settings"
-            className="px-3 py-1.5 bg-card border border-border rounded text-xs text-foreground hover:border-accent"
-          >
-            [Manage Subscriptions & Pricing]
-          </Link>
+          <button type="button" onClick={refreshCloudSnapshot} disabled={refreshing || !user || activeView === "settings"} title={activeView === "settings" ? "Use Reload preferences in Settings" : "Read the latest received cloud snapshot"} className="sp-console-action" aria-busy={refreshing}>{refreshing ? "Refreshing…" : "Reload view"}</button>
+          {user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}
+          <button type="button" className="sp-console-action" onClick={() => changeConsoleView("settings")}>Settings</button>
         </div>
+      </header>
+
+      {!user && <section className="sp-console-connect" aria-label="Desktop connection">
+        <p>Sign in to view your paired desktop snapshots. Hosted cloud-session tracking is unavailable.</p>
+        <div className="sp-console-connect-actions">
+          <Link href="/auth" className="sp-console-link sp-console-link-primary">Sign in</Link>
+        </div>
+      </section>}
+
+      {copyFeedback && <p role="status" className="sp-console-notice">{copyFeedback}</p>}
+      <div className="sp-console-refresh-state" aria-live="polite">
+        <span>{refreshMessage || connectedSource}</span>
+        <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
       </div>
 
+      <div className="sp-console-workspace">
+      <nav className="sp-console-nav" aria-label="Console views">
+        {["overview", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}>{view}</button>)}
+      </nav>
+      <div className="sp-console-content">
+      {activeView === "settings" && <SettingsPanel embedded />}
+      {activeView === "projects" && <div dangerouslySetInnerHTML={{ __html: renderProjects(undefined) }} />}
+      {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
+
       {/* Timeline Filter Bar */}
-      <div className="flex justify-between items-center bg-card border border-border rounded-md px-4 py-2.5 mb-6 flex-wrap gap-3 font-mono">
+      {!["settings", "automations"].includes(activeView) && <div className="sp-console-timeline-filter">
         <div className="text-xs text-muted">
           Scope: <span className="text-foreground uppercase">{timeline}</span>
           {report?.earliest_at && report?.latest_at && (
@@ -362,6 +465,7 @@ export default function ConsolePage() {
             <button
               key={t}
               onClick={() => { setTimeline(t); setPage(1); }}
+              aria-pressed={timeline === t}
               className={`px-3 py-1 text-xs rounded border transition-colors ${
                 timeline === t
                   ? "bg-accent text-bg border-accent font-semibold"
@@ -374,58 +478,33 @@ export default function ConsolePage() {
         </div>
       </div>
 
-      {/* 4 KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 font-mono">
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">Active Fleet Agents</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{activeCount}</div>
-          <div className="text-[11px] text-muted mt-1">Active in last 15 min</div>
-        </div>
+      }
+      {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
+      {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
 
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">API-Equivalent Spend</div>
-          <div className="text-2xl font-bold mt-1 text-accent">
-            ${report?.total_cost_usd?.toFixed(2) || "0.00"}
-          </div>
-          <div className="text-[11px] text-muted mt-1">Exact Token Attribution</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">Prompt Cache Savings</div>
-          <div className="text-2xl font-bold mt-1 text-green">
-            ${report?.total_cache_savings_usd?.toFixed(2) || "0.00"}
-          </div>
-          <div className="text-[11px] text-green mt-1">Direct Cost Avoided</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-5">
-          <div className="text-xs text-muted uppercase">Quota Pools Monitored</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{quota.length}</div>
-          <div className="text-[11px] text-muted mt-1">5h & 7d Window Bounds</div>
-        </div>
-      </div>
+      {activeView === "usage" && <ProvidersPanel report={report} />}
 
       {/* Subscription ROI Breakdown */}
-      <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
+      {activeView === "usage" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
         <div className="flex justify-between items-center mb-3">
           <div className="text-xs text-muted uppercase font-semibold">Subscription ROI Breakdown</div>
-          <Link href="/settings" className="text-xs text-accent hover:underline">
-            [Edit Plans]
-          </Link>
+          <button type="button" onClick={() => changeConsoleView("settings")} className="text-xs text-accent hover:underline">
+            Edit plans
+          </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
           {activeRoi.map((roi) => (
-            <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
+              <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
               <div className="text-[11px] text-muted uppercase font-semibold">{roi.provider}</div>
               <div className="text-lg font-bold text-foreground my-1">
-                {(roi.multiplier ?? 0).toFixed(1)}x Return
+                {typeof roi.multiplier === "number" ? `${roi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof roi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
               </div>
               <div className={`text-[11px] font-semibold ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
-                {(roi.net_savings_usd ?? 0) >= 0 ? "+" : ""}${(roi.net_savings_usd ?? 0).toFixed(2)} vs API
+                {typeof roi.net_savings_usd === "number" ? `${roi.net_savings_usd >= 0 ? "+" : ""}$${roi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> vs API
               </div>
               <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Plan: <span className="text-foreground">${(roi.monthly_plan_usd ?? 20).toFixed(0)}/mo</span> &bull; ${(roi.plan_usd ?? 0).toFixed(2)} ({roi.period_label || "period"})</div>
-                <div>Delivered Value: <span className="text-accent font-semibold">${(roi.spend_usd ?? 0).toFixed(2)}</span></div>
+                <div>Plan: <span className="text-foreground">{typeof roi.monthly_plan_usd === "number" ? `$${roi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof roi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span> · {typeof roi.plan_usd === "number" ? `$${roi.plan_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span> ({roi.period_label || "period"})</div>
+                <div>Delivered value: <span className="text-accent font-semibold">{typeof roi.spend_usd === "number" ? `$${roi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
               </div>
             </div>
           ))}
@@ -433,14 +512,14 @@ export default function ConsolePage() {
             <div className="bg-bg border border-accent/40 rounded p-3.5">
               <div className="text-[11px] text-accent uppercase font-semibold">Combined Fleet ROI</div>
               <div className="text-lg font-bold text-accent my-1">
-                {(combinedRoi.multiplier ?? 0).toFixed(1)}x Return
+                {typeof combinedRoi.multiplier === "number" ? `${combinedRoi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
               </div>
-              <div className={`text-[11px] font-semibold ${(combinedRoi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
-                {(combinedRoi.net_savings_usd ?? 0) >= 0 ? "+" : ""}${(combinedRoi.net_savings_usd ?? 0).toFixed(2)} Net
+              <div className={`text-[11px] font-semibold ${typeof combinedRoi.net_savings_usd !== "number" ? "text-muted" : combinedRoi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
+                {typeof combinedRoi.net_savings_usd === "number" ? `${combinedRoi.net_savings_usd >= 0 ? "+" : ""}$${combinedRoi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> Net
               </div>
               <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Total Plan: <span className="text-foreground">${(combinedRoi.monthly_plan_usd ?? 60).toFixed(0)}/mo</span></div>
-                <div>Fleet Value: <span className="text-accent font-semibold">${(combinedRoi.spend_usd ?? 0).toFixed(2)}</span></div>
+                <div>Total plan: <span className="text-foreground">{typeof combinedRoi.monthly_plan_usd === "number" ? `$${combinedRoi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span></div>
+                <div>Fleet value: <span className="text-accent font-semibold">{typeof combinedRoi.spend_usd === "number" ? `$${combinedRoi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
               </div>
             </div>
           )}
@@ -450,120 +529,13 @@ export default function ConsolePage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
-      {/* Spend By Agent (Click to View Models) */}
-      <div className="mb-6 font-mono">
-        <div className="text-xs text-muted uppercase mb-3 font-semibold">
-          Spend by Agent (Click to View Models)
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-          {activeAgents.map((prov) => {
-            const isExpanded = !!expandedAgents[prov.provider];
-            const savingsUsd = prov.total_cache_savings_usd ?? prov.cache_savings_usd ?? 0;
-            return (
-              <div
-                key={prov.provider}
-                onClick={() => setExpandedAgents(prev => ({ ...prev, [prov.provider]: !prev[prov.provider] }))}
-                className={`bg-card border rounded-lg p-4 cursor-pointer transition-colors ${
-                  isExpanded ? "border-accent" : "border-border hover:border-accent/60"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <div className="text-sm font-semibold">{prov.provider}</div>
-                  <div className="text-sm font-bold text-foreground">
-                    ${(prov.total_cost_usd ?? 0).toFixed(2)}
-                  </div>
-                </div>
-                <div className="text-[11px] text-muted">
-                  {prov.models?.length || 0} model(s) &bull; ${savingsUsd.toFixed(2)} cached
-                </div>
-
-                {isExpanded && (
-                  <div className="mt-3 pt-3 border-t border-border space-y-2">
-                    {prov.models?.map((m) => (
-                      <div key={m.model} className="text-[11px] flex justify-between items-center bg-bg p-2 rounded">
-                        <div>
-                          <div className="font-semibold text-foreground">{m.model}</div>
-                          <div className="text-muted text-[10px]">
-                            In: {formatTokens(m.input_tokens)} | Out: {formatTokens(m.output_tokens)}
-                          </div>
-                        </div>
-                        <div className="font-bold text-foreground">${(m.cost_usd ?? 0).toFixed(2)}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {activeAgents.length === 0 && (
-            <div className="col-span-3 bg-card border border-border rounded-lg p-6 text-center text-xs text-muted">
-              No agent spending recorded for the selected scope ({timeline.toUpperCase()}).
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Per-Model Quota Pools */}
-      <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
-        <div className="flex justify-between items-center mb-3">
-          <div className="text-xs text-muted uppercase font-semibold">Per-Model Quota Pools</div>
-          <div className="text-[11px] text-muted">[CONFIRMED] Exact provider limits.</div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="text-[11px] text-muted border-b border-border uppercase">
-              <tr>
-                <th className="pb-2">Provider</th>
-                <th className="pb-2">Pool ID</th>
-                <th className="pb-2">Window</th>
-                <th className="pb-2">Used %</th>
-                <th className="pb-2">Resets At</th>
-                <th className="pb-2 text-right">Basis</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {quota.map((q, idx) => (
-                <tr key={`${q.provider}-${q.limit_id}-${idx}`} className="hover:bg-bg/40">
-                  <td className="py-2.5 font-semibold">{q.provider}</td>
-                  <td className="py-2.5">{q.limit_id}</td>
-                  <td className="py-2.5 capitalize">{q.window ? q.window.replace("_", "-") : "rolling"}</td>
-                  <td className="py-2.5">
-                    <span className={`font-bold ${(q.used_pct ?? 0) >= 90 ? "text-red" : (q.used_pct ?? 0) >= 60 ? "text-accent" : "text-green"}`}>
-                      {(q.used_pct ?? 0).toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className="py-2.5 text-muted">
-                    {formatResetCountdown(q.resets_at, q.window)}
-                  </td>
-                  <td className="py-2.5 text-right">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        q.basis?.toLowerCase() === "estimated"
-                          ? "bg-card text-muted border border-border"
-                          : "bg-accent/15 text-accent"
-                      }`}
-                    >
-                      {q.basis?.toLowerCase() === "estimated" ? "EST" : "EXACT"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {quota.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-4 text-center text-muted">
-                    No quota pools monitored yet. Active sessions will populate live limits.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+      {(activeView === "overview" || activeView === "limits") && <div dangerouslySetInnerHTML={{ __html: renderQuota(quota, snapshotGeneratedAt) }} />}
+      {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
+      <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
       {/* Live & Historical Agent Sessions */}
-      <div className="bg-card border border-border rounded-lg p-5 font-mono">
+      {(activeView === "overview" || activeView === "sessions") && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div className="text-xs text-muted uppercase font-semibold">Live & Historical Agent Sessions</div>
           <div className="flex gap-2">
@@ -590,137 +562,11 @@ export default function ConsolePage() {
           </div>
         </div>
 
-        {sessions.some((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
-          <div className="mb-3 px-3 py-2 bg-red/10 border border-red/30 rounded text-xs text-red flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="font-mono font-bold">[PRO LABS]</span>
-              <span>Context saturation reserve active (&gt;=90%). Sessions are eligible for zero-token handoff via <code className="font-mono text-[11px] bg-red/20 px-1 py-0.5 rounded">.fleethud/HANDOFF.md</code>.</span>
-            </div>
-            {sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
-              <button
-                onClick={() => {
-                  const target = sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
-                  if (target) handleRemoteRelay(target);
-                }}
-                className="px-2.5 py-1 bg-red text-white text-[11px] font-semibold rounded hover:opacity-90 transition-opacity"
-              >
-                Handoff & Rotate Saturated Session
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="text-[11px] text-muted border-b border-border uppercase">
-              <tr>
-                <th className="pb-2">Project</th>
-                <th className="pb-2">Agent</th>
-                <th className="pb-2">Surface</th>
-                <th className="pb-2">Model</th>
-                <th className="pb-2">Tokens</th>
-                <th className="pb-2">Context</th>
-                <th className="pb-2">Cost</th>
-                <th className="pb-2">Status</th>
-                <th className="pb-2 text-right">Last Active</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {sessions.map((s) => {
-                const totalTokens = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_read_tokens || 0);
-                const ctxTokens = s.context_tokens || 0;
-                const ctxWin = s.context_window || 0;
-                const fillPct = ctxWin > 0 ? Math.min(100, Math.round((ctxTokens / ctxWin) * 100)) : 0;
-                const barColor = fillPct > 85 ? "bg-red" : fillPct > 60 ? "bg-yellow" : "bg-accent";
-
-                return (
-                  <tr key={s.id} className="hover:bg-bg/40">
-                    <td className="py-2.5">
-                      <span className="font-semibold text-foreground block">{s.project_name}</span>
-                      {s.title ? (
-                        <span className="text-[11px] text-muted block truncate max-w-[200px]" title={s.title}>
-                          {s.title}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="py-2.5 capitalize">{s.agent}</td>
-                    <td className="py-2.5">
-                      <span className="capitalize block">{s.surface.replace("_", " ")}</span>
-                      <span className="text-[10px] text-muted block font-mono">
-                        {s.device_name || "local"}
-                      </span>
-                    </td>
-                    <td className="py-2.5">{s.model}</td>
-                    <td className="py-2.5">
-                      <span className="font-semibold text-foreground">
-                        {s.usage_available === false ? "Unknown" : formatTokens(totalTokens)}
-                      </span>
-                      <span className="text-[10px] text-muted block">
-                        {s.usage_available === false ? "No measured usage" : `${formatTokens(s.input_tokens)} in · ${formatTokens(s.output_tokens)} out`}
-                      </span>
-                      {s.cache_read_tokens && s.cache_read_tokens > 0 ? (
-                        <span className="text-[10px] text-green block font-semibold">
-                          + {formatTokens(s.cache_read_tokens)} cache
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="py-2.5">
-                      {ctxWin > 0 ? (
-                        <div>
-                          <div className="flex items-center gap-1 font-semibold text-foreground">
-                            <span>{formatTokens(ctxTokens)}</span>
-                            <span className="text-[10px] text-muted font-normal">/ {formatTokens(ctxWin)}</span>
-                            <span className="text-[10px] text-muted font-normal">({fillPct}%)</span>
-                          </div>
-                          <div className="w-20 bg-border h-1.5 rounded-sm overflow-hidden mt-1">
-                            <div className={`h-full ${barColor}`} style={{ width: `${fillPct}%` }} />
-                          </div>
-                          {fillPct >= 90 ? (
-                            <button
-                              onClick={() => handleRemoteRelay(s)}
-                              className="mt-1 text-[10px] font-semibold text-accent hover:underline block"
-                              title="Handoff to clean session with 0 context tokens via .fleethud/HANDOFF.md"
-                            >
-                              [Handoff & Rotate]
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : ctxTokens > 0 ? (
-                        <span className="text-foreground font-semibold">{formatTokens(ctxTokens)}</span>
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 font-bold text-foreground">
-                      {s.usage_available === false || s.cost_basis === "unknown" ? "Unknown" : `$${(s.total_cost_usd ?? 0).toFixed(2)} EST`}
-                    </td>
-                    <td className="py-2.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${s.is_active ? "bg-green" : "bg-muted"}`}></span>
-                        <span className={s.is_active ? "text-green font-semibold capitalize" : "text-muted capitalize"}>
-                          {s.state}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-right text-muted">{formatTimeAgo(s.last_event_at)}</td>
-                  </tr>
-                );
-              })}
-              {sessions.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="py-6 text-center text-muted">
-                    No matching agent sessions found. Run Claude Code, Codex, or Antigravity on your machine.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
+        <SessionsPanel sessions={sessions} onRotate={handleRemoteRelay} />
         {/* Pagination Controls */}
         <div className="flex justify-between items-center mt-4 pt-3 border-t border-border text-xs text-muted">
           <div>
-            Page {page} of {totalPages} ({totalCount} sessions)
+            Page {page} of {totalPages} <span className="sp-trust">EXACT</span> ({totalCount} sessions <span className="sp-trust">EXACT</span>)
           </div>
           <div className="flex gap-2">
             <button
@@ -739,7 +585,8 @@ export default function ConsolePage() {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </div>}
+      </div></div>
+    </main>
   );
 }

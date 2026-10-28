@@ -1,124 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import packageInfo from "../../package.json";
+import { PlatformDownloads } from "./PlatformDownloads";
 
 export const metadata: Metadata = {
-  title: "Download FleetHUD — Native Installers & Binaries",
-  description:
-    "Download FleetHUD for Windows 10/11, macOS (Apple Silicon & Intel), Linux, and npm. Features silent system tray mode, zero black console windows, and autostart.",
-  alternates: {
-    canonical: "https://fleethud.vercel.app/downloads",
-  },
+  title: "Downloads — spawnt",
+  description: "Download the verified Windows or Linux release of spawnt.",
+  alternates: { canonical: "https://fleethud.vercel.app/downloads" },
 };
 
 export default function DownloadsPage() {
   return (
-    <div className="max-w-7xl mx-auto px-6 py-14 font-sans">
-      <div className="flex justify-between items-center pb-6 border-b border-border mb-10 flex-wrap gap-4">
+    <div className="sp-console-shell sp-downloads-page mx-auto max-w-7xl px-6 py-16 font-sans">
+      <header className="sp-downloads-header">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-green/15 border border-green/30 text-green font-mono text-xs mb-2">
-            <span>Production Release &bull; v1.4.1</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Download FleetHUD
-          </h1>
-          <p className="text-sm text-muted mt-1">
-            Native installers, background services, and CLI packages for Windows, macOS, and Linux
-          </p>
+          <h1>Download spawnt</h1>
+          <p>Verified local releases for Windows and Linux. Your agent logs stay on your machine.</p>
         </div>
-        <Link
-          href="/console"
-          className="px-4 py-2 border border-border rounded text-xs font-mono text-foreground hover:border-accent transition-colors"
-        >
-          Launch Console &rarr;
-        </Link>
-      </div>
+        <span className="sp-download-release">CURRENT RELEASE · v{packageInfo.version}</span>
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-14 font-mono">
-        {/* Windows Card */}
-        <div className="bg-card border-2 border-accent/40 rounded-xl p-6 flex flex-col justify-between shadow-lg shadow-accent/5">
-          <div>
-            <div className="text-xs text-accent uppercase tracking-wider mb-2 font-semibold">
-              [WINDOWS 10 / 11]
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Windows</h2>
-            <p className="text-xs text-muted leading-relaxed mb-6">
-              Standalone native <code className="text-foreground">Installer.exe</code> with System Tray daemon, autostart registry configuration, and zero black command prompt windows.
-            </p>
-          </div>
-          <div>
-            <a
-              href="/downloads/FleetHUD-Setup.exe"
-              download="FleetHUD-Setup.exe"
-              className="w-full block text-center py-3 px-4 bg-accent text-[#0d1117] font-bold rounded-lg text-xs hover:opacity-90 transition-opacity shadow-sm shadow-accent/20 mb-2"
-            >
-              Download Windows (.exe) &darr;
-            </a>
-            <div className="flex justify-between items-center text-[11px] text-muted mb-2 px-1">
-              <span>Standalone Installer (x64)</span>
-              <a href="/downloads/FleetHUD-v1.4.1-windows-x64.zip" download className="text-accent hover:underline">
-                Zip (.zip)
-              </a>
-            </div>
-            <div className="text-[11px] text-muted text-center pt-2 border-t border-border/60">
-              PowerShell 1-Liner: <code className="text-accent select-all">irm fleethud.vercel.app/win | iex</code>
-            </div>
-          </div>
-        </div>
+      <PlatformDownloads />
 
-        {/* macOS Card */}
-        <div className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="text-xs text-muted uppercase tracking-wider mb-2 font-semibold">
-              [MACOS 12+]
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Mac</h2>
-            <p className="text-xs text-muted leading-relaxed mb-6">
-              macOS builds for Apple Silicon and Intel are pending a working macOS build runner. No verified v1.4.1 macOS package is available yet.
-            </p>
-          </div>
-          <div>
-            <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              macOS packages pending
-            </div>
-            <div className="text-[11px] text-muted text-center">Native macOS packages pending</div>
-          </div>
+      <section className="sp-download-help" aria-label="Release verification">
+        <div>
+          <h2>Verify the release</h2>
+          <p>Release archives include a SHA-256 manifest. The Windows updater and Linux install script verify downloads before replacing an existing install.</p>
         </div>
-
-        {/* Linux Card */}
-        <div className="bg-card border border-border rounded-xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="text-xs text-muted uppercase tracking-wider mb-2 font-semibold">
-              [LINUX & WSL2]
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">FleetHUD for Linux</h2>
-            <p className="text-xs text-muted leading-relaxed mb-6">
-              CLI and local web daemon for Linux x86_64 and ARM64 (glibc 2.35+), including WSL2. Existing sessions and account pairing are preserved during updates.
-            </p>
-          </div>
-          <div>
-            <div className="bg-bg border border-border rounded-lg p-3 text-xs text-muted select-all mb-3 overflow-x-auto">
-              curl -fsSL https://fleethud.vercel.app/sh | bash
-            </div>
-            <div className="text-[11px] text-muted text-center">Verified tarball installation; .deb, RPM and AppImage packages are not published</div>
-          </div>
-        </div>
-      </div>
-
-      {/* CLI Quickstart */}
-      <div className="bg-card border border-border rounded-xl p-6 font-mono">
-        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-            Install Globally via npm
-          </h3>
-          <span className="text-xs text-green font-semibold">[CROSS-PLATFORM]</span>
-        </div>
-        <p className="text-xs text-muted mb-4">
-          The v1.4.1 npm package has not been published. Use the verified native installer or Linux installation command above.
-        </p>
-        <div className="bg-bg border border-border rounded-lg p-3.5 text-xs text-accent select-all">
-          Native downloads above include v1.4.1
-        </div>
-      </div>
+        <Link href="/docs#quickstart">Read installation guide <span aria-hidden="true">→</span></Link>
+      </section>
     </div>
   );
 }

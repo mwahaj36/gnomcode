@@ -2,7 +2,7 @@
 # FleetHUD Unix installer. Download and verify before replacing an existing install.
 set -euo pipefail
 
-VERSION="1.4.1"
+VERSION="1.5.0"
 BASE_URL="https://fleethud.vercel.app/downloads"
 INSTALL_DIR="${FLEETHUD_INSTALL_DIR:-${HOME}/.local/bin}"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -26,7 +26,7 @@ replacement=""
 trap 'rm -rf "${stage}"; if [ -n "${replacement}" ]; then rm -f "${replacement}"; fi' EXIT
 asset="fleethud-v${VERSION}-${OS}-${ARCH_TAG}.tar.gz"
 if ! curl --fail --show-error --silent --location "${BASE_URL}/${asset}" -o "${stage}/${asset}"; then
-  echo "No downloadable FleetHUD ${VERSION} package for ${OS}-${ARCH_TAG}. Your existing install was preserved." >&2
+  echo "No downloadable spawnt ${VERSION} package for ${OS}-${ARCH_TAG}. Your existing install was preserved." >&2
   exit 1
 fi
 curl --fail --show-error --silent --location "${BASE_URL}/SHA256SUMS-v${VERSION}.txt" -o "${stage}/SHA256SUMS"
@@ -50,5 +50,5 @@ replacement="$(mktemp "${INSTALL_DIR}/.fleethud-update.XXXXXX")"
 install -m 755 "${stage}/unpacked/fleethud" "${replacement}"
 mv -f "${replacement}" "${INSTALL_DIR}/fleethud"
 replacement=""
-printf 'FleetHUD %s installed to %s/fleethud.\n' "${VERSION}" "${INSTALL_DIR}"
+printf 'spawnt %s installed to %s/fleethud.\n' "${VERSION}" "${INSTALL_DIR}"
 printf 'User data and account pairing were preserved. Ensure %s is in PATH.\n' "${INSTALL_DIR}"

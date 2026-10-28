@@ -19,6 +19,25 @@ use tokio::task::JoinHandle;
 
 type HmacSha256 = Hmac<Sha256>;
 
+#[derive(Clone, Serialize)]
+pub(crate) struct CloudSyncStatus {
+    state: &'static str,
+    last_attempt_at: Option<String>,
+    last_success_at: Option<String>,
+    message: &'static str,
+}
+
+static SYNC_STATUS: Mutex<CloudSyncStatus> = Mutex::const_new(CloudSyncStatus {
+    state: "unknown",
+    last_attempt_at: None,
+    last_success_at: None,
+    message: "Cloud publication has not been checked in this daemon run.",
+});
+
+pub(crate) async fn cloud_sync_status() -> CloudSyncStatus {
+    SYNC_STATUS.lock().await.clone()
+}
+
 /// Synchronized hourly usage record for multi-device mirroring and team rollups.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HourlyUsageSync {
@@ -82,11 +101,12 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, fleethud_store::Error> 
     let active_count = sessions.iter().filter(|session| session.is_active).count();
     let count = sessions.len();
     Ok(json!({
+        "generated_at": Utc::now().to_rfc3339(),
         "timeline": today,
         "timelines": { "today": today, "7d": week, "30d": month, "all": all },
         "user_profile": db.get_user_profile()?,
         "sessions": sessions,
-        "quota": db.get_latest_quota_snapshots()?,
+        "quota": crate::api::quota_views(db.get_latest_quota_snapshots()?),
         "active_count": active_count,
         "total_count": count,
         "total_pages": 1,
@@ -109,8 +129,29 @@ pub fn spawn_cloud_sync(db: Arc<Mutex<Database>>) -> JoinHandle<()> {
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
         loop {
             ticker.tick().await;
-            if let Err(error) = push_snapshot(&client, &db).await {
-                tracing::warn!("cloud sync failed: {error}");
+            {
+                let mut status = SYNC_STATUS.lock().await;
+                status.state = "publishing";
+                status.last_attempt_at = Some(Utc::now().to_rfc3339());
+                status.message = "Publishing the latest metadata snapshot.";
+            }
+            let result = push_snapshot(&client, &db).await;
+            let mut status = SYNC_STATUS.lock().await;
+            match result {
+                Ok(true) => {
+                    status.state = "connected";
+                    status.last_success_at = Some(Utc::now().to_rfc3339());
+                    status.message = "Cloud snapshot published successfully.";
+                }
+                Ok(false) => {
+                    status.state = "unpaired";
+                    status.message = "Connect an account to publish desktop snapshots.";
+                }
+                Err(error) => {
+                    status.state = "error";
+                    status.message = "Cloud publication failed. Check connectivity and reconnect account pairing if needed.";
+                    tracing::warn!("cloud sync failed: {error}");
+                }
             }
         }
     })
@@ -119,7 +160,7 @@ pub fn spawn_cloud_sync(db: Arc<Mutex<Database>>) -> JoinHandle<()> {
 async fn push_snapshot(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let session_path = fleethud_platform::fleethud_home().join("session.json");
     let Some(CloudAuth {
         user_id,
@@ -128,7 +169,7 @@ async fn push_snapshot(
         public_key,
     }) = read_cloud_auth(client, &session_path).await?
     else {
-        return Ok(());
+        return Ok(false);
     };
 
     // Poll for pending remote relay commands from web console
@@ -227,7 +268,7 @@ async fn push_snapshot(
         .send()
         .await?
         .error_for_status()?;
-    Ok(())
+    Ok(true)
 }
 
 pub(crate) struct CloudAuth {
@@ -475,5 +516,11 @@ mod tests {
         assert!(!encoded.contains("rollout.jsonl"));
         assert!(!encoded.contains("paired_session"));
         assert_eq!(snapshot["active_count"], 1);
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(
+                snapshot["generated_at"].as_str().expect("source timestamp")
+            )
+            .is_ok()
+        );
     }
 }
