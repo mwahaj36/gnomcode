@@ -5,6 +5,7 @@ import MarketingFooter from "./MarketingFooter";
 
 export default function FooterWrapper() {
   const pathname = usePathname();
+  if (pathname === "/") return null;
   const isAppRoute = pathname.startsWith("/console") || pathname.startsWith("/settings") || pathname.startsWith("/auth");
 
   if (isAppRoute) {

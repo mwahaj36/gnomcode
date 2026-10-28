@@ -114,6 +114,12 @@ impl Default for UserProfile {
 /// Enriched session item for UI list with project name and clean state.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionListItem {
+    /// Measured session tokens with cache counted once.
+    #[serde(default)]
+    pub total_tokens: Option<u64>,
+    /// Latest context fill percentage, calculated in Rust.
+    #[serde(default)]
+    pub context_fill_pct: Option<f64>,
     /// Session ID.
     pub id: String,
     /// Agent name.
@@ -197,7 +203,53 @@ pub struct ProviderReport {
 
 /// Filtered timeline report with date spans and per-provider ROI comparison.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DailyUsage {
+    /// UTC date of measured usage.
+    pub date: String,
+    /// Tokens including cache exactly once.
+    pub total_tokens: u64,
+    /// Recorded API-equivalent cost.
+    pub cost_usd: f64,
+    /// Pricing provenance, unknown if any record is unpriced.
+    pub cost_basis: TrustLevel,
+    /// Measured invocations.
+    pub turns: u64,
+    /// Bar height relative to the busiest recorded day, computed in Rust.
+    pub chart_pct: f64,
+}
+
+/// Local-only project usage rollup; repository identity is not published to cloud.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ProjectUsage {
+    /// Stable canonical project ID.
+    pub id: String,
+    /// Local project display name.
+    pub name: String,
+    /// Measured tokens with cache counted once.
+    pub total_tokens: u64,
+    /// API-equivalent spend.
+    pub cost_usd: f64,
+    /// Pricing trust; unknown if any invocation is unpriced.
+    pub cost_basis: TrustLevel,
+    /// Number of sessions with recorded usage in the selected period.
+    pub sessions: u64,
+}
+
+/// Filtered timeline report with date spans and per-provider ROI comparison.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TimelineReport {
+    /// Aggregate pricing trust; unknown when any included invocation is unpriced.
+    #[serde(default = "unknown_cost_basis")]
+    pub cost_basis: TrustLevel,
+    /// Share of measured input tokens served from read cache.
+    #[serde(default)]
+    pub cache_share_pct: Option<f64>,
+    /// Daily UTC measurements for charts; missing dates are not fabricated zeros.
+    #[serde(default)]
+    pub daily: Vec<DailyUsage>,
+    /// Measured tokens with provider-specific cache accounting applied once.
+    #[serde(default)]
+    pub total_tokens: u64,
     /// Range label (e.g. "Today", "Last 7 Days", "All Time").
     pub range_label: String,
     /// Earliest event timestamp in range.
@@ -220,6 +272,10 @@ pub struct TimelineReport {
     pub providers: Vec<ProviderReport>,
     /// Total item count.
     pub items_count: usize,
+}
+
+fn unknown_cost_basis() -> TrustLevel {
+    TrustLevel::Unknown
 }
 
 /// Local database storage statistics.
@@ -1195,7 +1251,7 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if query execution fails.
     pub fn generate_usage_report(&self) -> Result<Vec<ReportRow>, Error> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare(obfstr::obfstr!(
             r#"
             SELECT
                 p.name AS project_name,
@@ -1210,10 +1266,11 @@ impl Database {
             FROM usage_record u
             JOIN session s ON u.session_id = s.id
             JOIN project p ON s.project_id = p.id
+            WHERE s.surface <> 'cloud'
             GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
-            "#,
-        )?;
+            "#
+        ))?;
 
         let rows = stmt.query_map([], |row| {
             let agent_str: String = row.get(1)?;
@@ -1313,7 +1370,12 @@ impl Database {
                 used_pct: row.get(3)?,
                 resets_at,
                 plan: row.get(5)?,
-                basis: TrustLevel::Exact,
+                basis: match row.get::<_, String>(6)?.as_str() {
+                    "exact" => TrustLevel::Exact,
+                    "estimated" => TrustLevel::Estimated,
+                    "api" => TrustLevel::Api,
+                    _ => TrustLevel::Unknown,
+                },
                 observed_at,
             })
         })?;
@@ -1733,7 +1795,9 @@ impl Database {
                 COALESCE(SUM(u.cost_usd), 0.0),
                 COALESCE(SUM(u.cache_read_tokens), 0),
                 COALESCE(
-                    (SELECT u2.context_tokens FROM usage_record u2 WHERE u2.session_id = s.id ORDER BY u2.rowid DESC LIMIT 1),
+                    -- Codex rows written before the adapter fix stored cumulative context here.
+                    (SELECT CASE WHEN s.agent = 'codex' THEN u2.input_tokens + u2.output_tokens ELSE u2.context_tokens END
+                     FROM usage_record u2 WHERE u2.session_id = s.id ORDER BY u2.rowid DESC LIMIT 1),
                     0
                 ),
                 COALESCE(
@@ -1742,7 +1806,9 @@ impl Database {
                 ),
                 s.title,
                 COUNT(u.dedup_key),
-                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END),
+                COALESCE(SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
+                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END), 0)
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -1798,6 +1864,17 @@ impl Database {
                 };
 
                 Ok(SessionListItem {
+                    total_tokens: if usage_count > 0 {
+                        Some(row.get::<_, i64>(17)?.max(0) as u64)
+                    } else {
+                        None
+                    },
+                    context_fill_pct: context_window
+                        .filter(|window| *window > 0)
+                        .filter(|_| usage_count > 0)
+                        .map(|window| {
+                            (context_tokens.max(0) as f64 / window as f64 * 100.0).clamp(0.0, 100.0)
+                        }),
                     id,
                     agent,
                     surface: surface.clone(),
@@ -1830,6 +1907,50 @@ impl Database {
             filtered.push(r?);
         }
         Ok((filtered, total_count.max(0) as usize))
+    }
+
+    /// Returns local project rollups using the same time bounds as the timeline report.
+    ///
+    /// # Errors
+    /// Returns an error if timeline or project query execution fails.
+    pub fn generate_project_report(
+        &self,
+        range: &str,
+        from: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Vec<ProjectUsage>, Error> {
+        let timeline = self.generate_usage_report_timeline(range, from, to)?;
+        if timeline.items_count == 0 {
+            return Ok(Vec::new());
+        }
+        let mut statement = self.conn.prepare(obfstr::obfstr!(r#"
+            SELECT p.id, p.name,
+                SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
+                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
+                SUM(u.cost_usd), COUNT(DISTINCT s.id), SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
+            FROM usage_record u JOIN session s ON s.id = u.session_id JOIN project p ON p.id = s.project_id
+            WHERE s.surface <> 'cloud' AND u.timestamp >= ?1 AND u.timestamp <= ?2
+            GROUP BY p.id ORDER BY SUM(u.cost_usd) DESC, p.id
+        "#))?;
+        let rows =
+            statement.query_map(params![timeline.earliest_at, timeline.latest_at], |row| {
+                let tokens: i64 = row.get(2)?;
+                let sessions: i64 = row.get(4)?;
+                let unpriced: i64 = row.get(5)?;
+                Ok(ProjectUsage {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    total_tokens: tokens.max(0) as u64,
+                    cost_usd: row.get(3)?,
+                    sessions: sessions.max(0) as u64,
+                    cost_basis: if unpriced > 0 {
+                        TrustLevel::Unknown
+                    } else {
+                        TrustLevel::Estimated
+                    },
+                })
+            })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
     }
 
     /// Generates timeline-filtered report grouped by provider (Anthropic, OpenAI, Google)
@@ -1892,7 +2013,7 @@ impl Database {
             }
         };
 
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare(obfstr::obfstr!(
             r#"
             SELECT
                 p.name AS project_name,
@@ -1909,12 +2030,12 @@ impl Database {
             FROM usage_record u
             JOIN session s ON u.session_id = s.id
             JOIN project p ON s.project_id = p.id
-            WHERE (?1 IS NULL OR u.timestamp >= ?1)
+            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR u.timestamp >= ?1)
               AND (?2 IS NULL OR u.timestamp <= ?2)
             GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
-            "#,
-        )?;
+            "#
+        ))?;
 
         let mut total_spend = 0.0;
         let mut total_savings = 0.0;
@@ -2074,7 +2195,62 @@ impl Database {
 
         let items_count = providers.iter().map(|p| p.models.len()).sum();
 
+        let mut daily_statement = self.conn.prepare(obfstr::obfstr!(r#"
+            SELECT substr(u.timestamp, 1, 10),
+                SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
+                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
+                SUM(u.cost_usd), COUNT(*),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
+            FROM usage_record u JOIN session s ON s.id = u.session_id
+            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR u.timestamp >= ?1) AND (?2 IS NULL OR u.timestamp <= ?2)
+            GROUP BY substr(u.timestamp, 1, 10) ORDER BY substr(u.timestamp, 1, 10)
+        "#))?;
+        let mut daily = daily_statement
+            .query_map(params![cutoff, to_ts], |row| {
+                let tokens: i64 = row.get(1)?;
+                let turns: i64 = row.get(3)?;
+                let unknown: i64 = row.get(4)?;
+                Ok(DailyUsage {
+                    date: row.get(0)?,
+                    total_tokens: tokens.max(0) as u64,
+                    cost_usd: row.get(2)?,
+                    turns: turns.max(0) as u64,
+                    cost_basis: if unknown > 0 {
+                        TrustLevel::Unknown
+                    } else {
+                        TrustLevel::Estimated
+                    },
+                    chart_pct: 0.0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let maximum = daily.iter().map(|day| day.total_tokens).max().unwrap_or(0);
+        let total_tokens = daily
+            .iter()
+            .fold(0u64, |sum, day| sum.saturating_add(day.total_tokens));
+        for day in &mut daily {
+            day.chart_pct = if maximum == 0 {
+                0.0
+            } else {
+                day.total_tokens as f64 / maximum as f64 * 100.0
+            };
+        }
+
         Ok(TimelineReport {
+            cost_basis: if daily
+                .iter()
+                .any(|day| day.cost_basis == TrustLevel::Unknown)
+            {
+                TrustLevel::Unknown
+            } else {
+                TrustLevel::Estimated
+            },
+            cache_share_pct: total_tokens
+                .checked_sub(total_out)
+                .filter(|input| *input > 0)
+                .map(|input| (total_read as f64 / input as f64 * 100.0).clamp(0.0, 100.0)),
+            daily,
+            total_tokens,
             range_label,
             earliest_at: global_earliest,
             latest_at: global_latest,
@@ -2209,6 +2385,21 @@ mod tests {
                 [],
             )
             .expect("legacy row");
+        db.conn.execute(
+            "INSERT INTO usage_record VALUES ('retired:usage','codex:retired',?1,'fixture-model',1000,100,0,0,0,0,1000,10000,1.0,0.0,'estimated','fixture')",
+            [now.to_rfc3339()],
+        ).expect("retired usage");
+        assert!(db.generate_usage_report().expect("report").is_empty());
+        let timeline = db
+            .generate_usage_report_timeline("all", None, None)
+            .expect("timeline");
+        assert!(timeline.daily.is_empty());
+        assert_eq!(timeline.total_tokens, 0);
+        assert!(
+            db.generate_project_report("all", None, None)
+                .expect("projects")
+                .is_empty()
+        );
         assert!(
             db.list_active_sessions(10)
                 .expect("CLI sessions")
@@ -2433,16 +2624,149 @@ mod tests {
         )
         .expect("second project");
         assert_eq!(db.generate_usage_report().expect("report").len(), 2);
+        let projects = db
+            .generate_project_report("all", None, None)
+            .expect("project rollups");
+        assert_eq!(projects.len(), 2);
+        assert_ne!(projects[0].id, projects[1].id);
+        assert_eq!(projects[0].total_tokens, 6_200);
+        assert_eq!(projects[0].sessions, 1);
+        db.conn
+            .execute("UPDATE usage_record SET cost_basis = 'unknown'", [])
+            .expect("unpriced usage");
+        assert_eq!(
+            db.generate_usage_report_timeline("all", None, None)
+                .expect("unpriced report")
+                .cost_basis,
+            TrustLevel::Unknown
+        );
 
         let latest_quota = db.get_latest_quota_snapshots().expect("latest quota");
         assert!(!latest_quota.is_empty());
         assert!(latest_quota.iter().any(|q| q.limit_id == "codex"));
+        db.conn
+            .execute("UPDATE quota_snapshot SET basis = 'estimated'", [])
+            .expect("set quota provenance");
+        assert_eq!(
+            db.get_latest_quota_snapshots().expect("estimated quota")[0].basis,
+            TrustLevel::Estimated
+        );
 
         let saved_cp = db
             .get_checkpoint("/path/to/log.jsonl")
             .expect("get checkpoint")
             .expect("checkpoint exists");
         assert_eq!(saved_cp.last_read_offset, 1234);
+    }
+
+    #[test]
+    fn codex_session_context_uses_latest_turn_for_previously_stored_rows() {
+        let mut db = Database::open_in_memory().expect("in-memory db");
+        let project = Project::from_origin(None, "/workspace/sample", None);
+        let session = Session {
+            id: "codex:synthetic".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::DesktopApp,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gpt-6-luna".to_owned()),
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+        let usage = UsageRecord {
+            dedup_key: "synthetic:1".to_owned(),
+            session_id: session.id.clone(),
+            timestamp: Utc::now(),
+            model: "gpt-6-luna".to_owned(),
+            input_tokens: 189_000,
+            output_tokens: 1_000,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 313_700_000,
+            context_window: Some(258_000),
+            cost_usd: 0.0,
+            cache_savings_usd: 0.0,
+            cost_basis: TrustLevel::Exact,
+            pricing_version: "test".to_owned(),
+        };
+        let checkpoint = SourceCheckpoint {
+            file_path: "/synthetic/rollout.jsonl".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "synthetic".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch(
+            std::slice::from_ref(&project),
+            std::slice::from_ref(&session),
+            std::slice::from_ref(&usage),
+            &[],
+            &[],
+            &checkpoint,
+        )
+        .expect("commit synthetic Codex usage");
+        db.conn
+            .execute("UPDATE usage_record SET cache_read_tokens = 100000", [])
+            .expect("cached Codex input");
+
+        let (sessions, count) = db
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("query Codex session");
+        assert_eq!(count, 1);
+        assert_eq!(sessions[0].context_tokens, 190_000);
+        assert_eq!(sessions[0].total_tokens, Some(190_000));
+        assert_eq!(sessions[0].context_window, Some(258_000));
+
+        // Every provider must use the latest context snapshot, even when it decreases.
+        for agent in [
+            AgentId::ClaudeCode,
+            AgentId::Codex,
+            AgentId::Antigravity,
+            AgentId::GeminiCli,
+            AgentId::Cline,
+            AgentId::Cursor,
+            AgentId::Aider,
+        ] {
+            let mut provider_session = session.clone();
+            provider_session.agent = agent;
+            provider_session.id = format!("{}:compaction", agent.as_str());
+            let mut before = usage.clone();
+            before.session_id = provider_session.id.clone();
+            before.dedup_key = format!("{}:before", provider_session.id);
+            before.context_tokens = 190_000;
+            let mut after = before.clone();
+            after.dedup_key = format!("{}:after", provider_session.id);
+            after.input_tokens = 19_000;
+            after.output_tokens = 1_000;
+            after.context_tokens = 20_000;
+            db.commit_batch(
+                std::slice::from_ref(&project),
+                &[provider_session.clone()],
+                &[before, after],
+                &[],
+                &[],
+                &checkpoint,
+            )
+            .expect("store provider context snapshots");
+            let (rows, _) = db
+                .list_sessions_paginated(None, None, 0, 100)
+                .expect("query snapshots");
+            let row = rows
+                .iter()
+                .find(|row| row.id == provider_session.id)
+                .expect("provider session");
+            assert_eq!(
+                row.context_tokens,
+                20_000,
+                "{} context must decrease",
+                agent.as_str()
+            );
+        }
     }
 
     #[test]
@@ -2552,12 +2876,20 @@ mod tests {
             .generate_usage_report_timeline("all", None, None)
             .expect("report all");
         assert_eq!(rep_all.total_cost_usd, 15.0);
+        assert_eq!(rep_all.daily.len(), 2);
+        assert_eq!(rep_all.total_tokens, 1_650);
+        assert_eq!(rep_all.cost_basis, TrustLevel::Estimated);
+        assert_eq!(rep_all.cache_share_pct, Some(0.0));
+        assert_eq!(rep_all.daily[0].total_tokens, 1_100);
+        assert_eq!(rep_all.daily[1].total_tokens, 550);
 
         // 2. "today" should include u_now (5.0) and exclude u_old
         let rep_today = db
             .generate_usage_report_timeline("today", None, None)
             .expect("report today");
         assert_eq!(rep_today.total_cost_usd, 5.0);
+        assert_eq!(rep_today.daily.len(), 1);
+        assert_eq!(rep_today.total_tokens, 550);
 
         // 3. "today" with explicit from_ts overriding cutoff to before u_old should return 15.0
         let explicit_from = (two_days_ago - chrono::Duration::hours(1)).to_rfc3339();

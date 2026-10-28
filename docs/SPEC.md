@@ -181,7 +181,7 @@ flowchart LR
 | `fleethud` | Rust single binary | Subcommands: `daemon`, `status`, `report`, `hook <event>`, `integrate <agent>`, `doctor`, `install`, `uninstall`, `open` |
 | daemon (`fleethud daemon`) | tokio + axum + rusqlite | Owns watchers, DB, API. Single instance via lockfile + port probe. |
 | Web dashboard | React + Vite + Tailwind, embedded via `rust-embed` | Served at `http://127.0.0.1:3333` |
-| Tray app | Tauri v2 | Thin client of the daemon API; spawns the daemon as a sidecar if absent; reuses the web bundle. |
+| Tray app | Rust tray controller (`crates/tray`) and platform scripts | Thin local client; opens the daemon-served console and invokes platform focus/notification behavior. The Tauri v2 shell remains a future migration, not the current shipped implementation. |
 
 **FleetHUD home:** `~/.fleethud/` on all OSes (override: `FLEETHUD_HOME`). Contains `fleethud.db`, `daemon.json` (port + token, user-only perms), `ipc.sock` (Unix), `config.toml`, `pricing.toml`, `license.json`, `bin/`, `logs/`.
 
@@ -222,7 +222,7 @@ pub trait SourceAdapter: Send {
 | Adapter | Dedup key | Gotchas |
 | :--- | :--- | :--- |
 | Claude Code | `message.id + requestId` | One message is written once per content block; resumed sessions copy history. `isSidechain` = subagent. |
-| Codex | `session_id + ordinal` | Use `last_token_usage` deltas, not cumulative totals. `rate_limits` = exact quota. |
+| Codex | `session_id + ordinal` | Use `last_token_usage` for per-turn usage and current context fill; never use rollout-cumulative `total_token_usage` for context fill, since compaction removes prior turns from the active context. `rate_limits` = exact quota. |
 | Antigravity | `conversation_id + step_index` | Model is tracked as a state variable updated by `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps (`Model Selection` -> e.g. `Claude Opus 5.5 (Medium)`, `Gemini 4 Argon (Medium)`). Subagents = `invoke_subagent` tool calls. Titles from `conversation_summaries.db` (read-only). |
 | Cline / Roo | `task_id + ts` | File is rewritten whole → re-read + diff, debounce 500 ms. |
 | Cursor | — | Open SQLite with `mode=ro&immutable=1` or copy first. |
@@ -260,7 +260,7 @@ pub trait SourceAdapter: Send {
 1. **Live Active Sessions:** agent, surface (`cli` / `ide` / `desktop_app`), project, model, live state (`thinking` / `tool` / `awaiting_approval` / `idle` / `error`), and redacted one-line current tool action.
 2. **Per-Model Quota Pools & Reset Timers:** 5-hour and weekly windows per `(provider, limit_id)`, burn velocity, and lockout ETA.
 3. **Side-by-Side Cost & Quota + Subscription ROI ("Plan Value"):** always shows **both** API-Equivalent USD value (`$X`, plus cache savings) and Plan Quota `%` side-by-side. Users select their active subscription plans and monthly prices in Settings (e.g., Claude Max `$100`, ChatGPT Plus `$20`, Antigravity) to compute live **Subscription ROI** ($\sum \text{API-equivalent compute} \div \text{plan price}$).
-4. **Context Window Fill Level:** current turn tokens vs. model maximum context window (`model_context_window`), with bloat warning at `75%` (configurable).
+4. **Context Window Fill Level:** latest request context snapshot vs. model maximum context window (`model_context_window`), with bloat warning at `75%` (configurable). This applies to every provider: a smaller snapshot after compaction replaces the previous value; session lifetime token totals must never determine context fill. The displayed value remains the last observed request until the provider emits another usage snapshot.
 5. **Session & Subagent Hierarchy:** parent session → spawned subagents/sidechains, turn counts, and duration.
 
 ### 3.7 Session state machine
@@ -330,7 +330,9 @@ Every quota record and UI meter is keyed by `(provider, limit_id, window)`:
 - Bind **127.0.0.1 only**. Random bearer token in `daemon.json` (0600 / user-only ACL).
 - Validate `Host` and `Origin` on every request (DNS-rebinding defense).
 - IPC: `~/.fleethud/ipc.sock` (Unix), `\\.\pipe\fleethud-<user>` (Windows).
-- Endpoints (v1): `GET /v1/sessions?active=1`, `GET /v1/usage?group=project|agent|model&from&to`, `GET /v1/quota`, `WS /v1/stream`, `POST /v1/sessions/:id/focus`, `GET|POST /v1/rules`, `GET /v1/health`.
+- Current HTTP routes: `GET /api/v1/sessions?page=&limit=&agent=&status=`, `GET /api/v1/report?range=&from=&to=`, `GET /api/v1/projects?range=&from=&to=`, `GET /api/v1/quota`, `POST /api/v1/reconcile`, `GET /api/v1/sync/status`, `POST /api/v1/sessions/:id/focus`, `GET|POST /api/v1/rules`, and `GET /health`. Local clients poll these routes; a WebSocket stream remains planned.
+- Timeline reports include Rust-produced UTC daily token/cost measurements and chart proportions. Session and project totals count provider cache tokens once. Project rollups and repository identity remain local; cloud sources without project rollups show an explicit unavailable state.
+- Cloud snapshots carry `generated_at` from the daemon. Cloud settings-row edits must not make old observations appear fresh. Authenticated local sync status exposes the last publication attempt/success and a credential-free failure message. Provider quota provenance is retained, and a past reset timestamp does not prove a new quota observation.
 
 ### 3.12 Cross-platform matrix
 
@@ -522,7 +524,17 @@ presence polling, usage-file import, `pair` command or `/pair` screen is shipped
 Older desktop account sign-in and opt-in desktop summary sync remain available.
 See `docs/CLOUD_SESSIONS.md` for upgrade and optional backend cleanup instructions.
 
+The signed-in and daemon-served consoles use the shared spawnt marketing visual
+system: sans-led page hierarchy, open sections with hairline dividers, square
+controls, plain status labels, and the same theme tokens. The native console
+window uses the same large heading, brand mark, status line, and divider while
+keeping its actions and data local. Authentication, data sources, and refresh
+behavior remain independent between the cloud and local consoles.
+
 ### 3.16 User Profile, Settings & Notifications
+
+Signed-in web Settings edits account-scoped cloud preferences only; the authenticated local console configures the desktop. Cloud save success requires a successful persistence response. Web preferences do not imply that a paired desktop has applied a local setting.
+
 
 #### A. Six Settings Sections
 1. **Profile & Account:** avatar/PFP upload (stored locally and synced to Supabase Storage when signed in), display name, username, email change, password change, connected OAuth accounts (GitHub, Google), and account deletion.
@@ -604,11 +616,11 @@ flowchart LR
 
 **Release:** `v0.2.0`.
 
-### M3 — Tray app on all OSes (weeks 5–8) [x]
+### M3 — Tray app on all OSes (weeks 5–8) [in progress]
 
 | Deliverable | Exit criteria | Status |
 | :--- | :--- | :--- |
-| Tauri v2 tray: status pill (active count, awaiting-approval badge, burn), popover/mini-window | Status badges without emojis ([RUN], [WAIT], [IDLE]) | Yes |
+| Native Rust tray controller and platform tray scripts: status (active count, awaiting-approval badge), open local console | Plain RUN, WAIT, and IDLE labels; shared spawnt colors and square count badge in the current Windows script. Tauri mini-window migration remains future work. | Partial |
 | Notifications: approval needed, quota reset, context bloat | Formatted notification payloads fired cleanly | Yes |
 | Bring-to-front (per §3.13) | Cross-platform focus dispatch for PID on Win/macOS/Linux | Yes |
 
@@ -657,6 +669,12 @@ All Tier A + B adapters stable, 0% parse errors on golden fixtures, zero PII lea
 The private repo's CI publishes to the public repos with a fine-grained token that can only write to those repos.
 
 ### 6.2 Artifacts per release
+
+Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; planned macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app (build deferred by the user after account billing blocked CI). Available Windows/Linux artifacts use the embedded local console, preserve `.fleethud` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
+
+
+Current v1.5 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; planned macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app (build deferred by the user after account billing blocked CI). Available Windows/Linux artifacts use the embedded local console, preserve `.fleethud` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
+
 
 | Artifact | Platforms / targets | Built by | Published to |
 | :--- | :--- | :--- | :--- |
@@ -813,6 +831,10 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0001](./adr/0001-rust-core.md) | Rust for core, CLI, daemon and hooks | Accepted |
 | [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
+| [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
+| [0006](./adr/0006-shared-spawnt-console-ui.md) | Shared token source and matched local/cloud presentation; preserve separate data adapters and existing native runtime pending a separate migration | Accepted |
+| [0007](./adr/0007-shared-console-renderers.md) | Shared console presenters and navigation layout, Rust daily measurements, source-generated freshness and authenticated sync status | Accepted |
+| [0008](./adr/0008-platform-release-fallbacks.md) | Versioned native archives and browser-console launchers; retain existing Windows tray and unsigned cross-platform fallbacks | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

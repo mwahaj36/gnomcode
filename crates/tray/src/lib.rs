@@ -35,13 +35,13 @@ pub struct TrayStatus {
 pub fn format_tray_tooltip(status: &TrayStatus) -> String {
     if status.awaiting_approval_count > 0 {
         format!(
-            "FleetHUD: {} active | [WAIT] {} awaiting approval",
+            "spawnt · {} active EXACT · {} awaiting approval EXACT",
             status.active_count, status.awaiting_approval_count
         )
     } else if status.active_count > 0 {
-        format!("FleetHUD: [RUN] {} active sessions", status.active_count)
+        format!("spawnt · {} active sessions EXACT", status.active_count)
     } else {
-        "FleetHUD: [IDLE] Ready".to_owned()
+        "spawnt · IDLE".to_owned()
     }
 }
 
@@ -83,13 +83,13 @@ mod tests {
     use super::{TrayStatus, format_tray_tooltip};
 
     #[test]
-    fn format_tray_tooltip_displays_badges_without_emojis() {
+    fn format_tray_tooltip_uses_plain_branded_status_and_trust_labels() {
         let idle = TrayStatus {
             active_count: 0,
             awaiting_approval_count: 0,
             tooltip: String::new(),
         };
-        assert_eq!(format_tray_tooltip(&idle), "FleetHUD: [IDLE] Ready");
+        assert_eq!(format_tray_tooltip(&idle), "spawnt · IDLE");
 
         let running = TrayStatus {
             active_count: 3,
@@ -98,7 +98,7 @@ mod tests {
         };
         assert_eq!(
             format_tray_tooltip(&running),
-            "FleetHUD: [RUN] 3 active sessions"
+            "spawnt · 3 active sessions EXACT"
         );
 
         let waiting = TrayStatus {
@@ -108,7 +108,7 @@ mod tests {
         };
         assert_eq!(
             format_tray_tooltip(&waiting),
-            "FleetHUD: 2 active | [WAIT] 1 awaiting approval"
+            "spawnt · 2 active EXACT · 1 awaiting approval EXACT"
         );
     }
 }

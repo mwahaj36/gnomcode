@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./spawnt-console.css";
 import Navbar from "../components/Navbar";
 import FooterWrapper from "../components/FooterWrapper";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://fleethud.vercel.app"),
   title: {
-    default: "FleetHUD — Mission Control for AI Coding Agents",
-    template: "%s | FleetHUD",
+    default: "spawnt — Mission Control for AI Coding Agents",
+    template: "%s | spawnt",
   },
   description:
     "Live mission control, token cost attribution, per-model quota pools, and flight recorder for Claude Code, OpenAI Codex, and Google Antigravity across Windows, macOS, and Linux.",
@@ -21,9 +22,9 @@ export const metadata: Metadata = {
     "AI developer tooling",
     "Local agent flight recorder",
   ],
-  authors: [{ name: "FleetHUD Team" }],
-  creator: "FleetHUD",
-  publisher: "FleetHUD",
+  authors: [{ name: "spawnt Team" }],
+  creator: "spawnt",
+  publisher: "spawnt",
   robots: {
     index: true,
     follow: true,
@@ -39,27 +40,22 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://fleethud.vercel.app",
-    title: "FleetHUD — Live Mission Control for AI Coding Agents",
+    title: "spawnt — Live Mission Control for AI Coding Agents",
     description:
       "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with zero content storage.",
-    siteName: "FleetHUD",
+    siteName: "spawnt",
   },
   twitter: {
     card: "summary_large_image",
-    title: "FleetHUD — Live Mission Control for AI Coding Agents",
+    title: "spawnt — Live Mission Control for AI Coding Agents",
     description:
       "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with zero content storage.",
-    creator: "@fleethud",
   },
   alternates: {
     canonical: "https://fleethud.vercel.app",
   },
   icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon.svg", type: "image/svg+xml" },
-    ],
-    apple: "/fleethud.svg",
+    icon: "/spawnt-mark.svg",
   },
 };
 
@@ -68,7 +64,7 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "SoftwareApplication",
-      name: "FleetHUD",
+      name: "spawnt",
       operatingSystem: "Windows, macOS, Linux",
       applicationCategory: "DeveloperApplication",
       offers: {
@@ -81,7 +77,7 @@ const jsonLd = {
     },
     {
       "@type": "Organization",
-      name: "FleetHUD",
+      name: "spawnt",
       url: "https://fleethud.vercel.app",
     },
     {
@@ -89,18 +85,18 @@ const jsonLd = {
       mainEntity: [
         {
           "@type": "Question",
-          name: "Does FleetHUD store my source code or prompt contents?",
+          name: "Does spawnt store my source code or prompt contents?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "No. FleetHUD enforces a non-negotiable invariant: zero content storage. Prompts, code, and tool outputs never touch disk or network.",
+            text: "No. spawnt enforces a non-negotiable invariant: zero content storage. Prompts, code, and tool outputs never touch disk or network.",
           },
         },
         {
           "@type": "Question",
-          name: "Which AI coding agents does FleetHUD support?",
+          name: "Which AI coding agents does spawnt support?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "FleetHUD supports Claude Code, OpenAI Codex (CLI & Desktop App), Google Antigravity (IDE & Autonomous Agent), and Google Gemini CLI.",
+            text: "spawnt supports Claude Code, OpenAI Codex (CLI & Desktop App), Google Antigravity (IDE & Autonomous Agent), and Google Gemini CLI.",
           },
         },
       ],
@@ -116,12 +112,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('spawnt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(_){}})();` }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="bg-bg text-[#c9d1d9] antialiased min-h-screen flex flex-col font-sans">
+      <body className="bg-bg text-[var(--sp-text)] antialiased min-h-screen flex flex-col font-sans">
         <Navbar />
         <main className="flex-1">{children}</main>
         <FooterWrapper />
