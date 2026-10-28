@@ -42,19 +42,20 @@ public class Win32 {
 }
 
 public class DarkMenuColorTable : ProfessionalColorTable {
-    public override Color MenuBorder { get { return Color.FromArgb(56, 56, 62); } }
+    public static bool Light;
+    public override Color MenuBorder { get { return Light ? Color.FromArgb(190, 203, 216) : Color.FromArgb(56, 56, 62); } }
     public override Color MenuItemBorder { get { return Color.Transparent; } }
-    public override Color MenuItemSelected { get { return Color.FromArgb(20, 20, 22); } }
-    public override Color ToolStripDropDownBackground { get { return Color.FromArgb(13, 13, 15); } }
-    public override Color ImageMarginGradientBegin { get { return Color.FromArgb(13, 13, 15); } }
-    public override Color ImageMarginGradientMiddle { get { return Color.FromArgb(13, 13, 15); } }
-    public override Color ImageMarginGradientEnd { get { return Color.FromArgb(13, 13, 15); } }
-    public override Color SeparatorDark { get { return Color.FromArgb(36, 36, 40); } }
-    public override Color SeparatorLight { get { return Color.FromArgb(13, 13, 15); } }
-    public override Color MenuItemSelectedGradientBegin { get { return Color.FromArgb(20, 20, 22); } }
-    public override Color MenuItemSelectedGradientEnd { get { return Color.FromArgb(20, 20, 22); } }
-    public override Color MenuItemPressedGradientBegin { get { return Color.FromArgb(28, 28, 32); } }
-    public override Color MenuItemPressedGradientEnd { get { return Color.FromArgb(28, 28, 32); } }
+    public override Color MenuItemSelected { get { return Light ? Color.FromArgb(237, 240, 243) : Color.FromArgb(20, 20, 22); } }
+    public override Color ToolStripDropDownBackground { get { return Light ? Color.FromArgb(246, 247, 248) : Color.FromArgb(13, 13, 15); } }
+    public override Color ImageMarginGradientBegin { get { return Light ? Color.FromArgb(246, 247, 248) : Color.FromArgb(13, 13, 15); } }
+    public override Color ImageMarginGradientMiddle { get { return Light ? Color.FromArgb(246, 247, 248) : Color.FromArgb(13, 13, 15); } }
+    public override Color ImageMarginGradientEnd { get { return Light ? Color.FromArgb(246, 247, 248) : Color.FromArgb(13, 13, 15); } }
+    public override Color SeparatorDark { get { return Light ? Color.FromArgb(217, 223, 230) : Color.FromArgb(36, 36, 40); } }
+    public override Color SeparatorLight { get { return Light ? Color.FromArgb(246, 247, 248) : Color.FromArgb(13, 13, 15); } }
+    public override Color MenuItemSelectedGradientBegin { get { return Light ? Color.FromArgb(237, 240, 243) : Color.FromArgb(20, 20, 22); } }
+    public override Color MenuItemSelectedGradientEnd { get { return Light ? Color.FromArgb(237, 240, 243) : Color.FromArgb(20, 20, 22); } }
+    public override Color MenuItemPressedGradientBegin { get { return Light ? Color.FromArgb(237, 240, 243) : Color.FromArgb(28, 28, 32); } }
+    public override Color MenuItemPressedGradientEnd { get { return Light ? Color.FromArgb(237, 240, 243) : Color.FromArgb(28, 28, 32); } }
 }
 "@
 
@@ -206,6 +207,16 @@ $contextMenu.BackColor = [System.Drawing.Color]::FromArgb(13, 13, 15)
 $contextMenu.ForeColor = [System.Drawing.Color]::White
 $contextMenu.Font = New-Object System.Drawing.Font("Segoe UI", 9.0)
 $contextMenu.Padding = New-Object System.Windows.Forms.Padding(2, 4, 2, 4)
+
+# Follow the device appearance each time the menu opens, including changes while running.
+$contextMenu.Add_Opening({
+    $light = $false
+    try { $light = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize').AppsUseLightTheme -eq 1 } catch {}
+    [DarkMenuColorTable]::Light = $light
+    $contextMenu.BackColor = if ($light) { [Drawing.Color]::FromArgb(246,247,248) } else { [Drawing.Color]::FromArgb(13,13,15) }
+    $contextMenu.ForeColor = if ($light) { [Drawing.Color]::FromArgb(12,17,25) } else { [Drawing.Color]::FromArgb(246,247,248) }
+    foreach ($item in $contextMenu.Items) { $item.ForeColor = $contextMenu.ForeColor }
+})
 
 # 1. Open Console
 $openItem = $contextMenu.Items.Add("Open spawnt")

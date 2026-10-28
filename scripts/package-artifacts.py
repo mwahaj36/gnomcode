@@ -6,6 +6,8 @@ import shutil
 import tarfile
 import tomllib
 import zipfile
+import plistlib
+import tempfile
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
@@ -14,6 +16,8 @@ parser.add_argument('--windows-exe', type=Path)
 parser.add_argument('--windows-setup', type=Path)
 parser.add_argument('--linux-x86-64', type=Path)
 parser.add_argument('--linux-aarch64', type=Path)
+parser.add_argument('--darwin-x86-64', type=Path)
+parser.add_argument('--darwin-aarch64', type=Path)
 args = parser.parse_args()
 version = tomllib.loads((root / 'Cargo.toml').read_text())['workspace']['package']['version']
 out = root / 'web/public/downloads'
@@ -39,21 +43,58 @@ if args.windows_exe:
         for name in ('fleethud.ico', 'tray.ps1', 'run-tray.vbs', 'open-console.vbs', 'open-dashboard.vbs'):
             bundle.write(root / 'scripts' / name, name)
     assets.append(archive)
-for arch, source in [('x86_64', args.linux_x86_64), ('aarch64', args.linux_aarch64)]:
+for os_name, arch, source in [
+    ('linux', 'x86_64', args.linux_x86_64), ('linux', 'aarch64', args.linux_aarch64),
+    ('darwin', 'x86_64', args.darwin_x86_64), ('darwin', 'aarch64', args.darwin_aarch64),
+]:
     if source is None:
         continue
     header = source.read_bytes()[:20]
-    machine = 62 if arch == 'x86_64' else 183
-    if header[:4] != b'\x7fELF' or int.from_bytes(header[18:20], 'little') != machine:
-        raise SystemExit(f'Not a matching Linux {arch} executable: {source}')
-    archive = out / f'fleethud-v{version}-linux-{arch}.tar.gz'
-    with tarfile.open(archive, 'w:gz') as bundle:
-        bundle.add(source, arcname='fleethud')
-        bundle.add(root / 'LICENSE', arcname='LICENSE')
-        bundle.add(notices, arcname='THIRD_PARTY_NOTICES.html')
+    if os_name == 'linux':
+        valid = header[:4] == b'\x7fELF' and int.from_bytes(header[18:20], 'little') == (62 if arch == 'x86_64' else 183)
+    else:
+        valid = header[:4] == b'\xcf\xfa\xed\xfe' and int.from_bytes(header[4:8], 'little') == (0x1000007 if arch == 'x86_64' else 0x100000c)
+    if not valid:
+        raise SystemExit(f'Not a matching {os_name} {arch} executable: {source}')
+    archive = out / f'fleethud-v{version}-{os_name}-{arch}.tar.gz'
+    with tempfile.TemporaryDirectory(prefix='spawnt-package-') as temp:
+        stage = Path(temp)
+        shutil.copyfile(source, stage / 'fleethud')
+        (stage / 'fleethud').chmod(0o755)
+        shutil.copyfile(root / 'LICENSE', stage / 'LICENSE')
+        shutil.copyfile(notices, stage / 'THIRD_PARTY_NOTICES.html')
+        shutil.copytree(root / 'web/public/fonts', stage / 'fonts')
+        shutil.copyfile(root / 'web/public/icons/spawnt-256.png', stage / 'spawnt.png')
+        launcher = stage / 'Open spawnt.command'
+        launcher.write_text('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./fleethud console\n')
+        launcher.chmod(0o755)
+        if os_name == 'darwin':
+            contents = stage / 'spawnt.app/Contents'
+            (contents / 'MacOS').mkdir(parents=True)
+            (contents / 'Resources').mkdir()
+            shutil.copyfile(stage / 'fleethud', contents / 'MacOS/fleethud')
+            (contents / 'MacOS/fleethud').chmod(0o755)
+            entry = contents / 'MacOS/spawnt'
+            entry.write_text('#!/bin/sh\nexec "$(dirname "$0")/fleethud" console\n')
+            entry.chmod(0o755)
+            shutil.copyfile(root / 'web/public/icons/spawnt.icns', contents / 'Resources/spawnt.icns')
+            (contents / 'Info.plist').write_bytes(plistlib.dumps({
+                'CFBundleName':'spawnt', 'CFBundleDisplayName':'spawnt', 'CFBundleIdentifier':'app.spawnt.console',
+                'CFBundleExecutable':'spawnt', 'CFBundlePackageType':'APPL', 'CFBundleIconFile':'spawnt.icns',
+                'CFBundleShortVersionString':version, 'CFBundleVersion':version, 'LSMinimumSystemVersion':'12.0',
+            }))
+        def archive_mode(info):
+            if info.isfile():
+                info.mode = 0o755 if info.name.endswith(('/MacOS/spawnt', '/fleethud', '.command')) or info.name == 'fleethud' else 0o644
+            return info
+        with tarfile.open(archive, 'w:gz') as bundle:
+            for entry in sorted(stage.iterdir()):
+                bundle.add(entry, arcname=entry.name, filter=archive_mode)
     assets.append(archive)
 if not assets:
     raise SystemExit('No built binaries supplied')
+# Preserve checksums from other targets built in the same release.
+assets = list({path.name: path for path in [*assets, *out.glob(f'fleethud-v{version}-*.tar.gz'), *out.glob(f'FleetHUD-v{version}-*.zip')]}.values())
 manifest = ''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in sorted(assets))
 (out / f'SHA256SUMS-v{version}.txt').write_text(manifest)
 (out / 'SHA256SUMS').write_text(manifest)

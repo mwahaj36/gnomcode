@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
 export const metadata: Metadata = {
@@ -16,7 +17,7 @@ export default function DownloadsPage() {
           <h1>Download spawnt</h1>
           <p>Verified local releases for Windows and Linux. Your agent logs stay on your machine.</p>
         </div>
-        <span className="sp-download-release">CURRENT RELEASE · v1.3.0</span>
+        <span className="sp-download-release">CURRENT RELEASE · v{packageInfo.version}</span>
       </header>
 
       <PlatformDownloads />

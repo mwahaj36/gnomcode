@@ -684,6 +684,12 @@ The private repo's CI publishes to the public repos with a fine-grained token th
 
 ### 6.2 Artifacts per release
 
+Current v1.4 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app. All use the embedded local console, preserve `.fleethud` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
+
+
+Current v1.4 delivery follows ADR 0007: Windows x64 setup/archive and script tray; Linux glibc x86_64/ARM64 archives; macOS Intel/Apple Silicon archives with an unsigned browser-console launcher app. All use the embedded local console, preserve `.fleethud` user data on upgrade, and include license notices. Unix installers do not enable autostart or require root. The matrix below is the future distribution target, not a claim that Tauri, notarization, package registries or public release repositories are operational.
+
+
 | Artifact | Platforms / targets | Built by | Published to |
 | :--- | :--- | :--- | :--- |
 | `fleethud` CLI binary (`.tar.gz` / `.zip`) | `x86_64/aarch64-pc-windows-msvc`, `x86_64/aarch64-apple-darwin`, `x86_64/aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` | GitHub Actions matrix (private repo) | `fleethud-releases` GitHub Releases, plus a Cloudflare R2 mirror |
@@ -842,6 +848,7 @@ Tauri needs `webkit2gtk-4.1` and `libayatana-appindicator3`. The `.deb`/`.rpm` p
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
 | [0005](./adr/0005-shared-spawnt-console-ui.md) | Shared token source and matched local/cloud presentation; preserve separate data adapters and existing native runtime pending a separate migration | Accepted |
 | [0006](./adr/0006-shared-console-renderers.md) | Shared console presenters and navigation layout, Rust daily measurements, source-generated freshness and authenticated sync status | Accepted |
+| [0007](./adr/0007-platform-release-fallbacks.md) | Versioned native archives and browser-console launchers; retain existing Windows tray and unsigned cross-platform fallbacks | Accepted |
 
 ## 10. Open questions
 
