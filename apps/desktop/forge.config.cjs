@@ -16,6 +16,7 @@ module.exports = {
       path.join(__dirname, 'staging', 'ELECTRON_LICENSE.txt'),
       path.join(__dirname, 'staging', 'CHROMIUM_LICENSES.html'),
       path.join(__dirname, '../../scripts/spawnt-tray.ico'),
+      path.join(__dirname, '../../scripts/tray-badges'),
       path.join(__dirname, '../../web/public/icons/spawnt-64.png'),
     ],
     ignore: file => Boolean(file && file !== '/package.json' && file !== '/dist' && !file.startsWith('/dist/') && file !== '/node_modules' && !file.startsWith('/node_modules/')),

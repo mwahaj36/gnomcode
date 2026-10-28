@@ -34,6 +34,14 @@ test('tray status shows daemon-provided ongoing counts and handles malformed dat
   }
 });
 
+test('tray count selects a numbered icon only for ongoing sessions', () => {
+  const { trayBadgeName } = require('../dist/security.js');
+  assert.equal(trayBadgeName({ ongoing_count: 0 }), 'spawnt-tray.ico');
+  assert.equal(trayBadgeName({ ongoing_count: 3 }), 'spawnt-tray-3.png');
+  assert.equal(trayBadgeName({ ongoing_count: 27 }), 'spawnt-tray-9plus.png');
+  assert.equal(trayBadgeName({ ongoing_count: '3' }), 'spawnt-tray.ico');
+});
+
 test('renderer requests are limited to local daemon resources and local generated blobs', () => {
   const { isAllowedResource } = require('../dist/security.js');
   assert.equal(isAllowedResource('http://127.0.0.1:41738/spawnt-tokens.css', 41738), true);

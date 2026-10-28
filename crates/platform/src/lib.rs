@@ -632,65 +632,35 @@ mod focus_target_tests {
 /// Brings the target project to the foreground in VS Code / Cursor / Windsurf (`SPEC §3.13`).
 #[must_use]
 pub fn focus_project_in_editor(root_path: &str) -> bool {
-    let _ = std::process::Command::new("code")
+    std::process::Command::new("code")
         .args(["-r", root_path])
-        .spawn();
-    true
+        .spawn()
+        .is_ok()
 }
 
-/// Spawns a fresh agent session in an interactive terminal window across platforms (`SPEC §3.14.1`).
-/// For CLI agents (`claude-code`, `codex`, `gemini-cli`), launches an interactive terminal pane in `cwd`.
-/// For IDE agents (`antigravity`, `cursor`, `cline`), focuses the workspace project in the editor.
+/// Starts a CLI agent through the independent PTY owner without shell interpolation (`SPEC §3.14.1`).
+/// IDE agents need a user-operated editor session and return false.
 #[must_use]
 pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
     let clean_agent = match agent {
         "claude" | "claude-code" => "claude",
         "codex" => "codex",
         "gemini" | "gemini-cli" => "gemini",
-        "antigravity" | "cursor" | "cline" | "aider" => {
-            return focus_project_in_editor(cwd);
-        }
         _ => return false,
     };
-
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let mut command = std::process::Command::new(exe);
+    command
+        .args(["launch", clean_agent, "--repo", cwd])
+        .current_dir(cwd);
     #[cfg(target_os = "windows")]
     {
-        let escaped_cwd = cwd.replace('\"', "\\\"");
-        let cmd_line = format!("cd /d \"{escaped_cwd}\" && {clean_agent}");
-        let _ = std::process::Command::new("cmd")
-            .args(["/c", "start", "Spawnt Relay", "cmd.exe", "/k", &cmd_line])
-            .spawn();
-        true
+        use std::os::windows::process::CommandExt as _;
+        command.creation_flags(0x0800_0000);
     }
-    #[cfg(target_os = "macos")]
-    {
-        let script = format!(
-            "tell application \"Terminal\" to do script \"cd \\\"{}\\\" && {}\"",
-            cwd.replace('\"', "\\\""),
-            clean_agent
-        );
-        let _ = std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .spawn();
-        true
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let script = format!(
-            "cd \"{}\" && {}; exec bash",
-            cwd.replace('\"', "\\\""),
-            clean_agent
-        );
-        let _ = std::process::Command::new("x-terminal-emulator")
-            .args(["-e", "bash", "-c", &script])
-            .spawn();
-        true
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        let _ = (cwd, clean_agent);
-        false
-    }
+    command.status().is_ok_and(|status| status.success())
 }
 
 /// Dispatches a native desktop notification across Windows, macOS, and Linux (`SPEC §3.10`).
