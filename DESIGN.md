@@ -69,6 +69,9 @@ The landing, shared site shell, pricing, platform-selectable downloads, redesign
 
 ## Landing console tour
 
+Overview is a compact marketing summary: three KPIs, a small seven-day chart and three short activity rows. Full daily grids and session detail tables belong in the Usage and Sessions tabs. Do not embed a full-height dashboard in the overview preview or clip its content to force a viewport fit.
+
+
 - Keep overview KPI labels separate from values and trust markers, with shared alignment across all three metrics.
 - Use consistent grid tracks for every row in a tour table so agent, state, value, and trust columns remain aligned. On narrow screens, hide the value column uniformly rather than allowing content-driven track widths.
 
