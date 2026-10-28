@@ -173,6 +173,9 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/routing/policy",
             get(routing_policy_get_handler).post(routing_policy_post_handler),
         )
+        .route("/api/v1/remote/pairing", get(remote_pairing_handler))
+        .route("/api/v1/remote/status", get(remote_status_handler))
+        .route("/api/v1/remote/revoke", post(remote_revoke_handler))
         .with_state(state)
 }
 
@@ -1319,6 +1322,67 @@ async fn routing_policy_post_handler(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(json!({ "ok": true, "policy": policy.as_str() })))
+}
+
+async fn remote_pairing_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+
+    let mut room_bytes = [0u8; 16];
+    let _ = getrandom::fill(&mut room_bytes);
+    let room_id = format!(
+        "room-{}",
+        room_bytes
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
+
+    let mut pubkey_bytes = [0u8; 32];
+    let _ = getrandom::fill(&mut pubkey_bytes);
+    let public_key = pubkey_bytes
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+
+    let verify_code = spawnt_core::RemotePairingSession::derive_verify_code(&pubkey_bytes);
+    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(5);
+
+    let session = spawnt_core::RemotePairingSession {
+        room_id,
+        public_key,
+        verify_code,
+        expires_at,
+    };
+
+    Ok(Json(session))
+}
+
+async fn remote_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(json!({
+        "enabled": true,
+        "paired": false,
+        "relay_url": "wss://relay.spawnt.internal",
+        "entitled": true
+    })))
+}
+
+async fn remote_revoke_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(json!({
+        "ok": true,
+        "revoked": true,
+        "status": "disconnected"
+    })))
 }
 
 fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
@@ -2870,5 +2934,52 @@ mod tests {
             .expect("request");
         let res_bad = app.oneshot(req_bad).await.expect("res");
         assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn remote_pairing_status_and_revoke_endpoints() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "remote-token".to_owned(),
+            orchestrator: None,
+        });
+
+        // 1. GET /api/v1/remote/pairing
+        let req_pair = Request::builder()
+            .uri("/api/v1/remote/pairing")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer remote-token")
+            .body(Body::empty())
+            .expect("request");
+        let res_pair = app.clone().oneshot(req_pair).await.expect("res");
+        assert_eq!(res_pair.status(), StatusCode::OK);
+        let body_pair = axum::body::to_bytes(res_pair.into_body(), 16384)
+            .await
+            .expect("body");
+        let session: spawnt_core::RemotePairingSession =
+            serde_json::from_slice(&body_pair).expect("json");
+        assert!(session.room_id.starts_with("room-"));
+        assert_eq!(session.verify_code.len(), 6);
+
+        // 2. GET /api/v1/remote/status
+        let req_stat = Request::builder()
+            .uri("/api/v1/remote/status")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer remote-token")
+            .body(Body::empty())
+            .expect("request");
+        let res_stat = app.clone().oneshot(req_stat).await.expect("res");
+        assert_eq!(res_stat.status(), StatusCode::OK);
+
+        // 3. POST /api/v1/remote/revoke
+        let req_rev = Request::builder()
+            .method("POST")
+            .uri("/api/v1/remote/revoke")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer remote-token")
+            .body(Body::empty())
+            .expect("request");
+        let res_rev = app.oneshot(req_rev).await.expect("res");
+        assert_eq!(res_rev.status(), StatusCode::OK);
     }
 }
