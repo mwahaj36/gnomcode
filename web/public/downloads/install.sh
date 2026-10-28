@@ -2,7 +2,7 @@
 # FleetHUD Unix installer. Download and verify before replacing an existing install.
 set -euo pipefail
 
-VERSION="1.5.2"
+VERSION="1.5.3"
 BASE_URL="https://fleethud.vercel.app/downloads"
 INSTALL_DIR="${FLEETHUD_INSTALL_DIR:-${HOME}/.local/bin}"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"

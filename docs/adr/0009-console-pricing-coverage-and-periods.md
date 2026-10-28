@@ -13,7 +13,7 @@ Rust supplies priced and unpriced invocation counts for timeline, interval, prov
 
 Today uses local-midnight boundaries and UTC hourly buckets, displayed as local clock times. Longer periods use UTC daily buckets. Calendar month starts at source-local midnight on the first day. Cloud snapshots publish the daemon's precomputed month; web code never recomputes costs or periods.
 
-The shared Overview places ongoing-session identity and provider limits before historical activity. Full session history supports a local project-ID query filter before pagination. Cloud project identity remains private; the web sessions filter only names already present in the opted-in snapshot.
+The shared Overview places activity first, the spend summary second, then provider limits and ongoing-session identity side by side, following the owner's subsequent layout refinement. Full session history supports a local project-ID query filter before pagination. Cloud project identity remains private; the web sessions filter only names already present in the opted-in snapshot.
 
 ## Consequences
 
