@@ -10,8 +10,7 @@
       if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
     } catch (_) {}
   </script>
-  <link rel="icon" type="image/svg+xml" href="/spawnt-mark.svg">
-  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
     @import url("/spawnt-tokens.css");
     .sp-brand-mark { display: inline-block; flex: none; background: currentColor; -webkit-mask: url("/spawnt-mark.svg") center / contain no-repeat; mask: url("/spawnt-mark.svg") center / contain no-repeat; }
@@ -477,6 +476,7 @@
       <div class="timeline-label" id="timeline-label">Showing: All Time</div>
       <div class="timeline-buttons">
         <button class="btn-control" onclick="setTimeline('today', this)">Today</button>
+        <button class="btn-control" onclick="setTimeline('month', this)">This month</button>
         <button class="btn-control" onclick="setTimeline('7d', this)">Last 7 Days</button>
         <button class="btn-control" onclick="setTimeline('30d', this)">Last 30 Days</button>
         <button class="btn-control active" onclick="setTimeline('all', this)">All Time</button>
@@ -489,6 +489,7 @@
 
   <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
     <div id="overview-summary" data-local-view="overview">Loading fleet summary...</div>
+    <div class="sp-overview-live" data-local-view="overview"><div id="ongoing-sessions">Loading ongoing sessions...</div><details class="sp-overview-limits" open><summary>Provider limits</summary><div id="overview-limits">Loading limits...</div></details></div>
     <div id="daily-activity" data-local-view="overview,usage"><p>Loading daily activity...</p></div>
     <!-- Spend by Agent (Click to View Models) -->
     <div data-local-view="usage" id="providers-container" style="align-items: start;">
@@ -506,20 +507,20 @@
       </div>
     </div>
 
-    <div id="quota-table" data-local-view="overview,limits"><p>Loading provider limits...</p></div>
+    <div id="quota-table" data-local-view="limits"><p>Loading provider limits...</p></div>
     <!-- Paginated Sessions Table -->
-    <div class="table-container" data-local-view="overview,sessions">
+    <div class="table-container" data-local-view="sessions">
       <div class="table-header-controls">
         <div class="section-title">Live & Historical Agent Sessions</div>
         <div class="filters">
-          <select id="agent-filter" onchange="onFilterChange()">
+          <label>Project <select id="project-filter" onchange="currentPage=1; lastSessionsJson=''; loadSessions()"><option value="">All projects</option></select></label><select id="agent-filter" aria-label="Agent" onchange="onFilterChange()">
             <option value="all">All Agents</option>
             <option value="antigravity">Antigravity</option>
             <option value="codex">OpenAI Codex</option>
             <option value="claude-code">Claude Code</option>
             <option value="gemini-cli">Gemini CLI</option>
           </select>
-          <select id="status-filter" onchange="onFilterChange()">
+          <select id="status-filter" aria-label="Session status" onchange="onFilterChange()">
             <option value="all">All Statuses</option>
             <option value="active">Active Only</option>
             <option value="idle">Idle Only</option>
@@ -543,7 +544,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <button class="btn-control" type="button" onclick="switchTab('auth')">Account and cloud pairing</button><p id="cloud-sync-status" role="status">Cloud publication status unknown.</p>
+    <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" onclick="switchTab('auth')">Manage account</button></div>
     <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
@@ -577,11 +578,11 @@
         
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
         <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 20px;">
-          <input type="text" id="settings-model-pattern" placeholder="Model (e.g. claude-3-5)">
-          <input type="number" id="settings-model-in" placeholder="In $" step="0.1">
-          <input type="number" id="settings-model-out" placeholder="Out $" step="0.1">
-          <input type="number" id="settings-model-cache" placeholder="Cache $" step="0.1">
-          <button class="btn-control" style="height: 32px;" onclick="addCustomPricingSettings()">+ Add</button>
+          <input type="text" id="settings-model-pattern" aria-label="Model name or pattern" placeholder="Model (e.g. claude-3-5)">
+          <input type="number" id="settings-model-in" aria-label="Input price per million tokens" placeholder="In $" step="0.1">
+          <input type="number" id="settings-model-out" aria-label="Output price per million tokens" placeholder="Out $" step="0.1">
+          <input type="number" id="settings-model-cache" aria-label="Cached input price per million tokens" placeholder="Cache $" step="0.1">
+          <button class="btn-control" style="white-space: nowrap; flex: 0 0 auto;" onclick="addCustomPricingSettings()">+ Add</button>
         </div>
 
         <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
@@ -594,68 +595,24 @@
   </main>
 
   <!-- ==================== VIEW 3: ACCOUNT ==================== -->
-  <main id="view-auth" class="view-content">
-    <div style="max-w: 680px; margin: 0 auto;" class="card">
-      <div class="section-title" style="margin-bottom: 16px;">Supabase Cloud Sync & Account Roaming</div>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;">
-        spawnt operates 100% locally by default. To sync your live fleet metrics, ROI multipliers, and quota pools across multiple workstations, pair your local daemon with your Supabase account.
-      </p>
-
-      <p id="auth-cloud-status" role="status">Checking desktop account status…</p>
-      <p>Desktop metadata snapshots publish every minute while the daemon runs. Hosted cloud-session tracking is unavailable.</p>
-      <a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a>
-
-      <!-- Paired Account Status Card -->
-      <div id="auth-paired-card" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-top: 20px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-          <div>
-            <div style="font-weight: 600; font-size: 13px; color: var(--green); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-              <span style="display: inline-block; width: 8px; height: 8px; background: var(--green);"></span>
-              <span>PAIRED: <span id="auth-paired-email" style="font-family: var(--font-mono); color: var(--text);"></span></span>
-            </div>
-            <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
-              Account credentials are saved for this device. Sync retries automatically while the daemon runs.
-            </p>
-          </div>
-          <button
-            onclick="unpairSession()"
-            class="btn-control"
-            style="border-color: var(--red); color: var(--red); font-size: 11px; padding: 6px 14px; cursor: pointer;"
-          >
-            Unpair / Disconnect
-          </button>
+  <main id="view-auth" class="view-content" tabindex="0">
+    <section class="sp-account-panel" aria-labelledby="account-heading">
+      <div class="sp-account-intro"><div><span class="sp-account-label">THIS DESKTOP</span><h2 id="account-heading">Your account, on this device.</h2><p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p></div><a href="https://fleethud.vercel.app/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a></div>
+      <div class="sp-account-state"><span class="sp-account-label">CONNECTION</span><p id="auth-cloud-status" role="status" tabindex="-1">Checking account connection...</p><p id="auth-publication-status">Checking the last desktop update...</p></div>
+      <div class="sp-account-columns">
+        <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Pairing shares this desktop's activity metadata, usage and quota snapshots with your account. Prompts, code and tool output are never synced.</p><p>Snapshots update about once a minute while spawnt is running. Local monitoring works without an account.</p></div>
+        <div>
+          <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This device is paired. Disconnecting keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" onclick="unpairSession()">Disconnect desktop</button></div>
+          <div id="auth-unpaired-card" hidden><h3>Connect this desktop</h3><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy desktop pairing token</strong>.</li><li>Paste the token below and connect.</li></ol><form onsubmit="event.preventDefault(); pairTokenDirectly()"><label for="auth-token-input">Desktop pairing token</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your pairing token" required><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local spawnt app.</p></form></div>
+          <p id="auth-pair-status" role="status" hidden></p>
         </div>
       </div>
-
-      <!-- Quick Account Pairing / Token Paste Card -->
-      <div id="auth-unpaired-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 16px; margin-top: 20px;">
-        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: var(--text);">Quick Account Pairing</div>
-        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
-          Already signed in on the web console? Click <strong>"Copy Pairing Token"</strong> in the web console, then paste below to pair this desktop.
-        </p>
-        <div style="display: flex; gap: 8px;">
-          <input
-            type="password"
-            id="auth-token-input"
-            placeholder="Paste pairing token or session JSON here..."
-            style="flex: 1; background: var(--card-bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
-          >
-          <button
-            onclick="pairTokenDirectly()"
-            class="btn-primary"
-            style="padding: 8px 16px; white-space: nowrap; font-size: 11px;"
-          >
-            Connect Account
-          </button>
-        </div>
-        <div id="auth-pair-status" style="margin-top: 10px; font-size: 11px; font-family: var(--font-mono); display: none;"></div>
-      </div>
-    </div>
+    </section>
   </main>
 
   <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
   <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+    <div class="sp-license-export">
       <!-- License Activation Card -->
       <div class="card">
         <div class="card-title">spawnt Pro Offline License</div>
@@ -666,7 +623,7 @@
         <div id="pro-license-details" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
           Free tier active. Pro features (Spend Guardrails, Auto-Resume Queue, CSV Analytics Export) unlock with an offline Ed25519-signed license key.
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div id="license-entry" class="sp-license-actions">
           <input
             type="text"
             id="license-key-input"
@@ -674,7 +631,7 @@
             style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
           >
           <button class="btn-primary" onclick="activateLicenseKey()">Activate Pro</button>
-          <button class="btn-control" onclick="removeLicenseKey()">Remove</button>
+          </div><div class="sp-license-actions"><button id="replace-license" class="btn-control" hidden onclick="document.getElementById('license-entry').hidden = false; this.hidden = true">Replace license</button><button id="remove-license" class="btn-control" hidden onclick="removeLicenseKey()">Remove license</button>
         </div>
         <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
       </div>
@@ -866,6 +823,7 @@
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
     let activeView = 'overview';
+    let projectsLoaded = false;
     let lastReportJson = '';
     let lastSessionsJson = '';
     let lastQuotaJson = '';
@@ -874,7 +832,7 @@
     document.querySelector('.app-brand').href = consoleViewUrl('overview');
 
     function setView(view, updateUrl = true) {
-      document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view[0].toUpperCase() + view.slice(1);
+      document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view === 'auth' ? 'Account' : view[0].toUpperCase() + view.slice(1);
       activeView = view;
       const titles = { overview: 'Your agent fleet', sessions: 'Sessions', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Settings' };
       document.getElementById('console-title').textContent = titles[view] || 'Your agent fleet';
@@ -923,7 +881,7 @@
       try {
         while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
         if (['overview', 'sessions', 'usage', 'limits'].includes(activeView)) {
-          const results = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+          const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
         } else if (activeView === 'settings') {
           if (!await loadSettingsData()) throw new Error('Settings could not be loaded');
@@ -955,7 +913,7 @@
       if (!['overview', 'sessions', 'usage', 'limits'].includes(activeView)) return;
       pollBusy = true;
       try {
-      const results = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+      const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
       const state = document.getElementById('sync-state');
       const updated = document.getElementById('last-updated');
       if (results.every(Boolean)) {
@@ -984,7 +942,7 @@
         if (response.status === 409) {
           document.getElementById('sync-state').textContent = 'Reconciliation in progress';
         } else if (!response.ok) throw new Error('Reconciliation failed');
-        const refreshed = await Promise.all([loadReport(), loadSessions(), loadQuota()]);
+        const refreshed = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
         if (refreshed.some(result => !result)) throw new Error('Local data refresh failed');
         if (response.status === 409) {
           document.getElementById('sync-state').textContent = 'Reconciliation in progress';
@@ -1027,9 +985,9 @@
     async function exportData(fmt) {
       try {
         let url = `/api/v1/export?range=${currentTimeline}&format=${fmt}`;
-        if (currentTimeline === 'today') {
+        if (currentTimeline === 'today' || currentTimeline === 'month') {
           const d = new Date();
-          d.setHours(0, 0, 0, 0);
+          d.setHours(0, 0, 0, 0); if (currentTimeline === 'month') d.setDate(1);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
         const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
@@ -1063,6 +1021,9 @@
           const lic = await licRes.json();
           const badge = document.getElementById('pro-tier-badge');
           const details = document.getElementById('pro-license-details');
+          document.getElementById('license-entry').hidden = lic.licensed;
+          document.getElementById('replace-license').hidden = !lic.licensed;
+          document.getElementById('remove-license').hidden = !lic.licensed;
           if (lic.licensed) {
             badge.innerText = lic.tier.toUpperCase();
             badge.style.color = 'var(--green)';
@@ -1362,9 +1323,9 @@
       try {
         const requestedRange = currentTimeline;
         let url = `/api/v1/report?range=${currentTimeline}`;
-        if (currentTimeline === 'today') {
+        if (currentTimeline === 'today' || currentTimeline === 'month') {
           const d = new Date();
-          d.setHours(0, 0, 0, 0);
+          d.setHours(0, 0, 0, 0); if (currentTimeline === 'month') d.setDate(1);
           url += `&from=${encodeURIComponent(d.toISOString())}`;
         }
         const res = await apiJson(url, { headers, signal: AbortSignal.timeout(15000) });
@@ -1429,12 +1390,21 @@
         if (range !== currentTimeline) return true;
         const presentation = await import('/console-presentation.js');
         container.innerHTML = presentation.renderProjects(projects);
+        projectsLoaded = true;
+        const select = document.getElementById('project-filter'); const selected = select.value; select.innerHTML = '<option value="">All projects</option>'; for (const project of projects) { const option = document.createElement('option'); option.value = project.id; option.textContent = project.name; select.append(option); } select.value = selected;
         return true;
       } catch (_) {
         container.textContent = 'Project usage could not be refreshed. Retry Reload view.';
         return false;
       }
     }
+
+    document.addEventListener('click', event => {
+      const project = event.target.closest('[data-project-id]');
+      if (!project) return;
+      event.preventDefault(); document.getElementById('project-filter').value = project.dataset.projectId;
+      currentPage = 1; lastSessionsJson = ''; switchTab('sessions');
+    });
 
     document.getElementById('sessions-table').addEventListener('click', async event => {
       const button = event.target.closest('[data-session-action="focus"]');
@@ -1451,12 +1421,14 @@
     });
     async function loadSessions() {
       try {
+        if (!projectsLoaded) await loadProjects();
         const requestedPage = currentPage;
+        const project = document.getElementById('project-filter').value;
         const agent = document.getElementById('agent-filter').value;
         const status = document.getElementById('status-filter').value;
-        const res = await apiJson(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}`, { headers, signal: AbortSignal.timeout(15000) });
+        const res = await apiJson(`/api/v1/sessions?page=${currentPage}&limit=${pageLimit}&agent=${agent}&status=${status}&project=${encodeURIComponent(project)}`, { headers, signal: AbortSignal.timeout(15000) });
         if (!res) return false;
-        if (requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
+        if (project !== document.getElementById('project-filter').value || requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
 
         const jsonStr = JSON.stringify(res);
         if (jsonStr === lastSessionsJson) return true;
@@ -1504,16 +1476,20 @@
       }
     }
 
+    let accountWriteBusy = false;
     async function pairTokenDirectly() {
+      if (accountWriteBusy) return;
       const input = document.getElementById('auth-token-input');
       const status = document.getElementById('auth-pair-status');
       if (!input || !status) return;
       const val = input.value.trim();
       if (!val) return;
 
-      status.style.display = 'block';
+      accountWriteBusy = true; input.disabled = true;
+      const button = document.getElementById('auth-pair-button'); button.disabled = true; button.textContent = 'Connecting...';
+      status.hidden = false;
       status.style.color = 'var(--text-muted)';
-      status.textContent = 'Verifying and saving session...';
+      status.textContent = 'Connecting this desktop...';
 
       try {
         let sessionData = null;
@@ -1528,69 +1504,80 @@
         }
 
         const res = await fetch('/api/v1/auth/session', {
-          method: 'POST',
+          method: 'POST', signal: AbortSignal.timeout(30000),
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(sessionData)
         });
 
         if (res.ok) {
           status.style.color = 'var(--green)';
-          status.textContent = 'Account successfully paired! Roaming enabled.';
+          status.textContent = 'Desktop connected. Waiting for its next metadata update.';
           input.value = '';
-          setTimeout(() => location.reload(), 1200);
+          if (await checkAuthSession()) document.getElementById('auth-cloud-status').focus({ preventScroll: true });
         } else {
           status.style.color = 'var(--red)';
           status.textContent = 'Failed to save session. Check token and try again.';
         }
       } catch (err) {
         status.style.color = 'var(--red)';
-        status.textContent = 'Error: ' + err.message;
-      }
+        status.textContent = 'Connection could not be confirmed. Reload account status before retrying.';
+      } finally { accountWriteBusy = false; input.disabled = false; button.disabled = false; button.textContent = 'Connect desktop'; }
     }
 
     async function checkAuthSession() {
       try {
-        const response = await fetch('/api/v1/auth/session', { headers, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('Account status request failed');
-        const res = await response.json();
-        const syncResponse = await fetch('/api/v1/sync/status', { headers, signal: AbortSignal.timeout(15000) });
-        const sync = syncResponse.ok ? await syncResponse.json() : null;
-        const syncLabel = document.getElementById('cloud-sync-status');
-        if (syncLabel) syncLabel.textContent = sync ? `${sync.message} Last published: ${sync.last_success_at ? new Date(sync.last_success_at).toLocaleString() : 'not yet'}` : 'Cloud publication status unavailable.';
-        const pairedCard = document.getElementById('auth-paired-card');
-        const unpairedCard = document.getElementById('auth-unpaired-card');
-        const emailEl = document.getElementById('auth-paired-email');
-        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Desktop account paired. Desktop summary sync is opt-in.' : 'This device is not paired. Local monitoring still works.';
-        if (res && res.paired) {
-          if (pairedCard) pairedCard.style.display = 'block';
-          if (unpairedCard) unpairedCard.style.display = 'none';
-          if (emailEl) emailEl.textContent = res.email || 'Connected Account';
-        } else {
-          if (pairedCard) pairedCard.style.display = 'none';
-          if (unpairedCard) unpairedCard.style.display = 'block';
-        }
+        const [account, publication] = await Promise.allSettled([
+          apiJson('/api/v1/auth/session', { headers, signal: AbortSignal.timeout(15000) }),
+          apiJson('/api/v1/sync/status', { headers, signal: AbortSignal.timeout(15000) })
+        ]);
+        if (account.status !== 'fulfilled') throw new Error('Account unavailable');
+        const res = account.value;
+        const sync = publication.status === 'fulfilled' ? publication.value : null;
+        const publicationText = sync ? `${sync.message} Last published: ${sync.last_success_at ? new Date(sync.last_success_at).toLocaleString() : 'not yet'}.` : 'Publication status unavailable. Retry Reload view.';
+        document.getElementById('auth-publication-status').textContent = publicationText;
+        document.getElementById('cloud-sync-status').textContent = publicationText;
+        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.';
+        document.getElementById('auth-paired-card').hidden = !res.paired;
+        document.getElementById('auth-unpaired-card').hidden = Boolean(res.paired);
+        document.getElementById('auth-paired-email').textContent = res.email || 'Connected account';
         return true;
-      } catch (err) {
-        console.error('Failed to check auth session', err);
+      } catch (_) {
+        document.getElementById('auth-cloud-status').textContent = 'Account connection unavailable. Retry Reload view.';
+        document.getElementById('auth-publication-status').textContent = 'Local monitoring does not require an account connection.';
+        document.getElementById('cloud-sync-status').textContent = 'Account status unavailable. Retry Reload view.';
+        document.getElementById('auth-paired-card').hidden = true;
+        document.getElementById('auth-unpaired-card').hidden = true;
         return false;
       }
     }
 
     async function unpairSession() {
-      if (!confirm('Unpair desktop daemon from cloud sync and disconnect account?')) return;
+      if (accountWriteBusy) return;
+      if (!confirm('Disconnect this desktop from your account? Recorded local sessions will stay on this device.')) return;
+      accountWriteBusy = true;
+      const button = document.getElementById('auth-disconnect-button'); button.disabled = true; button.textContent = 'Disconnecting...';
       try {
         const res = await fetch('/api/v1/auth/session', {
-          method: 'DELETE',
+          method: 'DELETE', signal: AbortSignal.timeout(30000),
           headers
         });
         if (res.ok) {
-          checkAuthSession();
+          await checkAuthSession();
         } else {
-          alert('Failed to disconnect account session.');
+          alert('Could not disconnect. Reload the account status and retry.');
         }
       } catch (err) {
-        alert('Error: ' + err.message);
-      }
+        alert('Connection could not be confirmed. Reload the account status before retrying.');
+      } finally { accountWriteBusy = false; button.disabled = false; button.textContent = 'Disconnect desktop'; }
+    }
+
+    async function loadOngoing() {
+      try {
+        const response = await apiJson('/api/v1/sessions?status=active&page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
+        const presentation = await import('/console-presentation.js');
+        presentation.updateOngoing(document.getElementById('ongoing-sessions'), response.sessions);
+        return true;
+      } catch (_) { document.getElementById('ongoing-sessions').textContent = 'Ongoing session status unavailable. Retry Reload view.'; return false; }
     }
 
     async function loadQuota() {
@@ -1602,10 +1589,12 @@
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
         document.getElementById('quota-table').innerHTML = presentation.renderQuota(res, new Date().toISOString());
+        document.getElementById('overview-limits').innerHTML = presentation.renderQuota(res, new Date().toISOString());
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
         lastQuotaJson = '';
+        document.getElementById('overview-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
         summaryState.quotaCount = null; await refreshSummary();
         document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;
@@ -1615,7 +1604,8 @@
       try {
         const [userResponse, statsResponse] = await Promise.all([
           fetch('/api/v1/user', { headers }),
-          fetch('/api/v1/stats', { headers })
+          fetch('/api/v1/stats', { headers }),
+          checkAuthSession()
         ]);
         if (!userResponse.ok || !statsResponse.ok) throw new Error('Settings request failed');
         const [user, stats] = await Promise.all([userResponse.json(), statsResponse.json()]);

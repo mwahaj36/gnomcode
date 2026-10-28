@@ -8,3 +8,6 @@ export function renderSessions(sessions: unknown, options?: { focus?: boolean; r
 export function renderQuota(pools: unknown, publishedAt?: string | null, options?: { illustrative?: boolean }): string;
 export function renderProjects(projects: unknown): string;
 export function renderSummary(data: { activeCount?: number | null; report?: unknown; quotaCount?: number | null }): string;
+
+export function updateOngoing(element: HTMLElement, sessions: unknown): void;
+export function renderOngoing(sessions: unknown): string;

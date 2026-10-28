@@ -7,7 +7,7 @@ assert.doesNotMatch(renderSummary({ report: { cost_basis: 'unknown', total_cost_
 assert.match(renderActivity(null), /unavailable/);
 assert.match(renderActivity({ daily: [] }), /No recorded usage/);
 const activity = renderActivity({ total_tokens: 100, daily: [{ date: '2026-10-28', total_tokens: 100, chart_pct: 100, cost_basis: 'unknown', cost_usd: 0, turns: 1 }] });
-assert.match(activity, /EXACT tokens/);
+assert.match(activity, /Recorded tokens/);
 assert.match(activity, /Unknown/);
 assert.doesNotMatch(activity, /\$0\.00/);
 const quota = renderQuota([{ provider: '<script>', limit_id: 'sample', window: 'weekly', used_pct: 75, remaining_pct: 25, resets_at: '2020-01-01', basis: 'exact' }], null);
@@ -24,7 +24,7 @@ console.log('PASS: shared console escaping, unknown data, trust, reset and fresh
 
 const providers=renderProviders({cost_basis:'unknown',providers:[{provider:'<script>',total_cost_usd:0,models:[{model:'<img onerror=x>',input_tokens:100,output_tokens:10,cost_usd:0}]}]});
 assert.doesNotMatch(providers,/<script>|<img|\$0\.00/);
-assert.match(providers,/Unknown · UNKNOWN/);
+assert.match(providers,/Unknown · Price unavailable/);
 
 let writes=0, values=[];
 globalThis.document={activeElement:null};
@@ -37,3 +37,21 @@ updateSummary(element,{activeCount:2});assert.equal(writes,2);assert.equal(value
 const webConsole = await readFile(new URL('../web/app/console/page.tsx', import.meta.url), 'utf8');
 assert.doesNotMatch(webConsole, /fleethud_cloud_sessions_live/, 'retired hosted sessions must not be queried');
 assert.match(webConsole, /fleethud_sync_state/, 'desktop summary sync remains available');
+
+const partial={cost_basis:'unknown',priced_turns:2,unpriced_turns:1,total_cost_usd:12,total_cache_savings_usd:4,range_label:'This month'};
+assert.match(renderSummary({report:partial}),/\$12.00/);
+assert.match(renderSummary({report:partial}),/Partial estimate/);
+const perProvider=renderProviders({cost_basis:'unknown',providers:[{provider:'Claude',priced_turns:1,unpriced_turns:0,total_cost_usd:12,total_cache_savings_usd:4,models:[]}]});
+assert.match(perProvider,/\$12.00/);assert.doesNotMatch(perProvider,/Unknown/);
+const hourly=renderActivity({...partial,range_label:'Today',total_tokens:100,daily:[{date:'2026-10-28T00:00:00Z',total_tokens:100,chart_pct:100,priced_turns:1,cost_usd:12,turns:1}]});
+assert.match(hourly,/Today, by hour/);assert.match(hourly,/Since local midnight/);assert.doesNotMatch(hourly,/>10-28</);
+const {renderOngoing}=await import(`data:text/javascript;base64,${source.toString('base64')}`);
+assert.match(renderOngoing([{id:'active-1',title:'Current session',agent:'codex',is_active:true,state:'thinking',last_event_at:'2026-10-28T00:00:00Z'},{id:'idle-1',title:'Old session',is_active:false}]),/Current session/);
+assert.doesNotMatch(renderOngoing([{id:'idle-1',title:'Old session',is_active:false}]),/Old session/);
+console.log('PASS: partial pricing, independent provider coverage, local hourly labels and ongoing session identity');
+
+const projectPartial=renderProjects([{id:'project"safe',name:'Project name',total_tokens:100,sessions:2,cost_basis:'unknown',priced_turns:1,unpriced_turns:1,cost_usd:12}]);
+assert.match(projectPartial,/\$12.00/);assert.match(projectPartial,/Partial estimate/);assert.match(projectPartial,/data-project-id="project&quot;safe"/);
+
+const sharedCss=await readFile(new URL('../web/app/spawnt-console.css',import.meta.url),'utf8');
+assert.doesNotMatch(sharedCss,/var\(--(?:text(?:-\d)?|border|primary-text|surface|bg)\)/,'shared console styles must use shared tokens, not marketing-only aliases');

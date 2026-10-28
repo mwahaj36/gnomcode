@@ -81,3 +81,11 @@ Overview is a compact marketing summary: three KPIs, a small seven-day chart and
 
 - Every executable command shown in the app has an integrated clipboard icon control with an accessible name, visible success/failure feedback, and keyboard focus styling.
 - Copy the exact command shown. Keep long commands horizontally scrollable or safely wrapped at narrow widths; the copy control remains visible.
+# Windows icon canvas
+
+Windows app, tray and installer ICOs use the canonical red mark on an opaque #070708 canvas. Small ICO frames use Windows DIB encoding so the current GDI+ tray can render count overlays; web SVG/PNG marks keep their existing presentation.
+
+Overview leads with ongoing session identity beside compact provider limits, with history below. Narrow layouts stack these regions. Declare data provenance at the section or column level and reserve repeated inline warnings for missing or partial data. Today uses hourly local-clock labels; longer periods name the reporting period beside the token total. Account is a settings row; active licenses show replacement/removal actions instead of an activation prompt.
+
+Desktop Account uses a connection summary above a two-column explanation and pairing flow. Pairing instructions name the exact web control, token entry is masked and labeled, and connected devices show a separate Disconnect action. Publication status is independent of account status; loading must resolve to a status or retry message.
+

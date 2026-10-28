@@ -1,6 +1,6 @@
 //! SQLite storage schema, migrations, queries, and rollups (`SPEC §3.6`, `§4.3`).
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use fleethud_core::rules::{GuardrailRule, ResumeQueueEntry};
 use fleethud_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
@@ -114,6 +114,12 @@ impl Default for UserProfile {
 /// Enriched session item for UI list with project name and clean state.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionListItem {
+    /// Priced invocation count.
+    #[serde(default)]
+    pub priced_turns: u64,
+    /// Unpriced invocation count; cost is partial when nonzero.
+    #[serde(default)]
+    pub unpriced_turns: u64,
     /// Measured session tokens with cache counted once.
     #[serde(default)]
     pub total_tokens: Option<u64>,
@@ -168,6 +174,12 @@ pub struct SessionListItem {
 /// Breakdown for a single model under a provider.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ModelReport {
+    /// Priced invocation count.
+    #[serde(default)]
+    pub priced_turns: u64,
+    /// Unpriced invocation count; costs are partial when nonzero.
+    #[serde(default)]
+    pub unpriced_turns: u64,
     /// Model name.
     pub model: String,
     /// Agent slug.
@@ -189,6 +201,12 @@ pub struct ModelReport {
 /// Breakdown for an AI provider (Anthropic, OpenAI, Google).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderReport {
+    /// Priced invocation count.
+    #[serde(default)]
+    pub priced_turns: u64,
+    /// Unpriced invocation count; costs are partial when nonzero.
+    #[serde(default)]
+    pub unpriced_turns: u64,
     /// Provider name ("Anthropic", "OpenAI", "Google", "Other").
     pub provider: String,
     /// Total cost in USD.
@@ -204,6 +222,12 @@ pub struct ProviderReport {
 /// Filtered timeline report with date spans and per-provider ROI comparison.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DailyUsage {
+    /// Invocations with a recorded pricing basis.
+    #[serde(default)]
+    pub priced_turns: u64,
+    /// Invocations whose price is unknown; recorded costs are a partial subtotal.
+    #[serde(default)]
+    pub unpriced_turns: u64,
     /// UTC date of measured usage.
     pub date: String,
     /// Tokens including cache exactly once.
@@ -221,6 +245,12 @@ pub struct DailyUsage {
 /// Local-only project usage rollup; repository identity is not published to cloud.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProjectUsage {
+    /// Priced invocation count.
+    #[serde(default)]
+    pub priced_turns: u64,
+    /// Unpriced invocation count; cost is partial when nonzero.
+    #[serde(default)]
+    pub unpriced_turns: u64,
     /// Stable canonical project ID.
     pub id: String,
     /// Local project display name.
@@ -238,6 +268,12 @@ pub struct ProjectUsage {
 /// Filtered timeline report with date spans and per-provider ROI comparison.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TimelineReport {
+    /// Invocations with a recorded pricing basis.
+    #[serde(default)]
+    pub priced_turns: u64,
+    /// Invocations whose price is unknown; recorded costs are a partial subtotal.
+    #[serde(default)]
+    pub unpriced_turns: u64,
     /// Aggregate pricing trust; unknown when any included invocation is unpriced.
     #[serde(default = "unknown_cost_basis")]
     pub cost_basis: TrustLevel,
@@ -1758,6 +1794,21 @@ impl Database {
         offset: usize,
         limit: usize,
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
+        self.list_sessions_filtered(agent_filter, status_filter, None, offset, limit)
+    }
+
+    /// Lists sessions with an optional exact local project ID before pagination.
+    ///
+    /// # Errors
+    /// Returns an error on SQLite failure.
+    pub fn list_sessions_filtered(
+        &self,
+        agent_filter: Option<&str>,
+        status_filter: Option<&str>,
+        project_filter: Option<&str>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let now = Utc::now();
         let cutoff = (now - chrono::Duration::minutes(15)).to_rfc3339();
         let agent = agent_filter
@@ -1768,11 +1819,11 @@ impl Database {
             .unwrap_or("all");
         let total_count: i64 = self.conn.query_row(
             r#"SELECT COUNT(*) FROM session s
-               WHERE s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
+               WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
                    OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))"#,
-            params![agent, status, cutoff],
+            params![agent, status, cutoff, project_filter],
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
@@ -1781,18 +1832,18 @@ impl Database {
                 SELECT s.*, p.name AS project_name,
                     CASE WHEN s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3 THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
-                WHERE s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
+                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'active' AND s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)
                     OR (?2 = 'idle' AND NOT (s.state IN ('thinking','tool','awaiting_approval') AND s.last_event_at >= ?3)))
                 ORDER BY active_rank DESC, s.last_event_at DESC
-                LIMIT ?4 OFFSET ?5
+                LIMIT ?5 OFFSET ?6
             )
             SELECT
                 s.id, s.agent, s.surface, s.project_name, s.model, s.state, s.started_at, s.last_event_at,
                 COALESCE(SUM(u.input_tokens), 0),
                 COALESCE(SUM(u.output_tokens), 0),
-                COALESCE(SUM(u.cost_usd), 0.0),
+                COALESCE(SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), 0.0),
                 COALESCE(SUM(u.cache_read_tokens), 0),
                 COALESCE(
                     -- Codex rows written before the adapter fix stored cumulative context here.
@@ -1817,7 +1868,14 @@ impl Database {
         )?;
 
         let rows = stmt.query_map(
-            params![agent, status, cutoff, limit as i64, offset as i64],
+            params![
+                agent,
+                status,
+                cutoff,
+                project_filter,
+                limit as i64,
+                offset as i64
+            ],
             |row| {
                 let id: String = row.get(0)?;
                 let agent: String = row.get(1)?;
@@ -1864,6 +1922,8 @@ impl Database {
                 };
 
                 Ok(SessionListItem {
+                    priced_turns: (usage_count - unknown_pricing.unwrap_or(0)).max(0) as u64,
+                    unpriced_turns: unknown_pricing.unwrap_or(0).max(0) as u64,
                     total_tokens: if usage_count > 0 {
                         Some(row.get::<_, i64>(17)?.max(0) as u64)
                     } else {
@@ -1927,10 +1987,10 @@ impl Database {
             SELECT p.id, p.name,
                 SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
-                SUM(u.cost_usd), COUNT(DISTINCT s.id), SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(DISTINCT s.id), SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END), COUNT(*)
             FROM usage_record u JOIN session s ON s.id = u.session_id JOIN project p ON p.id = s.project_id
-            WHERE s.surface <> 'cloud' AND u.timestamp >= ?1 AND u.timestamp <= ?2
-            GROUP BY p.id ORDER BY SUM(u.cost_usd) DESC, p.id
+            WHERE s.surface <> 'cloud' AND julianday(u.timestamp) >= julianday(?1) AND julianday(u.timestamp) <= julianday(?2)
+            GROUP BY p.id ORDER BY SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END) DESC, p.id
         "#))?;
         let rows =
             statement.query_map(params![timeline.earliest_at, timeline.latest_at], |row| {
@@ -1938,6 +1998,8 @@ impl Database {
                 let sessions: i64 = row.get(4)?;
                 let unpriced: i64 = row.get(5)?;
                 Ok(ProjectUsage {
+                    priced_turns: (row.get::<_, i64>(6)? - unpriced).max(0) as u64,
+                    unpriced_turns: unpriced.max(0) as u64,
                     id: row.get(0)?,
                     name: row.get(1)?,
                     total_tokens: tokens.max(0) as u64,
@@ -1985,6 +2047,20 @@ impl Database {
                     (Some(start_of_day.to_rfc3339()), "Today".to_owned())
                 }
             }
+            "month" => {
+                let local_now = chrono::Local::now();
+                let first = local_now
+                    .date_naive()
+                    .with_day(1)
+                    .and_then(|date| date.and_hms_opt(0, 0, 0))
+                    .and_then(|time| time.and_local_timezone(chrono::Local).earliest())
+                    .map(|time| time.to_rfc3339())
+                    .unwrap_or_else(|| format!("{}-01T00:00:00Z", now.format("%Y-%m")));
+                (
+                    Some(from_ts.unwrap_or(&first).to_owned()),
+                    "This month".to_owned(),
+                )
+            }
             "7d" => {
                 if let Some(f) = from_ts {
                     (Some(f.to_owned()), "Last 7 Days".to_owned())
@@ -2022,16 +2098,17 @@ impl Database {
                 SUM(u.input_tokens) AS in_tok,
                 SUM(u.cache_read_tokens) AS read_tok,
                 SUM(u.output_tokens) AS out_tok,
-                SUM(u.cost_usd) AS total_cost,
-                SUM(u.cache_savings_usd) AS total_savings,
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END) AS total_cost,
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cache_savings_usd END) AS total_savings,
                 COUNT(u.dedup_key) AS turns,
                 MIN(u.timestamp) AS earliest,
-                MAX(u.timestamp) AS latest
+                MAX(u.timestamp) AS latest,
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END) AS unpriced
             FROM usage_record u
             JOIN session s ON u.session_id = s.id
             JOIN project p ON s.project_id = p.id
-            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR u.timestamp >= ?1)
-              AND (?2 IS NULL OR u.timestamp <= ?2)
+            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1))
+              AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
             GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
             "#
@@ -2055,6 +2132,7 @@ impl Database {
             cost: f64,
             savings: f64,
             turns: u64,
+            unpriced: u64,
         }
         let mut raw_items = Vec::new();
 
@@ -2091,6 +2169,7 @@ impl Database {
                     cost,
                     savings,
                     turns: turns_u,
+                    unpriced: row.get::<_, i64>(11)?.max(0) as u64,
                 },
                 earliest,
                 latest,
@@ -2146,6 +2225,8 @@ impl Database {
             let entry = models_map
                 .entry(item.model.clone())
                 .or_insert_with(|| ModelReport {
+                    priced_turns: 0,
+                    unpriced_turns: 0,
                     model: item.model,
                     agent: item.agent,
                     input_tokens: 0,
@@ -2161,6 +2242,8 @@ impl Database {
             entry.cost_usd += item.cost;
             entry.cache_savings_usd += item.savings;
             entry.turn_count += item.turns;
+            entry.priced_turns += item.turns.saturating_sub(item.unpriced);
+            entry.unpriced_turns += item.unpriced;
         }
 
         let mut providers = Vec::new();
@@ -2184,6 +2267,8 @@ impl Database {
                     0.0
                 };
                 providers.push(ProviderReport {
+                    priced_turns: models.iter().map(|model| model.priced_turns).sum(),
+                    unpriced_turns: models.iter().map(|model| model.unpriced_turns).sum(),
                     provider: agent_label.to_owned(),
                     total_cost_usd: prov_cost,
                     total_cache_savings_usd: prov_savings,
@@ -2196,21 +2281,23 @@ impl Database {
         let items_count = providers.iter().map(|p| p.models.len()).sum();
 
         let mut daily_statement = self.conn.prepare(obfstr::obfstr!(r#"
-            SELECT substr(u.timestamp, 1, 10),
+            SELECT CASE WHEN ?3 = 'today' THEN strftime('%Y-%m-%dT%H:00:00Z', u.timestamp) ELSE date(u.timestamp) END,
                 SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
-                SUM(u.cost_usd), COUNT(*),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(*),
                 SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
             FROM usage_record u JOIN session s ON s.id = u.session_id
-            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR u.timestamp >= ?1) AND (?2 IS NULL OR u.timestamp <= ?2)
-            GROUP BY substr(u.timestamp, 1, 10) ORDER BY substr(u.timestamp, 1, 10)
+            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1)) AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
+            GROUP BY 1 ORDER BY 1
         "#))?;
         let mut daily = daily_statement
-            .query_map(params![cutoff, to_ts], |row| {
+            .query_map(params![cutoff, to_ts, range_kind], |row| {
                 let tokens: i64 = row.get(1)?;
                 let turns: i64 = row.get(3)?;
                 let unknown: i64 = row.get(4)?;
                 Ok(DailyUsage {
+                    priced_turns: (turns - unknown).max(0) as u64,
+                    unpriced_turns: unknown.max(0) as u64,
                     date: row.get(0)?,
                     total_tokens: tokens.max(0) as u64,
                     cost_usd: row.get(2)?,
@@ -2237,6 +2324,8 @@ impl Database {
         }
 
         Ok(TimelineReport {
+            priced_turns: daily.iter().map(|day| day.priced_turns).sum(),
+            unpriced_turns: daily.iter().map(|day| day.unpriced_turns).sum(),
             cost_basis: if daily
                 .iter()
                 .any(|day| day.cost_basis == TrustLevel::Unknown)
@@ -2904,5 +2993,55 @@ mod tests {
             .generate_usage_report_timeline("today", None, Some(&before_now))
             .expect("report with to_ts");
         assert_eq!(rep_to.total_cost_usd, 0.0);
+
+        db.conn
+            .execute(
+                "UPDATE usage_record SET cost_basis = 'unknown' WHERE dedup_key = 'old:1'",
+                [],
+            )
+            .expect("unprice old record");
+        let partial = db
+            .generate_usage_report_timeline("all", None, None)
+            .expect("partial");
+        assert_eq!((partial.priced_turns, partial.unpriced_turns), (1, 1));
+        assert_eq!(partial.total_cost_usd, 5.0);
+        assert_eq!(partial.cost_basis, TrustLevel::Unknown);
+        assert_eq!(partial.providers[0].priced_turns, 1);
+        assert_eq!(partial.providers[0].unpriced_turns, 1);
+        let projects = db
+            .generate_project_report("all", None, None)
+            .expect("project coverage");
+        assert_eq!(
+            (projects[0].priced_turns, projects[0].unpriced_turns),
+            (1, 1)
+        );
+        assert_eq!(projects[0].cost_usd, 5.0);
+        let (_, count) = db
+            .list_sessions_filtered(None, None, Some(&projects[0].id), 0, 1)
+            .expect("project filter");
+        assert_eq!(count, 1);
+        let (rows, count) = db
+            .list_sessions_filtered(None, None, Some("missing-project"), 0, 1)
+            .expect("unmatched project");
+        assert!(rows.is_empty());
+        assert_eq!(count, 0);
+
+        db.conn.execute("UPDATE usage_record SET timestamp = '2026-10-27T23:30:00+05:00' WHERE dedup_key = 'old:1'", []).expect("before local midnight");
+        db.conn.execute("UPDATE usage_record SET timestamp = '2026-10-28T01:30:00+05:00' WHERE dedup_key = 'now:1'", []).expect("after local midnight");
+        let local_day = db
+            .generate_usage_report_timeline(
+                "today",
+                Some("2026-10-27T19:00:00Z"),
+                Some("2026-10-28T19:00:00Z"),
+            )
+            .expect("local day");
+        assert_eq!(local_day.total_tokens, 550);
+        assert_eq!(local_day.daily.len(), 1);
+        assert_eq!(local_day.daily[0].date, "2026-10-27T20:00:00Z");
+        let month = db
+            .generate_usage_report_timeline("month", Some("2026-09-30T19:00:00Z"), None)
+            .expect("calendar month");
+        assert_eq!(month.range_label, "This month");
+        assert_eq!(month.total_tokens, 1650);
     }
 }

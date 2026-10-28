@@ -2,6 +2,40 @@
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
 
+## 2026-10-28 — final v1.5.2 Account package rebuild
+
+- Rebuilt all Windows x64 and Linux x64/ARM64 release files again after the Account panel refinement so embedded HTML/CSS match the final source. Updated combined manifests and retained the existing 1.5.2 version while the release is unpublished.
+- Final parity review replaced marketing-only CSS aliases with canonical shared tokens and added a regression preventing their reuse. Custom-rate inputs now shrink/wrap on narrow layouts; session filters and pricing inputs have explicit accessible names.
+- Final source passed the Windows Rust gate, Linux clippy/workspace tests, ARM64 smoke, production web build, source/version audit, native JavaScript/navigation/account-state/icon tests and shared console/settings/tour regressions. Windows payload/updater and Unix corrupted-manifest preservation checks passed against the final files. macOS and browser screenshot checks remain explicitly deferred/unavailable.
+
+## 2026-10-28 — desktop Account panel refinement
+
+- Replaced the oversized technical cloud-roaming card with a connection summary, concise privacy explanation, numbered pairing steps and a masked, labeled token form. Retained the current domain, manual pairing API and private credential handling.
+- Fetch account/publication status independently; failed status reads now clear Checking and show retry guidance. Connected devices show their account and Disconnect action; disconnected devices show the pairing flow. Pairing and disconnect prevent concurrent writes, and pairing updates state without reloading the page.
+- Runtime regressions execute actual connected/disconnected/failure transitions and verify duplicate pairing calls issue one request, clear the token on success and restore controls. Native script/target checks pass. Account uses the shared responsive tokens and remains keyboard usable; browser screenshot inspection remains unavailable.
+
+## 2026-10-28 — v1.5.2 verified packages
+
+- Rebuilt Windows x64 engine/setup/ZIP and Linux x64/ARM64 archives from the tray, coverage, period and ongoing-session fixes. Version metadata, website output, installer mirrors and SHA-256 manifests use 1.5.2.
+- Windows full Rust gate including cargo-deny, Linux clippy/workspace tests, ARM64 version smoke, native icon/runtime/navigation tests, shared presenter and settings tests, Next production build, packaging checks and isolated upgrade/corrupt-manifest preservation checks passed. Native icon drawing now gates Windows release packaging.
+- Clear cloud project-filter names on account changes. Project rollups and local IDs remain local. Scope assumes calendar month means the data source's local month; totals are never relabeled from All Time.
+- Browser visual tooling remains unavailable, so no desktop/narrow screenshot parity pass is claimed. macOS builds remain explicitly deferred. Published historical artifacts and user data are retained.
+
+## 2026-10-28 — ongoing-first console and truthful pricing coverage
+
+- Local API diagnostics confirmed the connected daemon had priced totals but aggregate unknown trust due to an unpriced model. Added Rust-priced/unpriced invocation counts at timeline, interval, provider, model, session and project levels; exclude unpriced records from displayed subtotals and label incomplete coverage explicitly.
+- Overview leads with ongoing-session title/project, agent/model, inferred state, latest activity and context, independent of history filters/pagination. Limits occupy a separate desktop column and a collapsible region; history remains in Sessions. Both consoles share presenters and CSS.
+- Today now uses actual local-midnight boundaries, Julian-day comparisons across RFC3339 offsets and hourly UTC buckets displayed as local time. Added a source-owned calendar-month report/snapshot and period labels. Missing hours remain unobserved, not fabricated zeros.
+- Project cards navigate to a native full-query project filter before pagination. Web filtering uses only already-published session names; private project rollups remain local.
+- Reduced repeated trust tags, added plain-language partial warnings, restructured Account controls, hid activation when licensed and kept explicit Replace/Remove controls. Aligned license/export actions and prevented Add-button wrapping.
+- Regression coverage verifies mixed known/unknown costs, project coverage/filtering, mismatched timestamp offsets around local midnight, hourly buckets, month labels, shared presentation and ongoing identity. Windows Rust gate including cargo-deny and production web build passed; final source/package checks are run before push. Browser visual checks remain unavailable and macOS builds remain deferred.
+
+## 2026-10-28 — Windows tray badge and icon recovery
+
+- Reproduced GDI+ DrawIcon/ToBitmap throwing on PNG-compressed small ICO frames; the tray swallowed the failure and never applied its running-count overlay. Generate small Windows ICO frames as DIBs from the same canonical SVG, retaining a compressed large frame.
+- Windows ICO frames now use an opaque #070708 canvas behind the red mark. Marketing PNG/SVG marks retain their existing backgrounds. Use ASCII tray separators to avoid Windows PowerShell UTF-8-without-BOM tooltip corruption.
+- Native regression renders count one, restores count zero, reads the resulting icon bitmap and asserts an opaque brand-black corner. It failed before the ICO encoding fix and passes afterward. Tray pricing captions also distinguish partial estimates from complete estimates.
+
 ## 2026-10-28 — v1.5.1 follow-up packages
 
 - Rebuilt Windows x64 engine/setup and Linux x64/ARM64 binaries from the navigation and compact-tour fixes. Updated all release metadata, installer mirrors and checksum manifests to 1.5.1; retained published historical artifacts.
