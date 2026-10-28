@@ -35,3 +35,6 @@ Thumbs.db
 # Local FleetHUD data (never commit real agent data)
 .fleethud/
 fixtures/**/raw/
+
+# Python build/check bytecode
+__pycache__/
