@@ -1,0 +1,6 @@
+{
+  "productName": "Spawnt",
+  "baseUrl": "https://spawntv.vercel.app",
+  "sourceRepository": "https://github.com/mwahaj36/spawnt",
+  "releasesRepository": "https://github.com/mwahaj36/spawnt-releases"
+}

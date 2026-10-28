@@ -247,7 +247,7 @@ export default function ConsolePage() {
     try {
     if (user) {
       try {
-        const desktop = await supabase.from("fleethud_sync_state").select("*").eq("user_id", user.id).maybeSingle();
+        const desktop = await supabase.from("spawnt_sync_state").select("*").eq("user_id", user.id).maybeSingle();
         if (generation !== metricsGeneration.current) return false;
         if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
         const snap = lastDesktopSnapshot.current;
@@ -376,7 +376,7 @@ export default function ConsolePage() {
 
     try {
       const { data: syncRow } = await supabase
-        .from("fleethud_sync_state")
+        .from("spawnt_sync_state")
         .select("live_snapshot")
         .eq("user_id", user.id)
         .maybeSingle();
@@ -397,7 +397,7 @@ export default function ConsolePage() {
       };
 
       const { error } = await supabase
-        .from("fleethud_sync_state")
+        .from("spawnt_sync_state")
         .update({
           live_snapshot: updatedSnap,
           updated_at: new Date().toISOString(),

@@ -6,12 +6,12 @@ use crate::{
     claude::{classify_tool_kind, extract_tool_detail, fallback_id_from_path},
 };
 use chrono::{DateTime, Utc};
-use fleethud_core::{
+use serde_json::Value;
+use spawnt_core::{
     ActivityEvent, AgentId, Project, Session, SessionState, Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::redact_summary,
 };
-use serde_json::Value;
 use std::collections::HashSet;
 
 /// Stateful parser for a Gemini CLI rewritten `.json` session log.

@@ -92,18 +92,69 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: cargo build --locked --release -p fleethud
-      - run: ./target/release/fleethud --version
-      - run: python scripts/package-artifacts.py --${{ matrix.argument }} target/release/fleethud
+      - run: cargo build --locked --release -p spawnt
+      - run: ./target/release/spawnt --version
+      - run: python scripts/package-artifacts.py --${{ matrix.argument }} target/release/spawnt
       - run: python scripts/check-unix-installer.py
       - name: Stage current target only
         shell: bash
         run: |
-          version=$(./target/release/fleethud --version | cut -d ' ' -f 2)
+          version=$(./target/release/spawnt --version | cut -d ' ' -f 2)
           mkdir -p target/release-assets
-          cp web/public/downloads/fleethud-v${version}-*.tar.gz target/release-assets/
+          cp web/public/downloads/spawnt-v${version}-*.tar.gz target/release-assets/
       - uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.target }}
           path: target/release-assets/*.tar.gz
           if-no-files-found: error
+
+  web:
+    name: web lint, typecheck and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  desktop:
+    name: desktop typecheck and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  npm-shim:
+    name: npm shim (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm test --prefix npm/spawnt
+      - run: node scripts/sync-branding.mjs --check

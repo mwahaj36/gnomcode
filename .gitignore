@@ -32,9 +32,12 @@ Thumbs.db
 *.pem
 *.key
 
-# Local FleetHUD data (never commit real agent data)
-.fleethud/
+# Local Spawnt data (never commit real agent data)
+.spawnt/
 fixtures/**/raw/
 
 # Python build/check bytecode
 __pycache__/
+# Electron build output and assembled release inputs
+apps/desktop/out/
+apps/desktop/staging/

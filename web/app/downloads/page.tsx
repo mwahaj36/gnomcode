@@ -1,3 +1,4 @@
+import branding from "../../branding.json";
 import type { Metadata } from "next";
 import Link from "next/link";
 import packageInfo from "../../package.json";
@@ -5,8 +6,8 @@ import { PlatformDownloads } from "./PlatformDownloads";
 
 export const metadata: Metadata = {
   title: "Downloads — spawnt",
-  description: "Download the verified Windows or Linux release of spawnt.",
-  alternates: { canonical: "https://fleethud.vercel.app/downloads" },
+  description: "Spawnt downloads are being prepared.",
+  alternates: { canonical: `${branding.baseUrl}/downloads` },
 };
 
 export default function DownloadsPage() {
@@ -15,9 +16,9 @@ export default function DownloadsPage() {
       <header className="sp-downloads-header">
         <div>
           <h1>Download spawnt</h1>
-          <p>Verified local releases for Windows and Linux. Your agent logs stay on your machine.</p>
+          <p>Spawnt desktop and CLI builds are being verified. Your agent logs stay on your machine.</p>
         </div>
-        <span className="sp-download-release">CURRENT RELEASE · v{packageInfo.version}</span>
+        <span className="sp-download-release">NEXT RELEASE · v{packageInfo.version}</span>
       </header>
 
       <PlatformDownloads />
