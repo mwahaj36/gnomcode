@@ -120,9 +120,6 @@ export default function ConsolePage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
-  const [quickTokenInput, setQuickTokenInput] = useState("");
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState("");
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
@@ -135,6 +132,7 @@ export default function ConsolePage() {
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [copyFeedback, setCopyFeedback] = useState("");
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
   const [refreshing, setRefreshing] = useState(false);
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState<Date | null>(null);
@@ -158,13 +156,7 @@ export default function ConsolePage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthChecked(true);
-      if (session && typeof window !== "undefined") {
-        const cb = localStorage.getItem("fleethud_auth_callback");
-        if (cb) {
-          localStorage.removeItem("fleethud_auth_callback");
-          window.location.href = `${cb}?session=${encodeURIComponent(JSON.stringify(session))}`;
-        }
-      }
+
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -200,9 +192,8 @@ export default function ConsolePage() {
         const allSessions: SessionItem[] = Array.from(new Map<string, SessionItem>([...(snap?.sessions || []), ...cloudSessions].map((session: SessionItem) => [session.id, session])).values());
         const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
           (agentFilter === "all" || session.agent === agentFilter) &&
-          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active))
-        );
-        setSessions(filtered.slice((page - 1) * 10, page * 10));
+          (statusFilter === "all" || (statusFilter === "active" ? session.is_active : !session.is_active)));
+        setSessions(filtered.slice((page-1)*10,page*10));
         setReport(snap?.timelines?.[timeline] || snap?.timeline || null);
         setQuota(snap?.quota || []);
         setRoiByProvider(snap?.roi_by_provider || []);
@@ -281,33 +272,6 @@ export default function ConsolePage() {
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
-  };
-
-  const copyQuickToken = async () => {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        const tokenStr = btoa(JSON.stringify(data.session));
-        await navigator.clipboard.writeText(tokenStr);
-        setCopyFeedback("Copied pairing token!");
-        setTimeout(() => setCopyFeedback(""), 3500);
-      }
-    } catch {
-      setCopyFeedback("Failed to copy");
-    }
-  };
-
-  const applyQuickToken = async () => {
-    try {
-      const raw = atob(quickTokenInput.trim());
-      const session = JSON.parse(raw);
-      await supabase.auth.setSession(session);
-      setUser(session.user);
-      setShowTokenModal(false);
-      setQuickTokenInput("");
-    } catch {
-      alert("Invalid pairing token format. Please copy fresh from your web browser session.");
-    }
   };
 
   const handleRemoteRelay = async (session: SessionItem) => {
@@ -718,16 +682,16 @@ export default function ConsolePage() {
           </div>
         </div>
 
-        {sessions.some((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+        {sessions.some((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
           <div className="mb-3 px-3 py-2 bg-red/10 border border-red/30 rounded text-xs text-red flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold">PRO LABS</span>
               <span>Context saturation reserve active (&gt;=90%). Sessions are eligible for zero-token handoff via <code className="font-mono text-[11px] bg-red/20 px-1 py-0.5 rounded">.fleethud/HANDOFF.md</code>.</span>
             </div>
-            {sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
+            {sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9) ? (
               <button
                 onClick={() => {
-                  const target = sessions.find((s) => s.surface !== "cloud" && s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
+                  const target = sessions.find((s) => s.context_window && s.context_tokens && (s.context_tokens / s.context_window) >= 0.9);
                   if (target) handleRemoteRelay(target);
                 }}
                 className="px-2.5 py-1 bg-red text-white text-[11px] font-semibold rounded hover:opacity-90 transition-opacity"
