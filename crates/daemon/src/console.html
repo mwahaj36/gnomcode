@@ -514,14 +514,14 @@
       <div class="table-header-controls">
         <div class="section-title">Live & Historical Agent Sessions</div>
         <div class="filters">
-          <label>Project <select id="project-filter" onchange="currentPage=1; lastSessionsJson=''; loadSessions()"><option value="">All projects</option></select></label><select id="agent-filter" onchange="onFilterChange()">
+          <label>Project <select id="project-filter" onchange="currentPage=1; lastSessionsJson=''; loadSessions()"><option value="">All projects</option></select></label><select id="agent-filter" aria-label="Agent" onchange="onFilterChange()">
             <option value="all">All Agents</option>
             <option value="antigravity">Antigravity</option>
             <option value="codex">OpenAI Codex</option>
             <option value="claude-code">Claude Code</option>
             <option value="gemini-cli">Gemini CLI</option>
           </select>
-          <select id="status-filter" onchange="onFilterChange()">
+          <select id="status-filter" aria-label="Session status" onchange="onFilterChange()">
             <option value="all">All Statuses</option>
             <option value="active">Active Only</option>
             <option value="idle">Idle Only</option>
@@ -579,10 +579,10 @@
         
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
         <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 20px;">
-          <input type="text" id="settings-model-pattern" placeholder="Model (e.g. claude-3-5)">
-          <input type="number" id="settings-model-in" placeholder="In $" step="0.1">
-          <input type="number" id="settings-model-out" placeholder="Out $" step="0.1">
-          <input type="number" id="settings-model-cache" placeholder="Cache $" step="0.1">
+          <input type="text" id="settings-model-pattern" aria-label="Model name or pattern" placeholder="Model (e.g. claude-3-5)">
+          <input type="number" id="settings-model-in" aria-label="Input price per million tokens" placeholder="In $" step="0.1">
+          <input type="number" id="settings-model-out" aria-label="Output price per million tokens" placeholder="Out $" step="0.1">
+          <input type="number" id="settings-model-cache" aria-label="Cached input price per million tokens" placeholder="Cache $" step="0.1">
           <button class="btn-control" style="white-space: nowrap; flex: 0 0 auto;" onclick="addCustomPricingSettings()">+ Add</button>
         </div>
 

@@ -52,3 +52,6 @@ console.log('PASS: partial pricing, independent provider coverage, local hourly 
 
 const projectPartial=renderProjects([{id:'project"safe',name:'Project name',total_tokens:100,sessions:2,cost_basis:'unknown',priced_turns:1,unpriced_turns:1,cost_usd:12}]);
 assert.match(projectPartial,/\$12.00/);assert.match(projectPartial,/Partial estimate/);assert.match(projectPartial,/data-project-id="project&quot;safe"/);
+
+const sharedCss=await readFile(new URL('../web/app/spawnt-console.css',import.meta.url),'utf8');
+assert.doesNotMatch(sharedCss,/var\(--(?:text(?:-\d)?|border|primary-text|surface|bg)\)/,'shared console styles must use shared tokens, not marketing-only aliases');
