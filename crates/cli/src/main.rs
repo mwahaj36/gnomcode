@@ -13,7 +13,8 @@ use spawnt_core::pricing::calculate_plan_roi;
 use spawnt_ingest::ingest_all;
 use spawnt_platform::{attach_parent_console, default_db_path, discover_agent_roots, spawnt_home};
 use spawnt_store::Database;
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
@@ -100,6 +101,37 @@ enum Commands {
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
+    /// Launch an agent in a workspace using an independently owned PTY session.
+    Launch {
+        /// Agent to launch (claude, codex, gemini).
+        agent: String,
+        /// Repository directory (defaults to current working directory).
+        #[arg(short, long)]
+        repo: Option<PathBuf>,
+        /// Model identifier.
+        #[arg(short, long)]
+        model: Option<String>,
+    },
+    /// Stop an active agent session.
+    Stop {
+        /// Session ID to stop.
+        session_id: String,
+    },
+    /// Attach to an active agent terminal session.
+    Attach {
+        /// Session ID to attach to.
+        session_id: String,
+    },
+    /// List supported models with live quota headroom and pricing.
+    Models,
+    /// Internal session host process.
+    #[command(hide = true)]
+    PtyHost {
+        session_id: String,
+        agent: String,
+        repo: PathBuf,
+        model: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -148,6 +180,16 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
+        Commands::Launch { agent, repo, model } => cmd_launch(&agent, repo, model).await,
+        Commands::Stop { session_id } => cmd_stop(&session_id).await,
+        Commands::Attach { session_id } => cmd_attach(&session_id).await,
+        Commands::Models => cmd_models(&db_path).await,
+        Commands::PtyHost {
+            session_id,
+            agent,
+            repo,
+            model,
+        } => cmd_pty_host(&session_id, &agent, &repo, model.as_deref()).await,
     }
 }
 
@@ -854,4 +896,206 @@ Add-Type -AssemblyName System.Windows.Forms
     }
 
     Ok(())
+}
+
+async fn cmd_launch(agent: &str, repo: Option<PathBuf>, model: Option<String>) -> Result<()> {
+    let repo_path = match repo {
+        Some(r) => r,
+        None => std::env::current_dir()?,
+    };
+
+    let session_id = format!(
+        "{}-{}",
+        agent,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    );
+
+    println!(
+        "[WAIT] Launching {} session in {}...",
+        agent,
+        repo_path.display()
+    );
+
+    let record =
+        spawnt_pty::launch_session(&session_id, agent, &repo_path, model.as_deref()).await?;
+
+    println!("[RUN] Session launched successfully");
+    println!("Session ID: {}", record.session_id);
+    println!("Agent:      {}", record.agent);
+    if let Some(m) = &record.model {
+        println!("Model:      {}", m);
+    }
+    println!("Host PID:   {}", record.host_pid);
+    println!("Child PID:  {}", record.child_pid);
+    println!("Stream:     ws://127.0.0.1:{}/stream", record.port);
+    println!();
+    println!("To attach to the terminal:");
+    println!("  spawnt attach {}", record.session_id);
+    println!("To stop the session:");
+    println!("  spawnt stop {}", record.session_id);
+
+    Ok(())
+}
+
+async fn cmd_stop(session_id: &str) -> Result<()> {
+    println!("[WAIT] Stopping session {}...", session_id);
+    spawnt_pty::stop_session(session_id).await?;
+    println!("[IDLE] Session {} stopped", session_id);
+    Ok(())
+}
+
+async fn cmd_attach(session_id: &str) -> Result<()> {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::connect_async;
+    use tokio_tungstenite::tungstenite::Message;
+
+    let record = spawnt_pty::load_session_record(session_id)?;
+    let url = format!(
+        "ws://127.0.0.1:{}/stream?token={}",
+        record.port, record.token
+    );
+
+    println!("Connecting to session {} at {}...", session_id, url);
+    println!("Press Ctrl+C to detach without stopping the agent.\n");
+
+    let (ws_stream, _) = connect_async(&url).await?;
+    let (mut write_half, mut read_half) = ws_stream.split();
+
+    // Spawn task to read stdout from WS
+    let read_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = read_half.next().await {
+            match msg {
+                Message::Binary(bytes) => {
+                    let _ = std::io::stdout().write_all(&bytes);
+                    let _ = std::io::stdout().flush();
+                }
+                Message::Text(text) => {
+                    let _ = std::io::stdout().write_all(text.as_bytes());
+                    let _ = std::io::stdout().flush();
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    // Read user stdin on a blocking thread
+    let (stdin_tx, mut stdin_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 1024];
+        let mut stdin = std::io::stdin();
+        while let Ok(n) = stdin.read(&mut buffer) {
+            if n == 0 || stdin_tx.blocking_send(buffer[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                println!("\nDetached from session {}. The agent process is still running.", session_id);
+                break;
+            }
+            Some(input) = stdin_rx.recv() => {
+                if write_half.send(Message::Binary(input.into())).await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+
+    read_task.abort();
+    Ok(())
+}
+
+async fn cmd_models(db_path: &Path) -> Result<()> {
+    let db = spawnt_store::Database::open(db_path)?;
+    let quotas = db.get_latest_quota_snapshots().unwrap_or_default();
+
+    let candidates = [
+        (
+            "claude-code",
+            "claude-3-5-sonnet-20241022",
+            "Claude 3.5 Sonnet",
+            "anthropic",
+        ),
+        (
+            "claude-code",
+            "claude-3-opus-20240229",
+            "Claude 3 Opus",
+            "anthropic",
+        ),
+        (
+            "claude-code",
+            "claude-3-5-haiku-20241022",
+            "Claude 3.5 Haiku",
+            "anthropic",
+        ),
+        ("codex", "o3", "OpenAI o3", "openai"),
+        ("codex", "o4-mini", "OpenAI o4-mini", "openai"),
+        ("codex", "codex-mini", "OpenAI Codex Mini", "openai"),
+        ("gemini-cli", "gemini-2.5-pro", "Gemini 2.5 Pro", "google"),
+        (
+            "gemini-cli",
+            "gemini-2.5-flash",
+            "Gemini 2.5 Flash",
+            "google",
+        ),
+    ];
+
+    println!(
+        "{:<12} {:<28} {:<10} {:>10} {:>12} {:>12}",
+        "AGENT", "MODEL", "PROVIDER", "CONTEXT", "QUOTA REM.", "PRICE IN/OUT"
+    );
+    println!(
+        "{:-<12} {:-<28} {:-<10} {:-<10} {:-<12} {:-<12}",
+        "", "", "", "", "", ""
+    );
+
+    for (agent, model, _display, provider) in candidates {
+        let pricing = spawnt_core::pricing::lookup_model_pricing(model);
+        let (cw, in_cost, out_cost) = match pricing {
+            Some(p) => (
+                p.context_window,
+                p.input_per_mtok_usd,
+                p.output_per_mtok_usd,
+            ),
+            None => (128_000, 0.0, 0.0),
+        };
+
+        let quota_str = quotas
+            .iter()
+            .find(|q| q.provider == provider)
+            .map(|q| format!("{}%", (100.0 - q.used_pct).clamp(0.0, 100.0).round() as u32))
+            .unwrap_or_else(|| "100%".to_owned());
+
+        let price_str = format!("${:.1}/${:.1}", in_cost, out_cost);
+
+        println!(
+            "{:<12} {:<28} {:<10} {:>10} {:>12} {:>12}",
+            agent,
+            model,
+            provider,
+            format!("{}k", cw / 1000),
+            quota_str,
+            price_str
+        );
+    }
+
+    Ok(())
+}
+
+async fn cmd_pty_host(
+    session_id: &str,
+    agent: &str,
+    repo: &Path,
+    model: Option<&str>,
+) -> Result<()> {
+    spawnt_pty::run_pty_host(session_id, agent, repo, model, None)
+        .await
+        .map_err(|e| anyhow::anyhow!("Session host failed: {e}"))
 }

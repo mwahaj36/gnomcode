@@ -18,6 +18,7 @@ spawnt-core = { path = "crates/core" }
 spawnt-adapters = { path = "crates/adapters" }
 spawnt-ingest = { path = "crates/ingest" }
 spawnt-store = { path = "crates/store" }
+spawnt-pty = { path = "crates/pty" }
 spawnt-platform = { path = "crates/platform" }
 spawnt-daemon = { path = "crates/daemon" }
 # External dependencies (see AGENTS.md §5).
@@ -43,6 +44,10 @@ libc = "0.2"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 toml = "0.8"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = "0.26"
+portable-pty = "0.9"
+conpty-oxide = "0.1.2"
 tempfile = "3.13"
 insta = { version = "1.40", features = ["json", "yaml"] }
 
