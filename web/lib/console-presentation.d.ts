@@ -13,3 +13,6 @@ export function updateOngoing(element: HTMLElement, sessions: unknown): void;
 export function renderOngoing(sessions: unknown): string;
 
 export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: string | null): void;
+
+export function renderChatCards(events: unknown): string;
+export function updateChat(element: HTMLElement, events: unknown): void;
