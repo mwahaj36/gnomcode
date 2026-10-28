@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use spawnt_core::rules::{GuardrailRule, ResumeQueueEntry};
 use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
-    Session, SessionState, Surface, TrustLevel, UsageRecord,
+    RoutingPolicy, Session, SessionState, Surface, TrustLevel, UsageRecord,
 };
 use std::path::Path;
 use thiserror::Error;
@@ -1037,6 +1037,30 @@ impl Database {
             ],
         )?;
         Ok(())
+    }
+
+    /// Returns the current global routing and failover policy.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn get_routing_policy(&self) -> Result<RoutingPolicy, Error> {
+        let cfg = self.get_context_relay_config()?;
+        Ok(match cfg.policy.as_str() {
+            "auto" | "automatic" => RoutingPolicy::Automatic,
+            "deny_cross_provider" => RoutingPolicy::DenyCrossProvider,
+            _ => RoutingPolicy::AskFirst,
+        })
+    }
+
+    /// Sets and saves the global routing and failover policy.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn save_routing_policy(&self, policy: RoutingPolicy) -> Result<(), Error> {
+        let mut cfg = self.get_context_relay_config().unwrap_or_default();
+        cfg.policy = policy.as_str().to_owned();
+        cfg.updated_at = Utc::now().to_rfc3339();
+        self.save_context_relay_config(&cfg)
     }
 
     /// Lists recent recorded Context Relay events.
@@ -2731,6 +2755,7 @@ mod tests {
 
     #[test]
     fn context_relay_config_and_ledger_persist() {
+        use spawnt_core::RoutingPolicy;
         let db = Database::open_in_memory().expect("in-memory db");
         let def = db.get_context_relay_config().expect("default config");
         assert_eq!(def.policy, "ask_first");
@@ -2743,6 +2768,18 @@ mod tests {
         let loaded = db.get_context_relay_config().expect("loaded config");
         assert_eq!(loaded.policy, "auto");
         assert_eq!(loaded.threshold_pct, 85);
+
+        // Test RoutingPolicy wrapper
+        assert_eq!(
+            db.get_routing_policy().expect("get policy"),
+            RoutingPolicy::Automatic
+        );
+        db.save_routing_policy(RoutingPolicy::DenyCrossProvider)
+            .expect("save routing policy");
+        assert_eq!(
+            db.get_routing_policy().expect("get policy 2"),
+            RoutingPolicy::DenyCrossProvider
+        );
 
         let entry = ContextRelayEntry {
             id: "relay-1".to_owned(),

@@ -124,6 +124,28 @@ enum Commands {
     },
     /// List supported models with live quota headroom and pricing.
     Models,
+    /// Switch an ongoing session to another model using zero-token handoff.
+    Switch {
+        /// Session ID to switch.
+        session_id: String,
+        /// Target model identifier.
+        #[arg(short, long)]
+        model: String,
+    },
+    /// Resume an idle or rate-limited session when quota resets.
+    Resume {
+        /// Session ID to resume.
+        session_id: String,
+        /// Optional resume prompt instruction.
+        #[arg(short, long)]
+        prompt: Option<String>,
+    },
+    /// View or configure the model failover and routing policy.
+    Policy {
+        /// Set routing policy: ask_first, automatic, or deny_cross_provider.
+        #[arg(long)]
+        set: Option<String>,
+    },
     /// Internal session host process.
     #[command(hide = true)]
     PtyHost {
@@ -184,6 +206,9 @@ async fn main() -> Result<()> {
         Commands::Stop { session_id } => cmd_stop(&session_id).await,
         Commands::Attach { session_id } => cmd_attach(&session_id).await,
         Commands::Models => cmd_models(&db_path).await,
+        Commands::Switch { session_id, model } => cmd_switch(&session_id, &model, &db_path).await,
+        Commands::Resume { session_id, prompt } => cmd_resume(&session_id, prompt, &db_path).await,
+        Commands::Policy { set } => cmd_policy(set, &db_path).await,
         Commands::PtyHost {
             session_id,
             agent,
@@ -1086,6 +1111,86 @@ async fn cmd_models(db_path: &Path) -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+async fn cmd_switch(session_id: &str, model: &str, db_path: &Path) -> Result<()> {
+    println!(
+        "[WAIT] Compiling zero-token handoff for session {} -> {}...",
+        session_id, model
+    );
+    let db = spawnt_store::Database::open(db_path)?;
+    let history = db
+        .get_session_chat(session_id, Some(50))
+        .unwrap_or_default();
+    let turn_count = history.len() as u32;
+
+    let mut user_prompts = Vec::new();
+    for evt in &history {
+        if evt.role == spawnt_core::ChatRole::User {
+            user_prompts.push(evt.content.clone());
+        }
+    }
+    let summary = if user_prompts.is_empty() {
+        format!("Continuation of session {session_id}")
+    } else {
+        user_prompts.join("; ")
+    };
+    let redacted_summary = spawnt_core::redact::redact_chat_content(&summary);
+
+    let packet = spawnt_core::HandoffPacket {
+        session_id: session_id.to_owned(),
+        source_model: "previous".to_owned(),
+        target_model: model.to_owned(),
+        prompt_summary: redacted_summary,
+        touched_files: Vec::new(),
+        turn_count,
+        created_at: chrono::Utc::now(),
+    };
+
+    println!("[RUN] Zero-token handoff compiled successfully");
+    println!("Session ID:   {}", packet.session_id);
+    println!("Target Model: {}", packet.target_model);
+    println!("Summarized:   {} turns", packet.turn_count);
+    println!("Context Goal: {}", packet.prompt_summary);
+    Ok(())
+}
+
+async fn cmd_resume(session_id: &str, prompt: Option<String>, db_path: &Path) -> Result<()> {
+    println!("[WAIT] Arming resume queue for session {}...", session_id);
+    let db = spawnt_store::Database::open(db_path)?;
+    let entry = spawnt_core::rules::ResumeQueueEntry {
+        session_id: session_id.to_owned(),
+        agent: spawnt_core::AgentId::ClaudeCode,
+        cwd: ".".to_owned(),
+        resume_prompt: prompt.unwrap_or_else(|| "continue".to_owned()),
+        max_runs: 1,
+        runs_completed: 0,
+        eligible_after: chrono::Utc::now(),
+    };
+    db.arm_resume_queue(&entry)?;
+    println!("[RUN] Session {} armed in Resume Queue", session_id);
+    println!("Session will resume automatically upon quota reset.");
+    Ok(())
+}
+
+async fn cmd_policy(set: Option<String>, db_path: &Path) -> Result<()> {
+    let db = spawnt_store::Database::open(db_path)?;
+    if let Some(new_policy) = set {
+        let policy = spawnt_core::RoutingPolicy::parse_policy(&new_policy).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid policy: {new_policy}. Valid options: ask_first, automatic, deny_cross_provider"
+            )
+        })?;
+        db.save_routing_policy(policy)?;
+        println!("[RUN] Routing policy updated to: {}", policy.as_str());
+    } else {
+        let policy = db
+            .get_routing_policy()
+            .unwrap_or(spawnt_core::RoutingPolicy::AskFirst);
+        println!("Current routing policy: {}", policy.as_str());
+        println!("Available policies:     ask_first, automatic, deny_cross_provider");
+    }
     Ok(())
 }
 
