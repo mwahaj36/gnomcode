@@ -343,7 +343,8 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 Ok(sessions) => {
                     let hosted = spawnt_pty::list_active_sessions();
                     let visible = sessions.iter().take(100).map(|session| {
-                        let can_prompt = prompt_host(session, &sessions, &hosted).is_some();
+                        let can_prompt = session.state == spawnt_core::SessionState::Idle
+                            && prompt_host(session, &sessions, &hosted).is_some();
                         json!({"id":session.id,"title":session.title,"agent":session.agent,"state":session.state,"can_prompt":can_prompt})
                     }).collect::<Vec<_>>();
                     json!({"type":"sessions","sessions":visible})
