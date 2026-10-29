@@ -7,102 +7,12 @@ import FooterWrapper from "../components/FooterWrapper";
 
 export const metadata: Metadata = {
   metadataBase: new URL(branding.baseUrl),
-  title: {
-    default: "spawnt — Mission Control for AI Coding Agents",
-    template: "%s | spawnt",
-  },
-  description:
-    "Live mission control, token cost attribution, per-model quota pools, and flight recorder for Claude Code, OpenAI Codex, and Google Antigravity across Windows, macOS, and Linux.",
-  keywords: [
-    "AI coding agent monitoring",
-    "Claude Code token tracker",
-    "OpenAI Codex rate limit monitor",
-    "Google Antigravity mission control",
-    "LLM spend attribution",
-    "Prompt cache savings calculator",
-    "AI developer tooling",
-    "Local agent flight recorder",
-  ],
-  authors: [{ name: "spawnt Team" }],
-  creator: "spawnt",
-  publisher: "spawnt",
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: branding.baseUrl,
-    title: "spawnt — Live Mission Control for AI Coding Agents",
-    description:
-      "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with local-first data handling.",
-    siteName: "spawnt",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "spawnt — Live Mission Control for AI Coding Agents",
-    description:
-      "Monitor token usage, per-model quota pools, and live session states for Claude Code, Codex, and Antigravity with local-first data handling.",
-  },
-  alternates: {
-    canonical: branding.baseUrl,
-  },
-  icons: {
-    icon: "/spawnt-mark.svg",
-  },
-};
-
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "SoftwareApplication",
-      name: "spawnt",
-      operatingSystem: "Windows, macOS, Linux",
-      applicationCategory: "DeveloperApplication",
-      offers: {
-        "@type": "Offer",
-        price: "0",
-        priceCurrency: "USD",
-      },
-      description:
-        "Live mission control, token spend attribution, and per-model quota monitoring for AI coding agents with local-first data handling.",
-    },
-    {
-      "@type": "Organization",
-      name: "spawnt",
-      url: branding.baseUrl,
-    },
-    {
-      "@type": "FAQPage",
-      mainEntity: [
-        {
-          "@type": "Question",
-          name: "Does spawnt store my source code or prompt contents?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "The current monitoring features store redacted metadata. Local conversation history is planned for model switching; existing optional metadata sync is not end-to-end encrypted.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Which AI coding agents does spawnt support?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "spawnt supports Claude Code, OpenAI Codex (CLI & Desktop App), Google Antigravity (IDE & Autonomous Agent), and Google Gemini CLI.",
-          },
-        },
-      ],
-    },
-  ],
+  title: { default: "Spawnt — The Runtime for AI Coding Agents", template: "%s | Spawnt" },
+  description: "Launch, switch and remotely control AI coding agents. Work across Claude Code, Codex and Gemini CLI from one place.",
+  keywords: ["AI coding agents", "Claude Code", "OpenAI Codex", "Gemini CLI", "agent orchestrator", "switch AI models", "remote AI agent control", "AI developer tools", "multi-agent"],
+  authors: [{ name: "Wahaj", url: "https://github.com/mwahaj36" }], creator: "Wahaj", publisher: "Spawnt",
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+  icons: { icon: "/spawnt-mark.svg" },
 };
 
 export default function RootLayout({
@@ -114,10 +24,7 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('spawnt-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(_){}})();` }} />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+
       </head>
       <body className="bg-bg text-[var(--sp-text)] antialiased min-h-screen flex flex-col font-sans">
         <Navbar />

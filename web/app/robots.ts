@@ -1,13 +1,9 @@
-import branding from "../branding.json";
 import { MetadataRoute } from "next";
-
+import branding from "../branding.json";
 export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: {
-      userAgent: "*",
-      allow: "/",
-      disallow: ["/api/", "/auth/callback"],
-    },
-    sitemap: `${branding.baseUrl}/sitemap.xml`,
-  };
+  const disallow = ["/api/", "/_next/", "/console", "/auth", "/settings"];
+  return { rules: [
+    { userAgent: "*", allow: "/", disallow },
+    ...["GPTBot", "PerplexityBot", "ClaudeBot"].map(userAgent => ({ userAgent, allow: "/", disallow })),
+  ], sitemap: `${branding.baseUrl}/sitemap.xml` };
 }
