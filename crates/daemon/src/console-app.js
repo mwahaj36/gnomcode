@@ -618,6 +618,17 @@ function cycleTheme() {
     let ideSessions = [];
     let hostedSessions = [];
     let chatRequest = 0;
+    const chatDrafts = new Map();
+    const pendingPrompts = new Set();
+
+    function selectChatSession(sessionId) {
+      const input = document.getElementById('chat-prompt-text');
+      if (activeChatSession) chatDrafts.set(activeChatSession, input.value);
+      activeChatSession = sessionId;
+      input.value = chatDrafts.get(sessionId) || '';
+      document.getElementById('chat-send-btn').disabled = pendingPrompts.has(sessionId);
+      document.getElementById('chat-delivery-status').textContent = '';
+    }
 
     async function renderIdeSessions() {
       const presentation = await import('/console-presentation.js');
@@ -627,7 +638,7 @@ function cycleTheme() {
     }
 
     function showLauncher() {
-      activeChatSession = ''; chatEvents = []; chatRequest++;
+      selectChatSession(''); chatEvents = []; chatRequest++;
       if (chatWs) { chatWs.close(); chatWs = null; }
       document.getElementById('session-chat-panel').hidden = true;
       document.getElementById('ide-launcher').hidden = false;
@@ -738,7 +749,7 @@ function cycleTheme() {
         if (status) status.textContent = `Session ${record.session_id} launched! Opening conversation...`;
         await loadSessions();
         await loadChat(record.session_id);
-        toggleStream();
+        if (agent === 'terminal') toggleStream();
       } catch (err) {
         if (status) status.textContent = `Could not launch: ${err.message}`;
       } finally {
@@ -750,9 +761,10 @@ function cycleTheme() {
       if (event) event.preventDefault();
       const input = document.getElementById('chat-prompt-text');
       const text = input?.value.trim();
-      if (!text || !activeChatSession) return;
-      const status = document.getElementById('chat-status');
+      if (!text || !activeChatSession || document.getElementById('chat-send-btn').disabled) return;
+      const status = document.getElementById('chat-delivery-status');
       const sessionId = activeChatSession;
+      pendingPrompts.add(sessionId);
       const button = document.getElementById('chat-send-btn'); button.disabled = true;
       if (status) status.textContent = 'Sending prompt...';
       try {
@@ -763,15 +775,29 @@ function cycleTheme() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || 'Prompt failed');
+          throw new Error(err.message || (res.status === 404 ? 'This session is not controlled by Spawnt. Start an agent with New Session to send messages here.' : 'The terminal did not accept the prompt. Check Terminal stream and retry.'));
         }
-        if (input) input.value = '';
-        if (status) status.textContent = 'Prompt delivered to agent. Awaiting response...';
+        if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
+        if (sessionId === activeChatSession) {
+          if (input.value.trim() === text) input.value = '';
+          if (status) status.textContent = 'Prompt delivered to agent.';
+          input.focus();
+        }
         if (sessionId === activeChatSession) setTimeout(() => loadChat(sessionId, false, true), 1000);
       } catch (err) {
-        if (status) status.textContent = `Prompt delivery failed: ${err.message}`;
-      } finally { button.disabled = false; }
+        if (sessionId === activeChatSession && status) status.textContent = `Prompt delivery failed: ${err.message}`;
+      } finally {
+        pendingPrompts.delete(sessionId);
+        button.disabled = pendingPrompts.has(activeChatSession);
+      }
     }
+
+    document.getElementById('chat-prompt-text').addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        document.getElementById('chat-prompt-form').requestSubmit();
+      }
+    });
 
     function toggleStream() {
       const terminal = document.getElementById('chat-terminal-view');
@@ -819,7 +845,8 @@ function cycleTheme() {
       if (!sessionId) return;
       if (silent && activeChatSession !== sessionId) return;
       if (!silent && !earlier) {
-        activeChatSession = sessionId; chatEvents = [];
+        if (activeChatSession !== sessionId) selectChatSession(sessionId);
+        chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
         document.getElementById('chat-stream').hidden = false;
@@ -844,10 +871,16 @@ function cycleTheme() {
         page.forEach(event => merged.set(event.event_id, event));
         chatEvents = [...merged.values()].sort((a,b) => a.turn_index-b.turn_index || a.created_at.localeCompare(b.created_at) || a.event_id.localeCompare(b.event_id));
         const presentation = await import('/console-presentation.js');
-        presentation.updateChat(document.getElementById('chat-stream'), chatEvents);
+        const stream = document.getElementById('chat-stream');
+        const oldHeight = stream.scrollHeight;
+        const oldTop = stream.scrollTop;
+        presentation.updateChat(stream, chatEvents);
+        if (earlier) stream.scrollTop = oldTop + stream.scrollHeight - oldHeight;
+        else if (!silent) stream.scrollTop = stream.scrollHeight;
         if (!silent) document.getElementById('chat-earlier').hidden = page.length < 500;
         document.getElementById('chat-delete').hidden = chatEvents.length === 0;
-        if (status) status.textContent = `${chatEvents.length} recorded message${chatEvents.length === 1 ? '' : 's'}`;
+        const messageCount = chatEvents.filter(event => (event.role === 'user' || event.role === 'assistant') && event.content?.trim()).length;
+        if (status) status.textContent = `${messageCount} recorded message${messageCount === 1 ? '' : 's'}`;
         panel.hidden = activeView !== 'sessions';
         if (!earlier && !silent) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch {

@@ -10,7 +10,7 @@ const fn=name=>file.statements.filter(ts.isFunctionDeclaration).find(node=>node.
 const window={location:new URL('http://127.0.0.1:41738/?token=unit-local-token#overview')};
 const document={getElementById:()=>({setAttribute(){}}),querySelectorAll:()=>[]};
 const history={pushState(_state,_title,url){window.location=new URL(url,window.location);}};
-const navigate=new Function('document','window','history','URL',`let activeView;${fn('consoleViewUrl')}\n${fn('setView')}\nreturn setView;`)(document,window,history,URL);
+const navigate=new Function('document','window','history','URL',`let activeView;const activeChatSession='';${fn('consoleViewUrl')}\n${fn('setView')}\nreturn setView;`)(document,window,history,URL);
 for(const view of ['sessions','settings','overview']) {
  navigate(view);
  assert.equal(window.location.searchParams.get('token'),'unit-local-token',`navigation to ${view} must preserve local authorization across reload`);
