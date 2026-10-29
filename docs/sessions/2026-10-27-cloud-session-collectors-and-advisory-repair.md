@@ -1,0 +1,12 @@
+## 2026-10-27 — Cloud session collectors and advisory repair
+
+- Goal: expose hosted sessions on all supported operating systems without inventing activity or usage.
+- Implemented `cloud-session` CLI with Codex runtime-ID detection and explicit native IDs for Claude Code, Cursor, Antigravity, Gemini CLI, Cline/Roo and Aider. A collector heartbeat is connected presence, never active agent work; it expires after 90 seconds.
+- Reused native usage adapters and added strict metadata-only invocation JSONL imports with durable checkpoints, stable deduplication, cache accounting, Rust pricing and unknown-cost handling. Remote payloads omit titles and repository labels/paths. API-equivalent USD is estimated, not a subscription invoice.
+- Added account-isolated Supabase cloud-session rows and a security-invoker view, so desktop snapshots cannot overwrite cloud sessions. Added dashboard merging, unknown-data display and per-session cost labels. Cloud summary charts and provider-specific telemetry exporters remain outside this implementation.
+- Fixed cargo-deny config by applying its supported private-workspace policy (`publish=false`) while retaining third-party license checks. Updated vulnerable ctutils 0.4.2 to 0.4.4. The patched crate requires Rust 1.87, so workspace MSRV and CI were updated; minimum-version workspace checking passed.
+- Validation: full Rust quality gate passed (55 tests, formatting, Clippy, advisories, licenses, source checks and core purity). Embedded Postgres checks passed for migration repeatability, account isolation, metadata requirements, measured usage, server timestamps and dead-collector expiry. Next.js production build passed. A collector for the actual current Codex thread was started and verified through the authenticated local daemon API; usage remains unknown because this host exposes no rollout or token feed.
+- Cross-platform review: shared Rust implementation uses Path/PathBuf, existing environment overrides, no new unsafe/process control or platform-specific shell dependency. JSONL handles CRLF; tests use temporary directories. Manual CI now covers Linux, Windows and macOS. Native Windows/macOS execution has not run in this Linux environment.
+- Deployment remains pending: apply the v3 Supabase migration, deploy the web client and provision a paired account session securely. No account pairing/admin database credential was available here; no live account data was changed.
+
+
