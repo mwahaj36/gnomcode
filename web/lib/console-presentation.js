@@ -133,6 +133,63 @@ export function renderSessionList(sessions, selected = '', query = '') {
   return matching.map(session => `<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.agent)} · ${escape(session.state || 'unknown')}</span><time datetime="${escape(session.last_event_at || '')}">${escape(relativeActivity(session.last_event_at))}</time></button>`).join('') || '<p class="local-view-message">No matching sessions on this page.</p>';
 }
 
+// A deliberately restricted Markdown surface: raw HTML and embedded media stay inert.
+function chatInline(text) {
+  return text.split(/(`+[^`]+`+|\[[^\]]+\]\([^\s)]+\))/g).map(part => {
+    if (part.startsWith('`')) return `<code>${escape(part.replace(/^`+|`+$/g, ''))}</code>`;
+    const link = part.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
+    if (link) return /^https?:\/\//i.test(link[2]) ? `<a href="${escape(link[2])}" target="_blank" rel="noopener noreferrer">${escape(link[1])}</a>` : escape(part);
+    return escape(part).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>').replace(/~~([^~]+)~~/g, '<del>$1</del>');
+  }).join('');
+}
+
+function chatMarkdown(text) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const html = [];
+  const cells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    const fence = line.match(/^\s*(`{3,}|~{3,})([^\s]*)\s*$/);
+    if (fence) {
+      const code = []; i++;
+      while (i < lines.length && !new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`).test(lines[i])) code.push(lines[i++]);
+      i++;
+      html.push(`<pre><code${/^[\w+-]+$/.test(fence[2]) ? ` class="language-${escape(fence[2])}"` : ''}>${escape(code.join('\n'))}</code></pre>`);
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) { html.push(`<h${heading[1].length}>${chatInline(heading[2])}</h${heading[1].length}>`); i++; continue; }
+    if (line.includes('|') && lines[i + 1] && cells(lines[i + 1]).every(cell => /^:?-{3,}:?$/.test(cell))) {
+      const head = cells(line); i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(`<tr>${cells(lines[i++]).map(cell => `<td>${chatInline(cell)}</td>`).join('')}</tr>`);
+      html.push(`<div class="sp-chat-table"><table><thead><tr>${head.map(cell => `<th>${chatInline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
+      continue;
+    }
+    const list = line.match(/^\s*(?:([-+*])|\d+[.)])\s+(.+)$/);
+    if (list) {
+      const tag = list[1] ? 'ul' : 'ol'; const items = [];
+      const indent = line.match(/^\s*/)[0].length;
+      while (i < lines.length) {
+        const item = lines[i].match(/^\s*(?:([-+*])|\d+[.)])\s+(.+)$/);
+        if (!item || lines[i].match(/^\s*/)[0].length !== indent || Boolean(item[1]) !== Boolean(list[1])) break;
+        const continuation = []; i++;
+        while (i < lines.length && lines[i].trim() && lines[i].match(/^\s*/)[0].length > indent) continuation.push(lines[i++].slice(indent + 2));
+        items.push(`<li>${chatInline(item[2])}${continuation.length ? chatMarkdown(continuation.join('\n')) : ''}</li>`);
+      }
+      const start = tag === 'ol' ? Number.parseInt(line.trim(), 10) : 1;
+      html.push(`<${tag}${start !== 1 ? ` start="${start}"` : ''}>${items.join('')}</${tag}>`); continue;
+    }
+    if (/^>\s?/.test(line)) { html.push(`<blockquote>${chatInline(line.replace(/^>\s?/, ''))}</blockquote>`); i++; continue; }
+    if (/^\s*(?:---+|\*\*\*+|___+)\s*$/.test(line)) { html.push('<hr>'); i++; continue; }
+    const paragraph = [line]; i++;
+    while (i < lines.length && lines[i].trim() && !/^\s*(?:#{1,6}\s|`{3,}|~{3,}|>|[-+*]\s|\d+[.)]\s|---+$|___+$)/.test(lines[i]) && !(lines[i].includes('|') && lines[i + 1] && cells(lines[i + 1]).every(cell => /^:?-{3,}:?$/.test(cell)))) paragraph.push(lines[i++]);
+    html.push(`<p>${paragraph.map(chatInline).join('<br>')}</p>`);
+  }
+  return html.join('');
+}
+
 export function renderChatCards(events) {
   events = events?.filter(evt => (evt.role === 'user' || evt.role === 'assistant') && evt.content?.trim());
   if (!Array.isArray(events) || !events.length) {
@@ -140,7 +197,7 @@ export function renderChatCards(events) {
   }
   return `<div class="sp-chat-stream">${events.map(evt => {
     const role = evt.role || 'system';
-    const roleLabel = role === 'user' ? 'User' : role === 'assistant' ? 'Agent' : role === 'tool' ? (evt.tool_name ? `Tool: ${evt.tool_name}` : 'Tool') : 'System';
+    const roleLabel = role === 'user' ? 'You' : 'Agent';
     const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';
     const approvalPrompt = evt.status === 'pending' ? `<p class="sp-approval-banner">Approval is pending in the agent.</p>` : '';
     return `<article class="sp-chat-card sp-chat-${escape(role)}">
@@ -149,12 +206,16 @@ export function renderChatCards(events) {
         ${statusBadge}
         <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
       </header>
-      <div class="sp-chat-body">${escape(evt.content)}</div>
+      <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : escape(evt.content)}</div>
       ${approvalPrompt}
     </article>`;
   }).join('')}</div>`;
 }
 
 export function updateChat(element, events) {
+  const previousHeight = element.scrollHeight;
+  const previousTop = element.scrollTop;
+  const follow = previousHeight - previousTop - element.clientHeight < 80;
   updateMarkup(element, renderChatCards(events));
+  element.scrollTop = follow ? element.scrollHeight : previousTop;
 }
