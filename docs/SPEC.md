@@ -955,3 +955,5 @@ Phase 1 packaging: Reqwest uses its Rust TLS backend to remove the Linux system 
 Branding configuration: `web/branding.json` is consumed by the website and embedded in `core::branding` at compile time. The daemon renders its public console links from that configuration. `scripts/sync-branding.mjs` generates Electron and npm configuration and synchronizes installer base URLs; CI checks generated outputs for drift.
 
 The manually triggered `npm-smoke.yml` builds the host CLI on Windows, macOS and Linux, stages host packages with approved legal inputs, installs actual npm tarballs offline, and invokes version, doctor and report. It does not publish packages. Full seven-target release preflight remains separate.
+
+**Desktop chrome follow-up (2026-10-29):** Remove the default Electron application menu. Use a compact draggable title region with Spawnt theme colors and platform window-control overlays, retaining OS minimize, maximize/restore, close and macOS traffic-light behavior. Appearance-only IPC accepts a fixed light/dark enum from the authenticated main renderer; no window/process control is exposed to remote web clients.

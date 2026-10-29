@@ -1,10 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
 import { spawn } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
-import { daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip } from './security';
+import { daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip, windowChrome } from './security';
 import { readDaemon } from './daemon-client';
 
 let window: BrowserWindow | null = null;
@@ -66,7 +66,9 @@ async function start(): Promise<void> {
   const isolatedSession = session.fromPartition('spawnt-local');
   isolatedSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isAllowedResource(details.url, daemonPort) }));
   isolatedSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  Menu.setApplicationMenu(null);
   window = new BrowserWindow({
+    ...windowChrome(process.platform, nativeTheme.shouldUseDarkColors),
     title: 'Spawnt', width: 1280, height: 820, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: !app.isPackaged, session: isolatedSession }
   });
@@ -78,7 +80,11 @@ async function start(): Promise<void> {
   current.webContents.on('will-navigate', (event, target) => { if (!isDaemonNavigation(target, daemonPort)) event.preventDefault(); });
   current.webContents.on('will-redirect', (event, target) => { if (!isDaemonNavigation(target, daemonPort)) event.preventDefault(); });
   current.on('close', event => { if (!quitting && tray) { event.preventDefault(); current.hide(); } });
-  ipcMain.handle('desktop:get-version', (event, ...args: unknown[]) => {
+  ipcMain.handle('desktop:set-appearance', (event, theme: unknown, ...extra: unknown[]) => {
+    if (extra.length || !['light','dark'].includes(String(theme)) || typeof theme !== 'string' || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender or appearance');
+    const overlay = windowChrome(process.platform, theme === 'dark').titleBarOverlay;
+    if (overlay && typeof overlay === 'object') current.setTitleBarOverlay(overlay);
+  });  ipcMain.handle('desktop:get-version', (event, ...args: unknown[]) => {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
     return app.getVersion();
   });
