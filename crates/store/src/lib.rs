@@ -729,6 +729,16 @@ impl Database {
         Ok(())
     }
 
+    /// Reads bounded opening user-message previews for local or encrypted conversation labels.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the query fails.
+    pub fn conversation_title_candidates(&self, session_id: &str) -> Result<Vec<String>, Error> {
+        let mut statement = self.conn.prepare(obfstr::obfstr!("SELECT substr(content, 1, 8192) FROM chat_event WHERE session_id = ?1 AND role = 'user' ORDER BY turn_index, created_at, event_id LIMIT 16"))?;
+        let rows = statement.query_map(params![session_id], |row| row.get(0))?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+    }
+
     /// Retrieves the most recent structured chat events for a session in turn order.
     ///
     /// # Errors

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import AccountLink from "../components/AccountLink";
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
 import ThemeControl from "../components/ThemeControl";
@@ -116,25 +117,25 @@ export default function LandingPage() {
 
   return <div className="sp-page">
     <a className="sp-skip" href="#content">Skip to content</a>
-    <header className="sp-header" ref={headerRef}>
+    <header onKeyDown={event => { if (event.key === "Escape") { setMenuOpen(false); event.currentTarget.querySelector<HTMLButtonElement>(".sp-menu")?.focus(); } }} className="sp-header" ref={headerRef}>
       <div className="sp-nav sp-width">
         <Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link>
         <span className="sp-nav-slash" aria-hidden="true">/</span>
-        <nav className={menuOpen ? "sp-nav-links open" : "sp-nav-links"} aria-label="Main navigation">
+        <nav id="marketing-navigation" onClick={() => setMenuOpen(false)} className={menuOpen ? "sp-nav-links open" : "sp-nav-links"} aria-label="Main navigation">
           <a href="#features" onClick={() => setMenuOpen(false)}>Product</a>
           <a href="#agents" onClick={() => setMenuOpen(false)}>Agents</a>
           <Link href="/docs">Docs</Link>
           <Link href="/pricing">Pricing</Link>
-          <Link className="sp-nav-login-mobile" href="/auth" onClick={() => setMenuOpen(false)}>Log in</Link>
+          <AccountLink className="sp-nav-login-mobile" onClick={() => setMenuOpen(false)} />
         </nav>
-        <div className="sp-nav-right"><Link href="/auth" className="sp-nav-login">Log in <span aria-hidden="true">↗</span></Link><Link href="/downloads" className="sp-nav-cta">Download <span aria-hidden="true">↗</span></Link></div>
-        <button className="sp-menu" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-label="Toggle menu"><span /><span /><span /></button>
+        <div className="sp-nav-right"><AccountLink className="sp-nav-login" arrow /><Link href="/downloads" className="sp-nav-cta">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div>
+        <button className="sp-menu" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="marketing-navigation" aria-label="Toggle menu"><span /><span /><span /></button>
       </div>
     </header>
 
     <main id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download spawnt <span aria-hidden="true">→</span></Link><Link className="sp-button-outline" href="/docs">View docs <span aria-hidden="true">↗</span></Link></div><small>Local-first. Cloud sync is optional.</small></div>
+        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download spawnt <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Local-first. Cloud sync is optional.</small></div>
         <div className="sp-hero-shot" aria-label="Illustrative console preview">
           <div className="sp-shot-head"><span><Mark /> spawnt <b>/</b> overview</span><span className="sp-demo-label">ILLUSTRATIVE PREVIEW</span></div>
           <div className="sp-shot-body"><ConsoleTourView kind="overview" compact /></div>
@@ -154,7 +155,7 @@ export default function LandingPage() {
           setTab(next); tourTabs.current[next]?.focus();
         }}>{view.name}</button>)}</div>
         <div className="sp-tour-panel" role="tabpanel" id="tour-panel" aria-labelledby={`tour-tab-${tab}`} tabIndex={0} key={tab}>
-          <div className="sp-tour-copy"><span className="sp-label">{tours[tab].name.toUpperCase()} / CONSOLE</span><h3>{tours[tab].title}</h3><p>{tours[tab].detail}</p><Link href="/auth">Open console <span aria-hidden="true">→</span></Link></div>
+          <div className="sp-tour-copy"><span className="sp-label">{tours[tab].name.toUpperCase()} / CONSOLE</span><h3>{tours[tab].title}</h3><p>{tours[tab].detail}</p><Link href="/auth">Open console <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></div>
           <div className="sp-tour-screen" ref={tourScreenRef}>
             <div className="sp-tour-screen-head"><span><Mark /> spawnt / {tours[tab].name.toLowerCase()}</span><span>RUN · LOCAL</span></div>
             <div className={tourVisible ? "sp-tour-screen-body visible" : "sp-tour-screen-body"} key={`${tab}-${tourVisible}`}>
@@ -167,9 +168,9 @@ export default function LandingPage() {
 
       <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Your logs stay on your machine.</h2><span>PRIVACY / BY DESIGN</span></div><div className="sp-privacy-grid">{[["Local only", "Reads logs on your machine."], ["Metadata only", "Activity metadata is redacted before storage."], ["No telemetry", "No product telemetry. Optional services are disclosed."], ["Loopback", "Only your machine can reach it."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
 
-      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote and Teams are planned paid features.</p></div><Link href="/pricing">Compare plans <span aria-hidden="true">↗</span></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <span aria-hidden="true">→</span></Link></article>)}</div></section>
+      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote and Teams are planned paid features.</p></div><Link href="/pricing">Compare plans <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></article>)}</div></section>
 
-      <section className="sp-final sp-width" data-reveal><h2>Start in a minute.</h2><p>Download spawnt and open your first session.</p><Link className="sp-button-primary" href="/downloads">Download <span aria-hidden="true">→</span></Link></section>
+      <section className="sp-final sp-width" data-reveal><h2>Start in a minute.</h2><p>Download spawnt and open your first session.</p><Link className="sp-button-primary" href="/downloads">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></section>
     </main>
     <footer className="sp-footer" data-reveal>
       <div className="sp-width sp-footer-grid">

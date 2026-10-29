@@ -16,6 +16,7 @@ spawnt-platform = { workspace = true }
 spawnt-ingest = { workspace = true }
 spawnt-pty = { workspace = true }
 chrono = { workspace = true }
+qrcode = { workspace = true }
 sha2 = { workspace = true }
 hmac = { workspace = true }
 getrandom = { workspace = true }

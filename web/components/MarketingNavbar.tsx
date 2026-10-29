@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import AccountLink from "./AccountLink";
 import { useEffect, useRef, useState } from "react";
 import ThemeControl from "./ThemeControl";
 
@@ -26,19 +27,20 @@ export default function MarketingNavbar({ showTheme = false }: { showTheme?: boo
     return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", update); window.removeEventListener("resize", update); };
   }, []);
 
-  return <header className="sp-site-header" ref={header}>
+  return <header onKeyDown={event => { if (event.key === "Escape") { setMenuOpen(false); event.currentTarget.querySelector<HTMLButtonElement>(".sp-site-menu")?.focus(); } }} className="sp-site-header" ref={header}>
     <div className="sp-site-nav">
       <Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>spawnt</span></Link>
       <span className="sp-site-divider" aria-hidden="true">/</span>
-      <nav className={menuOpen ? "sp-site-links open" : "sp-site-links"} aria-label="Main navigation">
+      <nav id="marketing-navigation" onClick={() => setMenuOpen(false)} className={menuOpen ? "sp-site-links open" : "sp-site-links"} aria-label="Main navigation">
         <Link href="/#features" onClick={() => setMenuOpen(false)}>Product</Link>
         <Link href="/#agents" onClick={() => setMenuOpen(false)}>Agents</Link>
         <Link href="/docs">Docs</Link>
         <Link href="/pricing">Pricing</Link>
-        <Link className="sp-site-mobile-login" href="/auth" onClick={() => setMenuOpen(false)}>Log in</Link>
+        <AccountLink className="sp-site-mobile-login" onClick={() => setMenuOpen(false)} />
+        {showTheme && <ThemeControl className="sp-mobile-theme" />}
       </nav>
-      <div className="sp-site-actions"><Link className="sp-site-login" href="/auth">Log in <span aria-hidden="true">↗</span></Link>{showTheme && <ThemeControl className="sp-nav-theme" />}<Link className="sp-site-download" href="/downloads">Download <span aria-hidden="true">↗</span></Link></div>
-      <button className="sp-site-menu" type="button" aria-label="Toggle menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><span /><span /><span /></button>
+      <div className="sp-site-actions"><AccountLink className="sp-site-login" arrow />{showTheme && <ThemeControl className="sp-nav-theme" />}<Link className="sp-site-download" href="/downloads">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div>
+      <button className="sp-site-menu" type="button" aria-controls="marketing-navigation" aria-label="Toggle menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><span /><span /><span /></button>
     </div>
   </header>;
 }

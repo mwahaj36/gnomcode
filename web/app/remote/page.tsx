@@ -1,5 +1,5 @@
 import RemoteCompanion from '../../components/RemoteCompanion';
 
 export default function RemotePage() {
-  return <RemoteCompanion />;
+  return <main className="sp-remote-page"><RemoteCompanion /></main>;
 }

@@ -775,14 +775,33 @@ async fn list_hosted_sessions_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let hosted = spawnt_pty::list_active_sessions();
+    let db = state.db.lock().await;
+    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let bindings = crate::remote::session_bindings(&sessions, &hosted);
     let records: Vec<serde_json::Value> = hosted
-        .into_iter()
+        .iter()
         .map(|r| {
+            let native = bindings
+                .iter()
+                .find(|(_, record)| record.session_id == r.session_id)
+                .map(|(session, _)| *session);
+            let observed = native.and_then(|session| session.model.as_ref());
+            let title = native
+                .and_then(|session| session.title.clone())
+                .or_else(|| native.and_then(|session| crate::conversation_title(&db, &session.id)))
+                .unwrap_or_else(|| {
+                    std::path::Path::new(&r.repo_path).file_name().map_or_else(
+                        || "New conversation".to_owned(),
+                        |name| name.to_string_lossy().into_owned(),
+                    )
+                });
             json!({
                 "session_id": r.session_id,
                 "agent": r.agent,
+                "title": title,
                 "repo_path": r.repo_path,
-                "model": r.model,
+                "model": observed.or(r.model.as_ref()),
+                "model_observed": observed.is_some(),
                 "started_at": r.started_at,
                 "child_pid": r.child_pid,
             })
@@ -1166,9 +1185,9 @@ async fn chat_get_handler(
     let id =
         crate::remote::conversation_session_id(&id, &sessions, &spawnt_pty::list_active_sessions());
     match db.get_session_chat_before(&id, query.limit, query.before.as_deref()) {
-        Ok(events) => Ok(Json(
+        Ok(events) => Ok(Json(spawnt_adapters::codex::clean_stored_conversation(
             spawnt_adapters::antigravity::clean_stored_conversation(events),
-        )),
+        ))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -1530,18 +1549,30 @@ async fn remote_pairing_handler(
             crate::remote::RemoteError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::BAD_GATEWAY,
         })?;
+    Ok(Json(remote_pairing_view(&status)))
+}
+
+fn remote_pairing_view(status: &crate::remote::PairingStatus) -> serde_json::Value {
     let mut body = json!(status);
     if let (Some(room), Some(key), Some(relay)) = (
-        status.room_id.as_deref(),
+        status.room_id.as_deref().filter(|_| !status.paired),
         status.public_key.as_deref(),
         status.relay_url.as_deref(),
     ) {
         let base = spawnt_core::branding::branding()
             .map(|branding| branding.base_url.as_str())
             .unwrap_or("https://spawntv.vercel.app");
-        body["pairing_url"] = json!(format!("{base}/remote#room={room}&key={key}&relay={relay}"));
+        let url = format!("{base}/remote#room={room}&key={key}&relay={relay}");
+        body["pairing_url"] = json!(url);
+        if let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
+            body["pairing_qr"] = json!(
+                code.render::<qrcode::render::svg::Color<'_>>()
+                    .min_dimensions(240, 240)
+                    .build()
+            );
+        }
     }
-    Ok(Json(body))
+    body
 }
 
 async fn remote_status_handler(
@@ -1549,7 +1580,7 @@ async fn remote_status_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(json!(state.remote.status().await)))
+    Ok(Json(remote_pairing_view(&state.remote.status().await)))
 }
 
 /// Desktop-side confirmation of the shared six-digit code.
@@ -1656,6 +1687,12 @@ async fn list_sessions_handler(
 
     let host = spawnt_platform::hostname();
     for s in &mut sessions {
+        if s.title
+            .as_deref()
+            .is_none_or(|title| title.trim().is_empty())
+        {
+            s.title = crate::conversation_title(&db, &s.id);
+        }
         if s.device_name.is_none() {
             s.device_name = Some(host.clone());
         }
@@ -2548,11 +2585,12 @@ mod tests {
     }
 
     #[test]
-    fn embedded_console_uses_the_shared_fleet_heading_and_plain_status() {
+    fn embedded_console_uses_the_compact_application_shell_and_plain_status() {
         let html = include_str!("console.html");
 
-        assert!(html.contains("id=\"console-title\">Your agent fleet</h1>"));
-        assert!(html.contains("class=\"console-hero\""));
+        assert!(html.contains("id=\"console-title\">Dashboard</h1>"));
+        assert!(!html.contains("<header class=\"app-header\""));
+        assert!(html.contains("class=\"console-context\""));
         assert!(html.contains("role=\"tablist\""));
         assert!(html.contains("data-view=\"overview\" role=\"tab\""));
         assert!(html.contains("id=\"reload-view\""));
@@ -2644,6 +2682,31 @@ mod tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn pairing_view_renders_a_local_qr_only_before_confirmation() {
+        let mut status = crate::remote::PairingStatus {
+            enabled: true,
+            paired: false,
+            room_id: Some("a".repeat(32)),
+            public_key: Some("b".repeat(64)),
+            verify_code: None,
+            relay_url: Some("wss://relay.example/relay".to_owned()),
+            expires_at: Some((chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339()),
+        };
+        let view = super::remote_pairing_view(&status);
+        assert!(view["pairing_qr"].as_str().expect("QR").contains("<svg"));
+        assert!(
+            view["pairing_url"]
+                .as_str()
+                .expect("URL")
+                .contains("/remote#room=")
+        );
+        status.paired = true;
+        let view = super::remote_pairing_view(&status);
+        assert!(view.get("pairing_qr").is_none());
+        assert!(view.get("pairing_url").is_none());
     }
 
     #[test]
@@ -2979,7 +3042,7 @@ mod tests {
             project_id: project.id.clone(),
             parent_session_id: None,
             model: Some("claude-3-5-sonnet".to_owned()),
-            title: Some("Chat Test".to_owned()),
+            title: None,
             state: spawnt_core::SessionState::Idle,
             pid: Some(100),
             started_at: chrono::Utc::now(),
@@ -3015,6 +3078,26 @@ mod tests {
             orchestrator: None,
             remote: Arc::new(crate::remote::RemoteManager::new()),
         });
+
+        let titles = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/sessions?range=all")
+                    .header("Host", "127.0.0.1")
+                    .header("Authorization", "Bearer chat-token")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let titles: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(titles.into_body(), 131072)
+                .await
+                .expect("body"),
+        )
+        .expect("json");
+        assert_eq!(titles["sessions"][0]["title"], "Please inspect tests");
 
         // 1. GET chat events
         let req_get = Request::builder()
