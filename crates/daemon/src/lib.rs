@@ -58,6 +58,24 @@ pub enum HandoffError {
 
 /// Resolve an interactive agent for a model, rejecting mismatched agent requests.
 pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'static str> {
+    if model == "@default" {
+        return match requested_agent {
+            Some("codex") => Some("codex"),
+            Some("claude" | "claude-code") => Some("claude-code"),
+            Some("gemini" | "gemini-cli") => Some("gemini-cli"),
+            Some("antigravity" | "agy") => Some("antigravity"),
+            _ => None,
+        };
+    }
+    if matches!(requested_agent, Some("antigravity" | "agy"))
+        && !model.is_empty()
+        && model.len() <= 128
+        && model
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/".contains(&byte))
+    {
+        return Some("antigravity");
+    }
     let lower = model.to_ascii_lowercase();
     let inferred = if lower.starts_with("claude-") {
         "claude-code"
@@ -97,6 +115,11 @@ mod switch_tests {
         );
         assert_eq!(super::agent_for_model("o3", Some("claude-code")), None);
         assert_eq!(super::agent_for_model("--yolo", None), None);
+        assert_eq!(
+            super::agent_for_model("@default", Some("antigravity")),
+            Some("antigravity")
+        );
+        assert_eq!(super::agent_for_model("@default", Some("terminal")), None);
     }
 }
 
@@ -150,10 +173,14 @@ pub(crate) async fn execute_switch(
     let mut random = [0u8; 8];
     getrandom::fill(&mut random).map_err(|e| HandoffError::Launch(e.to_string()))?;
     let new_id = format!("switch-{}", u64::from_be_bytes(random));
-    let record =
-        spawnt_pty::launch_session(&new_id, agent, Path::new(&repo), Some(&packet.target_model))
-            .await
-            .map_err(|e| HandoffError::Launch(e.to_string()))?;
+    let record = spawnt_pty::launch_session(
+        &new_id,
+        agent,
+        Path::new(&repo),
+        (packet.target_model != "@default").then_some(packet.target_model.as_str()),
+    )
+    .await
+    .map_err(|e| HandoffError::Launch(e.to_string()))?;
     let files = packet.touched_files.join("\n");
     let prompt = format!(
         "Continue the task from session {} in this workspace. Inspect the current files before editing.\n\nRecent user objectives:\n{}\n\nChanged files:\n{}\n",

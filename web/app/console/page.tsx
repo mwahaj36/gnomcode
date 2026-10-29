@@ -190,7 +190,7 @@ export default function ConsolePage() {
   const metricsGeneration = useRef(0);
   const manualRefreshInFlight = useRef(false);
   const [activeView, setActiveView] = useState("overview");
-  const [navigationPinned, setNavigationPinned] = useState(false);
+  const [navigationExpanded, setNavigationExpanded] = useState(false);
   const [viewError, setViewError] = useState("");
   const lastDesktopSnapshot = useRef<any>(null);
 
@@ -374,7 +374,7 @@ export default function ConsolePage() {
   }
 
   return (
-    <main className={`sp-console-app sp-web-app ${navigationPinned ? "web-navigation-pinned" : ""}`}>
+    <main className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
       <header className="web-context"><h1>{activeView === "overview" ? "Dashboard" : activeView === "chat" ? "Workspace" : activeView === "settings" ? "Profile" : activeView[0].toUpperCase() + activeView.slice(1)}</h1><span className={activeView === "settings" ? "" : "sr-only"}>{connectedSource}</span></header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
         <p>Sign in to view activity from your paired desktop.</p>
@@ -392,10 +392,11 @@ export default function ConsolePage() {
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
         <Link href="/console" className="web-rail-brand" aria-label="Spawnt dashboard"><span className="sp-brand-mark" /></Link>
-        <button type="button" aria-label="Pin navigation" aria-pressed={navigationPinned} onClick={() => setNavigationPinned(!navigationPinned)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7" /></svg><span>Pin navigation</span></button>
+        <button type="button" aria-label="Toggle navigation" aria-expanded={navigationExpanded} onClick={() => setNavigationExpanded(!navigationExpanded)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7" /></svg><span>Collapse navigation</span></button>
         {["overview", "chat", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view, index) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={[
           "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z", "M4 4h16v12H9l-5 4V4Z", "M4 4h16v16H4z M8 9h8 M8 14h8", "M4 20V10m8 10V4m8 16v-7", "M4 12a8 8 0 0 1 16 0 M12 12l5-5 M4 20h16", "M3 6h7l2 3h9v11H3V6Z", "m13 2-9 12h7l-1 8 10-13h-8l1-7Z", "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3"
         ][index]} /></svg><span>{view === "overview" ? "Dashboard" : view === "chat" ? "Workspace" : view === "settings" ? "Profile" : view[0].toUpperCase() + view.slice(1)}</span></button>)}
+        <Link className="web-download-link" href="/downloads" aria-label="Download desktop app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Download app</span></Link>
       </nav>
       <div className="sp-console-content">
       {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connect this account to your desktop to publish activity. Remote conversations use a separately confirmed encrypted connection.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button>{user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}</div></section><DesktopDevices /><SettingsPanel embedded /></>}

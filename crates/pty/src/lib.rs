@@ -69,6 +69,7 @@ pub fn launch_command(
     let executable = match agent {
         "claude" | "claude-code" => "claude".to_owned(),
         "codex" => "codex".to_owned(),
+        "antigravity" | "agy" => "agy".to_owned(),
         "gemini" | "gemini-cli" => "gemini".to_owned(),
         "terminal" | "shell" => {
             return Ok({
@@ -261,6 +262,7 @@ struct HostState {
     output_tx: broadcast::Sender<Vec<u8>>,
     input_tx: std::sync::mpsc::Sender<Vec<u8>>,
     stopping: Arc<AtomicBool>,
+    resize: Arc<dyn Fn(u16, u16) + Send + Sync>,
 }
 
 /// Runs the independent PTY session host server.
@@ -365,6 +367,15 @@ pub async fn run_pty_host(
     let stopping_clone = Arc::clone(&stopping);
 
     #[cfg(windows)]
+    let resize: Arc<dyn Fn(u16, u16) + Send + Sync> = {
+        let controller = session_handle.2.clone();
+        Arc::new(move |cols, rows| {
+            if let Ok(size) = conpty_oxide::Size::try_new(cols, rows) {
+                let _ = controller.resize(size);
+            }
+        })
+    };
+    #[cfg(windows)]
     std::thread::spawn(move || {
         let (_child, mut output, _controller) = session_handle;
         let mut buffer = [0u8; 4096];
@@ -384,8 +395,24 @@ pub async fn run_pty_host(
     });
 
     #[cfg(unix)]
+    let reader = master.try_clone_reader();
+    #[cfg(unix)]
+    let resize: Arc<dyn Fn(u16, u16) + Send + Sync> = {
+        let master = Mutex::new(master);
+        Arc::new(move |cols, rows| {
+            if let Ok(master) = master.lock() {
+                let _ = master.resize(portable_pty::PtySize {
+                    cols,
+                    rows,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                });
+            }
+        })
+    };
+    #[cfg(unix)]
     std::thread::spawn(move || {
-        if let Ok(mut reader) = master.try_clone_reader() {
+        if let Ok(mut reader) = reader {
             let mut buffer = [0u8; 4096];
             while !stopping_clone.load(Ordering::Relaxed) {
                 match reader.read(&mut buffer) {
@@ -430,6 +457,7 @@ pub async fn run_pty_host(
         output_tx,
         input_tx,
         stopping: Arc::clone(&stopping),
+        resize,
     });
 
     let app = Router::new()
@@ -572,6 +600,7 @@ async fn host_stream_handler(
     }
 
     let input_tx = state.input_tx.clone();
+    let resize = state.resize.clone();
     let mut rx = state.output_tx.subscribe();
     let initial_bytes = state
         .scrollback
@@ -597,6 +626,12 @@ async fn host_stream_handler(
                             let _ = input_tx.send(b.to_vec());
                         }
                         Some(Ok(Message::Text(t))) => {
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&t) {
+                                if let Some(size) = value.get("resize") {
+                                    if let Some((cols,rows)) = terminal_dimensions(size) {resize(cols,rows);}
+                                    continue;
+                                }
+                            }
                             let _ = input_tx.send(t.as_bytes().to_vec());
                         }
                         Some(Ok(Message::Close(_))) | None => break,
@@ -607,6 +642,12 @@ async fn host_stream_handler(
         }
     })
     .into_response()
+}
+
+fn terminal_dimensions(value: &serde_json::Value) -> Option<(u16, u16)> {
+    let cols = u16::try_from(value.get("cols")?.as_u64()?).ok()?;
+    let rows = u16::try_from(value.get("rows")?.as_u64()?).ok()?;
+    ((1..=500).contains(&cols) && (1..=200).contains(&rows)).then_some((cols, rows))
 }
 
 /// Launches a new session worker in an independent detached process.
@@ -745,6 +786,7 @@ mod tests {
             output_tx,
             input_tx,
             stopping: Arc::new(AtomicBool::new(false)),
+            resize: Arc::new(|_, _| {}),
         });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -800,6 +842,20 @@ mod tests {
         server.abort();
     }
 
+    #[test]
+    fn terminal_resize_rejects_invalid_dimensions() {
+        assert_eq!(
+            super::terminal_dimensions(&serde_json::json!({"cols":80,"rows":24})),
+            Some((80, 24))
+        );
+        for value in [
+            serde_json::json!({"cols":0,"rows":24}),
+            serde_json::json!({"cols":1000,"rows":24}),
+            serde_json::json!({"cols":80,"rows":-1}),
+        ] {
+            assert_eq!(super::terminal_dimensions(&value), None);
+        }
+    }
     #[test]
     fn owner_rejects_non_loopback_origin_and_host() {
         let mut headers = HeaderMap::new();
@@ -893,6 +949,7 @@ mod tests {
             ("claude", "claude"),
             ("claude-code", "claude"),
             ("codex", "codex"),
+            ("antigravity", "agy"),
             ("gemini", "gemini"),
             ("gemini-cli", "gemini"),
         ] {

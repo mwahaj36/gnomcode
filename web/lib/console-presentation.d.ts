@@ -17,3 +17,6 @@ export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: 
 export function renderChatCards(events: unknown): string;
 export function renderSessionList(sessions: unknown[], selected?: string, query?: string): string;
 export function updateChat(element: HTMLElement, events: unknown): void;
+
+export type PendingChat = {id:string; text:string; created_at:string; baseline:string[]; delivered:boolean};
+export function reconcileChat(events:unknown[],pending:PendingChat[],state?:string): {events:unknown[];pending:PendingChat[]};

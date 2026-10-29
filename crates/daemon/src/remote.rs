@@ -52,6 +52,22 @@ pub struct PairingStatus {
     pub expires_at: Option<String>,
 }
 
+impl PairingStatus {
+    /// Temporary owner-scoped locator; encrypted device confirmation still controls access.
+    pub(crate) fn pairing_code(&self) -> Option<String> {
+        if !self.enabled || self.paired {
+            return None;
+        }
+        let expires = chrono::DateTime::parse_from_rfc3339(self.expires_at.as_deref()?).ok()?;
+        if expires <= chrono::Utc::now() {
+            return None;
+        }
+        let room = self.room_id.as_deref()?;
+        let value = u32::from_str_radix(room.get(..8)?, 16).ok()? % 100_000_000;
+        Some(format!("{value:08}"))
+    }
+}
+
 /// One room at a time; replacing or revoking a room closes its connection.
 #[derive(Default)]
 pub struct RemoteManager {
@@ -420,7 +436,13 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             };
             if !matches!(
                 agent,
-                "claude" | "claude-code" | "codex" | "gemini" | "gemini-cli"
+                "claude"
+                    | "claude-code"
+                    | "codex"
+                    | "gemini"
+                    | "gemini-cli"
+                    | "antigravity"
+                    | "agy"
             ) {
                 return json!({"type":"error","message":"Remote launch supports agent CLIs only"});
             }
@@ -557,7 +579,7 @@ fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -
     for record in hosted {
         if !matches!(
             record.agent.as_str(),
-            "claude" | "claude-code" | "codex" | "gemini" | "gemini-cli"
+            "claude" | "claude-code" | "codex" | "gemini" | "gemini-cli" | "antigravity" | "agy"
         ) {
             continue;
         }
@@ -630,6 +652,7 @@ pub(crate) fn session_bindings<'s, 'h>(
             let agent = match record.agent.as_str() {
                 "claude" => "claude-code",
                 "gemini" => "gemini-cli",
+                "agy" => "antigravity",
                 other => other,
             };
             let path = Path::new(&record.repo_path);

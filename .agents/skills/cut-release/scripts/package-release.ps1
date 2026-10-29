@@ -26,6 +26,10 @@ $NativeExe = Join-Path $TargetDir "release/spawnt.exe"
 if ((& $NativeExe --version) -ne "spawnt $Version") { throw "Binary version mismatch" }
 & $Cargo about generate about.hbs --output-file "$Out/THIRD_PARTY_NOTICES.html"
 if ($LASTEXITCODE -ne 0) { throw "Third-party notices generation failed; install cargo-about --features cli --locked" }
+$TerminalLicense = [System.Net.WebUtility]::HtmlEncode([IO.File]::ReadAllText((Join-Path $RepoRoot "web/public/vendor/XTERM-LICENSE.txt")))
+[IO.File]::AppendAllText("$Out/THIRD_PARTY_NOTICES.html", "<h2>xterm.js 6.0.0 (MIT)</h2><pre>$TerminalLicense</pre>", [Text.Encoding]::UTF8)
+$TerminalFitLicense = [System.Net.WebUtility]::HtmlEncode([IO.File]::ReadAllText((Join-Path $RepoRoot "web/public/vendor/XTERM-FIT-LICENSE.txt")))
+[IO.File]::AppendAllText("$Out/THIRD_PARTY_NOTICES.html", "<h2>xterm addon-fit 0.11.0 (MIT)</h2><pre>$TerminalFitLicense</pre>", [Text.Encoding]::UTF8)
 $FontNotices = Get-ChildItem "$RepoRoot/web/public/fonts/*-LICENSE.txt" | ForEach-Object { "<h2>$($_.BaseName)</h2><pre>$([System.Net.WebUtility]::HtmlEncode((([IO.File]::ReadAllText($_.FullName) -split "`n" | ForEach-Object { $_.TrimEnd() }) -join "`n")))</pre>" }
 [IO.File]::AppendAllText("$Out/THIRD_PARTY_NOTICES.html", ($FontNotices -join "`n"), [Text.Encoding]::UTF8)
 $NoticeLines = [IO.File]::ReadAllText("$Out/THIRD_PARTY_NOTICES.html") -split "`n" | ForEach-Object { $_.TrimEnd() }
