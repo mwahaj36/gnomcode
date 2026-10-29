@@ -51,6 +51,19 @@ pub fn default_db_path() -> PathBuf {
 /// # Errors
 /// Returns an error when Git cannot read the repository or a path is not UTF-8.
 pub fn handoff_files(repo: &Path) -> Result<Vec<String>, Error> {
+    if !repo.is_dir() {
+        return Err(io::Error::other("workspace directory is unavailable").into());
+    }
+    let mut git_workspace = false;
+    for ancestor in repo.ancestors() {
+        if ancestor.join(".git").try_exists()? {
+            git_workspace = true;
+            break;
+        }
+    }
+    if !git_workspace {
+        return Ok(Vec::new());
+    }
     let mut files = Vec::new();
     for args in [
         &["diff", "--name-only", "-z"][..],

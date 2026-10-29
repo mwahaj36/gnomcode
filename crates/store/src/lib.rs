@@ -814,6 +814,29 @@ impl Database {
         self.get_session_chat_before(session_id, limit, None)
     }
 
+    /// Reads a persisted handoff notice by its target host identity.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if SQLite cannot read the notice.
+    pub fn handoff_notice(&self, host: &str) -> Result<Option<ChatEvent>, Error> {
+        let id = format!("handoff:{host}:source");
+        let session: Option<String> = self
+            .conn
+            .query_row(
+                obfstr::obfstr!("SELECT session_id FROM chat_event WHERE event_id=?1"),
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match session {
+            Some(session) => Ok(self
+                .get_session_chat(&session, None)?
+                .into_iter()
+                .find(|event| event.event_id == id)),
+            None => Ok(None),
+        }
+    }
+
     /// Retrieves one page of a session's chat before an event ID, newest page first.
     ///
     /// # Errors
@@ -917,6 +940,21 @@ impl Database {
             params![session_id],
         )?;
         Ok(deleted)
+    }
+
+    /// Deletes a conversation and its owned handoff notices atomically.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if SQLite cannot delete both identities.
+    pub fn delete_session_chat_with_host(
+        &self,
+        session_id: &str,
+        host_id: &str,
+    ) -> Result<usize, Error> {
+        Ok(self.conn.execute(
+            obfstr::obfstr!("DELETE FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3"),
+            params![session_id, host_id, format!("handoff:{host_id}:source")],
+        )?)
     }
 
     /// Prunes chat events older than the specified retention window in days.

@@ -199,7 +199,7 @@ function cycleTheme() {
 
     async function apiJson(url, options = { headers }) {
       const response = await fetch(url, options);
-      if (!response.ok) throw new Error(response.status === 401 ? 'Local authorization is missing or expired. Close this window and reopen spawnt from its tray icon or shortcut.' : `spawnt request failed (${response.status}). Retry Reload view or restart spawnt if this persists.`);
+      if (!response.ok) {const error=await response.json().catch(()=>null);throw new Error(response.status === 401 ? 'Local authorization is missing or expired. Close this window and reopen spawnt from its tray icon or shortcut.' : typeof error?.message === 'string' ? error.message : `spawnt request failed (${response.status}). Retry Reload view or restart spawnt if this persists.`);}
       return response.json();
     }
     function escapeHtml(value) {
@@ -680,6 +680,7 @@ function cycleTheme() {
     }
 
     function showCurrentChatModel() {
+      if(modelHandoffBusy)return;
       const select = document.getElementById('chat-model-select');
       const session = ideSessions.find(session => session.id === activeChatSession);
       const hosted = hostedSessions.find(session => session.session_id === activeChatSession);
@@ -728,25 +729,28 @@ function cycleTheme() {
       }
     }
 
+    let modelHandoffBusy = false;
     async function switchChatModel() {
       const select = document.getElementById('chat-model-select');
-      if (!activeChatSession || !select.value) return;
+      if (!activeChatSession || !select.value || modelHandoffBusy || select.value === select.dataset.currentModel) return;
       const sourceSession = activeChatSession;
       const previousModel = select.dataset.currentModel || 'CLI default';
       const targetModel = select.selectedOptions[0].dataset.model || select.value;
       const targetAgent = select.selectedOptions[0].dataset.agent;
       const button = document.getElementById('chat-switch-btn'); button.disabled = true;
+      const draft=pendingPrompts.has(sourceSession) ? '' : document.getElementById('chat-prompt-text').value;
+      modelHandoffBusy = true;select.disabled=true;pendingPrompts.add(sourceSession);document.getElementById('chat-send-btn').disabled=true;
       try {
         const result = await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/switch`, { method:'POST', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ target_model:targetModel, agent:targetAgent }) });
-        handoffNotices.set(result.session_id, [{event_id:`handoff:${result.session_id}`,role:'system',status:'model_changed',created_at:new Date().toISOString(),content:`Agent/model change requested: ${ideSessions.find(session=>session.id === sourceSession)?.agent || 'Agent'} / ${previousModel} → ${targetAgent} / ${targetModel === '@default' ? 'agent default' : targetModel}. Waiting for confirmation.`}]);
         await loadSessions();
         if (activeChatSession === sourceSession) {
           await loadChat(result.session_id);
+          if(draft){chatDrafts.set(result.session_id,draft);chatDrafts.delete(sourceSession);document.getElementById('chat-prompt-text').value=draft;resizePrompt();}
           document.getElementById('chat-delivery-status').textContent = '';
           void renderCurrentChat();
         }
-      } catch { if (activeChatSession === sourceSession) document.getElementById('chat-delivery-status').textContent = 'Model handoff failed. Check the target CLI installation and login, then retry.'; }
-      finally { showCurrentChatModel(); }
+      } catch (error) { if (activeChatSession === sourceSession) showNotice(`Model change failed. ${error.message} Your previous model and draft are unchanged.`); }
+      finally { modelHandoffBusy=false;pendingPrompts.delete(sourceSession);select.disabled=false;document.getElementById('chat-send-btn').disabled=pendingPrompts.has(activeChatSession);showCurrentChatModel(); }
     }
 
     async function focusChat() {
@@ -1389,12 +1393,12 @@ function cycleTheme() {
         remoteNoticeTimer = setTimeout(() => { badge.hidden = true; }, 5000);
       }
       remoteWasPaired = Boolean(status.paired);
-      document.getElementById('remote-confirmation').hidden = !status.verify_code || status.paired;
+      document.getElementById('remote-confirmation').hidden = !status.verify_code || status.paired || status.remembered;
       const output = document.getElementById('remote-status');
       const link = document.getElementById('remote-link');
       if (!output || !link) return;
-      output.textContent = !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? `Compare code ${status.verify_code} with your phone, then confirm on both devices.` : 'Waiting for the code to be entered on the web.';
-      if (!status.paired && status.room_id && status.public_key && status.relay_url) {
+      output.textContent = status.remembered && !status.paired ? 'Device remembered. Waiting for the phone to reconnect.' : !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? 'Enter the six-digit security code shown on your phone.' : 'Waiting for the code to be entered on the web.';
+      if (!status.paired && !status.remembered && !status.verify_code && status.room_id && status.public_key && status.relay_url) {
         const markup = `<div class="desktop-pairing-code"><label for="desktop-pairing-code">Enter this code in web Profile</label><input id="desktop-pairing-code" readonly value="${escapeHtml(status.pairing_code || '')}" aria-label="Desktop pairing code"><small>Expires in five minutes. Sign in to the same account on both devices.</small></div>`;
         if (remotePairingMarkup !== markup) { link.innerHTML = markup; remotePairingMarkup = markup; }
       } else if (remotePairingMarkup) { link.textContent = ''; remotePairingMarkup = ''; }
@@ -1461,7 +1465,7 @@ function cycleTheme() {
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
     document.addEventListener('change', event => {
-      if (event.target.id === 'chat-model-select') { showCurrentChatModel(); return; }
+      if (event.target.id === 'chat-model-select') { void switchChatModel(); return; }
       if (event.target.id === 'launch-agent-select') {
         updateAgentInstallHint();
         return;
