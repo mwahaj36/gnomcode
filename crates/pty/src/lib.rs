@@ -695,6 +695,21 @@ async fn send_stop(record: &SessionRecord) -> Result<(), Error> {
     Ok(())
 }
 
+/// Pastes an agent instruction then submits it after the TUI has processed the paste.
+/// Shell sessions receive a normal command line.
+///
+/// # Errors
+/// Returns [`Error`] if the host cannot acknowledge either input frame.
+pub async fn send_prompt(record: &SessionRecord, text: &str) -> Result<(), Error> {
+    if matches!(record.agent.as_str(), "terminal" | "shell") {
+        return send_input(record, format!("{text}\r").as_bytes()).await;
+    }
+    send_input(record, format!("\x1b[200~{text}\x1b[201~").as_bytes()).await?;
+    // A separate Enter avoids the CLI's burst-paste detector swallowing submission.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    send_input(record, b"\r").await
+}
+
 /// Queues terminal input through an authenticated endpoint independently of terminal output.
 ///
 /// # Errors
@@ -754,6 +769,20 @@ mod tests {
             .await
             .expect("acknowledged input");
         assert_eq!(input_rx.try_recv().expect("queued input"), b"hello\r");
+        send_prompt(&record, "one line")
+            .await
+            .expect("agent prompt");
+        assert_eq!(
+            input_rx.try_recv().expect("paste frame"),
+            b"\x1b[200~one line\x1b[201~"
+        );
+        assert_eq!(input_rx.try_recv().expect("submit frame"), b"\r");
+        let mut shell = record.clone();
+        shell.agent = "terminal".into();
+        send_prompt(&shell, "echo test")
+            .await
+            .expect("shell command");
+        assert_eq!(input_rx.try_recv().expect("shell input"), b"echo test\r");
         let mut invalid = record.clone();
         invalid.token = "wrong".into();
         assert!(send_input(&invalid, b"forbidden").await.is_err());

@@ -45,6 +45,14 @@ export function isAllowedResource(input: string, port: number): boolean {
   if (input.startsWith('blob:')) {
     try { return new URL(input).origin === new URL(`http://127.0.0.1:${port}`).origin; } catch { return false; }
   }
+  try {
+    const url = new URL(input);
+    if (url.protocol === 'ws:') {
+      return url.hostname === '127.0.0.1' && (url.port || '80') === String(port) &&
+        !url.username && !url.password && !url.hash &&
+        /^\/api\/v1\/sessions\/[^/]+\/pty$/.test(url.pathname);
+    }
+  } catch { return false; }
   return isDaemonNavigation(input, port);
 }
 
