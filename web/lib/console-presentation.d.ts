@@ -1,3 +1,4 @@
+export function sessionStateLabel(state: string): string;
 export function renderActivity(report: unknown): string;
 export function renderProviders(report: unknown): string;
 export function updateProviders(element: HTMLElement, report: unknown): void;
