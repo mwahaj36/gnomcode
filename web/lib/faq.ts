@@ -1,0 +1,128 @@
+export const faqGroups = [
+  {
+    "title": "Getting started",
+    "questions": [
+      {
+        "question": "Do I need a Spawnt account?",
+        "answer": "No account is needed for local features. Optional account metadata sync and Remote discovery use a Spawnt account; your agents keep separate vendor accounts."
+      },
+      {
+        "question": "Does Spawnt work offline?",
+        "answer": "Local reporting, inspection and orchestration do not require Spawnt cloud services. Official agent inference may still require the vendor network; disable update checks and leave optional services off to avoid Spawnt network traffic."
+      },
+      {
+        "question": "Which operating systems are supported?",
+        "answer": "Windows, macOS and Linux are design targets. The current locally verified desktop packages are Windows development builds; other platform release acceptance remains open."
+      },
+      {
+        "question": "Do I install agent CLIs separately?",
+        "answer": "Yes. Install and authenticate the official CLI you want to launch, then let Spawnt discover it on PATH. Spawnt does not supply provider subscriptions or credentials."
+      }
+    ]
+  },
+  {
+    "title": "Supported agents",
+    "questions": [
+      {
+        "question": "Which agents does Spawnt observe?",
+        "answer": "Adapters cover Claude Code, Codex, Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider records. Available token, model and quota fields vary by source."
+      },
+      {
+        "question": "Can I control Cursor, Cline or Aider remotely?",
+        "answer": "Their observation adapters do not provide hosted takeover. Remote prompting and launch use supported official CLI processes owned by Spawnt."
+      },
+      {
+        "question": "Will more agents be added?",
+        "answer": "New support needs a documented source contract, anonymized fixtures and capability tests. No future agent or release date is promised by the current support list."
+      }
+    ]
+  },
+  {
+    "title": "Model switching",
+    "questions": [
+      {
+        "question": "What is a zero-token handoff?",
+        "answer": "A compact briefing assembled locally without an AI summarization call. The receiving model still consumes input tokens and can charge for them."
+      },
+      {
+        "question": "Does the new agent receive my full history?",
+        "answer": "It receives redacted objectives, changed-file paths and recent activity rather than a full replay. The original conversation remains available locally; provider-internal state is not transferred."
+      },
+      {
+        "question": "What happens to the old session?",
+        "answer": "Its history is preserved while the handoff creates a fresh target session. Inspect lifecycle state before allowing both agents to edit the same workspace."
+      },
+      {
+        "question": "Can I switch back?",
+        "answer": "You can select an eligible supported target again or return to the original history. A fresh handoff does not merge provider-internal sessions or guarantee native resume across every CLI."
+      }
+    ]
+  },
+  {
+    "title": "Remote access",
+    "questions": [
+      {
+        "question": "How do I pair my phone?",
+        "answer": "Use the desktop eight-digit discovery code while signed into the same account on the phone. Then enter the separate phone security code on desktop and confirm on both devices."
+      },
+      {
+        "question": "Is Remote independently security approved?",
+        "answer": "The E2EE implementation and public-relay browser tests exist. Independent review and explicit production approval remain launch gates."
+      },
+      {
+        "question": "What can I do from my phone?",
+        "answer": "Read available chat history, receive replies, launch supported CLIs, choose a workspace and send eligible initial/follow-up prompts. Imported history remains read-only."
+      },
+      {
+        "question": "What can I not do remotely?",
+        "answer": "Run an arbitrary shell, escalate permissions or bypass native approval checks. Remote access also depends on an online desktop and uniquely owned live agent session."
+      },
+      {
+        "question": "Does pairing survive a reload?",
+        "answer": "Remembered trust reconnects after reload/backgrounding with fresh connection keys. It expires after seven inactive days; desktop revocation or browser forgetting/sign-out removes access."
+      }
+    ]
+  },
+  {
+    "title": "Pricing and privacy",
+    "questions": [
+      {
+        "question": "What is free and what is paid?",
+        "answer": "All local features are free without a local license. Remote and Teams are paid categories; commercial prices and terms are not finalized."
+      },
+      {
+        "question": "Does Spawnt charge per token?",
+        "answer": "Spawnt reports estimated API-equivalent usage rather than reselling inference. Your agent provider determines its own subscription or usage charges; final paid Spawnt service terms require launch approval."
+      },
+      {
+        "question": "Does Spawnt read my agent API keys?",
+        "answer": "It does not read official agent subscription tokens for launch or model discovery. Optional Spawnt account authentication uses its own separate credentials; avoid typing secrets into conversations because redaction is not perfect."
+      },
+      {
+        "question": "What data leaves my machine?",
+        "answer": "Optional account sync sends a non-E2EE metadata snapshot, currently including labels and automation metadata. Paired Remote deliberately carries conversation and commands as ciphertext to your trusted device; chat events are excluded from metadata sync."
+      },
+      {
+        "question": "Can I delete local history?",
+        "answer": "Session deletion removes Spawnt chat rows without modifying agent logs. A complete store reset requires stopping Spawnt and handling state.db, sidecars and backups; preserved agent logs can be ingested again."
+      }
+    ]
+  },
+  {
+    "title": "Troubleshooting",
+    "questions": [
+      {
+        "question": "Why is my agent not detected?",
+        "answer": "Start the official agent and run spawnt doctor. Check its supported log location, home overrides and PATH, then restart Spawnt after a CLI installation."
+      },
+      {
+        "question": "Why is my quota unknown?",
+        "answer": "Not every agent records a reliable quota window. Spawnt leaves missing data unknown; inspect your official CLI or provider usage page rather than treating unknown as zero."
+      },
+      {
+        "question": "Why will the companion not connect?",
+        "answer": "Check desktop connectivity, current builds and the same account on both devices. Generate a fresh offer if the discovery code expired; if remembered trust was revoked, pair again."
+      }
+    ]
+  }
+];

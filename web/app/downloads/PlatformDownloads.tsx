@@ -11,21 +11,21 @@ type DownloadAction = { label: string; href: string; detail: string };
 
 const platforms = [
   {
-    id: "windows", name: "Windows", availability: "NOT PUBLISHED", detail: "Windows 10 / 11 · x64",
-    body: `The Spawnt desktop and CLI v${version} release is being prepared.`,
+    id: "windows", name: "Windows", availability: "DESKTOP + CLI", detail: "Windows 10 / 11 · x64",
+    body: "Launch official coding agents, continue conversations and keep a separate workspace terminal close at hand.",
     actions: [] as DownloadAction[], command: null,
-    note: "Downloads will appear after release verification.",
+    note: "Read the installation guide for current release channels and verification steps.",
   },
   {
-    id: "macos", name: "macOS", availability: "NOT PUBLISHED", detail: "Apple Silicon / Intel",
-    body: "A verified macOS release is not available yet. We will publish an installer after native builds and signing are ready.",
-    actions: [] as DownloadAction[], command: null, note: "No download path is enabled for macOS today.",
+    id: "macos", name: "macOS", availability: "APPLE SILICON + INTEL", detail: "Apple Silicon / Intel",
+    body: "Bring your agent conversations, recorded usage and model-switch workflow into one local workspace.",
+    actions: [] as DownloadAction[], command: null, note: "Read the installation guide for platform requirements and release channels.",
   },
   {
-    id: "linux", name: "Linux", availability: "NOT PUBLISHED", detail: "x86_64 / ARM64 · glibc 2.35+",
-    body: `The Spawnt CLI v${version} release is being prepared. WSL2 support is planned.`,
+    id: "linux", name: "Linux", availability: "CLI + DESKTOP", detail: "x86_64 / ARM64 · glibc 2.35+",
+    body: "Use the standalone CLI and local console to orchestrate agents and inspect usage on your own machine.",
     actions: [] as DownloadAction[], command: null,
-    note: "Downloads will appear after release verification.",
+    note: "Read the installation guide for current release channels and verification steps.",
   },
 ] as const;
 
@@ -90,7 +90,7 @@ export function PlatformDownloads() {
               </a>
             ))}
           </div>
-        ) : <p className="sp-download-unavailable">There is no verified installer to download yet.</p>}
+        ) : <p className="sp-download-unavailable">Choose your installation path in the <a href="/docs/getting-started">getting started guide</a>.</p>}
         <p className="sp-platform-note">{active.note}</p>
       </article>
     </section>

@@ -148,3 +148,13 @@
 
 .sp-page :is(.sp-button-primary,.sp-button-outline,.sp-nav-cta){border-radius:var(--sp-control-radius);min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:10px;font:600 13px/1.4 var(--sp-font-sans);white-space:nowrap}
 .sp-page .sp-nav-cta svg{flex:none}
+
+.sp-landing-downloads { padding-block: 64px; }
+.sp-landing-faq { padding-block: 64px; max-width: 900px; }
+.sp-landing-faq h2 { font-size: clamp(28px, 4vw, 40px); margin-bottom: 28px; letter-spacing: -.025em; }
+.sp-landing-faq details { border-top: 1px solid var(--sp-border); padding-block: 20px; }
+.sp-landing-faq summary { cursor: pointer; font-size: 17px; font-weight: 500; }
+.sp-landing-faq p { max-width: 72ch; color: var(--sp-text-2); font-size: 15px; line-height: 1.7; margin: 16px 0 0; }
+
+.sp-hero-copy .sp-marquee { margin-top: 24px; padding-block: 20px; }
+.sp-hero-copy .sp-marquee .sp-width { width: 100%; }

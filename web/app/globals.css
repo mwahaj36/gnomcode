@@ -437,3 +437,19 @@ body {
 /* The desktop rail opens above embedded Remote; phones use Remote's own toolbar. */
 .sp-web-app .sp-console-workspace>.sp-console-nav{z-index:45}
 @media(max-width:760px){.sp-web-app:has(.sp-remote:is(.is-paired,.is-reconnecting)) .sp-console-workspace>.sp-console-nav{visibility:hidden}}
+
+/* Reading surfaces share the established documentation typography. */
+.sp-guide-page { max-width: 880px; }
+.sp-guide-page .sp-docs-header { margin-bottom: 28px; }
+.sp-guide-page .sp-docs-header h1 { margin-top: 20px; text-wrap: balance; }
+.sp-guide-page .sp-docs-article > p { margin: 0 0 40px; font-size: 17px; line-height: 1.7; color: var(--sp-text-2); max-width: 72ch; }
+.sp-guide-page section { margin-bottom: 40px; }
+.sp-guide-page p, .sp-guide-page li { font-size: 15px; line-height: 1.75; color: var(--sp-text-2); overflow-wrap: anywhere; text-wrap: pretty; }
+.sp-guide-page section h2 { margin-top: 36px; }
+.sp-guide-page section h3 { margin-top: 24px; }
+.sp-guide-page a, .sp-docs-article section a { color: var(--sp-primary-text); text-underline-offset: 4px; }
+.sp-guide-page ul { padding-left: 20px; }
+.sp-guide-related { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
+.sp-guide-related a { display: inline-block; padding-block: 8px; }
+.sp-guide-page .sp-docs-article > section > div > p { margin-top: 8px; }
+@media (max-width: 600px) { .sp-guide-related { grid-template-columns: 1fr; } .sp-guide-page { padding-top: 36px; } }

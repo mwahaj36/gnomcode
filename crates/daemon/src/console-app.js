@@ -229,11 +229,11 @@ function cycleTheme() {
         }
         const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
         if (res.status === 402) {
-          showNotice("Exporting analytics requires a Pro license. Activate Pro in Automations.");
+          showNotice("Export is unavailable. Reopen the local console and try again.");
           return;
         }
         if (!res.ok) {
-          showNotice("Failed to export data.");
+          showNotice("Export failed. Reload the view and try again.");
           return;
         }
         const blob = await res.blob();
@@ -246,7 +246,7 @@ function cycleTheme() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(downloadUrl);
       } catch (err) {
-        showNotice("Export failed: " + err);
+        showNotice("Export failed. Reload the view and retry. Details: " + err);
       }
     }
 
@@ -277,7 +277,7 @@ function cycleTheme() {
           const queue = await qRes.json();
           const qTable = document.getElementById('resume-queue-table');
           if (!queue || queue.length === 0) {
-            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No armed sessions in queue.</td></tr>';
+            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No sessions are armed. Open a supported session and arm resume after a quota limit.</td></tr>';
           } else {
             qTable.innerHTML = queue.map(e => `
               <tr>
@@ -299,7 +299,7 @@ function cycleTheme() {
           const rules = await rulesRes.json();
           const rTable = document.getElementById('rules-table');
           if (!rules || rules.length === 0) {
-            rTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No custom guardrail rules configured.</td></tr>';
+            rTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No guardrail rules yet. Add a rule to set a local budget or loop alert.</td></tr>';
           } else {
             rTable.innerHTML = rules.map(r => `
               <tr>
@@ -319,7 +319,7 @@ function cycleTheme() {
           const alerts = await alertsRes.json();
           const aTable = document.getElementById('alerts-table');
           if (!alerts || alerts.length === 0) {
-            aTable.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded.</td></tr>';
+            aTable.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded. Configure a rule to monitor supported sessions.</td></tr>';
           } else {
             aTable.innerHTML = alerts.map(a => `
               <tr>
@@ -356,7 +356,7 @@ function cycleTheme() {
         const table = document.getElementById('relay-table');
         if (table) {
           if (!data.relays || data.relays.length === 0) {
-            table.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No active context relays recorded.</td></tr>';
+            table.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No context handoffs recorded. Open a supported session to switch agents.</td></tr>';
           } else {
             table.innerHTML = data.relays.map(r => {
               const statusColor = r.status === 'executed' ? 'var(--green)' : (r.status === 'pending' ? 'var(--yellow)' : 'var(--text-muted)');
@@ -393,14 +393,14 @@ function cycleTheme() {
           body: JSON.stringify({ policy: pol, strategy: str, threshold_pct: thr })
         });
         if (res.status === 402) {
-          showNotice('Context Relay configuration requires an active spawnt Pro license.');
+          showNotice('Could not save handoff settings. Reopen the local console and try again.');
           return;
         }
         if (res.ok) {
           loadRelayData();
         }
       } catch (err) {
-        showNotice('Failed to save config: ' + err.message);
+        showNotice('Settings could not be saved. Check the connection and retry. Details: ' + err.message);
       }
     }
 
@@ -413,14 +413,14 @@ function cycleTheme() {
           body: JSON.stringify({ id })
         });
         if (res.status === 402) {
-          showNotice('Context Relay execution requires an active spawnt Pro license.');
+          showNotice('Could not start the handoff. Reopen the local console and check the agent session.');
           return;
         }
         if (res.ok) {
-          showNotice('Context Relay handoff executed successfully! A fresh session was launched with a repository handoff.');
+          showNotice('Handoff launched a fresh session. Check the target conversation and reported model.');
           loadRelayData();
         } else {
-          showNotice('Failed to execute relay handoff.');
+          showNotice('Handoff failed. Check the target CLI in Terminal stream and try again.');
         }
       } catch (err) {
         showNotice('Error: ' + err.message);
@@ -974,7 +974,7 @@ function cycleTheme() {
         chatWs.onerror = () => { terminal.textContent += '\n[Terminal stream disconnected or not hosted by Spawnt]'; };
         chatWs.onclose = () => { chatWs = null; };
       } catch (e) {
-        terminal.textContent += '\n[Failed to open terminal stream]';
+        terminal.textContent += '\n[Terminal stream unavailable. Reopen the session and try again.]';
       }
     }
 
@@ -1023,7 +1023,7 @@ function cycleTheme() {
         if (!silent) requestAnimationFrame(resizePrompt);
       } catch {
         if (request !== chatRequest || sessionId !== activeChatSession) return;
-        if (!silent && status) status.textContent = 'Could not load conversation history.';
+        if (!silent && status) status.textContent = 'Could not load conversation history. Reload the view and check the desktop connection.';
         panel.hidden = activeView !== 'sessions';
         if (!silent) requestAnimationFrame(resizePrompt);
       }
