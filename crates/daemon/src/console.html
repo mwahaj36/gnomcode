@@ -8,6 +8,36 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
     @import url("/spawnt-tokens.css");
+    .ide-layout { display:grid; grid-template-columns:280px minmax(0,1fr); min-height:620px; border:1px solid var(--sp-border); }
+    .ide-sidebar { padding:16px; border-right:1px solid var(--sp-border); min-width:0; }
+    .ide-sidebar > button, .ide-sidebar input { width:100%; margin-bottom:12px; }
+    .ide-sidebar .filters { display:grid; gap:8px; margin-bottom:12px; }
+    .ide-sidebar select { width:100%; min-width:0; }
+    #ide-session-list { max-height:560px; overflow:auto; }
+    .ide-session { display:grid; gap:6px; width:100%; padding:12px; text-align:left; color:var(--sp-text); background:transparent; border:1px solid transparent; cursor:pointer; }
+    .ide-session strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; font-weight:600; }
+    .ide-session span, .ide-session time { color:var(--sp-text-2); font-size:12px; }
+    .ide-session:hover { background:var(--sp-surface-2); }
+    .ide-session[aria-current="true"] { border-color:var(--sp-primary); background:var(--sp-surface); }
+    .ide-main { min-width:0; padding:24px; }
+    .ide-main .card { border:0; padding:0; background:transparent; }
+    .ide-launcher { max-width:620px; margin:48px auto; }
+    .ide-launcher h2 { font-size:28px; margin-bottom:12px; }
+    .ide-launcher p { color:var(--sp-text-2); line-height:1.6; margin-bottom:24px; }
+    .ide-launcher form { display:grid; gap:20px; }
+    .ide-layout label { display:block; font-size:13px; margin-bottom:8px; }
+    .ide-layout input, .ide-layout select, .ide-layout textarea { min-height:44px; padding:10px 12px; background:var(--sp-bg); color:var(--sp-text); border:1px solid var(--sp-border); border-radius:4px; font:inherit; max-width:100%; }
+    .ide-launcher input, .ide-launcher select { width:100%; }
+    .ide-chat-controls { display:flex; flex-wrap:wrap; align-items:end; gap:8px; margin:16px 0; }
+    .ide-chat-controls label { margin:0; }
+    #chat-stream { min-height:300px; max-height:55vh; overflow:auto; }
+    #chat-terminal-view { min-height:300px; max-height:55vh; overflow:auto; padding:16px; background:var(--sp-surface); color:var(--sp-text); font:13px/1.6 var(--sp-font-mono); white-space:pre-wrap; overflow-wrap:anywhere; }
+    #chat-prompt-form { display:flex; gap:12px; align-items:end; margin-top:20px; }
+    #chat-prompt-form > div { flex:1; min-width:0; }
+    #chat-prompt-text { width:100%; resize:vertical; }
+    .ide-layout :focus-visible { outline:2px solid var(--sp-primary); outline-offset:3px; }
+    @media(max-width:900px) { .ide-layout { grid-template-columns:220px minmax(0,1fr); } .ide-main { padding:16px; } }
+    @media(max-width:600px) { .ide-layout { grid-template-columns:1fr; } .ide-sidebar { border-right:0; border-bottom:1px solid var(--sp-border); } #ide-session-list { max-height:220px; } .ide-launcher { margin:24px auto; } }
     .sp-brand-mark { display: inline-block; flex: none; background: currentColor; -webkit-mask: url("/spawnt-mark.svg") center / contain no-repeat; mask: url("/spawnt-mark.svg") center / contain no-repeat; }
 
     :root {
@@ -488,42 +518,55 @@
     </div>
 
     <div id="quota-table" data-local-view="limits"><p>Loading provider limits...</p></div>
-    <div id="sessions-ongoing" data-local-view="sessions">Loading ongoing sessions...</div>
-    <!-- Paginated Sessions Table -->
-    <div class="table-container" data-local-view="sessions">
-      <div class="table-header-controls">
-        <div class="section-title">Session history</div>
+    <div id="sessions-ongoing" hidden></div>
+    <section class="ide-layout" data-local-view="sessions" aria-label="Agent workspace">
+      <aside class="ide-sidebar" aria-label="Session history">
+        <button class="btn-primary" type="button" data-action="new-session">+ New Session</button>
+        <label for="ide-session-search">Search this page</label>
+        <input id="ide-session-search" type="search" placeholder="Find a conversation" />
         <div class="filters">
-          <label>Project <select id="project-filter" data-change="project-filter"><option value="">All projects</option></select></label><select id="agent-filter" aria-label="Agent" data-change="filter">
-            <option value="all">All Agents</option>
-            <option value="antigravity">Antigravity</option>
-            <option value="codex">OpenAI Codex</option>
-            <option value="claude-code">Claude Code</option>
-            <option value="gemini-cli">Gemini CLI</option>
-          </select>
-          <select id="status-filter" aria-label="Session status" data-change="filter">
-            <option value="all">All Statuses</option>
-            <option value="ongoing">Ongoing</option><option value="active">Running or waiting</option>
-            <option value="idle">Idle</option><option value="ended">Ended</option>
-          </select>
+          <label>Project <select id="project-filter" data-change="project-filter"><option value="">All projects</option></select></label>
+          <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option><option value="gemini-cli">Gemini CLI</option></select>
+          <select id="status-filter" aria-label="Session status" data-change="filter"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="active">Running or waiting</option><option value="idle">Idle</option><option value="ended">Ended</option></select>
         </div>
+        <div id="ide-session-list">Loading conversations...</div>
+        <div id="sessions-table" hidden></div>
+        <div class="pagination"><span id="pagination-info">Page 1 of 1</span><div><button class="btn-control" id="prev-btn" data-action="previous">Previous</button><button class="btn-control" id="next-btn" data-action="next">Next</button></div></div>
+      </aside>
+      <div class="ide-main">
+        <section id="ide-launcher" class="ide-launcher" aria-labelledby="launcher-heading">
+          <h2 id="launcher-heading">New agent session</h2>
+          <p>Choose an agent and workspace to begin. Use the terminal shell to install a CLI or sign in with your provider.</p>
+          <form id="launch-agent-form" data-submit="launch-agent">
+            <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="terminal">Terminal Shell</option></select></div>
+            <div><label for="launch-repo-input">Workspace directory</label><input id="launch-repo-input" type="text" placeholder="Absolute path to your repository" required /></div>
+            <div><label for="launch-model-input">Model (optional)</label><input id="launch-model-input" type="text" placeholder="Use the agent default" maxlength="128" /></div>
+            <p id="launch-agent-hint" role="status">Checking installed agents...</p>
+            <button type="submit" class="btn-primary" id="launch-agent-btn">Launch Agent</button>
+          </form>
+          <p id="launch-status" role="status"></p>
+        </section>
+        <section id="session-chat-panel" aria-labelledby="session-chat-heading" hidden>
+          <h2 id="session-chat-heading" class="section-title">Conversation</h2>
+          <p id="chat-session-label"></p>
+          <div class="ide-chat-controls">
+            <label for="chat-model-select">Model<select id="chat-model-select"><option value="">Choose a model</option></select></label>
+            <button type="button" class="btn-control" id="chat-switch-btn" data-action="switch-model">Switch</button>
+            <button type="button" class="btn-control" data-action="focus-chat">Focus Window</button>
+            <button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Terminal stream</button>
+            <button type="button" class="btn-control" data-action="close-chat">Close</button>
+          </div>
+          <p id="chat-status" role="status"></p>
+          <p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden data-action="copy-workspace">Copy workspace path</button>
+          <div id="chat-stream" aria-live="polite"></div>
+          <div id="chat-terminal-view" role="log" aria-label="Interactive terminal. Click here to type; Control C interrupts." tabindex="0" hidden></div>
+          <form id="chat-prompt-form" data-submit="send-prompt">
+            <div><label for="chat-prompt-text">Send instructions</label><textarea id="chat-prompt-text" rows="3" maxlength="4000" placeholder="Write instructions for this agent"></textarea></div>
+            <button type="submit" class="btn-primary" id="chat-send-btn">Send</button>
+          </form>
+          <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div>
+        </section>
       </div>
-      <div id="sessions-table" role="region" aria-label="Agent sessions" tabindex="0">Loading sessions...</div><p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden data-action="copy-workspace">Copy workspace path</button>
-      <div class="pagination">
-        <span id="pagination-info">Page 1 of 1</span>
-        <div>
-          <button class="btn-control" id="prev-btn" data-action="previous">Previous</button>
-          <button class="btn-control" id="next-btn" data-action="next">Next</button>
-        </div>
-      </div>
-    </div>
-    <section id="session-chat-panel" class="card" aria-labelledby="session-chat-heading" hidden>
-      <div class="table-header-controls"><h2 id="session-chat-heading" class="section-title">Conversation</h2><button type="button" class="btn-control" data-action="close-chat">Close</button></div>
-      <p id="chat-session-label"></p>
-      <p id="chat-status" role="status"></p>
-      <div id="chat-stream" aria-live="polite"></div>
-      <button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button>
-      <button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button>
     </section>
   </main>
 

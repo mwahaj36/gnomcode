@@ -60,7 +60,7 @@ function cycleTheme() {
         button.tabIndex = selected ? 0 : -1;
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
-      if (view !== 'sessions') document.getElementById('session-chat-panel').hidden = true;
+      document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
     }
@@ -195,6 +195,9 @@ function cycleTheme() {
     function switchTab(tabName) {
       setView(tabName);
       refreshCurrentView();
+      if (tabName === 'sessions') {
+        loadInstalledAgents();
+      }
     }
 
     async function exportData(fmt) {
@@ -610,27 +613,240 @@ function cycleTheme() {
 
     let activeChatSession = '';
     let chatEvents = [];
-    async function loadChat(sessionId, earlier = false) {
+    let chatWs = null;
+    let installedAgents = [];
+    let ideSessions = [];
+    let hostedSessions = [];
+    let chatRequest = 0;
+    let modelsLoaded = false;
+
+    async function renderIdeSessions() {
+      const presentation = await import('/console-presentation.js');
+      const known = new Set(ideSessions.map(session => session.id));
+      const hosted = hostedSessions.filter(session => !known.has(session.session_id)).map(session => ({ ...session, id: session.session_id, title: session.repo_path, last_event_at: session.started_at, state: 'hosted' }));
+      document.getElementById('ide-session-list').innerHTML = presentation.renderSessionList([...hosted, ...ideSessions], activeChatSession, document.getElementById('ide-session-search').value);
+    }
+
+    function showLauncher() {
+      activeChatSession = ''; chatEvents = []; chatRequest++;
+      if (chatWs) { chatWs.close(); chatWs = null; }
+      document.getElementById('session-chat-panel').hidden = true;
+      document.getElementById('ide-launcher').hidden = false;
+      document.getElementById('launch-status').textContent = '';
+      renderIdeSessions(); loadInstalledAgents();
+    }
+
+    async function loadChatModels() {
+      if (modelsLoaded) return;
+      try {
+        const models = await apiJson('/api/v1/models', { headers });
+        const select = document.getElementById('chat-model-select');
+        select.innerHTML = '<option value="">Choose a model</option>';
+        for (const model of models.models || models) {
+          const option = document.createElement('option'); option.value = model.model;
+          option.dataset.agent = model.agent; option.textContent = model.display_name || model.model; select.append(option);
+        }
+        modelsLoaded = true;
+      } catch { document.getElementById('chat-status').textContent = 'Model list unavailable. Reopen this conversation to retry.'; }
+    }
+
+    async function switchChatModel() {
+      const select = document.getElementById('chat-model-select');
+      if (!activeChatSession || !select.value) return;
+      const button = document.getElementById('chat-switch-btn'); button.disabled = true;
+      try {
+        const result = await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/switch`, { method:'POST', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ target_model:select.value, agent:select.selectedOptions[0].dataset.agent }) });
+        await loadSessions(); await loadChat(result.session_id);
+      } catch { document.getElementById('chat-status').textContent = 'Model handoff failed. Check the target CLI installation and login, then retry.'; }
+      finally { button.disabled = false; }
+    }
+
+    async function focusChat() {
+      if (!activeChatSession) return;
+      try {
+        const result = await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/focus`, { method:'POST', headers });
+        document.getElementById('session-action-status').textContent = result.message;
+        const copy = document.getElementById('session-action-copy'); copy.hidden = result.focused || !result.repo_path; copy.dataset.path = result.repo_path || '';
+      } catch { document.getElementById('session-action-status').textContent = 'Window unavailable. Use the terminal stream for a hosted session.'; }
+    }
+
+    async function loadInstalledAgents() {
+      try {
+        const data = await apiJson('/api/v1/agents/installed', { headers });
+        if (data?.agents) {
+          installedAgents = data.agents;
+          const select = document.getElementById('launch-agent-select');
+          if (select) {
+            const selected = select.value;
+            select.innerHTML = installedAgents.map(a =>
+              `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}${a.installed ? '' : ' [Not installed]'}</option>`
+            ).join('');
+            if (installedAgents.some(agent => agent.id === selected)) select.value = selected;
+            updateAgentInstallHint();
+          }
+        }
+      } catch (e) {
+        document.getElementById('launch-agent-hint').textContent = 'Agent detection failed. Reopen New Session to retry, or launch Terminal Shell.';
+      }
+    }
+
+    function updateAgentInstallHint() {
+      const select = document.getElementById('launch-agent-select');
+      const hint = document.getElementById('launch-agent-hint');
+      if (!select || !hint) return;
+      const agent = installedAgents.find(a => a.id === select.value);
+      if (agent && !agent.installed) {
+        hint.innerHTML = `<span style="color:var(--text-muted);">${escapeHtml(agent.name)} is not found on PATH. Run: <code>${escapeHtml(agent.install_command)}</code> then <code>${escapeHtml(agent.login_command)}</code>. Or launch <strong>Terminal Shell</strong> to set it up.</span>`;
+      } else {
+        hint.textContent = agent ? `${agent.name} is available on PATH. Provider login is checked by the CLI when it starts.` : 'Agent detection unavailable. Try launching the terminal shell.';
+      }
+      document.getElementById('launch-model-input').disabled = select.value === 'terminal';
+      document.getElementById('launch-agent-btn').disabled = Boolean(agent && !agent.installed);
+    }
+
+    async function launchNewAgent(event) {
+      if (event) event.preventDefault();
+      const agent = document.getElementById('launch-agent-select')?.value;
+      const repoPath = document.getElementById('launch-repo-input')?.value.trim();
+      const model = document.getElementById('launch-model-input')?.value.trim() || undefined;
+      const status = document.getElementById('launch-status');
+      const btn = document.getElementById('launch-agent-btn');
+      if (!agent || !repoPath) {
+        if (status) status.textContent = 'Please provide an agent and a workspace directory.';
+        return;
+      }
+      if (btn) btn.disabled = true;
+      if (status) status.textContent = `Launching ${agent}...`;
+      try {
+        const res = await fetch('/api/v1/sessions/launch', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent, repo_path: repoPath, model })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || `Launch failed (status ${res.status})`);
+        }
+        const record = await res.json();
+        if (status) status.textContent = `Session ${record.session_id} launched! Opening conversation...`;
+        await loadSessions();
+        await loadChat(record.session_id);
+        toggleStream();
+      } catch (err) {
+        if (status) status.textContent = `Could not launch: ${err.message}`;
+      } finally {
+        updateAgentInstallHint();
+      }
+    }
+
+    async function sendPrompt(event) {
+      if (event) event.preventDefault();
+      const input = document.getElementById('chat-prompt-text');
+      const text = input?.value.trim();
+      if (!text || !activeChatSession) return;
+      const status = document.getElementById('chat-status');
+      const sessionId = activeChatSession;
+      const button = document.getElementById('chat-send-btn'); button.disabled = true;
+      if (status) status.textContent = 'Sending prompt...';
+      try {
+        const res = await fetch(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/prompt`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'Prompt failed');
+        }
+        if (input) input.value = '';
+        if (status) status.textContent = 'Prompt delivered to agent. Awaiting response...';
+        if (sessionId === activeChatSession) setTimeout(() => loadChat(sessionId, false, true), 1000);
+      } catch (err) {
+        if (status) status.textContent = `Prompt delivery failed: ${err.message}`;
+      } finally { button.disabled = false; }
+    }
+
+    function toggleStream() {
+      const terminal = document.getElementById('chat-terminal-view');
+      const stream = document.getElementById('chat-stream');
+      const btn = document.getElementById('chat-toggle-stream');
+      if (!terminal || !stream) return;
+      if (terminal.hidden) {
+        terminal.hidden = false;
+        stream.hidden = true;
+        if (btn) btn.textContent = 'Show conversation';
+        connectTerminalWs();
+      } else {
+        terminal.hidden = true;
+        stream.hidden = false;
+        if (btn) btn.textContent = 'Terminal stream';
+        if (chatWs) { chatWs.close(); chatWs = null; }
+      }
+    }
+
+    function connectTerminalWs() {
+      if (chatWs || !activeChatSession) return;
+      const terminal = document.getElementById('chat-terminal-view');
+      if (!terminal) return;
+      terminal.textContent = 'Connecting to PTY terminal stream...\n';
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token') || '';
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${location.host}/api/v1/sessions/${encodeURIComponent(activeChatSession)}/pty?token=${encodeURIComponent(token)}`;
+      try {
+        chatWs = new WebSocket(wsUrl);
+        chatWs.binaryType = 'arraybuffer';
+        chatWs.onmessage = (e) => {
+          const text = typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data);
+          terminal.textContent = (terminal.textContent + text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')).slice(-200000);
+          terminal.scrollTop = terminal.scrollHeight;
+        };
+        chatWs.onerror = () => { terminal.textContent += '\n[Terminal stream disconnected or not hosted by Spawnt]'; };
+        chatWs.onclose = () => { chatWs = null; };
+      } catch (e) {
+        terminal.textContent += '\n[Failed to open terminal stream]';
+      }
+    }
+
+    async function loadChat(sessionId, earlier = false, silent = false) {
       if (!sessionId) return;
+      if (silent && activeChatSession !== sessionId) return;
+      if (!silent && !earlier) {
+        activeChatSession = sessionId; chatEvents = [];
+        if (chatWs) { chatWs.close(); chatWs = null; }
+        document.getElementById('chat-terminal-view').hidden = true;
+        document.getElementById('chat-stream').hidden = false;
+        document.getElementById('chat-toggle-stream').textContent = 'Terminal stream';
+      }
+      const request = ++chatRequest;
+      document.getElementById('ide-launcher').hidden = true;
+      const session = ideSessions.find(session => session.id === sessionId);
+      const hosted = hostedSessions.find(session => session.session_id === sessionId);
+      document.getElementById('session-chat-heading').textContent = session?.title || hosted?.repo_path || 'Conversation';
+      document.getElementById('chat-session-label').textContent = `${session?.agent || hosted?.agent || 'Agent'} · ${session?.state || 'hosted'} · ${sessionId}`;
+      renderIdeSessions();
+      if (!silent) loadChatModels();
       const panel = document.getElementById('session-chat-panel');
       const status = document.getElementById('chat-status');
-      status.textContent = 'Loading conversation...';
+      if (!silent && status) status.textContent = 'Loading conversation...';
       try {
         const before = earlier && chatEvents.length ? `&before=${encodeURIComponent(chatEvents[0].event_id)}` : '';
         const page = await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat?limit=500${before}`, { headers });
-        activeChatSession = sessionId;
-        chatEvents = earlier ? [...page, ...chatEvents] : page;
+        if (request !== chatRequest || sessionId !== activeChatSession) return;
+        const merged = new Map((earlier || silent ? chatEvents : []).map(event => [event.event_id, event]));
+        page.forEach(event => merged.set(event.event_id, event));
+        chatEvents = [...merged.values()].sort((a,b) => a.turn_index-b.turn_index || a.created_at.localeCompare(b.created_at) || a.event_id.localeCompare(b.event_id));
         const presentation = await import('/console-presentation.js');
         presentation.updateChat(document.getElementById('chat-stream'), chatEvents);
-        document.getElementById('chat-session-label').textContent = sessionId;
-        document.getElementById('chat-earlier').hidden = page.length < 500;
+        if (!silent) document.getElementById('chat-earlier').hidden = page.length < 500;
         document.getElementById('chat-delete').hidden = chatEvents.length === 0;
-        status.textContent = `${chatEvents.length} recorded message${chatEvents.length === 1 ? '' : 's'}`;
-        panel.hidden = false;
-        if (!earlier) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (status) status.textContent = `${chatEvents.length} recorded message${chatEvents.length === 1 ? '' : 's'}`;
+        panel.hidden = activeView !== 'sessions';
+        if (!earlier && !silent) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch {
-        status.textContent = 'Could not load conversation history.';
-        panel.hidden = false;
+        if (request !== chatRequest || sessionId !== activeChatSession) return;
+        if (!silent && status) status.textContent = 'Could not load conversation history.';
+        panel.hidden = activeView !== 'sessions';
       }
     }
 
@@ -681,7 +897,8 @@ function cycleTheme() {
         if (project !== document.getElementById('project-filter').value || requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
 
         const jsonStr = JSON.stringify(res);
-        if (jsonStr === lastSessionsJson) return true;
+        try { hostedSessions = (await apiJson('/api/v1/sessions/hosted', { headers })).sessions || []; } catch { hostedSessions = []; }
+        if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
 
         summaryState.activeCount = res.ongoing_count ?? res.active_count ?? null; await refreshSummary();
         document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
@@ -690,6 +907,8 @@ function cycleTheme() {
 
         const presentation = await import('/console-presentation.js');
         presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
+        ideSessions = res.sessions || [];
+        await renderIdeSessions();
         lastSessionsJson = jsonStr;
         return true;
       } catch (e) {
@@ -698,6 +917,7 @@ function cycleTheme() {
         showConnectionError(e);
         summaryState.activeCount = null; await refreshSummary();
         document.getElementById('sessions-table').textContent = 'Session data is unavailable. Retry Reload view when the local daemon is reachable.';
+        document.getElementById('ide-session-list').textContent = 'Sessions unavailable. Retry Reload view.';
         return false;
       }
     }
@@ -982,7 +1202,7 @@ function cycleTheme() {
 
     async function startRemote() {
       try { showRemoteStatus(await apiJson('/api/v1/remote/pairing', { headers })); }
-      catch (error) { document.getElementById('remote-status').textContent = error.message.includes('503') ? 'Remote relay is not configured for this desktop build. Pairing is unavailable until a relay URL is installed.' : 'Could not start pairing. Check your Pro account and relay connection.'; }
+      catch { document.getElementById('remote-status').textContent = 'Could not start pairing. Check your Pro account and internet connection, then retry.'; }
     }
 
     async function confirmRemote() {
@@ -1021,7 +1241,9 @@ function cycleTheme() {
     const actions = { theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
-      'close-chat': () => { document.getElementById('session-chat-panel').hidden = true; },
+      'toggle-stream': toggleStream,
+      'close-chat': showLauncher, 'new-session': showLauncher,
+      'switch-model': switchChatModel, 'focus-chat': focusChat,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
@@ -1032,6 +1254,10 @@ function cycleTheme() {
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
     document.addEventListener('change', event => {
+      if (event.target.id === 'launch-agent-select') {
+        updateAgentInstallHint();
+        return;
+      }
       const target = event.target.closest('[data-change]');
       if (!target) return;
       if (target.dataset.change === 'timeline') setTimeline(target.value);
@@ -1039,15 +1265,36 @@ function cycleTheme() {
       else if (target.dataset.change === 'filter') onFilterChange();
       else if (target.dataset.change === 'relay-config') saveRelayConfig();
     });
+    document.getElementById('ide-session-search').addEventListener('input', renderIdeSessions);
+    document.getElementById('chat-terminal-view').addEventListener('keydown', event => {
+      if (!chatWs || chatWs.readyState !== WebSocket.OPEN || event.metaKey || event.altKey) return;
+      const keys = { Enter:'\r', Backspace:'\x7f', Tab:'\t', Escape:'\x1b', ArrowUp:'\x1b[A', ArrowDown:'\x1b[B', ArrowRight:'\x1b[C', ArrowLeft:'\x1b[D' };
+      const input = event.ctrlKey && event.key.toLowerCase() === 'c' ? '\x03' : !event.ctrlKey ? keys[event.key] || (event.key.length === 1 ? event.key : '') : '';
+      if (input) { event.preventDefault(); chatWs.send(new TextEncoder().encode(input)); }
+    });
     document.addEventListener('submit', event => {
-      if (event.target.dataset.submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
+      const form = event.target.closest('[data-submit]');
+      if (!form) return;
+      const submit = form.dataset.submit;
+      if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
+      else if (submit === 'launch-agent') { event.preventDefault(); launchNewAgent(event); }
+      else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
     });
 
     const initialView = window.location.hash.slice(1);
     if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(initialView)) setView(initialView, false);
     else setView('overview', false);
     pollLocalData();
+    if (initialView === 'sessions') loadInstalledAgents();
     setInterval(() => {
       pollLocalData();
       if (activeView === 'settings') loadRemoteStatus();
+      if (activeView === 'sessions' && !installedAgents.length) loadInstalledAgents();
+      const chatPanel = document.getElementById('session-chat-panel');
+      if (chatPanel && !chatPanel.hidden && activeChatSession) {
+        const terminal = document.getElementById('chat-terminal-view');
+        if (terminal && terminal.hidden) {
+          loadChat(activeChatSession, false, true);
+        }
+      }
     }, 2000);

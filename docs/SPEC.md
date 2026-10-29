@@ -12,6 +12,10 @@
 
 > **Implementation status:** The local model-switch path launches a fresh supported agent session and submits a redacted handoff prompt; live vendor-agent validation remains pending. Remote has an opt-in encrypted relay, two-device code confirmation, chat history paging and bounded prompting for idle Spawnt-hosted sessions. Pairing requires a signed license or a live validated Pro account; the legacy unencrypted cloud command intake is retired. Live cross-device validation and the independent security review remain pending before Remote is offered as a production feature.
 
+> **Agent workspace, 2026-10-29:** The Sessions destination provides paged, searchable session navigation beside a clean user/assistant conversation feed. Tool output stays in the separately selected interactive terminal stream. Existing Antigravity history is cleaned on read without rewriting agent logs or SQLite rows, retaining cursor positions. The launcher supports official Claude Code, Codex and Gemini CLIs plus a local terminal shell (PowerShell on Windows, `$SHELL` or `/bin/sh` on Unix). PATH discovery and install/login hints are local; the official CLI owns login and credentials. Windows npm CLIs run their package-declared Node entry point without command-shell interpolation. Local prompt input supports multiline agent instructions through bracketed paste. Prompt delivery and handoffs use an acknowledged, bounded loopback input endpoint on the independent PTY owner, avoiding races with terminal output. Model switching launches a new compatible agent session; hosted IDs resolve uniquely to the native conversation history.
+>
+> **Public relay deployment, 2026-10-29:** Pairing defaults to `wss://spawnt-remote-relay.mwahaj25.workers.dev/relay`, deployed as a SQLite-backed Cloudflare Durable Object; `SPAWNT_REMOTE_RELAY_URL` remains an override. Connections use TLS and the existing end-to-end encrypted protocol. Live public-relay tests verify both peers, matching codes, confirmation, chat delivery and replay rejection; the Rust pairing integration also passes against this relay. Remote launch accepts only supported agent CLIs. Shell launch/input and permission escalation remain unavailable remotely; prompts require a uniquely bound idle native agent session. A physical phone/browser acceptance pass and independent security review remain required before production availability is claimed.
+>
 > **Remote chat:** A paired device must be able to view the complete available conversation history, submit prompts to the active agent, and receive subsequent responses as they arrive. The phone page and web console Chat panel use the same end-to-end encrypted Remote channel; the web console requires the desktop pairing link before it can show conversation content. Chat must never enter the existing unencrypted metadata sync. Preserve agent-owned history and enforce the same permission boundaries as local interaction.
 >
 > **Rename target:** `spawnt`, `SPAWNT_HOME`, `~/.spawnt`, renamed IPC, app IDs, repositories and documentation, without a legacy executable, home-directory migration, or compatibility shim; no users require migration. Centralize branding and base URLs. The source and releases repositories are to be renamed in place, preserving redirects.
@@ -601,6 +605,15 @@ flowchart LR
     L --> M4["M4 Integrations + Pro (wk 9-12)"]
     M4 --> M5["M5 Teams (post-traction)"]
 ```
+
+### Agent IDE completion follow-up (2026-10-29)
+
+| Deliverable | Status |
+| :--- | :--- |
+| Session sidebar, clean legacy history, launcher, local prompt/model controls and responsive companion launch form | Implemented; automated UI and backend checks |
+| Public encrypted relay deployment and Rust pairing interoperability | Verified against the live Cloudflare relay |
+| Windows desktop installer and hosted terminal lifecycle | Verification recorded in SESSION_LOG |
+| Physical phone acceptance and independent Remote security review | Pending; Remote production approval remains open |
 
 ### M0 — Foundation (week 0–1) Yes
 

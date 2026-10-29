@@ -41,3 +41,10 @@ __pycache__/
 # Electron build output and assembled release inputs
 apps/desktop/out/
 apps/desktop/staging/
+.wrangler/
+
+# Local verification artifacts
+.tmp/
+
+.vercel
+.env*
