@@ -248,6 +248,55 @@ pub struct DailyUsage {
     pub chart_pct: f64,
 }
 
+fn group_activity(rows: Vec<DailyUsage>, range: &str) -> (Vec<DailyUsage>, &'static str) {
+    let span = rows
+        .first()
+        .zip(rows.last())
+        .and_then(|(first, last)| {
+            let start =
+                chrono::NaiveDate::parse_from_str(first.date.get(..10)?, "%Y-%m-%d").ok()?;
+            let end = chrono::NaiveDate::parse_from_str(last.date.get(..10)?, "%Y-%m-%d").ok()?;
+            Some((end - start).num_days())
+        })
+        .unwrap_or_default();
+    let unit = if range == "today" {
+        "hour"
+    } else if range != "all" || span <= 62 {
+        "day"
+    } else if span <= 730 {
+        "month"
+    } else {
+        "year"
+    };
+    if matches!(unit, "day" | "hour") {
+        return (rows, unit);
+    }
+    let mut groups = std::collections::BTreeMap::<String, DailyUsage>::new();
+    for mut row in rows {
+        let length = if unit == "month" { 7 } else { 4 };
+        let key = row.date.get(..length).unwrap_or(&row.date).to_owned();
+        row.date = if unit == "month" {
+            format!("{key}-01")
+        } else {
+            format!("{key}-01-01")
+        };
+        groups
+            .entry(key)
+            .and_modify(|group| {
+                group.total_tokens = group.total_tokens.saturating_add(row.total_tokens);
+                group.turns = group.turns.saturating_add(row.turns);
+                group.priced_turns = group.priced_turns.saturating_add(row.priced_turns);
+                group.unpriced_turns = group.unpriced_turns.saturating_add(row.unpriced_turns);
+                group.cost_usd += row.cost_usd;
+                if row.cost_basis == TrustLevel::Unknown {
+                    group.cost_basis = TrustLevel::Unknown;
+                }
+            })
+            .or_insert(row);
+    }
+    (groups.into_values().collect(), unit)
+}
+
 /// Local-only project usage rollup; repository identity is not published to cloud.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProjectUsage {
@@ -289,6 +338,9 @@ pub struct TimelineReport {
     /// Daily UTC measurements for charts; missing dates are not fabricated zeros.
     #[serde(default)]
     pub daily: Vec<DailyUsage>,
+    /// Chart bucket unit: hour, day, month or year.
+    #[serde(default)]
+    pub activity_interval: String,
     /// Measured tokens with provider-specific cache accounting applied once.
     #[serde(default)]
     pub total_tokens: u64,
@@ -2578,6 +2630,8 @@ impl Database {
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
+        let (grouped, activity_interval) = group_activity(daily, range_kind);
+        daily = grouped;
         let maximum = daily.iter().map(|day| day.total_tokens).max().unwrap_or(0);
         let total_tokens = daily
             .iter()
@@ -2606,6 +2660,7 @@ impl Database {
                 .filter(|input| *input > 0)
                 .map(|input| (total_read as f64 / input as f64 * 100.0).clamp(0.0, 100.0)),
             daily,
+            activity_interval: activity_interval.to_owned(),
             total_tokens,
             range_label,
             earliest_at: global_earliest,
@@ -2703,6 +2758,35 @@ mod tests {
         ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
         SessionState, Surface, TrustLevel, UsageRecord,
     };
+
+    #[test]
+    fn all_time_activity_groups_by_span_without_losing_totals() {
+        use super::{DailyUsage, group_activity};
+        let rows = ["2024-01-01", "2024-01-31", "2024-05-01"]
+            .map(|date| DailyUsage {
+                date: date.into(),
+                total_tokens: 10,
+                cost_usd: 1.0,
+                cost_basis: TrustLevel::Estimated,
+                turns: 1,
+                priced_turns: 1,
+                unpriced_turns: 0,
+                chart_pct: 0.0,
+            })
+            .to_vec();
+        let (rows, unit) = group_activity(rows, "all");
+        assert_eq!(unit, "month");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].total_tokens, 20);
+        let mut rows = rows;
+        rows.push(DailyUsage {
+            date: "2027-01-01".into(),
+            ..rows[0].clone()
+        });
+        let (rows, unit) = group_activity(rows, "all");
+        assert_eq!(unit, "year");
+        assert_eq!(rows.len(), 2);
+    }
 
     #[test]
     fn retired_cloud_rows_stay_hidden_without_deleting_history() {

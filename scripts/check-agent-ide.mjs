@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 
 // Run with Playwright available on NODE_PATH; exercises the shipped console against controlled API replies.
 const { chromium } = createRequire(import.meta.url)('playwright');
+const {WebSocketServer} = createRequire(new URL('../web/package.json',import.meta.url))('next/dist/compiled/ws');
 const writes = [];
 const errors = [];
 let remotePaired = false;
@@ -12,7 +13,7 @@ const session = { id:'codex:sample', title:'Review authentication', agent:'codex
 const staticFiles = {
   '/':'crates/daemon/src/console.html', '/theme-init.js':'crates/daemon/src/theme-init.js', '/console-app.js':'crates/daemon/src/console-app.js',
   '/console-presentation.js':'web/lib/console-presentation.js', '/spawnt-console.css':'web/app/spawnt-console.css',
-  '/spawnt-tokens.css':'web/app/spawnt-tokens.css', '/spawnt-mark.svg':'web/public/spawnt-mark.svg',
+  '/vendor/xterm-addon-fit.js':'web/public/vendor/xterm-addon-fit.js', '/vendor/xterm.js':'web/public/vendor/xterm.js', '/vendor/xterm.css':'web/public/vendor/xterm.css', '/spawnt-tokens.css':'web/app/spawnt-tokens.css', '/spawnt-mark.svg':'web/public/spawnt-mark.svg',
 };
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost');
@@ -33,6 +34,7 @@ const server = createServer(async (request, response) => {
   ] };
   else if (url.pathname === '/api/v1/projects') value = [];
   else if (url.pathname === '/api/v1/remote/status') value = {enabled:true,paired:remotePaired};
+  else if (url.pathname.endsWith('/terminal')) value = {session_id:'terminal-test',repo_path:'C:\\workspace\\demo'};
   else if (url.pathname === '/api/v1/models') value = [{ model:'gpt-6.1-sol',agent:'codex',display_name:'GPT 6.1' },{ model:'o3', agent:'codex',display_name:'OpenAI o3' }];
   else if (url.pathname.endsWith('/chat')) value = [
     { event_id:'1', turn_index:1, role:'user', content:'Review authentication', created_at:session.last_event_at },
@@ -52,6 +54,9 @@ const server = createServer(async (request, response) => {
   }
   response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify(value));
 });
+const terminalServer = new WebSocketServer({noServer:true});
+const terminalInput=[];
+server.on('upgrade',(request,socket,head)=>terminalServer.handleUpgrade(request,socket,head,ws=>{ws.send('\x1b[32mWorkspace shell ready\x1b[0m\r\n> ');ws.on('message',data=>{if(data.toString().startsWith('{"resize":'))return;terminalInput.push(data.toString());ws.send(data);});}));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
 try {
@@ -59,16 +64,25 @@ try {
   await page.addInitScript(() => { window.spawntDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?token=test#sessions`);
+  assert.equal(await page.getByRole('button',{name:'Pin navigation',exact:true}).count(),0,'navigation has a single predictable toggle');
   await page.getByRole('button', {name:/Review authentication/}).click();
   await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
-  await page.waitForFunction(() => document.getElementById('remote-status').textContent.includes('Waiting for phone'));
+  await page.waitForFunction(() => document.getElementById('remote-status').textContent.includes('Waiting for the code'));
   assert.equal(await page.locator('#remote-connection-state').isVisible(),false,'initial connection status must not create a toast');
   remotePaired = true;
   await page.locator('#remote-connection-state').waitFor({state:'visible'});
   assert.doesNotMatch(await page.locator('#chat-stream').textContent(), /Command output/);
-  assert.equal(await page.locator('#chat-status').textContent(), '2 recorded messages', 'hidden tool events are not counted as conversation messages');
+  assert.equal(await page.locator('#chat-status').textContent(), '2 messages', 'hidden tool events are not counted as conversation messages');
+  await page.getByRole('button',{name:'Terminal',exact:true}).click();
+  await page.locator('#workspace-terminal-pane').waitFor({state:'visible'});
+  await page.locator('#workspace-terminal-screen .xterm-screen').waitFor();
+  await page.locator('#workspace-terminal-screen .xterm-helper-textarea').pressSequentially('pwd');
+  await page.waitForTimeout(150);
+  assert.match(terminalInput.join(''), /pwd/, 'integrated terminal forwards real typing');
+  assert.ok(writes.some(write=>write.path.endsWith('/terminal')),'shell launch resolves the current conversation workspace');
+  await page.getByRole('button',{name:'Hide',exact:true}).click();
   assert.equal(await page.locator('#chat-model-select').inputValue(), 'gpt-6.1-sol', 'model picker shows the running model');
-  assert.match(await page.locator('#chat-model-status').textContent(), /Current model: gpt-6.1-sol/);
+  assert.equal(await page.locator('#chat-model-status').textContent(), '', 'confirmed model is not repeated beside its selector');
   await page.locator('#chat-stream h2').getByText('Findings').waitFor();
   assert.equal(await page.locator('#chat-stream pre code').textContent(), 'let safe = "<script>";');
   const userBox = await page.locator('.sp-chat-user').boundingBox();
@@ -114,6 +128,8 @@ try {
   });
   await page.locator('#chat-send-btn').click();
   await sendStarted;
+  await page.locator('.sp-chat-user').filter({hasText:'Keep my draft'}).waitFor();
+  await page.locator('.sp-chat-waiting').getByText('Sending...').waitFor();
   await page.locator('#chat-model-select').selectOption('o3');
   await page.locator('#chat-switch-btn').click();
   await page.getByRole('heading',{name:'Model handoff',exact:true}).waitFor();
@@ -161,17 +177,25 @@ try {
     await page.evaluate(() => delete document.documentElement.dataset.theme);
   }
   await page.setViewportSize({width:1440,height:1000});
+  await page.locator('#navigation-toggle').click();
+  assert.equal(await page.locator('#navigation-toggle').getAttribute('aria-expanded'),'true');
+  await page.mouse.move(1000,500);
+  assert.equal(await page.locator('.sp-console-nav').evaluate(node=>Math.round(node.getBoundingClientRect().width)),208,'rail state does not change on pointer leave');
+  await page.locator('#navigation-toggle').click();
   await page.locator('#tab-btn-settings').click();
   await page.evaluate(() => {document.documentElement.dataset.theme = 'dark'; document.activeElement?.blur();});
   await page.mouse.move(1000, 500);
   await page.waitForTimeout(250);
   await page.screenshot({path:new URL('../.tmp/ide-verification/profile-dark-1440.png', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
+  await page.evaluate(() => {const status={enabled:true,paired:false,room_id:'a'.repeat(32),public_key:'b'.repeat(64),relay_url:'wss://relay.example/relay',pairing_code:'63311530'};showRemoteStatus(status);document.getElementById('desktop-pairing-code').focus();document.getElementById('desktop-pairing-code').select();window.pairingNode=document.getElementById('desktop-pairing-code');showRemoteStatus(status);});
+  assert.equal(await page.locator('#desktop-pairing-code').evaluate(node=>node===window.pairingNode && node.selectionEnd-node.selectionStart===8),true,'status polling preserves code selection for copying');
   await page.route('**/api/v1/models', route => route.fulfill({status:200,contentType:'application/json',body:'[]'}));
   await page.locator('#tab-btn-sessions').click();
   await page.reload();
   await page.getByRole('button', {name:/Review authentication/}).click();
   await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
-  assert.equal(await page.locator('#chat-model-select').isDisabled(), true, 'missing CLI metadata cannot produce a guessed model list');
+  assert.equal(await page.locator('#chat-model-select option[value="o3"]').count(),0,'missing CLI metadata cannot produce guessed model names');
+  assert.ok(await page.locator('#chat-model-select option[data-model="@default"]').count()>0,'installed agents remain switchable through their actual CLI defaults');
   assert.equal(await page.locator('#chat-switch-btn').isDisabled(), true);
   await page.evaluate(async () => {
     const {updateChat} = await import('/console-presentation.js');

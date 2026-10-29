@@ -235,7 +235,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-web-app .sp-console-nav:hover button>span,.sp-web-app .sp-console-nav:focus-within button>span,.web-navigation-pinned .sp-console-nav button>span{opacity:1}
 .sp-web-app .sp-console-nav svg{flex:0 0 20px;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .sp-web-app .web-rail-brand{display:block;padding:12px;margin-bottom:12px}
-.sp-web-app .sp-console-nav button:last-child{margin-top:auto}
+.sp-web-app .sp-console-nav button:last-of-type{margin-top:auto}
 .sp-web-app .sp-console-content{max-width:1440px;margin:auto}
 .web-profile-section{padding:0 0 24px;margin-bottom:24px;border-bottom:1px solid var(--sp-border)}
 .web-profile-section h2{font:600 20px/1.4 var(--sp-font-sans);margin-bottom:12px}
@@ -390,3 +390,38 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 }
 
 .sp-native-console[data-console-view="sessions"] .view-content.active{animation:none;transform:none}
+
+/* One explicit rail toggle; focus and hover never change the layout. */
+body.sp-native-console .sp-console-workspace{padding-left:64px!important}
+body.sp-native-console .sp-console-workspace>.sp-console-nav{width:64px!important;transition:none}
+body.sp-native-console .sp-console-nav .rail-label{opacity:0!important}
+body.sp-native-console.navigation-expanded .sp-console-workspace{padding-left:208px!important}
+body.sp-native-console.navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
+body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1!important}
+.sp-web-app{padding-left:96px!important}
+.sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:none}
+.sp-web-app .sp-console-nav button>span{opacity:0!important}
+.sp-web-app.web-navigation-expanded{padding-left:240px!important}
+.sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
+.sp-web-app.web-navigation-expanded .sp-console-nav button>span{opacity:1!important}
+.sp-web-app .sp-console-nav>button:first-of-type{display:flex!important}
+.desktop-pairing-code{display:grid;gap:10px;margin:20px 0;max-width:400px}
+.desktop-pairing-code label{font:500 14px/1.5 var(--sp-font-sans)}
+.desktop-pairing-code input{width:100%;font:600 30px/1.4 var(--sp-font-mono);letter-spacing:.12em;padding:12px;background:var(--sp-surface-2);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:6px}
+.desktop-pairing-code small{font:12px/1.5 var(--sp-font-sans);color:var(--sp-text-2)}
+#remote-link>details svg{display:block;width:240px;max-width:100%;height:auto;background:white;margin:12px 0}
+.pairing-code-form{margin:16px 0}.pairing-code-form label{display:block;font-size:13px;margin-bottom:8px}.pairing-code-form>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pairing-code-form input{min-width:0;max-width:200px;padding:10px 12px;background:var(--sp-surface);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:6px;font:18px/1.5 var(--sp-font-mono);letter-spacing:.1em}
+:is(.sp-native-console,.sp-console-app,.sp-remote) select{color-scheme:inherit}
+:is(.sp-native-console,.sp-console-app,.sp-remote) :is(option,optgroup){background:var(--sp-surface);color:var(--sp-text)}
+@media(max-width:760px){body.sp-native-console .sp-console-workspace,body.sp-native-console.navigation-expanded .sp-console-workspace{padding-left:56px!important}body.sp-native-console .sp-console-workspace>.sp-console-nav{width:56px!important}.sp-web-app,.sp-web-app.web-navigation-expanded{padding-left:72px!important}.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
+
+.workspace-field{position:relative}.workspace-field #launch-repo-input{padding-right:52px}.workspace-field #launch-workspace-browse{position:absolute;right:3px;top:3px;width:40px;min-height:38px;padding:8px;background:transparent;display:flex;align-items:center;justify-content:center}
+.sp-chat-waiting{align-self:flex-start;color:var(--sp-text-2);max-width:100%}.sp-chat-waiting header{display:none}.sp-chat-waiting .sp-chat-body{font-size:13px}.sp-chat-waiting .sp-chat-body::before{content:'';display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:10px;animation:chat-pulse 1s ease-in-out infinite alternate}@keyframes chat-pulse{to{opacity:.3}}@media(prefers-reduced-motion:reduce){.sp-chat-waiting .sp-chat-body::before{animation:none}}
+.sp-native-console #chat-prompt-text:focus-visible{outline:0}.sp-native-console #chat-prompt-form:focus-within{border-color:var(--sp-border-strong)}
+
+.conversation-heading>.btn-control{margin-left:auto;background:transparent}#workspace-terminal-pane{flex:none;height:240px;min-height:160px;border-top:1px solid var(--sp-border);margin-top:12px;overflow:hidden} .workspace-terminal-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font:12px/1.5 var(--sp-font-mono);color:var(--sp-text-2)}#workspace-terminal-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#workspace-terminal-screen{height:190px;overflow:auto;background:#0d0d0f;padding:8px}#workspace-terminal-screen>div{min-width:660px;height:100%}
+
+.sp-settings-resources{flex-wrap:wrap;gap:12px 20px;justify-content:flex-end;border-bottom:1px solid var(--sp-border);padding-bottom:16px}.sp-settings-resources a{font:12px/1.5 var(--sp-font-sans);color:var(--sp-text-2);text-decoration:none}.sp-settings-resources a:hover{color:var(--sp-text)}
+.web-download-link{display:flex;align-items:center;gap:14px;min-height:44px;padding:10px 12px;color:var(--sp-text-2);white-space:nowrap;text-decoration:none;font:13px/1.4 var(--sp-font-sans)}.web-download-link svg{flex:0 0 20px}.web-download-link span{opacity:0}.web-navigation-expanded .web-download-link span{opacity:1}
+
+#workspace-terminal-screen>div{min-width:0;width:100%}.conversation-heading>.btn-control{flex:none;white-space:nowrap;min-width:72px}.conversation-heading>div:first-child{min-width:0;flex:1}.conversation-heading h2{overflow-wrap:anywhere}@media(max-width:600px){.conversation-heading>.btn-control{min-width:44px;padding-inline:8px;font-size:11px}}

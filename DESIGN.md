@@ -156,11 +156,11 @@ Inter is the approved display, body and control family. JetBrains Mono is reserv
 
 Use the established spacing rhythm in frontmatter. Marketing content remains centered around a 1200px maximum, with narrower mobile gutters. Open sections and aligned grids separate content without introducing a floating card for every group.
 
-The native and web consoles occupy the available window. Their fixed left rail is compact (64px desktop, 56px phone), expands to 208px on hover or keyboard focus, and can be pinned on desktop. Expanded desktop navigation reserves content space. Profile sits at the bottom of the full-height rail. Application views keep independent data/auth adapters while sharing presentation tokens and formatting.
+The native and web consoles occupy the available window. Their fixed left rail is compact (64px desktop, 56px phone). An explicit navigation toggle expands or collapses it; hover and focus do not change layout, and there is no pin mode. Expanded desktop navigation reserves content space at 208px. Profile sits at the bottom of the full-height rail. Application views keep independent data/auth adapters while sharing presentation tokens and formatting.
 
 Workspace places conversation history beside the transcript and anchors the composer beneath it. Native history uses a 280px desktop pane; Remote uses 260px. Phone layouts replace the list with a drawer anchored to the content edge, use one conversation toolbar, and retain readable touch targets. The precise route composition belongs to the surface brief rather than a new global layout rule.
 
-Dashboard presents activity before summary, then limits and ongoing sessions; narrow layouts stack them. Long-period reporting labels the selected period and actual UTC chart window. Keep provenance at section or column level and distinguish unknown data from zero. Profile groups account, devices, appearance and data, with advanced plans/pricing and offline license disclosed.
+Dashboard presents activity before summary, then limits and ongoing sessions; narrow layouts stack them. Activity adapts its visible interval from daily to monthly or yearly totals as the reporting span grows, while Today remains hourly. Long-period reporting labels the selected period, aggregation interval and actual UTC chart window. Keep provenance at section or column level and distinguish unknown data from zero. Profile groups account, devices, appearance, data and desktop downloads, with advanced plans/pricing and offline license disclosed.
 
 The landing tour preserves its compact illustrative overview: three KPIs, a short chart and short activity rows. Full daily grids and session details belong in the relevant tour views. Keep KPI labels, values and trust aligned; narrow tour rows omit a column consistently rather than changing tracks per row.
 
@@ -190,7 +190,7 @@ Marketing headers retain Product, Agents, Docs, Pricing, an account link and Dow
 
 Application navigation uses the left rail and compact current-view title rather than the removed top brand/settings/theme bar. Profile contains theme, account and devices. Theme cycles System, Light, Dark; System follows the OS, stored overrides apply before first paint, and controls stay readable throughout the switch. The marketing footer retains its small theme control; Auth's phone menu also exposes it.
 
-Rail expansion follows hover/focus and can be interrupted. Default transitions use the existing exponential ease-out curve; remove nonessential looping or travel for reduced motion while preserving clear state changes. The supported-agent strip becomes a static wrapping list in reduced motion. Workspace itself avoids an entry transform that would offset the fixed drawer.
+Rail expansion is controlled only by its labeled toggle, with expanded state exposed to assistive technology. Default transitions use the existing exponential ease-out curve; remove nonessential looping or travel for reduced motion while preserving clear state changes. The supported-agent strip becomes a static wrapping list in reduced motion. Workspace itself avoids an entry transform that would offset the fixed drawer.
 
 ### Reporting containers and badges
 
@@ -198,15 +198,15 @@ Reporting uses hairline grids, divided rows and truthful unavailable states. Tru
 
 ### Conversation bubbles and composer
 
-User messages align right in red with dark text; agent replies align left on a neutral gray surface. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
+User messages align right in red with dark text; agent replies align left on a neutral gray surface. Submission immediately adds the optimistic user bubble and a gray agent waiting bubble. Reconcile that feedback with recorded history without duplicating messages; failed delivery preserves the draft. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
 
-The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The model control belongs beside the composer; confirmed model changes appear as dated conversation notices. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive.
+The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Display observed model state truthfully; confirmed agent/model changes appear as dated conversation notices. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
 
 ### Profile, pairing and feedback
 
 Profile uses open sections and aligned action groups. Advanced settings use disclosures. Account connection distinguishes account state from publication state, masks the desktop token field, names the actual web action, and offers a separate Disconnect action when connected.
 
-Device discovery, a locally generated QR code and direct pairing links lead to the existing matching-code flow. The code is shown clearly and confirmed on both devices. Initial status loading stays quiet; an actual connection change produces a short dismissible notification with a geometric phone icon. Current connection status remains inline in Profile.
+Pairing is owner-scoped: desktop Profile displays an eight-digit code, and web Profile accepts that code while signed in to the same account. The entry expires after five minutes, then the separate matching security code is confirmed on both devices. The interface does not present pairing links or QR codes. Initial status loading stays quiet; an actual connection change produces a short dismissible notification with a geometric phone icon. Current connection status remains inline in Profile.
 
 Confirmation dialogs describe the action and consequence, focus Cancel initially, use an explicit action label and cancel on Escape. Ordinary feedback uses a dismissible app notice rather than a blocking browser alert.
 

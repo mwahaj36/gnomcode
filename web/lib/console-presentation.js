@@ -55,12 +55,13 @@ export function renderActivity(report) {
   if (!Array.isArray(report?.daily)) return '<section class="sp-activity"><h2>Activity</h2><p>Measurements are unavailable. Update the paired desktop app to publish this view.</p></section>';
   if (!report.daily.length) return '<section class="sp-activity"><h2>Activity</h2><p>No recorded usage in this period. Unobserved intervals are not counted as zero.</p></section>';
   const hours = report.range_label === 'Today';
+  const interval = report.activity_interval || (hours ? 'hour' : 'day');
   const days = report.daily.slice(-84);
   const chartDate = value => new Date(value).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric',...(hours ? {} : {timeZone:'UTC'})});
-  const chartWindow = `${chartDate(days[0].date)} – ${chartDate(days.at(-1).date)}`;
-  const label = day => hours ? new Date(day.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}) : day.date.slice(5);
+  const chartWindow = `${chartDate(report.earliest_at || days[0].date)} – ${chartDate(report.latest_at || days.at(-1).date)}`;
+  const label = day => interval === 'year' ? day.date.slice(0,4) : interval === 'month' ? new Date(day.date).toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'}) : hours ? new Date(day.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}) : day.date.slice(5);
   return `<section class="sp-activity" aria-label="Recorded token activity">
-    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · local time' : `${escape(report.range_label || 'Selected period')} · daily totals · UTC`} · expand for details</p></div><div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-trust">Recorded tokens · ${escape(period(report))}</span></div></div></div>
+    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · local time' : `${escape(report.range_label || 'Selected period')} · ${interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · UTC`} · expand for details</p></div><div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-trust">Recorded tokens · ${escape(period(report))}</span></div></div></div>
     <p class="sp-activity-caption">Chart window: ${escape(chartWindow)}. ${days.length < report.daily.length ? 'Latest 84 recorded intervals; the total above covers the full selected period.' : 'All recorded intervals in the selected period.'} Gaps are not counted as zero.</p>
     <div class="sp-activity-bars" role="img" aria-label="Recorded token volumes; measurements below">${days.map((day, index) => `<i style="--day-delay:${Math.min(index, 20) * 25}ms;--day-height:${Number.isFinite(day.chart_pct) ? Math.min(100, Math.max(0, day.chart_pct)) : 0}%" title="${escape(label(day))}: ${escape(tokens(day.total_tokens))} tokens"></i>`).join('')}</div>
     <div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(label(day))}</time><strong>${escape(tokens(day.total_tokens))}</strong></summary><div><span>API equivalent</span><strong>${cost(day, day.cost_usd)}</strong><span>${priced(day) ? coverage(day) : 'Price unavailable'}</span><span>${escape(day.turns)} recorded invocations</span></div></details>`).join('')}</div>
@@ -71,7 +72,7 @@ export function renderActivity(report) {
 export function renderOngoing(sessions) {
   if (!Array.isArray(sessions)) return '<section class="sp-ongoing"><h2>Ongoing sessions</h2><p>Session status is unavailable.</p></section>';
   const active = sessions.filter(session => session.is_ongoing ?? session.is_active);
-  return `<section class="sp-ongoing"><div class="sp-panel-heading"><h2>Ongoing sessions</h2><p>In progress, waiting or recently active.</p></div>${active.length ? active.map(session => `<details data-key="${escape(session.id)}"><summary><strong>${escape(session.title || session.project_name || 'Private session')}</strong><span>${escape(session.agent)} · ${escape(session.model || 'Model unknown')}</span><b>${session.presence === 'recently_idle' ? 'Recently idle' : escape((session.state || 'unknown').replaceAll('_',' '))}</b><time datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">Last activity ${escape(relativeActivity(session.last_event_at))}</time></summary><dl><dt>Session</dt><dd>${escape(session.id)}</dd><dt>Last activity</dt><dd>${escape(relativeActivity(session.last_event_at))} · ${escape(new Date(session.last_event_at).toLocaleString())}</dd><dt>Active context</dt><dd>${escape(tokens(session.context_tokens))} / ${escape(tokens(session.context_window))}</dd><dt>Project</dt><dd>${escape(session.project_name || 'Private project')}</dd></dl></details>`).join('') : '<p>No ongoing sessions at the last observation.</p>'}</section>`;
+  return `<section class="sp-ongoing"><div class="sp-panel-heading"><h2>Ongoing sessions</h2><p>In progress, waiting or recently active.</p></div>${active.length ? active.map(session => `<details data-key="${escape(session.id)}"><summary><strong>${escape(session.title || session.project_name || 'Private session')}</strong><span>${escape(session.project_name || 'Private project')} · ${escape(session.agent)} · ${escape(session.model || 'Model unknown')}</span><b>${session.presence === 'recently_idle' ? 'Recently idle' : escape((session.state || 'unknown').replaceAll('_',' '))}</b><time datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">Last activity ${escape(relativeActivity(session.last_event_at))}</time></summary><dl><dt>Session</dt><dd>${escape(session.id)}</dd><dt>Last activity</dt><dd>${escape(relativeActivity(session.last_event_at))} · ${escape(new Date(session.last_event_at).toLocaleString())}</dd><dt>Active context</dt><dd>${escape(tokens(session.context_tokens))} / ${escape(tokens(session.context_window))}</dd><dt>Project</dt><dd>${escape(session.project_name || 'Private project')}</dd></dl></details>`).join('') : '<p>No ongoing sessions at the last observation.</p>'}</section>`;
 }
 
 export function updateOngoing(element, sessions) { updateMarkup(element, renderOngoing(sessions)); }
@@ -204,7 +205,7 @@ export function renderChatCards(events) {
     const roleLabel = role === 'user' ? 'You' : 'Agent';
     const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';
     const approvalPrompt = evt.status === 'pending' ? `<p class="sp-approval-banner">Approval is pending in the agent.</p>` : '';
-    return `<article class="sp-chat-card sp-chat-${escape(role)}">
+    return `<article data-chat-id="${escape(evt.event_id || '')}" class="sp-chat-card sp-chat-${escape(role)}${evt.waiting ? ' sp-chat-waiting' : ''}">
       <header>
         <strong>${escape(roleLabel)}</strong>
         ${statusBadge}
@@ -216,10 +217,34 @@ export function renderChatCards(events) {
   }).join('')}</div>`;
 }
 
+export function reconcileChat(events, pending, state = '') {
+  const output = [...(events || [])];
+  const remaining = [];
+  const consumed = new Set();
+  for (const prompt of pending || []) {
+    const index = output.findIndex((event,index) => !consumed.has(index) && !event.local_pending && event.role === 'user' && !prompt.baseline.includes(event.event_id) && event.content?.trim() === prompt.text.trim());
+    if (index >= 0) consumed.add(index);
+    if (index >= 0 && output.slice(index + 1).some(event => event.role === 'assistant' && !event.local_pending)) continue;
+    prompt.baseline = [...new Set([...prompt.baseline,...[...consumed].filter(i=>i!==index).map(i=>output[i].event_id)])];
+    remaining.push(prompt);
+    if (index < 0) output.push({event_id:prompt.id,role:'user',content:prompt.text,created_at:prompt.created_at,local_pending:true});
+  }
+  if (remaining.length) {
+    const latest = remaining.at(-1);
+    const content = ['ended','disconnected'].includes(state) ? 'Agent session ended without a recorded reply.' : !latest.delivered ? 'Sending...' : state === 'thinking' ? 'Thinking...' : state === 'waiting' ? 'Waiting for approval in Terminal stream' : 'Waiting for agent response...';
+    output.push({event_id:latest.id+':response',role:'assistant',content,created_at:latest.created_at,local_pending:true,waiting:true});
+  }
+  return {events:output,pending:remaining};
+}
+
 export function updateChat(element, events) {
   const previousHeight = element.scrollHeight;
   const previousTop = element.scrollTop;
   const follow = previousHeight - previousTop - element.clientHeight < 80;
+  const previous = new Set([...element.querySelectorAll('[data-chat-id]')].map(node => node.dataset.chatId));
   updateMarkup(element, renderChatCards(events));
+  element.querySelectorAll('[data-chat-id]').forEach(node => {
+    if (!previous.has(node.dataset.chatId) && (previous.size || events.some(event=>event.local_pending)) && !matchMedia('(prefers-reduced-motion: reduce)').matches) node.animate([{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.16,1,.3,1)'});
+  });
   element.scrollTop = follow ? element.scrollHeight : previousTop;
 }

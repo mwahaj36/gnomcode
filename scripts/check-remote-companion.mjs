@@ -39,11 +39,12 @@ const browser=await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executabl
 try {
   const page=await browser.newPage({viewport:{width:390,height:844}});
   page.on('pageerror',error=>failures.push(error.message));
-  await page.goto(`${site}/remote#${new URLSearchParams({room,key:keys.publicHex,relay})}`);
+  await page.addInitScript(offer => sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(offer)),{room,key:keys.publicHex,relay,expires_at:new Date(Date.now()+300000).toISOString()});
+  await page.goto(`${site}/remote`);
   assert.equal(await page.locator('footer').count(),0,'Remote must use the app shell, without the marketing footer');
   const remoteBox = await page.locator('.remote-heading').boundingBox();
   assert.ok(remoteBox.x >= 16 && remoteBox.width <= 358,'phone conversation needs horizontal padding');
-  await page.getByRole('button',{name:'Connect securely'}).click();
+
   await page.getByRole('button',{name:'Codes match'}).waitFor();
   for(let attempt=0;attempt<100 && !channel;attempt++) await new Promise(resolve=>setTimeout(resolve,50));
   assert.ok(channel, 'desktop receives the phone public key');
@@ -97,7 +98,7 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.locator('.remote-actions > summary').click();
   await page.getByRole('button',{name:'Disconnect',exact:true}).click();
-  await page.getByRole('button',{name:'Connect securely',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Pair your desktop',exact:true}).waitFor();
   await page.waitForTimeout(100);
   assert.deepEqual(await page.locator('.sp-remote [role="alert"]').allTextContents(),[],'intentional disconnect must not show a connection failure');
   assert.deepEqual(failures,[]);
