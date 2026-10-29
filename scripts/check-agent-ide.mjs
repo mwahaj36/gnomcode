@@ -75,6 +75,12 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no horizontal overflow at ${width}px`);
     await page.screenshot({path:new URL(`../.tmp/ide-verification/launcher-${width}.png`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   }
+  await page.route('**/api/v1/models', route => route.fulfill({status:200,contentType:'application/json',body:'[]'}));
+  await page.reload();
+  await page.getByRole('button', {name:/Review authentication/}).click();
+  await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
+  assert.equal(await page.locator('#chat-model-select').isDisabled(), true, 'missing CLI metadata cannot produce a guessed model list');
+  assert.equal(await page.locator('#chat-switch-btn').isDisabled(), true);
   assert.deepEqual(errors, []);
   console.log('PASS: session selection, clean chat, multiline prompt, model handoff, installation hints, launcher and responsive layout');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
