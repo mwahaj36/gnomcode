@@ -1,17 +1,10 @@
+import { pageMetadata } from "../../lib/seo";
 import branding from "../../branding.json";
-import type { Metadata } from "next";
 import Link from "next/link";
 import { CopyCommand } from "../components/CopyCommand";
 import { PlatformDownloads } from "../downloads/PlatformDownloads";
 
-export const metadata: Metadata = {
-  title: "Documentation — Setup, Agents & API Reference",
-  description:
-    "Complete technical guide for spawnt: quickstart, agent support, CLI commands, and REST APIs.",
-  alternates: {
-    canonical: `${branding.baseUrl}/docs`,
-  },
-};
+export const metadata = pageMetadata("/docs", "Spawnt Documentation", "Install Spawnt, launch AI coding agents, switch models and pair your phone. Guides for agent support, cost, quota and privacy.");
 
 const docsJsonLd = {
   "@context": "https://schema.org",
@@ -30,7 +23,7 @@ const docsJsonLd = {
 
 export default function DocsPage() {
   const sections = [
-    { id: "quickstart", title: "Quickstart (1 Min)" },
+    { id: "quickstart", title: "Getting started" },
     { id: "supported-agents", title: "Supported Agents & Logs" },
     { id: "privacy", title: "Privacy Invariants" },
     { id: "cli", title: "CLI Command Reference" },
@@ -68,17 +61,18 @@ export default function DocsPage() {
               spawnt Documentation
             </h1>
             <p>
-              spawnt is live mission control for AI coding agents. Current monitoring reads local agent activity and stores redacted metadata. Local conversation history is planned for model switching.
+              Spawnt is a local-first agent orchestrator. Launch supported official CLIs, work in redacted local conversations, switch with a compact handoff and pair a device for encrypted Remote.
             </p>
           </header>
 
           {/* Section 1: Quickstart */}
+          <section id="guides"><h2>Spawnt guides</h2><p>Choose a workflow, then check capability and release details.</p><ul className="sp-guide-related"><li><Link href="/docs/getting-started">Getting started</Link></li><li><Link href="/docs/model-switching">Model switching</Link></li><li><Link href="/docs/remote-access">Remote access</Link></li><li><Link href="/docs/supported-agents">Supported agents</Link></li><li><Link href="/docs/quota-and-cost">Quota and cost</Link></li><li><Link href="/docs/model-pricing">Model pricing</Link></li><li><Link href="/docs/automate-multiple-agents">Automate multiple agents</Link></li><li><Link href="/docs/prompt-from-phone">Prompt from phone</Link></li><li><Link href="/docs/faq">FAQ</Link></li><li><Link href="/docs/quota-limits-explained">Quota limits explained</Link></li><li><Link href="/docs/privacy">Privacy</Link></li><li><Link href="/docs/claude-code-vs-codex">Claude Code vs Codex</Link></li></ul></section>
           <section id="quickstart" className="mb-14 scroll-mt-24">
             <h2>
               Quickstart
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-4">
-              spawnt runs locally with no external runtime dependencies. Choose an available platform release below:
+              spawnt runs locally with no external runtime dependencies. Check the platform guide for current release availability:
             </p>
 
             <PlatformDownloads />
@@ -122,10 +116,10 @@ export default function DocsPage() {
                   </span>
                 </div>
                 <p className="text-muted text-[11px] mb-3 leading-relaxed">
-                  Parses <code className="text-foreground">~/.codex/sessions/rollout-*.jsonl</code> with session UUID attribution. Detects 5-hour and 7-day exact rate limit headers, turn token usage, and mid-session model shifts.
+                  Parses <code className="text-foreground">~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code> with session UUID attribution. Detects 5-hour and 7-day exact rate limit headers, turn token usage, and mid-session model shifts.
                 </p>
                 <div className="text-[10px] text-muted">
-                  Log Path: <code className="text-foreground">~/.codex/sessions/rollout-*.jsonl</code>
+                  Log Path: <code className="text-foreground">~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code>
                 </div>
               </div>
 
@@ -155,7 +149,7 @@ export default function DocsPage() {
                   Tracks CLI commands, execution turns, and token counts from local Gemini configuration and history logs in <code className="text-foreground">~/.gemini/</code>.
                 </p>
                 <div className="text-[10px] text-muted">
-                  Log Path: <code className="text-foreground">~/.gemini/logs/*</code>
+                  Log Path: <code className="text-foreground">~/.gemini/tmp/</code>
                 </div>
               </div>
             </div>
@@ -174,14 +168,14 @@ export default function DocsPage() {
               <div className="bg-card border border-border rounded-lg p-4">
                 <div className="text-accent font-semibold mb-1">Local-first history</div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Current monitoring stores redacted activity and usage metadata. A future console will keep local conversation history for session continuity and model switching. Existing optional metadata sync is not end-to-end encrypted and must not carry chat content.
+                  Spawnt stores redacted local chat for continuity. Chat events are excluded from non-E2EE account metadata sync. Paired Remote carries conversations over a separate encrypted channel.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4">
                 <div className="text-accent font-semibold mb-1">Project identifiers are minimized</div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Before account synchronization, local file paths are truncated to directory basenames, and full paths are irreversibly hashed using HMAC-SHA256 with a local machine key.
+                  The live account snapshot includes project/session labels and automation metadata. HMAC rollup helpers do not make it hash-only. Read the privacy guide before enabling sync; field-level minimization remains a launch gate.
                 </div>
               </div>
 
@@ -369,6 +363,7 @@ export default function DocsPage() {
             </div>
           </section>
 
+          <section id="legal"><h2>Legal</h2><p><Link href="/privacy">Privacy</Link> and <Link href="/terms">Terms of Service</Link> describe storage, optional services and licensing.</p></section>
           {/* Bottom CTA */}
           <div className="sp-docs-cta">
             <p>

@@ -40,7 +40,7 @@ export function ConsoleTourView({ kind, visible = true, compact = false }: { kin
         <ol aria-label="Seven recorded sample days">{report.daily.map((day, index) => <li key={day.date} data-sample-day={day.date} aria-label={`${day.date}: ${day.total_tokens.toLocaleString()} tokens, exact`} style={{ "--day-height": `${day.chart_pct}%`, "--day-delay": `${index * 35}ms` } as CSSProperties}><i aria-hidden="true" /></li>)}</ol>
       </figure>}
       <div className="sp-tour-overview-columns"><span>Agent</span><span>State / EST</span><span>Tokens / EXACT</span></div>
-      <ul className="sp-tour-overview-list">{sessions.map(session => <li className="sp-tour-overview-row" key={session.id}><strong>{session.agent}</strong><span>{session.state === "thinking" ? "RUN" : session.state === "awaiting_approval" ? "WAIT" : "IDLE"}</span><span>{new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(session.total_tokens)}</span></li>)}</ul>
+      <ul className="sp-tour-overview-list">{sessions.map(session => <li className="sp-tour-overview-row" key={session.id}><strong>{session.agent}</strong><span>{session.state === "thinking" ? "Running" : session.state === "awaiting_approval" ? "Waiting" : "Idle"}</span><span>{new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(session.total_tokens)}</span></li>)}</ul>
     </>}
     {!compact && kind === "usage" && <div ref={activity} />}
     {kind === "sessions" && <div className="sp-tour-real-table" role="region" aria-label="Illustrative sessions; expand for details" tabIndex={0} dangerouslySetInnerHTML={{ __html: renderSessions(sessions, { illustrative: true }) }} />}

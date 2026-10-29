@@ -1,5 +1,6 @@
 'use client';
 
+import { sessionStateLabel } from "../lib/console-presentation.js";
 import { useEffect, useRef, useState } from 'react';
 import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
 import DesktopDevices from './DesktopDevices';
@@ -153,7 +154,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
     poll.current = setInterval(() => {
-      void send({type:'sessions'}).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN)setError('Session refresh failed.');});
+      void send({type:'sessions'}).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN)setError('Session refresh failed. Check the desktop connection and reconnect.');});
       if (selectedRef.current && !loadingHistory.current) loadChat(selectedRef.current);
     }, 2000);
   }
@@ -200,7 +201,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
       if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
       if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
-      setError(reply.message || 'Remote request failed.');
+      setError(reply.message || 'Remote request failed. Reconnect and try again.');
     }
   }
 
@@ -326,7 +327,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
         <button type="submit" disabled={!launchRepo.trim()}>Launch Agent</button>
       </form></details>
         <div className="remote-list-heading"><h2>Conversations</h2><button type="button" onClick={() => void send({type:'sessions'}).catch(() => setError('Sessions could not be refreshed. Reconnect and retry.'))}>Refresh</button></div>
-        <div className="remote-session-list">{sessions.map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => selectSession(session.id)}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {session.state.replaceAll('_',' ')}</span></button>)}</div>
+        <div className="remote-session-list">{sessions.map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => selectSession(session.id)}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
         {!sessions.length && <p>No conversations yet. Start an agent here or on your desktop.</p>}
       </aside>
       <div className="remote-conversation">{selected ? <>

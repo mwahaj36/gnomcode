@@ -1,7 +1,46 @@
 # spawnt
 
-> **See, stop, and control your agents.**
-> Track live agent state, per-model quota pools, and measured usage and estimated API-equivalent cost across Claude Code, Codex, Google Antigravity, Gemini CLI, Cline/Roo, and Cursor on Windows, macOS, and Linux. Local-first, with optional account pairing for metadata snapshots.
+Spawnt is a local-first orchestrator for AI coding agents: launch Claude Code, Codex, Gemini CLI and other supported official CLIs, switch models with a compact handoff, and use encrypted remote access from a paired phone/browser. Designed for Windows, macOS and Linux, it brings conversations, model switching, usage and quota into one workspace.
+
+## Why Spawnt?
+
+- Launch agents across projects without juggling separate terminals.
+- Continue a task with another supported model using a locally compiled briefing.
+- Read conversations and send eligible instructions from a paired device over E2EE.
+- Compare usage, estimated API-equivalent cost and quota with explicit trust levels.
+
+## Supported agents
+
+Observation adapters cover Claude Code, OpenAI Codex (including discovered desktop/IDE logs), Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider. Hosted control uses official Claude Code, Codex, Gemini and Antigravity CLIs. Editor/Aider adapters do not imply hosted takeover. Real authenticated Antigravity/model-switch acceptance remains open.
+
+## Quick start
+
+Use an approved platform build from [Downloads](https://spawntv.vercel.app/downloads). Public 0.9.0 packages and non-Windows release acceptance remain launch gates. After approved npm publication, the standalone install command is:
+
+```sh
+npm install -g spawnt
+spawnt console
+spawnt doctor
+spawnt launch codex --repo ./my-project
+```
+
+Install and authenticate the official CLI separately. Select a folder and agent in Workspace, complete native login/trust prompts in Terminal stream, then send a prompt. Local Spawnt needs no account; agent inference can still require its provider network.
+
+## Features
+
+- **Launcher and chat:** official CLIs, independent PTY hosting, paged redacted local history and a separate local terminal.
+- **Model switching:** a fresh target receives objectives, changed-file paths and recent activity. “Zero-token” means no inference call creates the briefing; the receiving agent still consumes tokens.
+- **Remote access:** encrypted paired history, prompts, supported launches and bounded folder selection, with remembered revocable trust. Physical-phone and independent security approval remain open.
+- **Cost tracking:** recorded tokens, estimated API-equivalent spend, cache savings and subscription comparisons.
+- **Quota monitoring:** observed windows, estimates or unknown values, plus free local routing, guardrails and resume controls. Native behavior needs provider/version acceptance.
+
+All local features are free. Remote and Teams are paid categories; commercial terms are not finalized. Optional account metadata sync is separate from E2EE Remote and needs a prelaunch minimization review.
+
+## Product and status
+
+- [Product brief](PRODUCT.md): what Spawnt is and questions for discussion.
+- [Launch checklist](docs/LAUNCH_CHECKLIST.md): blockers, causes, closure steps and evidence.
+- [Engineering sessions](docs/sessions/README.md): individual dated records.
 
 [![npm version](https://img.shields.io/npm/v/spawnt.svg)](https://www.npmjs.com/package/spawnt)
 

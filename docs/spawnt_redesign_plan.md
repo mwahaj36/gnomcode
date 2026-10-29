@@ -1,6 +1,6 @@
 # spawnt redesign: Implementation Plan
 
-Audience: an implementing model that needs explicit instructions. Follow phases in order. One branch and one PR per phase (AGENTS.md section 8). Update `docs/SESSION_LOG.md` every PR. Update `docs/SPEC.md` and `DESIGN.md` in the same change as the code they describe.
+Audience: an implementing model that needs explicit instructions. Follow phases in order. One branch and one PR per phase (AGENTS.md section 8). Add a dated record under `docs/sessions/` and update its index every PR. Update `docs/SPEC.md` and `DESIGN.md` in the same change as the code they describe.
 
 ## 0. Findings from the repo (read first)
 

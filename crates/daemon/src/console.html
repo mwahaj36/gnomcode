@@ -561,7 +561,7 @@
     <details class="profile-disclosure"><summary>Plans and model pricing</summary>    <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
-        <div class="section-title" style="margin-bottom: 16px;">Local Profile & Subscriptions</div>
+        <div class="section-title" style="margin-bottom: 16px;">Local profile and subscriptions</div>
         <div class="form-group">
           <label for="settings-display-name">Display Name</label>
           <input type="text" id="settings-display-name" placeholder="Developer">
@@ -621,10 +621,10 @@
           <input
             type="text"
             id="license-key-input"
-            placeholder="Paste Ed25519 license JSON here..."
+            placeholder="Paste your signed Remote license"
             style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
           >
-          <button class="btn-primary" data-action="activate-license">Activate Pro</button>
+          <button class="btn-primary" data-action="activate-license">Activate license</button>
           </div><div class="sp-license-actions"><button id="replace-license" class="btn-control" hidden data-action="replace-license">Replace license</button><button id="remove-license" class="btn-control" hidden data-action="remove-license">Remove license</button>
         </div>
         <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
@@ -670,7 +670,7 @@
           </tr>
         </thead>
         <tbody id="resume-queue-table">
-          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No armed sessions in queue.</td></tr>
+          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No sessions are armed. Open a supported session and arm resume after a quota limit.</td></tr>
         </tbody>
       </table>
     </div>
@@ -692,7 +692,7 @@
           </tr>
         </thead>
         <tbody id="rules-table">
-          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No custom guardrail rules configured.</td></tr>
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No guardrail rules yet. Add a rule to set a local budget or loop alert.</td></tr>
         </tbody>
       </table>
     </div>
@@ -712,7 +712,7 @@
           </tr>
         </thead>
         <tbody id="alerts-table">
-          <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded.</td></tr>
+          <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded. Configure a rule to monitor supported sessions.</td></tr>
         </tbody>
       </table>
     </div>
@@ -776,7 +776,7 @@
           </tr>
         </thead>
         <tbody id="relay-table">
-          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No active context relays recorded.</td></tr>
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No context handoffs recorded. Open a supported session to switch agents.</td></tr>
         </tbody>
       </table></div>
     </div>
