@@ -56,6 +56,19 @@ test('default HTTP port is treated as port 80 for local navigation', () => {
   assert.equal(isDaemonNavigation('http://127.0.0.1:80/health', 80), true);
 });
 
+test('terminal resources allow only the daemon PTY WebSocket while navigation stays HTTP-only', () => {
+  const { isAllowedResource } = require('../dist/security.js');
+  const terminal = 'ws://127.0.0.1:41738/api/v1/sessions/codex-host/pty?token=test';
+  assert.equal(isAllowedResource(terminal, 41738), true);
+  assert.equal(isDaemonNavigation(terminal, 41738), false);
+  for (const url of [
+    terminal.replace('41738', '1234'), terminal.replace('127.0.0.1', 'localhost'),
+    terminal.replace('127.0.0.1', 'example.com'), terminal.replace('ws:', 'wss:'),
+    terminal.replace('/pty?', '/stop?'), terminal.replace('/api/v1/sessions/codex-host/pty', '/other'),
+    terminal.replace('127.0.0.1', 'user@127.0.0.1'), `${terminal}#fragment`,
+  ]) assert.equal(isAllowedResource(url, 41738), false, url);
+});
+
 test('external links open only approved product pages without embedded credentials or query data', () => {
   const { isAllowedExternalUrl } = require('../dist/security.js');
   assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/docs'), true);

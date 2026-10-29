@@ -618,7 +618,6 @@ function cycleTheme() {
     let ideSessions = [];
     let hostedSessions = [];
     let chatRequest = 0;
-    let modelsLoaded = false;
 
     async function renderIdeSessions() {
       const presentation = await import('/console-presentation.js');
@@ -637,17 +636,25 @@ function cycleTheme() {
     }
 
     async function loadChatModels() {
-      if (modelsLoaded) return;
+      const select = document.getElementById('chat-model-select');
+      const button = document.getElementById('chat-switch-btn');
+      const status = document.getElementById('chat-model-status');
       try {
         const models = await apiJson('/api/v1/models', { headers });
-        const select = document.getElementById('chat-model-select');
+        const selected = select.value;
         select.innerHTML = '<option value="">Choose a model</option>';
-        for (const model of models.models || models) {
+        const available = models.models || models;
+        for (const model of available) {
           const option = document.createElement('option'); option.value = model.model;
           option.dataset.agent = model.agent; option.textContent = model.display_name || model.model; select.append(option);
         }
-        modelsLoaded = true;
-      } catch { document.getElementById('chat-status').textContent = 'Model list unavailable. Reopen this conversation to retry.'; }
+        select.disabled = available.length === 0; button.disabled = available.length === 0;
+        if (available.some(model => model.model === selected)) select.value = selected;
+        status.textContent = available.length ? `Codex CLI catalog${available[0].observed_at ? ' · ' + new Date(available[0].observed_at).toLocaleString() : ''}. Provider access is checked by the CLI.` : 'No fresh CLI model catalog. Open Codex CLI to refresh it; use other agents’ own model selectors.';
+      } catch {
+        select.innerHTML = '<option value="">Model catalog unavailable</option>'; select.disabled = true; button.disabled = true;
+        status.textContent = 'Model list unavailable. Reopen this conversation to retry.';
+      }
     }
 
     async function switchChatModel() {

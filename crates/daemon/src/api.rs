@@ -832,15 +832,7 @@ async fn prompt_session_handler(
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let input = if text.contains('\n') && !matches!(record.agent.as_str(), "terminal" | "shell") {
-        format!("\x1b[200~{text}\x1b[201~\r")
-    } else {
-        format!("{text}\r")
-    };
-    if spawnt_pty::send_input(&record, input.as_bytes())
-        .await
-        .is_ok()
-    {
+    if spawnt_pty::send_prompt(&record, text).await.is_ok() {
         Ok(Json(json!({ "ok": true, "session_id": id })))
     } else {
         Err(StatusCode::BAD_GATEWAY)
@@ -979,7 +971,7 @@ async fn proxy_pty_ws(client_ws: axum::extract::ws::WebSocket, backend_url: Stri
     }
 }
 
-/// A model available in the catalog with live quota capacity and pricing.
+/// A model reported by an installed CLI catalog, with optional pricing metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelCatalogItem {
     /// Agent identifier.
@@ -991,13 +983,17 @@ pub struct ModelCatalogItem {
     /// Provider name.
     pub provider: String,
     /// Context window size in tokens.
-    pub context_window: u64,
+    pub context_window: Option<u64>,
     /// Estimated remaining quota percentage.
     pub remaining_pct: Option<u32>,
     /// Input cost per 1M tokens in USD.
-    pub input_cost_per_mtok: f64,
+    pub input_cost_per_mtok: Option<f64>,
     /// Output cost per 1M tokens in USD.
-    pub output_cost_per_mtok: f64,
+    pub output_cost_per_mtok: Option<f64>,
+    /// Where the CLI reported the model; this is not a pricing catalog.
+    pub availability_source: String,
+    /// Time the official CLI refreshed its model catalog.
+    pub observed_at: String,
 }
 
 async fn installed_agents_handler(
@@ -1038,76 +1034,115 @@ async fn installed_agents_handler(
     Ok(Json(json!({ "agents": agents })))
 }
 
+fn codex_models_from_cache(
+    bytes: &[u8],
+    now: chrono::DateTime<chrono::Utc>,
+) -> Vec<ModelCatalogItem> {
+    let Ok(cache) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Vec::new();
+    };
+    let Some(observed) = cache
+        .get("fetched_at")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+    else {
+        return Vec::new();
+    };
+    let age = now.signed_duration_since(observed);
+    if age < chrono::Duration::minutes(-5) || age > chrono::Duration::hours(24) {
+        return Vec::new();
+    }
+    let Some(models) = cache.get("models").and_then(serde_json::Value::as_array) else {
+        return Vec::new();
+    };
+    let mut seen = std::collections::HashSet::new();
+    models
+        .iter()
+        .filter_map(|entry| {
+            if entry.get("visibility").and_then(serde_json::Value::as_str) != Some("list") {
+                return None;
+            }
+            let model = entry.get("slug")?.as_str()?;
+            if model.is_empty()
+                || model.len() > 128
+                || model.starts_with('-')
+                || !model
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/".contains(&byte))
+                || !seen.insert(model)
+            {
+                return None;
+            }
+            let pricing = spawnt_core::pricing::all_model_pricings()
+                .iter()
+                .find(|price| price.family.eq_ignore_ascii_case(model));
+            Some(ModelCatalogItem {
+                agent: "codex".into(),
+                model: model.into(),
+                display_name: entry
+                    .get("display_name")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|name| !name.trim().is_empty())
+                    .unwrap_or(model)
+                    .into(),
+                provider: "openai".into(),
+                context_window: entry
+                    .get("context_window")
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|value| *value > 0)
+                    .or_else(|| pricing.map(|price| price.context_window)),
+                remaining_pct: None,
+                input_cost_per_mtok: pricing.map(|price| price.input_per_mtok_usd),
+                output_cost_per_mtok: pricing.map(|price| price.output_per_mtok_usd),
+                availability_source: "codex_cli_cache".into(),
+                observed_at: observed.to_rfc3339(),
+            })
+        })
+        .collect()
+}
+
+/// Reads fresh, visible CLI model metadata without reading provider credentials.
+#[must_use]
+pub fn available_models() -> Vec<ModelCatalogItem> {
+    use std::io::Read as _;
+    if !spawnt_platform::executables::executable_available("codex") {
+        return Vec::new();
+    }
+    let cache = spawnt_platform::discover_agent_roots()
+        .into_iter()
+        .find(|root| root.agent == spawnt_core::AgentId::Codex)
+        .and_then(|root| {
+            root.path
+                .parent()
+                .map(|path| path.join(obfstr::obfstr!("models_cache.json")))
+        });
+    let Some(path) = cache else {
+        return Vec::new();
+    };
+    let Ok(file) = spawnt_platform::open_shared_read(&path) else {
+        return Vec::new();
+    };
+    let mut bytes = Vec::new();
+    if file
+        .take(8 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .is_err()
+        || bytes.len() > 8 * 1024 * 1024
+    {
+        return Vec::new();
+    }
+    codex_models_from_cache(&bytes, chrono::Utc::now())
+}
+
 async fn models_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-
-    let candidates = [
-        (
-            "claude-code",
-            "claude-3-5-sonnet-20241022",
-            "Claude 3.5 Sonnet",
-            "anthropic",
-        ),
-        (
-            "claude-code",
-            "claude-3-opus-20240229",
-            "Claude 3 Opus",
-            "anthropic",
-        ),
-        (
-            "claude-code",
-            "claude-3-5-haiku-20241022",
-            "Claude 3.5 Haiku",
-            "anthropic",
-        ),
-        ("codex", "o3", "OpenAI o3", "openai"),
-        ("codex", "o4-mini", "OpenAI o4-mini", "openai"),
-        ("codex", "codex-mini", "OpenAI Codex Mini", "openai"),
-        ("gemini-cli", "gemini-2.5-pro", "Gemini 2.5 Pro", "google"),
-        (
-            "gemini-cli",
-            "gemini-2.5-flash",
-            "Gemini 2.5 Flash",
-            "google",
-        ),
-    ];
-
-    let db = state.db.lock().await;
-    let quotas = db.get_latest_quota_snapshots().unwrap_or_default();
-    drop(db);
-
-    let mut items = Vec::new();
-    for (agent, model, display, provider) in candidates {
-        let pricing = spawnt_core::pricing::lookup_model_pricing(model);
-        let (cw, in_cost, out_cost) = match pricing {
-            Some(p) => (
-                p.context_window,
-                p.input_per_mtok_usd,
-                p.output_per_mtok_usd,
-            ),
-            None => (128_000, 0.0, 0.0),
-        };
-        let rem_pct = quotas
-            .iter()
-            .find(|q| q.provider == provider)
-            .map(|q| (100.0 - q.used_pct).clamp(0.0, 100.0).round() as u32);
-
-        items.push(ModelCatalogItem {
-            agent: agent.to_owned(),
-            model: model.to_owned(),
-            display_name: display.to_owned(),
-            provider: provider.to_owned(),
-            context_window: cw,
-            remaining_pct: rem_pct,
-            input_cost_per_mtok: in_cost,
-            output_cost_per_mtok: out_cost,
-        });
-    }
-
-    Ok(Json(items))
+    let models = tokio::task::spawn_blocking(available_models)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(models))
 }
 
 /// Query parameters for retrieving chat events.
@@ -2331,7 +2366,7 @@ async fn live_snapshot_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, ModelCatalogItem, build_router, quota_views};
+    use super::{AppState, build_router, quota_views};
 
     #[test]
     fn pty_query_token_does_not_bypass_host_or_origin_validation() {
@@ -2797,39 +2832,22 @@ mod tests {
         assert_eq!(value["repo_path"], "/workspace/focus-test");
     }
 
-    #[tokio::test]
-    async fn models_endpoint_returns_verified_catalog_with_pricing() {
-        let app = build_router(AppState {
-            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
-            bearer_token: "models-token".to_owned(),
-            orchestrator: None,
-            remote: Arc::new(crate::remote::RemoteManager::new()),
-        });
-
-        let request = Request::builder()
-            .uri("/api/v1/models")
-            .header("Host", "127.0.0.1")
-            .header("Authorization", "Bearer models-token")
-            .body(Body::empty())
-            .expect("request");
-
-        let response = app.oneshot(request).await.expect("response");
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), 16384)
-            .await
-            .expect("body");
-        let items: Vec<ModelCatalogItem> = serde_json::from_slice(&body).expect("json");
-        assert!(
-            items
-                .iter()
-                .any(|m| m.agent == "claude-code" && m.model == "claude-3-5-sonnet-20241022")
-        );
-        assert!(items.iter().any(|m| m.agent == "codex" && m.model == "o3"));
-        assert!(
-            items
-                .iter()
-                .any(|m| m.agent == "gemini-cli" && m.model == "gemini-2.5-pro")
-        );
+    #[test]
+    fn model_picker_uses_only_visible_fresh_cli_models() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-10-29T05:00:00Z")
+            .expect("time")
+            .with_timezone(&chrono::Utc);
+        let bytes = br#"{"fetched_at":"2026-10-29T04:00:00Z","models":[{"slug":"gpt-test-visible","display_name":"Visible CLI model","visibility":"list"},{"slug":"gpt-test-hidden","visibility":"hide"},{"slug":"--yolo","visibility":"list"},{"slug":"gpt-no-visibility"},{"slug":"gpt-test-visible","visibility":"list"}]}"#;
+        let items = super::codex_models_from_cache(bytes, now);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].model, "gpt-test-visible");
+        assert_eq!(items[0].display_name, "Visible CLI model");
+        assert_eq!(items[0].availability_source, "codex_cli_cache");
+        assert_eq!(items[0].input_cost_per_mtok, None);
+        assert_eq!(items[0].context_window, None);
+        assert!(super::codex_models_from_cache(bytes, now + chrono::Duration::days(2)).is_empty());
+        assert!(super::codex_models_from_cache(b"broken", now).is_empty());
+        assert!(super::codex_models_from_cache(br#"{"models":[]}"#, now).is_empty());
     }
 
     #[tokio::test]
