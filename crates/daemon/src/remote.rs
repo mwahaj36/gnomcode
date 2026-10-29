@@ -84,8 +84,8 @@ impl RemoteManager {
     /// # Errors
     /// Returns [`RemoteError`] for missing configuration or failed relay connection.
     pub async fn start(&self, db: Arc<Mutex<Database>>) -> Result<PairingStatus, RemoteError> {
-        let relay_url =
-            std::env::var("SPAWNT_REMOTE_RELAY_URL").map_err(|_| RemoteError::NotConfigured)?;
+        let relay_url = std::env::var("SPAWNT_REMOTE_RELAY_URL")
+            .unwrap_or_else(|_| "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay".to_owned());
         self.start_with_url(db, relay_url).await
     }
 
@@ -342,14 +342,61 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             match result {
                 Ok(sessions) => {
                     let hosted = spawnt_pty::list_active_sessions();
-                    let visible = sessions.iter().take(100).map(|session| {
+                    let mut visible = sessions.iter().take(100).map(|session| {
                         let can_prompt = session.state == spawnt_core::SessionState::Idle
                             && prompt_host(session, &sessions, &hosted).is_some();
                         json!({"id":session.id,"title":session.title,"agent":session.agent,"state":session.state,"can_prompt":can_prompt})
                     }).collect::<Vec<_>>();
+                    for h in &hosted {
+                        if !visible
+                            .iter()
+                            .any(|v| v.get("id").and_then(Value::as_str) == Some(&h.session_id))
+                        {
+                            visible.push(json!({
+                                "id": h.session_id,
+                                "title": format!("{} ({})", h.agent, h.repo_path),
+                                "agent": h.agent,
+                                "state": "unknown",
+                                "can_prompt": false,
+                            }));
+                        }
+                    }
                     json!({"type":"sessions","sessions":visible})
                 }
                 Err(_) => json!({"type":"error","message":"Could not load sessions"}),
+            }
+        }
+        Some("launch") => {
+            let Some(agent) = request.get("agent").and_then(Value::as_str) else {
+                return json!({"type":"error","message":"Missing agent"});
+            };
+            if !matches!(
+                agent,
+                "claude" | "claude-code" | "codex" | "gemini" | "gemini-cli"
+            ) {
+                return json!({"type":"error","message":"Remote launch supports agent CLIs only"});
+            }
+            let Some(repo_path) = request.get("repo_path").and_then(Value::as_str) else {
+                return json!({"type":"error","message":"Missing repo_path"});
+            };
+            let model = request.get("model").and_then(Value::as_str);
+            let repo = Path::new(repo_path);
+            if !repo.is_dir() {
+                return json!({"type":"error","message":"Invalid workspace directory"});
+            }
+            let session_id = format!(
+                "{}-{}",
+                agent,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0)
+            );
+            match spawnt_pty::launch_session(&session_id, agent, repo, model).await {
+                Ok(record) => {
+                    json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent})
+                }
+                Err(err) => json!({"type":"error","message":format!("Launch failed: {err}")}),
             }
         }
         Some("chat") => {
@@ -368,12 +415,13 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 .and_then(Value::as_u64)
                 .unwrap_or(200)
                 .min(500);
-            match db
-                .lock()
-                .await
-                .get_session_chat_before(session_id, Some(limit as usize), before)
-            {
+            let db = db.lock().await;
+            let sessions = db.list_active_sessions(1000).unwrap_or_default();
+            let native_id =
+                conversation_session_id(session_id, &sessions, &spawnt_pty::list_active_sessions());
+            match db.get_session_chat_before(&native_id, Some(limit as usize), before) {
                 Ok(events) => {
+                    let events = spawnt_adapters::antigravity::clean_stored_conversation(events);
                     json!({"type":"chat","session_id":session_id,"before":before,"events":events})
                 }
                 Err(_) => json!({"type":"error","message":"Could not load chat"}),
@@ -393,6 +441,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             {
                 return json!({"type":"error","message":"Invalid prompt"});
             }
+            let hosted = spawnt_pty::list_active_sessions();
             let sessions = db
                 .lock()
                 .await
@@ -400,15 +449,10 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 .unwrap_or_default();
             let session = sessions.iter().find(|session| session.id == session_id);
             let Some(session) = session else {
-                return json!({"type":"error","message":"Session unavailable"});
+                return json!({"type":"error","message":"Session unavailable; wait for the agent log to appear"});
             };
-            if session.state != spawnt_core::SessionState::Idle {
-                return json!({"type":"error","message":"Agent is not ready for a prompt"});
-            }
-            let hosted = spawnt_pty::list_active_sessions();
-            let record = prompt_host(session, &sessions, &hosted);
-            let Some(record) = record else {
-                return json!({"type":"error","message":"Session is not hosted by Spawnt"});
+            let Some(record) = prompt_host(session, &sessions, &hosted) else {
+                return json!({"type":"error","message":"Prompting requires an idle agent with a unique hosted session"});
             };
             let url = format!(
                 "ws://127.0.0.1:{}/stream?token={}",
@@ -441,7 +485,13 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             }
             let prepared = {
                 let guard = db.lock().await;
-                crate::prepare_switch(&guard, session_id, model, None)
+                let sessions = guard.list_active_sessions(1000).unwrap_or_default();
+                let native_id = conversation_session_id(
+                    session_id,
+                    &sessions,
+                    &spawnt_pty::list_active_sessions(),
+                );
+                crate::prepare_switch(&guard, &native_id, model, None)
             };
             let Ok(prepared) = prepared else {
                 return json!({"type":"error","message":"Could not prepare model switch"});
@@ -457,7 +507,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     }
 }
 
-fn prompt_host<'a>(
+pub(crate) fn prompt_host<'a>(
     session: &Session,
     sessions: &[Session],
     hosted: &'a [spawnt_pty::SessionRecord],
@@ -465,6 +515,32 @@ fn prompt_host<'a>(
     if session.state != spawnt_core::SessionState::Idle {
         return None;
     }
+    session_host(session, sessions, hosted)
+}
+
+pub(crate) fn conversation_session_id(
+    id: &str,
+    sessions: &[Session],
+    hosted: &[spawnt_pty::SessionRecord],
+) -> String {
+    let matches = sessions
+        .iter()
+        .filter(|session| {
+            session_host(session, sessions, hosted).is_some_and(|host| host.session_id == id)
+        })
+        .collect::<Vec<_>>();
+    if matches.len() == 1 {
+        matches[0].id.clone()
+    } else {
+        id.to_owned()
+    }
+}
+
+pub(crate) fn session_host<'a>(
+    session: &Session,
+    sessions: &[Session],
+    hosted: &'a [spawnt_pty::SessionRecord],
+) -> Option<&'a spawnt_pty::SessionRecord> {
     if let Some(exact) = hosted
         .iter()
         .find(|record| Some(record.child_pid) == session.pid || record.session_id == session.id)
@@ -509,6 +585,57 @@ fn prompt_host<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn remote_launch_refuses_shells_before_workspace_access() {
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
+        for agent in ["terminal", "shell", "powershell", "unknown"] {
+            let reply = dispatch(
+                &db,
+                json!({"type":"launch", "agent":agent, "repo_path":"missing-workspace"}),
+            )
+            .await;
+            assert_eq!(reply["message"], "Remote launch supports agent CLIs only");
+        }
+    }
+
+    #[test]
+    fn conversation_binding_keeps_native_id_while_agent_is_thinking() {
+        let now = chrono::Utc::now();
+        let session = Session {
+            id: "codex:native".into(),
+            agent: spawnt_core::AgentId::Codex,
+            surface: spawnt_core::Surface::Cli,
+            project_id: "test".into(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: spawnt_core::SessionState::Thinking,
+            pid: Some(12),
+            started_at: now,
+            last_event_at: now,
+        };
+        let record = spawnt_pty::SessionRecord {
+            session_id: "codex-host".into(),
+            agent: "codex".into(),
+            repo_path: "unused".into(),
+            model: None,
+            host_pid: 11,
+            child_pid: 12,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        assert_eq!(
+            conversation_session_id(
+                "codex-host",
+                std::slice::from_ref(&session),
+                std::slice::from_ref(&record)
+            ),
+            "codex:native"
+        );
+        assert!(prompt_host(&session, std::slice::from_ref(&session), &[record]).is_none());
+    }
 
     #[test]
     fn hosted_prompt_binding_requires_unique_recent_session() {
@@ -584,7 +711,9 @@ mod tests {
         });
         let manager = RemoteManager::new();
         let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
-        let base = format!("ws://127.0.0.1:{port}/relay");
+        // Network verification is explicit; normal test runs stay on loopback.
+        let base = std::env::var("SPAWNT_TEST_REMOTE_RELAY_URL")
+            .unwrap_or_else(|_| format!("ws://127.0.0.1:{port}/relay"));
         let status = manager
             .start_with_url(db, base.clone())
             .await

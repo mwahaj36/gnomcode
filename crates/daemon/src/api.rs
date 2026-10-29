@@ -95,10 +95,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
+        .route("/api/v1/sessions/hosted", get(list_hosted_sessions_handler))
         .route("/api/v1/sessions/launch", post(launch_session_handler))
         .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
+        .route("/api/v1/sessions/{id}/prompt", post(prompt_session_handler))
         .route("/api/v1/sessions/{id}/pty", get(pty_stream_handler))
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
+        .route("/api/v1/agents/installed", get(installed_agents_handler))
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/projects", get(projects_handler))
@@ -739,7 +742,7 @@ async fn launch_session_handler(
         payload.agent,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
+            .map(|d| d.as_nanos())
             .unwrap_or(0)
     );
     let repo = std::path::Path::new(&payload.repo_path);
@@ -766,6 +769,99 @@ async fn stop_session_handler(
     }
 }
 
+async fn list_hosted_sessions_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let hosted = spawnt_pty::list_active_sessions();
+    let records: Vec<serde_json::Value> = hosted
+        .into_iter()
+        .map(|r| {
+            json!({
+                "session_id": r.session_id,
+                "agent": r.agent,
+                "repo_path": r.repo_path,
+                "model": r.model,
+                "started_at": r.started_at,
+                "child_pid": r.child_pid,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "sessions": records })))
+}
+
+/// Request payload to deliver a prompt to an active session.
+#[derive(Debug, Deserialize)]
+pub struct PromptSessionRequest {
+    /// Prompt text to submit.
+    pub text: String,
+}
+
+async fn prompt_session_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+    Json(payload): Json<PromptSessionRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let text = payload.text.trim();
+    if text.is_empty()
+        || text.len() > 4000
+        || text
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
+        || text.starts_with('/')
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let hosted = spawnt_pty::list_active_sessions();
+    let record = spawnt_pty::load_session_record(&id)
+        .ok()
+        .or_else(|| hosted.iter().find(|r| r.session_id == id).cloned())
+        .or_else(|| {
+            let db = state.db.try_lock().ok()?;
+            let sessions = db.list_active_sessions(1000).ok()?;
+            let session = sessions.iter().find(|s| s.id == id)?;
+            let matched = crate::remote::prompt_host(session, &sessions, &hosted)?;
+            Some((*matched).clone())
+        });
+
+    let Some(record) = record else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+
+    let url = format!(
+        "ws://127.0.0.1:{}/stream?token={}",
+        record.port, record.token
+    );
+    let sent = async {
+        use futures_util::SinkExt;
+        let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.ok()?;
+        socket
+            .send(tokio_tungstenite::tungstenite::Message::Binary(
+                if text.contains('\n') && !matches!(record.agent.as_str(), "terminal" | "shell") {
+                    format!("\x1b[200~{text}\x1b[201~\r")
+                } else {
+                    format!("{text}\r")
+                }
+                .into_bytes()
+                .into(),
+            ))
+            .await
+            .ok()?;
+        Some(())
+    }
+    .await;
+
+    if sent.is_some() {
+        Ok(Json(json!({ "ok": true, "session_id": id })))
+    } else {
+        Err(StatusCode::BAD_GATEWAY)
+    }
+}
+
 /// Query parameters for PTY streaming WebSocket.
 #[derive(Debug, Deserialize)]
 pub struct PtyStreamQuery {
@@ -782,7 +878,21 @@ async fn pty_stream_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_pty_auth(&headers, query.token.as_deref(), &state.bearer_token)?;
 
-    let record = spawnt_pty::load_session_record(&id).map_err(|_| StatusCode::NOT_FOUND)?;
+    let hosted = spawnt_pty::list_active_sessions();
+    let sessions = state
+        .db
+        .lock()
+        .await
+        .list_active_sessions(1000)
+        .unwrap_or_default();
+    let record = hosted
+        .iter()
+        .find(|record| record.session_id == id)
+        .or_else(|| {
+            let session = sessions.iter().find(|session| session.id == id)?;
+            crate::remote::session_host(session, &sessions, &hosted)
+        })
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     let backend_url = format!(
         "ws://127.0.0.1:{}/stream?token={}",
@@ -905,6 +1015,44 @@ pub struct ModelCatalogItem {
     pub output_cost_per_mtok: f64,
 }
 
+async fn installed_agents_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let agents = vec![
+        json!({
+            "id": "claude",
+            "name": "Claude Code",
+            "installed": spawnt_platform::executables::executable_available("claude"),
+            "install_command": "npm install -g @anthropic-ai/claude-code",
+            "login_command": "claude auth login"
+        }),
+        json!({
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "installed": spawnt_platform::executables::executable_available("codex"),
+            "install_command": "npm install -g @openai/codex",
+            "login_command": "codex login"
+        }),
+        json!({
+            "id": "gemini",
+            "name": "Gemini CLI",
+            "installed": spawnt_platform::executables::executable_available("gemini"),
+            "install_command": "npm install -g @google/gemini-cli",
+            "login_command": "gemini"
+        }),
+        json!({
+            "id": "terminal",
+            "name": "Terminal Shell",
+            "installed": true,
+            "install_command": serde_json::Value::Null,
+            "login_command": serde_json::Value::Null
+        }),
+    ];
+    Ok(Json(json!({ "agents": agents })))
+}
+
 async fn models_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -994,8 +1142,13 @@ async fn chat_get_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
+    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let id =
+        crate::remote::conversation_session_id(&id, &sessions, &spawnt_pty::list_active_sessions());
     match db.get_session_chat_before(&id, query.limit, query.before.as_deref()) {
-        Ok(events) => Ok(Json(events)),
+        Ok(events) => Ok(Json(
+            spawnt_adapters::antigravity::clean_stored_conversation(events),
+        )),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -1007,6 +1160,9 @@ async fn chat_delete_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
+    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let id =
+        crate::remote::conversation_session_id(&id, &sessions, &spawnt_pty::list_active_sessions());
     match db.delete_session_chat(&id) {
         Ok(deleted_count) => Ok(Json(json!({
             "ok": true,
@@ -1212,7 +1368,18 @@ async fn switch_session_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let prepared = {
         let db = state.db.lock().await;
-        crate::prepare_switch(&db, &id, &payload.target_model, payload.agent.as_deref())
+        let sessions = db.list_active_sessions(1000).unwrap_or_default();
+        let native_id = crate::remote::conversation_session_id(
+            &id,
+            &sessions,
+            &spawnt_pty::list_active_sessions(),
+        );
+        crate::prepare_switch(
+            &db,
+            &native_id,
+            &payload.target_model,
+            payload.agent.as_deref(),
+        )
     }
     .map_err(|error| match error {
         crate::HandoffError::MissingSession => StatusCode::NOT_FOUND,
@@ -2716,6 +2883,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multiline_prompt_is_validated_before_host_lookup() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "prompt-test".into(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/missing/prompt")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-test")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"text":"Review auth\nThen run tests"}"#))
+            .expect("request");
+        assert_eq!(
+            app.oneshot(request).await.expect("response").status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn hosted_and_prompt_endpoints_require_auth_and_validate_input() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "prompt-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+
+        let unauth = Request::builder()
+            .method("GET")
+            .uri("/api/v1/sessions/hosted")
+            .header("Host", "127.0.0.1")
+            .body(Body::empty())
+            .expect("request");
+        let res = app.clone().oneshot(unauth).await.expect("response");
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        let auth = Request::builder()
+            .method("GET")
+            .uri("/api/v1/sessions/hosted")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-token")
+            .body(Body::empty())
+            .expect("request");
+        let res = app.clone().oneshot(auth).await.expect("response");
+        assert_eq!(res.status(), StatusCode::OK);
+
+        let bad_prompt = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/nonexistent/prompt")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"text":"/exit"}"#))
+            .expect("request");
+        let res = app.clone().oneshot(bad_prompt).await.expect("response");
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        let unknown = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/nonexistent/prompt")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"text":"hello world"}"#))
+            .expect("request");
+        let res = app.clone().oneshot(unknown).await.expect("response");
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        let agents_req = Request::builder()
+            .method("GET")
+            .uri("/api/v1/agents/installed")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-token")
+            .body(Body::empty())
+            .expect("request");
+        let res = app.oneshot(agents_req).await.expect("response");
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn chat_endpoints_retrieve_and_hard_delete_history() {
         let db = Database::open_in_memory().expect("database");
         let project = spawnt_core::Project::from_origin(None, "C:\\repo", None);
@@ -3047,6 +3297,25 @@ mod tests {
 
     #[tokio::test]
     async fn remote_pairing_status_and_revoke_endpoints() {
+        if std::env::var_os("SPAWNT_TEST_ISOLATED_REMOTE").is_none() {
+            let home = tempfile::tempdir().expect("isolated home");
+            let output =
+                std::process::Command::new(std::env::current_exe().expect("test executable"))
+                    .args([
+                        "--exact",
+                        "api::tests::remote_pairing_status_and_revoke_endpoints",
+                    ])
+                    .env("SPAWNT_HOME", home.path())
+                    .env("SPAWNT_TEST_ISOLATED_REMOTE", "1")
+                    .output()
+                    .expect("isolated test");
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            return;
+        }
         let app = build_router(AppState {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
             bearer_token: "remote-token".to_owned(),

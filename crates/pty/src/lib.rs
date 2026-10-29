@@ -70,6 +70,15 @@ pub fn launch_command(
         "claude" | "claude-code" => "claude".to_owned(),
         "codex" => "codex".to_owned(),
         "gemini" | "gemini-cli" => "gemini".to_owned(),
+        "terminal" | "shell" => {
+            return Ok({
+                let (executable, arguments) = spawnt_platform::executables::terminal_shell();
+                LaunchCommand {
+                    executable,
+                    arguments,
+                }
+            });
+        }
         other => return Err(Error::UnsupportedAgent(other.to_owned())),
     };
     let mut arguments = Vec::new();
@@ -288,7 +297,10 @@ pub async fn run_pty_host(
             (c.to_owned(), a.iter().map(|s| (*s).to_owned()).collect())
         } else {
             let launch = launch_command(agent, repo, model)?;
-            (launch.executable, launch.arguments)
+            let (executable, mut arguments) =
+                spawnt_platform::executables::agent_command(&launch.executable);
+            arguments.extend(launch.arguments);
+            (executable, arguments)
         };
 
         let mut command = conpty_oxide::blocking::Command::new(cmd);
