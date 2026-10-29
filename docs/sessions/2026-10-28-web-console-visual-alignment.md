@@ -6,4 +6,3 @@
 - Follow-up: enlarged and top-aligned the mark with the title, then combined the disconnected-account and missing-desktop notices into one contextual connection row beneath the heading.
 - Follow-up: the connection row is now signed-out only. Shared action buttons across marketing, downloads, Auth, Settings, and console use a consistent square 44 px treatment.
 - Verification: `npm run build --prefix web` passed, `git diff --check` was clean, and Chromium desktop renders were reviewed in dark and light themes with the accessibility tree. Narrow viewport, keyboard-only, and reduced-motion checks remain pending; signed-in data was unavailable for this visual review.
-

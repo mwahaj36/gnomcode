@@ -18,4 +18,3 @@
 - **Remote dispatch extensions (`crates/daemon/src/remote.rs`)**:
   - Added `launch` command to encrypted remote WebSocket protocol, allowing remote session creation from phone/browser.
   - Enabled direct prompt delivery to hosted session IDs over encrypted remote channel.
-

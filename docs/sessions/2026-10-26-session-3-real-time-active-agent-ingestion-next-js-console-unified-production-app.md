@@ -22,4 +22,3 @@
 - Live test: `spawnt status` and `spawnt report` correctly detect running agents and display updated quota pools (93.0% / 30.0%).
 
 ---
-

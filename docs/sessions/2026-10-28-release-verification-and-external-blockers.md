@@ -4,4 +4,3 @@
 - Native GitHub CI run 40635697474 never started any job: account payments/spending limits blocked execution. Browser inventory still reports local browser use disabled after the user's enable attempt. Live desktop pairing renewal is rejected; the user chose to reconnect later.
 - Prepared v1.4.0 as a draft only. Merge/publication remain held because macOS artifacts and final visual parity cannot be verified. Existing distribution paths and user data stay compatible; no public repository or new domain was created.
 - Packaging now works with Ubuntu 22.04 Python 3.10 using the standard library. Regression checks cover architecture headers, executable launcher permissions, canonical app icons, bundled font notices and combined checksum preservation. Generated Python bytecode is ignored rather than committed.
-

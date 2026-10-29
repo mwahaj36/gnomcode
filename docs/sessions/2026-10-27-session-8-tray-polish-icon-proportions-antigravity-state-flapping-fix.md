@@ -27,4 +27,3 @@
 - `npm run build --prefix web`: Next.js 15.5 production build clean with all 13 routes.
 - `csc.exe Setup.cs`: Clean .NET Windows GUI installer compilation (`Spawnt-Setup.exe`, 5.42 MB).
 - `Compress-Archive`: Updated `Spawnt-v1.1.1-windows-x64.zip` (5.08 MB).
-

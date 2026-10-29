@@ -6,4 +6,3 @@
 - Project cards navigate to a native full-query project filter before pagination. Web filtering uses only already-published session names; private project rollups remain local.
 - Reduced repeated trust tags, added plain-language partial warnings, restructured Account controls, hid activation when licensed and kept explicit Replace/Remove controls. Aligned license/export actions and prevented Add-button wrapping.
 - Regression coverage verifies mixed known/unknown costs, project coverage/filtering, mismatched timestamp offsets around local midnight, hourly buckets, month labels, shared presentation and ongoing identity. Windows Rust gate including cargo-deny and production web build passed; final source/package checks are run before push. Browser visual checks remain unavailable and macOS builds remain deferred.
-

@@ -4,4 +4,3 @@
 - Preserve the complete current query when changing views or following the brand link. No auth bypass, automatic credential recovery or persistent browser token storage was added.
 - Local reads now expose actionable authorization failures, and failed report reads resolve the daily-activity loading state. Render caches are committed only after successful rendering so a transient UI failure can be retried.
 - Verification: functional navigation/reload and failed-401 regression reproduced the issue before the fix; native script/target checks and full Rust gate passed.
-

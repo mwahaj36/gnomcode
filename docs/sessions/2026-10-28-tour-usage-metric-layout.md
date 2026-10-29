@@ -5,4 +5,3 @@
 - Follow-up: moved command-copy actions inside their code boxes with a clipboard/check icon and accessible feedback; corrected the remaining CLI prose to spawnt. Installed cargo-deny 0.20.2 and verified advisories, bans, licenses, and sources pass (duplicate-version warnings only).
 
 ---
-

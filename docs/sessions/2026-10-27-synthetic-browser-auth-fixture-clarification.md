@@ -6,4 +6,3 @@ an all-zero test account and an invalid signature, and is accepted only by mocke
 auth transport. Generate its header and signature from clearly named test values
 instead. No real account credential was committed or needs rotating. Production
 code and packaged binaries are unchanged. Rerun the browser flow with this fixture.
-

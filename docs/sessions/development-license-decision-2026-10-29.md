@@ -10,4 +10,3 @@
 - Removed the legacy unencrypted cloud `relay_commands` intake and its misleading web-console rotation button. Metadata snapshot publishing remains opt-in. Remote pairing now validates the account with the auth server and requires the primary Pro account or a server-controlled Pro/Team claim; a file named `session.json` alone no longer grants Remote access.
 - Generated Rust, Electron, and Chromium notices, staged the development EULA and release binary, and built the Windows Electron Forge installer and ZIP. The installer is an unsigned development artifact; the public legal and signing work remains for launch.
 - Windows workspace tests, clippy, formatting, cargo-deny, desktop tests/lint/typecheck, web tests/typecheck, npm shim tests, and relay tests pass after these changes. Cargo-deny reports duplicate-version warnings only.
-

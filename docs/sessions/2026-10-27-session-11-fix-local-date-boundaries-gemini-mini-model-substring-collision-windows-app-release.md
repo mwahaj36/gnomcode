@@ -19,4 +19,3 @@
 - Native Installer: Compiled `Spawnt-Setup.exe` via `csc.exe` with embedded payload verification passing cleanly.
 - Web Production Build: Next.js 15.5 production build verified (all 14 static routes compiled cleanly).
 - Live verification: `spawnt report --range today` reports exact local day spend ($28.67) and Gemini Flash 1M context window.
-

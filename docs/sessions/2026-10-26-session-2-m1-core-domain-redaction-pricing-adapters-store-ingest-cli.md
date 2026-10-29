@@ -27,4 +27,3 @@
 - **Feature (`feat/cli-daemon-command`):** Added `spawnt daemon` and `spawnt dashboard` commands to CLI binary with loopback HTTP binding, token query param auto-auth, and browser auto-launch. All 5 quality gates passed.
 
 ---
-

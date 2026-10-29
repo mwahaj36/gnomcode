@@ -11,4 +11,3 @@
 # Spawnt Engineering Session Log
 
 Ongoing engineering ledger recording goals, outcomes, problems encountered, root-cause fixes, and product/architectural decisions.
-

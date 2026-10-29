@@ -22,4 +22,3 @@
 - Comprehensive Test: `model_lookup_resolves_all_catalog_families_and_rejects_false_substring_collisions` verified all 39 catalog models and 14 negative test cases.
 - Native Windows Installer: `Spawnt-Setup.exe` compiled and verified with `check-installer-payload.cs`.
 - Local Daemon: Restarted with hardened binary; live session context correctly shows `200.5k / 1,000,000 (20.0%)` with healthy green progress bar.
-

@@ -10,4 +10,3 @@
 - Replaced user-facing Spawnt product-name copy with spawnt across web metadata, pricing, auth, docs, signed-in console, and the daemon console, including Pro license prompts and exported report filenames.
 - Kept the existing domain, installer filenames, CLI command, database/schema names, callback key, and `.spawnt` data paths unchanged for compatibility; those are technical identifiers rather than visible product branding.
 - Verification: production web build, `git diff --check`, full Rust quality gate (cargo-deny unavailable), and app-source search passed. Desktop theme screenshots confirmed route surfaces follow Light/Dark; narrow and keyboard review remain pending.
-

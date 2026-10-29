@@ -30,4 +30,3 @@
 - `C:\Users\Wahaj\Downloads`: verified old `Spawnt-Setup.exe` and `.zip` deleted cleanly.
 
 ---
-

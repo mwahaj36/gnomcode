@@ -10,4 +10,3 @@
 - Replacement native packages are v1.4.1, keeping Windows update ordering correct. Native Windows GUI and macOS hardware remain unavailable in this cloud environment.
 
 - Verification: Rust gate (56 tests, Clippy, cargo-deny), MSRV, production web build and disposable PostgreSQL cleanup checks passed. Browser checks against the packaged daemon verify working local data/auth UI, preserved desktop snapshot reads, ignored legacy cloud rows, no presence fetches and retired pairing API/page returning 404. CLI rejects retired commands and a daemon in this actual cloud runtime creates no cloud-presence row. Live Supabase pairing/view/table probes now return 404; the older desktop sync endpoint still exists.
-

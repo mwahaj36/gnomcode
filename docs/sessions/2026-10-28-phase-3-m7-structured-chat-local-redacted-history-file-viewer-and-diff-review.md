@@ -11,4 +11,3 @@
   - `GET /api/v1/repos/diff`: read-only Git diff and status inspection.
 - Console UI: Added `renderChatCards` and `updateChat` in `web/lib/console-presentation.js`, and chat loading, deletion, and approval handlers in `crates/daemon/src/console-app.js`.
 - All quality gates verified: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (all 82 tests passing), `cargo deny check`, and web/desktop/npm test suites passing.
-

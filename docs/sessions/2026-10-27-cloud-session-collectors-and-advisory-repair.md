@@ -8,5 +8,3 @@
 - Validation: full Rust quality gate passed (55 tests, formatting, Clippy, advisories, licenses, source checks and core purity). Embedded Postgres checks passed for migration repeatability, account isolation, metadata requirements, measured usage, server timestamps and dead-collector expiry. Next.js production build passed. A collector for the actual current Codex thread was started and verified through the authenticated local daemon API; usage remains unknown because this host exposes no rollout or token feed.
 - Cross-platform review: shared Rust implementation uses Path/PathBuf, existing environment overrides, no new unsafe/process control or platform-specific shell dependency. JSONL handles CRLF; tests use temporary directories. Manual CI now covers Linux, Windows and macOS. Native Windows/macOS execution has not run in this Linux environment.
 - Deployment remains pending: apply the v3 Supabase migration, deploy the web client and provision a paired account session securely. No account pairing/admin database credential was available here; no live account data was changed.
-
-

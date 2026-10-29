@@ -6,4 +6,3 @@
 - Verification: Next.js production build passed; local server and browser review performed in dark and light themes, including scroll navbar, tour tabs, selectable bars and rows, scroll-triggered graph motion, self-hosted agent logos, a tighter final CTA, a typographic footer inspired by footer.design, and device-default theme control moved to the footer.
 - Added a Log in nav action (in the mobile menu on narrow screens) and routed the landing's console links through web authentication, since the web console requires a signed-in account to be useful.
 - Preserved the user-provided `spawnt_redesign_plan.md` verbatim under `docs/`, rewrote `DESIGN.md` for the current red and near-black palette, and added `docs/spawnt_rollout_plan.md` to reconcile the draft with the repo's separate local and signed-in web consoles. No console implementation was changed in this documentation pass.
-

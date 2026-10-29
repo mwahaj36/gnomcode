@@ -26,4 +26,3 @@
 - `npm run build --prefix web`: Next.js 15.5 production build clean.
 - Native GUI installer `Spawnt-Setup.exe` compiled cleanly (3.9 MB) with embedded payload and zero console popups.
 - Verified clean uninstallation of previous local files, shortcuts, and registry entries.
-

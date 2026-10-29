@@ -10,4 +10,3 @@
 - Native Windows GUI and macOS hardware are unavailable in this cloud environment. Windows executable behavior is checked under Wine; macOS packages remain unavailable rather than relabeling old artifacts.
 
 - Verification: 65 Rust tests, Clippy, cargo-deny and MSRV 1.87 passed. Both embedded PostgreSQL migration suites and real-browser email/PKCE approval checks passed. Windows PE/installer payload and PowerShell updater checks passed; Linux/ARM64 versions and Wine Windows collector smoke checks passed. Unix updater rejects corrupt manifests without replacing the existing install. Final Linux x86_64 packaging explicitly selects static OpenSSL to avoid an accidental host shared-library dependency.
-

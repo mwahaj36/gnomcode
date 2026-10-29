@@ -31,4 +31,3 @@
 - Release Packager: Compiled native release `spawnt.exe` (5.22 MB), compiled installer `Spawnt-Setup.exe` (5.47 MB), and packaged `Spawnt-v1.2.0-windows-x64.zip` (5.12 MB).
 
 ---
-

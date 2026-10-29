@@ -30,4 +30,3 @@
 - `cargo fmt --all -- --check`: Clean formatting across entire workspace.
 - `npm run build --prefix web`: Next.js 15.5 production build clean with all 13 routes compiled.
 - `csc.exe ... Setup.cs`: Clean .NET Windows GUI executable compilation.
-

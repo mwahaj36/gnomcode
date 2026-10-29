@@ -6,4 +6,3 @@
 - Windows full Rust gate including cargo-deny, Linux clippy/tests, Rust 1.87 check, production web build and source-matching Windows/Linux packaging passed. Native asset MIME/body tests and embedded syntax/runtime-target checks passed before authorized merge/publication. macOS remains deferred; browser visual checks remain unavailable.
 
 - GitGuardian on the integration PR flags two historical occurrences of the same invalid mock JWT in main commits 0d4f190/5c2df63. PR 45 documents its synthetic signature and remediation; the fixture file is absent from current source after PR 46. No scanner configuration or exemptions were changed.
-

@@ -5,4 +5,3 @@
 - Preserve full-size tray geometry in a separate canonical ICO while keeping the Windows app inset. Simplified tray tooltip, console header and period/export controls; aligned panel headings, grouped provider windows into compact expandable rows, reduced summary height, preserved expanded rows during polling, and removed correction/history prose from public copy.
 - Reproduced Windows PowerShell requesting SeSecurityPrivilege for private credential Set-Acl. Direct .NET writes retain protected owner-only ACLs without escalation; replacement and ACL inspection tests pass.
 - Windows full gate including cargo-deny, workspace tests, source/DOM/runtime regressions, native tray bitmap and script parsing, packaging tests and Next build pass. Native files are rebuilt in the release phase. Browser visual tooling remains disabled; macOS builds remain deferred.
-

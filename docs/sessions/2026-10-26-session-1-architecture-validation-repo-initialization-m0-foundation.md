@@ -40,4 +40,3 @@
 - **Commits `5f636fc` & `c5ea80c` (PRs #5, #1, #8 — Dependabot resolution):** Merged `actions/checkout` v7, `sha2` 0.11, `rusqlite` 0.40.2, `sysinfo` 0.36.1, and `hmac` 0.13.0; closed superseded Dependabot PRs and ignored `dtolnay/rust-toolchain` since `rust-toolchain.toml` governs toolchain selection.
 
 ---
-

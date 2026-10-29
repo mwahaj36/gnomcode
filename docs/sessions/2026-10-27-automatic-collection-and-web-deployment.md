@@ -11,4 +11,3 @@
 - Vercel reports the updated branch preview Ready. GitHub CI dispatch was accepted but every job stopped before runner steps because account payments/spending limits blocked execution; Windows/macOS native checks remain pending.
 - The user applied the v3 Supabase migration. A read-only schema probe returned permission denied for the new view under anonymous credentials, confirming it exists and does not grant anonymous access. Authenticated account sync cannot be tested without pairing.
 - Promoting the web changes through PR #38 and the existing Vercel main-branch deployment integration; production readiness is checked separately from preview status.
-

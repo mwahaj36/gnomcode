@@ -6,7 +6,7 @@ Deliver the supplied marketing/SEO brief alongside an accurate product brief, re
 
 ## Outcomes
 
-- Split all 76 historical entries into individual files with an index and compatibility navigation at SESSION_LOG.md. Verified every original block is preserved exactly, including duplicate session names and historical verification language.
+- Split all 76 historical entries into individual files with an index and compatibility navigation at SESSION_LOG.md. Verified all original content is preserved, including duplicate names and historical verification language; separator blank lines are normalized at file endings.
 - Rewrote PRODUCT.md around actual workflows, audience, capabilities, commercial model, data boundaries and discussion questions. Refreshed SPEC and archived the previous specification rather than discarding design history. Updated contributor/session workflow references.
 - Added LAUNCH_CHECKLIST.md with blockers, causes, closure steps and required evidence. Remote security/physical-phone/provider acceptance, metadata minimization, platform delivery, signing/legal/payment/distribution remain explicitly open.
 - Repositioned landing copy around launch, model continuity and encrypted remote control; retained the established visual system and console shell. Added support row, workflow feature copy, platform picker, visible FAQ and matching SoftwareApplication/FAQ schema.
@@ -32,7 +32,7 @@ Keep marketing optimistic without inventing availability, prices, ratings or uni
 - Full Rust gate: rustfmt, clippy -D warnings, 153 workspace tests, cargo-deny and core-purity checks passed.
 - Web suite: 17 tests plus shared presentation checks passed; optimized Next build passed.
 - Browser acceptance: 19 public routes checked for status, unique metadata, canonical/OG fields, parseable structured data, working internal guide links, FAQ parity, sitemap and robots. Phone/desktop layouts in dark/light captured and inspected.
-- Session migration: all 76 source blocks preserved exactly. Current product/spec/checklist/README links resolve.
+- Session migration: all 76 source blocks preserved, normalizing separator blank lines at file endings. Current product/spec/checklist/README links resolve.
 - Cross-platform review: only docs, presentation copy/formatting and Next metadata wrappers change; no path/process/IPC behavior changed. macOS/Linux and physical-phone execution are not claimed.
 - Public production crawl/Schema.org service validation and legal approval remain launch checklist items. This work does not release an installer or certify Remote security.
 

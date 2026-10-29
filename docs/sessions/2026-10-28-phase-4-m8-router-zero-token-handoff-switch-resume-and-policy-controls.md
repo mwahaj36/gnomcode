@@ -14,4 +14,3 @@
   - `spawnt policy [--set <policy>]`: reads or updates active routing policy.
   - Integration tests in `crates/cli/tests/launch_lifecycle.rs` for `policy`, `switch`, and `resume`.
 - Full quality gate verified across all crates and frontend packages.
-

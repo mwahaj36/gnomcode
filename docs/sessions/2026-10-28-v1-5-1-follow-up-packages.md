@@ -6,4 +6,3 @@
 - Projects reads use the same actionable local authorization errors as other views. Native navigation regression now runs before release packaging.
 - Final review reproduced an additional direct cause of the native unavailable screen: lastReportJson, lastSessionsJson and lastQuotaJson were read without declarations. Added explicit initial values and invalidate caches on failed reads so identical successful retries replace error placeholders. The regression executes a healthy quota response followed by failure and identical recovery; it failed before the declaration fix and passed afterward. Rebuilt packages again from this corrected source.
 - Browser access was checked again and remains disabled in Work settings, so desktop/narrow visual inspection is not claimed. macOS builds remain explicitly deferred. Assumption: the landing tour should summarize Overview without clipping or changing the actual consoles.
-

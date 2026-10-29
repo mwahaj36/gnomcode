@@ -66,4 +66,3 @@ Phase 1 continuation: added three-OS npm shim CI and offline tarball smoke/stagi
 Added shared branding generation and CI drift validation; Electron and npm tests pass. Added manually triggered published-style npm smoke workflow for Windows, macOS and Linux with approved legal input checks and offline command execution. Workflow has not been dispatched; release legal inputs are still absent.
 
 Phase 1 continuation: added the `spawnt open` command and verified CLI smoke tests and clippy. npm staging now rejects draft legal input; smoke tests isolate agent home directories. The release version check separates version consistency from artifact availability. Electron tray status and local dashboard are implemented, but notification parity, native packaging and updater verification remain open.
-
