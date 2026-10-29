@@ -86,6 +86,11 @@ async function start(): Promise<void> {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
     showWindow();
   });
+  ipcMain.handle('desktop:choose-workspace', async (event, ...args: unknown[]) => {
+    if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
+    const result = await dialog.showOpenDialog(current, {title:'Choose workspace',properties:['openDirectory']});
+    return result.canceled ? null : result.filePaths[0] || null;
+  });
   ipcMain.handle('desktop:launch-session', async (event, agent: unknown, repoPath: unknown, model: unknown) => {
     if (event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
     if (typeof agent !== 'string' || typeof repoPath !== 'string') throw new Error('Invalid launch parameters');

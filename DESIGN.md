@@ -1,93 +1,233 @@
-# spawnt design guide
+---
+name: spawnt
+description: Restrained mission control for AI coding agents.
+colors:
+  primary: "#ff2544"
+  primary-text-dark: "#ff6177"
+  primary-text-light: "#d4102e"
+  canvas-dark: "#070708"
+  surface-dark: "#0d0d0f"
+  surface-raised-dark: "#141416"
+  border-dark: "#242428"
+  border-strong-dark: "#38383e"
+  text-dark: "#f6f7f8"
+  text-secondary-dark: "#a9b4c2"
+  text-muted-dark: "#8d99aa"
+  canvas-light: "#f6f7f8"
+  surface-light: "#ffffff"
+  surface-raised-light: "#edf0f3"
+  border-light: "#d9dfe6"
+  border-strong-light: "#becbd8"
+  text-light: "#0c1119"
+  text-secondary-light: "#4a5565"
+  text-muted-light: "#657184"
+  accent-dark: "#becbd8"
+  accent-light: "#252e99"
+  on-primary: "#0c1119"
+typography:
+  display:
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "clamp(40px, 4.3vw, 56px)"
+    fontWeight: 600
+    lineHeight: 1.07
+    letterSpacing: "-0.03em"
+  title:
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "18px"
+    fontWeight: 600
+    lineHeight: 1.4
+  section:
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "20px"
+    fontWeight: 600
+    lineHeight: 1.4
+  body:
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.6
+  conversation:
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.75
+  control:
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "13px"
+    fontWeight: 500
+    lineHeight: 1.4
+  data:
+    fontFamily: "JetBrains Mono, Consolas, monospace"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.5
+rounded:
+  code: "4px"
+  control: "6px"
+  panel: "12px"
+  conversation: "16px"
+spacing:
+  tight: "4px"
+  small: "8px"
+  control: "12px"
+  regular: "16px"
+  section: "24px"
+  wide: "32px"
+  large: "48px"
+  spacious: "64px"
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.control}"
+    rounded: "{rounded.control}"
+    padding: "9px 14px"
+  button-secondary-dark:
+    backgroundColor: "{colors.surface-raised-dark}"
+    textColor: "{colors.text-dark}"
+    typography: "{typography.control}"
+    rounded: "{rounded.control}"
+    padding: "9px 14px"
+  composer-dark:
+    backgroundColor: "{colors.surface-dark}"
+    textColor: "{colors.text-dark}"
+    rounded: "{rounded.panel}"
+    padding: "10px 12px"
+  agent-bubble-dark:
+    backgroundColor: "{colors.surface-raised-dark}"
+    textColor: "{colors.text-dark}"
+    rounded: "{rounded.conversation}"
+    padding: "16px 20px"
+---
 
-Status: the landing, shared marketing shell, pricing, platform-selectable downloads, redesigned docs and Auth, signed-in web console, daemon-served local console, and current Windows icon assets use the spawnt direction and canonical tokens in `web/app/spawnt-tokens.css`. `web/public/spawnt-mark.svg` is the canonical solid triangle-and-square mark. Settings uses the open, divided layout and shared square controls. The local console and Windows tray script now use the spawnt hierarchy, palette, and plain status labels; macOS/Linux use the same browser console through explicit launchers; native tray integration remains future work. The user-supplied [original redesign plan](docs/spawnt_redesign_plan.md) is preserved in the repo; follow the [current rollout plan](docs/spawnt_rollout_plan.md) for implementation order and [SPEC](docs/SPEC.md) for product behavior and security.
+# Design System: spawnt
 
-## Brand and visual language
+## Overview
 
-- Display `spawnt` in lowercase. Keep internal `spawnt` identifiers until a separate migration phase.
-- Keep the Daytona-inspired structure: near-black canvas, thin borders, aligned grids, restrained uppercase mono labels, square controls, and the smoothly detaching marketing navbar. Use the marketing sans-led type hierarchy and open, divided sections in the console too.
-- Use the solid triangle-and-square mark from `web/public/spawnt-mark.svg` in `currentColor`, without a tile behind it. Red identifies primary actions, active state, and attention. Web and embedded console headers use the same mask asset; generated Windows icon assets and installer marks follow its geometry.
-- No emojis, decorative gradients, oversized pills, or color-only status indicators.
+**Creative North Star: "Mission control"**
 
-## Color tokens
+Spawnt keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.
 
-The brand colors are primary red `#FF2544`, pale neutral `#BECBD8`, deep blue secondary accent `#252E99`, light canvas `#F6F7F8`, and near-black dark canvas `#070708`. The dark canvas replaces the attached plan's `#0C1119` at the user's request. `#0C1119` remains the light theme's text color and the text color on red buttons.
+Marketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in [the console surface brief](docs/design/console-workspace.md); product and security behavior remain governed by [SPEC](docs/SPEC.md).
 
-These values match the current landing CSS. Derived surfaces, borders, and text colors may be tuned after contrast review.
+**Key Characteristics:**
 
-| Role | Dark | Light |
-| :--- | :--- | :--- |
-| Canvas `--bg` | `#070708` | `#F6F7F8` |
-| Surface `--surface` | `#0D0D0F` | `#FFFFFF` |
-| Second surface `--surface-2` | `#141416` | `#EDF0F3` |
-| Hairline `--border` | `#242428` | `#D9DFE6` |
-| Strong hairline `--border-strong` | `#38383E` | `#BECBD8` |
-| Main text `--text` | `#F6F7F8` | `#0C1119` |
-| Secondary text `--text-2` | `#A9B4C2` | `#4A5565` |
-| Muted text `--text-3` | `#8D99AA` | `#657184` |
-| Primary fill `--primary` | `#FF2544` | `#FF2544` |
-| Small red text `--primary-text` | `#FF6177` | `#D4102E` |
-| Secondary accent `--accent` | `#BECBD8` | `#252E99` |
-| Text on red `--on-primary` | `#0C1119` | `#0C1119` |
+- Canonical red accents and quiet neutral surfaces.
+- Sans-led hierarchy with monospace reserved for data and commands.
+- Restrained controls, open divided sections and geometric SVG icons.
+- Compact application chrome with independently scrolling work areas.
 
-Contrast ratios calculated from these hex values: primary on dark 5.37:1; primary on light 3.50:1; small red text on light 5.00:1; small red text on dark 6.93:1; dark text on primary 5.05:1. Use `--primary-text` for small red text on light backgrounds. Recheck contrast wherever a surface changes.
+## Colors
 
-Status and trust semantics stay separate from the brand palette. Use plain status labels such as `RUN`, `WAIT`, `IDLE`, `LIMIT`, and `ERR`, without square-bracket wrappers. Number trust labels are `EXACT`, `EST`, `API`, or `UNKNOWN`. A quota warning may use amber, but amber is not a brand accent. Never imply an estimate is exact.
+The palette pairs a vivid red accent with cool neutral canvases, surfaces, borders and text. `web/app/spawnt-tokens.css` is the runtime source; the frontmatter records its current values.
 
-## Type, shape, and layout
+### Primary
 
-- Inter for headings and body; JetBrains Mono for labels, numbers, IDs, and commands. Self-host fonts in shipped surfaces; make no remote font requests. Use tabular numerals.
-- Body type is generally 14/20 or 16/24; section headings 28/36 or 40/44; marketing hero up to 56/60. Prefer weights 400 and 600.
-- Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64 px. Controls need at least a 44 px touch target.
-- Radius: 4 px for controls and square badges, 6 px for panels and the floating navbar, 0 for grid cells and full-bleed regions. Do not use pill-shaped controls or badges. Borders are 1 px. Shadows belong only on floating layers.
-- Shared action buttons use a 44 px target, square corners, the same mono label style, and consistent outline or red primary treatment. Tabs, theme cycling, and icon-only mobile controls keep their distinct interaction patterns.
-- Console content uses a compact hairline grid: KPIs share borders and tables use row separators. Avoid floating dashboard cards.
-- Use geometric SVG icons and self-hosted agent marks in `web/public/agents/`. Labels remain readable without icons.
+- **Spawnt red** (`primary`) identifies primary actions, attention and user chat bubbles. Text on red uses `on-primary` in both themes.
+- **Readable accent text** (`primary-text-dark` / `primary-text-light`) is the theme-specific red used for small links and accent labels. Do not substitute the fill color for small text on light backgrounds.
 
-## Motion and interaction
+### Secondary
 
-- Default easing: `cubic-bezier(0.16, 1, 0.3, 1)`; controls about 180 ms, panels about 320 ms. No bounce.
-- Marketing navbar is flush at the top and progressively detaches into a 6 px radius island as the page scrolls. Its movement follows scroll position. The console has its own app shell.
-- Reveal sections and charts on viewport entry. Chart bars rise in sequence and rows may stagger slightly. Hover effects must not shift surrounding layout.
-- The supported-agent strip moves continuously and eases to a pause on hover or keyboard focus. Reduced-motion users get a static list.
-- Tour tabs, chart bars, and rows are real controls with clear selected states. Motion cannot be the only way to understand a change.
-- Respect `prefers-reduced-motion`: remove nonessential travel and looping motion while preserving visible state changes.
+- **Cool neutral accent** (`accent-dark`) and **deep blue accent** (`accent-light`) retain the existing theme-aware secondary emphasis.
 
-## Navigation, theme, and surfaces
+### Neutral
 
-- Marketing header: mark and `spawnt`, Product, Agents, Docs, Pricing, `Log in`, and primary Download. `Log in` goes to `/auth`; the landing's console links also pass through `/auth`, which redirects signed-in users to `/console`.
-- Theme selection is shared across all web routes and both consoles. The marketing footer keeps its minimal `Theme / system` control; the signed-in console, auth page, and daemon-served local console expose the same cycle. It cycles System, Light, Dark. System follows `prefers-color-scheme` and is the default. Stored overrides apply before first paint.
-- The signed-in web console and local daemon console use the marketing site's sans-led hierarchy, open divided sections, and shared theme tokens, while keeping distinct data and auth paths. Share presentation code as described in the rollout plan.
-- Native console window uses the same large sans-led page heading, canonical mark, compact status line, and full-width hairline divider. Native actions and data remain local.
-- The Windows tray script echoes these tokens and plain status labels. Other platform tray surfaces retain their current implementation until the cross-platform native rollout.
+- Canvas tokens supply the near-black or cool light ground. Surface and raised-surface tokens distinguish panes, fields and agent replies.
+- Border tokens make hairline divisions; strong borders clarify controls and floating surfaces.
+- Main, secondary and muted text tokens keep hierarchy readable in either theme.
 
-## Current implementation boundary
+**The Foreground Pair Rule.** A control's foreground and background must switch theme together; never carry a light foreground onto a light fill or the reverse.
 
-The navigation rail, daily chart/token grid, quota panels, session table/details, and project rollup presentation now share `web/app/spawnt-console.css` and `web/lib/console-presentation.js` across the Next and embedded consoles. These presenters contain formatting only. Rust supplies totals, context percentages, remaining capacity, chart proportions, and trust. Polling preserves expanded details and keyboard focus. Cloud-only unavailable states occupy the same sections without inventing local data.
+Status and numeric trust remain separate from brand color. Use plain status labels (`RUN`, `WAIT`, `IDLE`, `LIMIT`, `ERR`) and explicit provenance (`EXACT`, `EST`, `API`, `UNKNOWN`). Color never substitutes for the label.
 
-The landing, shared site shell, pricing, platform-selectable downloads, redesigned documentation and Auth, Settings, and both consoles use canonical spawnt tokens. Documentation uses the same sans-led hierarchy, restrained mono labels, open rows, hairline dividers, and square controls as the marketing surfaces; it should not resemble a raw Markdown export. Settings uses open sections, labels local/cloud state distinctly, and marks user-configured and unknown rates accurately. Auth keeps its Supabase and callback flows while using accessible mode controls, clear pending/error states, and theme-aware account forms. The two consoles retain independent rendering/data adapters: Next/React for signed-in snapshots, standalone embedded HTML for local daemon data. Both use matching headings, status hierarchy, divided sections, and control treatment. The local console uses the shared large heading, mark, status line, and divider with local actions and data. The web console distinguishes unknown values from zero and reports reload success only after both cloud reads succeed. The daemon console groups its existing local report, session, quota, guardrail, account, and settings capabilities into matching destinations. Project rollups are computed locally in Rust and remain unavailable in cloud snapshots. The Windows tray menu now uses the shared palette, square activity badge, and plain status labels; macOS/Linux use the same browser console through explicit launchers; native tray integration remains future work.
+## Typography
 
-## Landing console tour
+Inter is the approved display, body and control family. JetBrains Mono is reserved for code, command snippets, IDs, measurements and compact data labels. Both are self-hosted under `web/public/fonts`; no remote font request is needed. Use tabular numerals for aligned metrics.
 
-Overview is a compact marketing summary: three KPIs, a small seven-day chart and three short activity rows. Full daily grids and session detail tables belong in the Usage and Sessions tabs. Do not embed a full-height dashboard in the overview preview or clip its content to force a viewport fit.
+- **Display:** the frontmatter's responsive display role belongs to marketing headlines, not console page chrome.
+- **Application titles:** compact semibold titles distinguish the active view or conversation. Section headings are larger than body copy without becoming page heroes.
+- **Body and conversation:** body uses the regular role; chat uses the more generous conversation leading, reducing to a smaller body size on phones.
+- **Controls:** sentence-case sans labels share one weight and scale. Avoid technical-looking monospace labels for ordinary buttons.
+- **Data:** monospace makes columns, IDs and executable snippets easy to compare.
 
+**The Task Before Chrome Rule.** Application headings identify the current task; they do not repeat a marketing hero above it.
 
-- Keep overview KPI labels separate from values and trust markers, with shared alignment across all three metrics.
-- Use consistent grid tracks for every row in a tour table so agent, state, value, and trust columns remain aligned. On narrow screens, hide the value column uniformly rather than allowing content-driven track widths.
+## Layout
 
-## Command snippets
+Use the established spacing rhythm in frontmatter. Marketing content remains centered around a 1200px maximum, with narrower mobile gutters. Open sections and aligned grids separate content without introducing a floating card for every group.
 
-- Use an integrated 44 px icon target at the right of the code box. The clipboard changes to a checkmark on success; screen readers receive status feedback and copy failures remain visible.
+The native and web consoles occupy the available window. Their fixed left rail is compact (64px desktop, 56px phone), expands to 208px on hover or keyboard focus, and can be pinned on desktop. Expanded desktop navigation reserves content space. Profile sits at the bottom of the full-height rail. Application views keep independent data/auth adapters while sharing presentation tokens and formatting.
 
-- Every executable command shown in the app has an integrated clipboard icon control with an accessible name, visible success/failure feedback, and keyboard focus styling.
-- Copy the exact command shown. Keep long commands horizontally scrollable or safely wrapped at narrow widths; the copy control remains visible.
-# Windows icon canvas
+Workspace places conversation history beside the transcript and anchors the composer beneath it. Native history uses a 280px desktop pane; Remote uses 260px. Phone layouts replace the list with a drawer anchored to the content edge, use one conversation toolbar, and retain readable touch targets. The precise route composition belongs to the surface brief rather than a new global layout rule.
 
-Windows app, tray and installer ICOs use the canonical red mark on an opaque #070708 canvas. Small ICO frames use Windows DIB encoding so the current GDI+ tray can render count overlays; web SVG/PNG marks keep their existing presentation.
+Dashboard presents activity before summary, then limits and ongoing sessions; narrow layouts stack them. Long-period reporting labels the selected period and actual UTC chart window. Keep provenance at section or column level and distinguish unknown data from zero. Profile groups account, devices, appearance and data, with advanced plans/pricing and offline license disclosed.
 
-Overview shows activity first, then the spend summary, then a two-column region with provider limits on the left and ongoing sessions on the right. Narrow layouts stack these regions in that order. The activity header shows tokens; total cost appears once in the spend summary, while expanded intervals retain their cost. Declare data provenance at the section or column level and reserve repeated inline warnings for missing or partial data. Today uses hourly local-clock labels; longer periods name the reporting period beside the token total. Account is a settings row; active licenses show replacement/removal actions instead of an activation prompt.
+The landing tour preserves its compact illustrative overview: three KPIs, a short chart and short activity rows. Full daily grids and session details belong in the relevant tour views. Keep KPI labels, values and trust aligned; narrow tour rows omit a column consistently rather than changing tracks per row.
 
-Windows app ICO generation centers the canonical asset at 0.65x on black. A separate full-size tray ICO preserves the approved badge appearance. Both come from the same SVG. Provider rows group quota windows, Overview panel headings share alignment, and the compact summary keeps coverage in accessible descriptions. Console navigation retains Settings; Docs and Pricing live inside Settings.
+## Elevation & Depth
 
-Desktop Account uses a connection summary above a two-column explanation and pairing flow. Pairing instructions name the exact web control, token entry is masked and labeled, and connected devices show a separate Disconnect action. Publication status is independent of account status; loading must resolve to a status or retry message.
+Flat surfaces and hairlines provide the default depth. Floating menus and dialogs use a separate tonal surface and border. The connection notification uses a modest downward soft shadow (`0 8px 24px rgb(0 0 0 / .18)`); the confirmation backdrop dims the rest of the interface. Marketing navigation retains its scroll-dependent detaching shadow. Do not add decorative halos or shadows to ordinary dashboard sections.
 
+**The Flat At Rest Rule.** Elevation communicates a floating interaction layer, not an extra decoration behind content.
+
+## Shapes
+
+Controls use the restrained `control` radius, replacing the old square-control guidance. They are neither sharp boxes nor pills. Code spans use the smaller code radius. Composers and dialogs use the panel radius; chat bubbles use larger corners with one small trailing corner. Grid cells, full-width dividers and reporting rows keep straight edges. Borders remain thin (1px).
+
+The canonical logo stays an unframed solid triangle-and-square mark in `currentColor`, from `web/public/spawnt-mark.svg`. Windows app and installer icons center that mark at 0.65x on the opaque dark canvas; the separate full-size tray icon retains its badge appearance. Small Windows ICO frames use DIB encoding for the existing tray renderer. These platform assets preserve their established geometry.
+
+## Components
+
+### Buttons and fields
+
+Primary actions use red fill with dark text; secondary actions use a quiet theme-aware neutral fill; ghost actions remain transparent until interaction. Shared button labels use the control role, consistent padding and restrained corners. Desktop density may use 40px controls; phone targets are at least 44px. Keyboard focus is a visible red outline, and pointer-down feedback is immediate. Disabled actions remain distinct and cannot be mistaken for available actions.
+
+Fields use theme-aware surfaces, main text and subtle borders. Associate visible labels with their fields. Error, pending and successful states use readable messages rather than color alone. Never render missing values as `undefined` or `NaN`.
+
+### Navigation and theme
+
+Marketing headers retain Product, Agents, Docs, Pricing, an account link and Download. The account link shows Console and opens it directly for a signed-in user; a signed-out user sees Log in. Mobile menus originate beneath their trigger, expose expanded state, dismiss on Escape and restore focus.
+
+Application navigation uses the left rail and compact current-view title rather than the removed top brand/settings/theme bar. Profile contains theme, account and devices. Theme cycles System, Light, Dark; System follows the OS, stored overrides apply before first paint, and controls stay readable throughout the switch. The marketing footer retains its small theme control; Auth's phone menu also exposes it.
+
+Rail expansion follows hover/focus and can be interrupted. Default transitions use the existing exponential ease-out curve; remove nonessential looping or travel for reduced motion while preserving clear state changes. The supported-agent strip becomes a static wrapping list in reduced motion. Workspace itself avoids an entry transform that would offset the fixed drawer.
+
+### Reporting containers and badges
+
+Reporting uses hairline grids, divided rows and truthful unavailable states. Trust badges are plain compact data labels, not decorative pills. Keep labels separate from values and align comparable rows. Dense populated metadata tables may use an explicit scroll container; empty-state text must fit the phone without horizontal scrolling.
+
+### Conversation bubbles and composer
+
+User messages align right in red with dark text; agent replies align left on a neutral gray surface. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
+
+The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The model control belongs beside the composer; confirmed model changes appear as dated conversation notices. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive.
+
+### Profile, pairing and feedback
+
+Profile uses open sections and aligned action groups. Advanced settings use disclosures. Account connection distinguishes account state from publication state, masks the desktop token field, names the actual web action, and offers a separate Disconnect action when connected.
+
+Device discovery, a locally generated QR code and direct pairing links lead to the existing matching-code flow. The code is shown clearly and confirmed on both devices. Initial status loading stays quiet; an actual connection change produces a short dismissible notification with a geometric phone icon. Current connection status remains inline in Profile.
+
+Confirmation dialogs describe the action and consequence, focus Cancel initially, use an explicit action label and cancel on Escape. Ordinary feedback uses a dismissible app notice rather than a blocking browser alert.
+
+### Command snippets
+
+Commands keep an integrated clipboard icon with a 44px target, an accessible name, keyboard focus and visible success/failure feedback. Copy the exact displayed command. Long snippets safely wrap or use a deliberate code container while the copy control remains visible.
+
+## Do's and Don'ts
+
+### Do:
+
+- **Do** use the canonical mark, shared palette and theme-specific foreground/background pairs.
+- **Do** use restrained control corners, aligned action groups and visible keyboard focus.
+- **Do** keep application chrome compact and make mobile conversation content fit its bubble.
+- **Do** label unknown values and numeric trust accurately, preserving the Rust-owned reporting boundary.
+- **Do** verify both themes, narrow layouts, open menus, dialogs and actual loading/error states.
+
+### Don't:
+
+- **Don't** use emojis, oversized pills, decorative gradients or color-only status indicators.
+- **Don't** restore the oversized console hero, duplicate top navigation or debug-style action toolbar.
+- **Don't** turn ordinary dashboard sections into nested floating cards.
+- **Don't** use a font warning as a reason to replace the approved Inter family.
+- **Don't** infer release readiness, physical-device support or security certification from design captures.

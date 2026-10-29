@@ -2,6 +2,7 @@
 //! window focus, and autostart (`SPEC §3.5`, `§3.12`, `§4.5`).
 
 pub mod executables;
+pub mod workspaces;
 
 use spawnt_core::AgentId;
 use std::env;

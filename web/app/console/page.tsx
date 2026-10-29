@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import RemoteCompanion from "../../components/RemoteCompanion";
+import DesktopDevices from "../../components/DesktopDevices";
+import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
 import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary, updateOngoing, updateQuota } from "../../lib/console-presentation.js";
@@ -188,6 +190,7 @@ export default function ConsolePage() {
   const metricsGeneration = useRef(0);
   const manualRefreshInFlight = useRef(false);
   const [activeView, setActiveView] = useState("overview");
+  const [navigationPinned, setNavigationPinned] = useState(false);
   const [viewError, setViewError] = useState("");
   const lastDesktopSnapshot = useRef<any>(null);
 
@@ -197,7 +200,7 @@ export default function ConsolePage() {
     setOngoing(null); setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
     setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
-    setRefreshMessage(""); setConnectedSource(user ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
+    setRefreshMessage(""); setConnectedSource(user?.id ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
   }, [user?.id]);
 
   useEffect(() => {
@@ -371,26 +374,8 @@ export default function ConsolePage() {
   }
 
   return (
-    <main className="sp-console-shell sp-console-app mx-auto py-10 font-sans">
-      {/* Header Controls */}
-      <header className="sp-console-heading">
-        <div className="sp-console-brand-lockup">
-          <span className="sp-console-mark sp-brand-mark" aria-hidden="true" />
-          <div>
-            <h1 className="sp-console-title">{activeView === "overview" ? "Your agent fleet" : activeView[0].toUpperCase() + activeView.slice(1)}</h1>
-            <div className="sp-console-status">
-              <span className={`w-2 h-2 ${connectedSource.startsWith("Remote daemon") ? "bg-green animate-pulse" : "bg-red"}`}></span>
-              <span>{connectedSource}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={refreshCloudSnapshot} disabled={refreshing || !user || activeView === "settings"} title={activeView === "settings" ? "Use Reload preferences in Settings" : "Read the latest received cloud snapshot"} className="sp-console-action" aria-busy={refreshing}>{refreshing ? "Refreshing…" : "Reload view"}</button>
-          {user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}
-          <button type="button" className="sp-console-action" onClick={() => changeConsoleView("settings")}>Settings</button>
-        </div>
-      </header>
-
+    <main className={`sp-console-app sp-web-app ${navigationPinned ? "web-navigation-pinned" : ""}`}>
+      <header className="web-context"><h1>{activeView === "overview" ? "Dashboard" : activeView === "chat" ? "Workspace" : activeView === "settings" ? "Profile" : activeView[0].toUpperCase() + activeView.slice(1)}</h1><span className={activeView === "settings" ? "" : "sr-only"}>{connectedSource}</span></header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
         <p>Sign in to view activity from your paired desktop.</p>
         <div className="sp-console-connect-actions">
@@ -399,17 +384,21 @@ export default function ConsolePage() {
       </section>}
 
       {copyFeedback && <p role="status" className="sp-console-notice">{copyFeedback}</p>}
-      <div className="sp-console-refresh-state" aria-live="polite">
+      <div className="sp-console-refresh-state" aria-live="polite" hidden={activeView !== "settings"}>
         <span>{refreshMessage || connectedSource}</span>
         <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
       </div>
 
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
-        {["overview", "sessions", "chat", "usage", "limits", "projects", "automations", "settings"].map((view) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}>{view}</button>)}
+        <Link href="/console" className="web-rail-brand" aria-label="Spawnt dashboard"><span className="sp-brand-mark" /></Link>
+        <button type="button" aria-label="Pin navigation" aria-pressed={navigationPinned} onClick={() => setNavigationPinned(!navigationPinned)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7" /></svg><span>Pin navigation</span></button>
+        {["overview", "chat", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view, index) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={[
+          "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z", "M4 4h16v12H9l-5 4V4Z", "M4 4h16v16H4z M8 9h8 M8 14h8", "M4 20V10m8 10V4m8 16v-7", "M4 12a8 8 0 0 1 16 0 M12 12l5-5 M4 20h16", "M3 6h7l2 3h9v11H3V6Z", "m13 2-9 12h7l-1 8 10-13h-8l1-7Z", "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3"
+        ][index]} /></svg><span>{view === "overview" ? "Dashboard" : view === "chat" ? "Workspace" : view === "settings" ? "Profile" : view[0].toUpperCase() + view.slice(1)}</span></button>)}
       </nav>
       <div className="sp-console-content">
-      {activeView === "settings" && <SettingsPanel embedded />}
+      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connect this account to your desktop to publish activity. Remote conversations use a separately confirmed encrypted connection.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button>{user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}</div></section><DesktopDevices /><SettingsPanel embedded /></>}
       {activeView === "chat" && <RemoteCompanion embedded />}
       {activeView === "projects" && <div dangerouslySetInnerHTML={{ __html: renderProjects(undefined) }} />}
       {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
@@ -495,7 +484,7 @@ export default function ConsolePage() {
       {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <div className="text-xs text-muted uppercase font-semibold">Session history <Link href="/remote" className="ml-3 underline normal-case">Open encrypted Remote</Link></div>
-          <div className="flex gap-2">
+          <div className="sp-session-filters">
             <select aria-label="Project" value={projectFilter} onChange={event => { setProjectFilter(event.target.value); setPage(1); }}><option value="all">All projects</option>{projectNames.map(project => <option key={project} value={project}>{project}</option>)}</select>
             <select aria-label="Agent"
               value={agentFilter}
@@ -522,11 +511,11 @@ export default function ConsolePage() {
 
         <SessionsPanel sessions={sessions} />
         {/* Pagination Controls */}
-        <div className="flex justify-between items-center mt-4 pt-3 border-t border-border text-xs text-muted">
+        <div className="sp-session-pagination">
           <div>
             Page {page} of {totalPages} <span className="sp-trust">EXACT</span> ({totalCount} sessions <span className="sp-trust">EXACT</span>)
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2" hidden={totalPages <= 1}>
             <button
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}

@@ -104,7 +104,7 @@ body {
 
 .sp-site-download, .sp-pricing-action, .sp-download-action, .sp-settings-action, .sp-auth-oauth, .sp-auth-submit, .sp-console-link, .sp-console-action { box-sizing: border-box; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 18px; border-radius: 0; font: 600 11px/20px var(--sp-font-mono); text-align: center; }
 .sp-settings-action { min-height: 44px; }
-.sp-console-app button:not(.sp-console-nav button):not(.sp-console-timeline-filter button) { min-height: 44px; border-radius: 0; font: 600 10px/1.4 var(--sp-font-mono); }
+.sp-console-app button:not(.sp-console-nav button):not(.sp-console-timeline-filter button) { min-height: var(--sp-control-height); border-radius: var(--sp-control-radius); font: 500 13px/1.4 var(--sp-font-sans); }
 .sp-settings-delete { min-height: 44px; padding-inline: 8px; }
 
 .sp-console-shell { width: min(1200px, calc(100% - 48px)); color: var(--sp-text); }
@@ -420,3 +420,16 @@ body {
 }
 
 .sp-console-content > .sp-settings-page { width:100%; padding:0 0 32px; }
+
+/* Shared action treatment across application, account and public entry screens. */
+:is(.sp-site-download,.sp-pricing-action,.sp-download-action,.sp-settings-action,.sp-auth-oauth,.sp-auth-submit,.sp-console-link,.sp-console-action,.sp-theme-control,.sp-button-primary,.sp-button-secondary,.sp-nav-cta){min-height:var(--sp-control-height);border-radius:var(--sp-control-radius);font-family:var(--sp-font-sans);font-size:13px;line-height:1.4;letter-spacing:0;text-transform:none;gap:8px}
+:is(.sp-site-menu,.sp-menu-button){min-width:44px;min-height:44px}
+:is(button,a,input,select,textarea,summary){touch-action:manipulation}
+:is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px}
+:is(.sp-auth-page,.sp-settings-page) input{border-radius:var(--sp-control-radius)}
+.desktop-device-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;border-block:1px solid var(--sp-border);margin-bottom:16px}
+.desktop-device-row p{margin:4px 0 0}
+@media(max-width:600px){.desktop-device-row{align-items:flex-start;flex-direction:column}}
+
+.sp-mobile-theme{display:none}
+@media(max-width:760px){.sp-site-login,.sp-site-actions .sp-nav-theme{display:none}.sp-site-links .sp-mobile-theme{display:inline-flex;align-self:flex-start}.sp-site-menu{flex:0 0 44px}.sp-site-download{padding-inline:14px}.sp-site-actions{gap:8px}}

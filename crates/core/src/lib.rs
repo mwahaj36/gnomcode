@@ -586,10 +586,12 @@ pub fn handoff_summary(events: &[ChatEvent]) -> String {
     let mut lines = Vec::new();
     for event in events {
         match event.role {
-            ChatRole::User => lines.push(format!(
-                "Goal: {}",
-                redact::redact_chat_content(&event.content)
-            )),
+            ChatRole::User => {
+                let prompt = redact::clean_user_text(&event.content);
+                if !prompt.trim().is_empty() {
+                    lines.push(format!("Goal: {}", redact::redact_chat_content(prompt)));
+                }
+            }
             ChatRole::Tool => {
                 if let Some(status) = &event.status {
                     let name = event.tool_name.as_deref().unwrap_or("tool");
@@ -707,6 +709,11 @@ mod tests {
             created_at: now,
         };
         let events = [
+            event(
+                ChatRole::User,
+                "<environment_context>injected setup</environment_context>",
+                None,
+            ),
             event(ChatRole::User, "Fix tests", None),
             event(ChatRole::Tool, "private output", Some("failed")),
         ];
@@ -714,6 +721,7 @@ mod tests {
         assert!(summary.contains("Fix tests"));
         assert!(summary.contains("failed"));
         assert!(!summary.contains("private output"));
+        assert!(!summary.contains("injected setup"));
     }
 
     #[test]

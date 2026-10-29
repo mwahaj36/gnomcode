@@ -715,13 +715,15 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         spawnt_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
-    let _cloud_sync_handle = spawnt_daemon::sync::spawn_cloud_sync(orchestrator.db());
+    let remote = Arc::new(spawnt_daemon::remote::RemoteManager::new());
+    let _cloud_sync_handle =
+        spawnt_daemon::sync::spawn_cloud_sync(orchestrator.db(), remote.clone());
 
     let state = spawnt_daemon::api::AppState {
         db: orchestrator.db(),
         bearer_token: info.token.clone(),
         orchestrator: Some(Arc::new(orchestrator)),
-        remote: Arc::new(spawnt_daemon::remote::RemoteManager::new()),
+        remote,
     };
 
     let router = spawnt_daemon::api::build_router(state);

@@ -3,6 +3,8 @@
 @font-face { font-family: 'JetBrains Mono'; src: url('/fonts/jetbrains-mono.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
 :root {
   color-scheme: dark;
+  --sp-control-radius: 6px;
+  --sp-control-height: 44px;
   --sp-bg: #070708;
   --sp-surface: #0d0d0f;
   --sp-surface-2: #141416;

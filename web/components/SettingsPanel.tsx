@@ -97,7 +97,8 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
     };
     supabase.auth.getSession().then(({ data: { session } }) => apply(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setTimeout(() => apply(session), 0); });
-    return () => { mounted = false; loadGeneration.current++; subscription.unsubscribe(); };
+    const generationRef = loadGeneration;
+    return () => { mounted = false; generationRef.current++; subscription.unsubscribe(); };
   }, [loadSettings]);
 
   const persist = async (values: Record<string, unknown>, success: string) => {
@@ -191,7 +192,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
           </div>
           <div>
             <dt>Privacy</dt>
-            <dd>Prompts, code, and tool output are never stored or sent.</dd>
+            <dd>Metadata sync excludes conversation content, code and tool output. Local chat stays on your desktop; paired Remote conversations use end-to-end encryption.</dd>
           </div>
         </dl>
 

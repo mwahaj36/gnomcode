@@ -72,6 +72,94 @@ pub trait SourceAdapter {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn codex_injected_context_is_not_a_user_turn() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let batch = CodexAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/codex/v0.165/injected_context.jsonl"),
+        );
+        assert!(
+            batch
+                .chat_events
+                .iter()
+                .all(|event| !event.content.contains("environment_context")
+                    && !event.content.contains("AGENTS.md"))
+        );
+        assert!(batch.chat_events.iter().any(
+            |event| event.role == spawnt_core::ChatRole::User && event.content == "[REDACTED]"
+        ));
+        assert_eq!(
+            batch
+                .chat_events
+                .iter()
+                .filter(|event| event.role == spawnt_core::ChatRole::User)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn codex_legacy_context_cleanup_preserves_prompts_and_cursor_ids() {
+        use spawnt_core::{ChatEvent, ChatRole};
+        let event = |id: &str, text: &str| ChatEvent {
+            event_id: id.into(),
+            session_id: "codex:legacy".into(),
+            turn_index: 1,
+            role: ChatRole::User,
+            content: text.into(),
+            tool_name: None,
+            status: None,
+            created_at: chrono::Utc::now(),
+        };
+        let cleaned = super::codex::clean_stored_conversation(vec![
+            event(
+                "context",
+                "# AGENTS.md instructions for sample\n<INSTRUCTIONS>internal</INSTRUCTIONS>\n<environment_context>internal</environment_context>",
+            ),
+            event(
+                "mixed",
+                "<environment_context>internal</environment_context>\nHello",
+            ),
+            event("literal", "Explain the <environment_context> tag"),
+        ]);
+        assert_eq!(cleaned.len(), 3);
+        assert_eq!(cleaned[0].event_id, "context");
+        assert!(cleaned[0].content.is_empty());
+        assert_eq!(cleaned[1].content, "Hello");
+        assert_eq!(cleaned[2].content, "Explain the <environment_context> tag");
+    }
+
+    #[test]
+    fn codex_turn_model_changes_emit_a_durable_notice() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let bytes = concat!(
+            "{\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-6.1-sol\"}}\n",
+            "{\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-6.1-sol\"}}\n",
+            "{\"type\":\"turn_context\",\"payload\":{\"model\":\"o3\"}}\n",
+        );
+        let events = CodexAdapter::new()
+            .parse(&FileCtx::default(), bytes.as_bytes())
+            .chat_events;
+        let changes: Vec<_> = events
+            .iter()
+            .filter(|event| event.status.as_deref() == Some("model_changed"))
+            .collect();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].content, "Model changed from gpt-6.1-sol to o3");
+        let resumed = CodexAdapter::new().parse(
+            &FileCtx {
+                source_offset: 100,
+                fallback_model: Some("gpt-6.1-sol".into()),
+                ..FileCtx::default()
+            },
+            b"{\"type\":\"turn_context\",\"payload\":{\"model\":\"o3\"}}\n",
+        );
+        assert_eq!(
+            resumed.chat_events[0].content,
+            "Model changed from gpt-6.1-sol to o3"
+        );
+    }
+    #[test]
     fn codex_conversation_fixture_emits_only_user_and_assistant_messages() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");

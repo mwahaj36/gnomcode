@@ -1,0 +1,462 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-29T12:29:59.760830+00:00",
+  "title": "Design System: spawnt",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Primary",
+        "tonalRamp": [
+          "oklch(15% 0.2433 21.71)",
+          "oklch(26% 0.2433 21.71)",
+          "oklch(37% 0.2433 21.71)",
+          "oklch(48% 0.2433 21.71)",
+          "oklch(59% 0.2433 21.71)",
+          "oklch(70% 0.2433 21.71)",
+          "oklch(82% 0.2433 21.71)",
+          "oklch(95% 0.2433 21.71)"
+        ]
+      },
+      "primary-text-dark": {
+        "role": "primary",
+        "displayName": "Primary Text Dark",
+        "tonalRamp": [
+          "oklch(15% 0.1920 15.28)",
+          "oklch(26% 0.1920 15.28)",
+          "oklch(37% 0.1920 15.28)",
+          "oklch(48% 0.1920 15.28)",
+          "oklch(59% 0.1920 15.28)",
+          "oklch(70% 0.1920 15.28)",
+          "oklch(82% 0.1920 15.28)",
+          "oklch(95% 0.1920 15.28)"
+        ]
+      },
+      "primary-text-light": {
+        "role": "primary",
+        "displayName": "Primary Text Light",
+        "tonalRamp": [
+          "oklch(15% 0.2174 23.09)",
+          "oklch(26% 0.2174 23.09)",
+          "oklch(37% 0.2174 23.09)",
+          "oklch(48% 0.2174 23.09)",
+          "oklch(59% 0.2174 23.09)",
+          "oklch(70% 0.2174 23.09)",
+          "oklch(82% 0.2174 23.09)",
+          "oklch(95% 0.2174 23.09)"
+        ]
+      },
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "Canvas Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0026 286.03)",
+          "oklch(26% 0.0026 286.03)",
+          "oklch(37% 0.0026 286.03)",
+          "oklch(48% 0.0026 286.03)",
+          "oklch(59% 0.0026 286.03)",
+          "oklch(70% 0.0026 286.03)",
+          "oklch(82% 0.0026 286.03)",
+          "oklch(95% 0.0026 286.03)"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Surface Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0042 285.92)",
+          "oklch(26% 0.0042 285.92)",
+          "oklch(37% 0.0042 285.92)",
+          "oklch(48% 0.0042 285.92)",
+          "oklch(59% 0.0042 285.92)",
+          "oklch(70% 0.0042 285.92)",
+          "oklch(82% 0.0042 285.92)",
+          "oklch(95% 0.0042 285.92)"
+        ]
+      },
+      "surface-raised-dark": {
+        "role": "neutral",
+        "displayName": "Surface Raised Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0040 286.02)",
+          "oklch(26% 0.0040 286.02)",
+          "oklch(37% 0.0040 286.02)",
+          "oklch(48% 0.0040 286.02)",
+          "oklch(59% 0.0040 286.02)",
+          "oklch(70% 0.0040 286.02)",
+          "oklch(82% 0.0040 286.02)",
+          "oklch(95% 0.0040 286.02)"
+        ]
+      },
+      "border-dark": {
+        "role": "neutral",
+        "displayName": "Border Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0074 285.88)",
+          "oklch(26% 0.0074 285.88)",
+          "oklch(37% 0.0074 285.88)",
+          "oklch(48% 0.0074 285.88)",
+          "oklch(59% 0.0074 285.88)",
+          "oklch(70% 0.0074 285.88)",
+          "oklch(82% 0.0074 285.88)",
+          "oklch(95% 0.0074 285.88)"
+        ]
+      },
+      "border-strong-dark": {
+        "role": "neutral",
+        "displayName": "Border Strong Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0104 285.84)",
+          "oklch(26% 0.0104 285.84)",
+          "oklch(37% 0.0104 285.84)",
+          "oklch(48% 0.0104 285.84)",
+          "oklch(59% 0.0104 285.84)",
+          "oklch(70% 0.0104 285.84)",
+          "oklch(82% 0.0104 285.84)",
+          "oklch(95% 0.0104 285.84)"
+        ]
+      },
+      "text-dark": {
+        "role": "neutral",
+        "displayName": "Text Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0017 247.84)",
+          "oklch(26% 0.0017 247.84)",
+          "oklch(37% 0.0017 247.84)",
+          "oklch(48% 0.0017 247.84)",
+          "oklch(59% 0.0017 247.84)",
+          "oklch(70% 0.0017 247.84)",
+          "oklch(82% 0.0017 247.84)",
+          "oklch(95% 0.0017 247.84)"
+        ]
+      },
+      "text-secondary-dark": {
+        "role": "neutral",
+        "displayName": "Text Secondary Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0235 254.43)",
+          "oklch(26% 0.0235 254.43)",
+          "oklch(37% 0.0235 254.43)",
+          "oklch(48% 0.0235 254.43)",
+          "oklch(59% 0.0235 254.43)",
+          "oklch(70% 0.0235 254.43)",
+          "oklch(82% 0.0235 254.43)",
+          "oklch(95% 0.0235 254.43)"
+        ]
+      },
+      "text-muted-dark": {
+        "role": "neutral",
+        "displayName": "Text Muted Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0287 257.05)",
+          "oklch(26% 0.0287 257.05)",
+          "oklch(37% 0.0287 257.05)",
+          "oklch(48% 0.0287 257.05)",
+          "oklch(59% 0.0287 257.05)",
+          "oklch(70% 0.0287 257.05)",
+          "oklch(82% 0.0287 257.05)",
+          "oklch(95% 0.0287 257.05)"
+        ]
+      },
+      "canvas-light": {
+        "role": "neutral",
+        "displayName": "Canvas Light",
+        "tonalRamp": [
+          "oklch(15% 0.0017 247.84)",
+          "oklch(26% 0.0017 247.84)",
+          "oklch(37% 0.0017 247.84)",
+          "oklch(48% 0.0017 247.84)",
+          "oklch(59% 0.0017 247.84)",
+          "oklch(70% 0.0017 247.84)",
+          "oklch(82% 0.0017 247.84)",
+          "oklch(95% 0.0017 247.84)"
+        ]
+      },
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Surface Light",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(37% 0.0000 89.88)",
+          "oklch(48% 0.0000 89.88)",
+          "oklch(59% 0.0000 89.88)",
+          "oklch(70% 0.0000 89.88)",
+          "oklch(82% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "surface-raised-light": {
+        "role": "neutral",
+        "displayName": "Surface Raised Light",
+        "tonalRamp": [
+          "oklch(15% 0.0052 247.88)",
+          "oklch(26% 0.0052 247.88)",
+          "oklch(37% 0.0052 247.88)",
+          "oklch(48% 0.0052 247.88)",
+          "oklch(59% 0.0052 247.88)",
+          "oklch(70% 0.0052 247.88)",
+          "oklch(82% 0.0052 247.88)",
+          "oklch(95% 0.0052 247.88)"
+        ]
+      },
+      "border-light": {
+        "role": "neutral",
+        "displayName": "Border Light",
+        "tonalRamp": [
+          "oklch(15% 0.0116 252.10)",
+          "oklch(26% 0.0116 252.10)",
+          "oklch(37% 0.0116 252.10)",
+          "oklch(48% 0.0116 252.10)",
+          "oklch(59% 0.0116 252.10)",
+          "oklch(70% 0.0116 252.10)",
+          "oklch(82% 0.0116 252.10)",
+          "oklch(95% 0.0116 252.10)"
+        ]
+      },
+      "border-strong-light": {
+        "role": "neutral",
+        "displayName": "Border Strong Light",
+        "tonalRamp": [
+          "oklch(15% 0.0231 248.10)",
+          "oklch(26% 0.0231 248.10)",
+          "oklch(37% 0.0231 248.10)",
+          "oklch(48% 0.0231 248.10)",
+          "oklch(59% 0.0231 248.10)",
+          "oklch(70% 0.0231 248.10)",
+          "oklch(82% 0.0231 248.10)",
+          "oklch(95% 0.0231 248.10)"
+        ]
+      },
+      "text-light": {
+        "role": "neutral",
+        "displayName": "Text Light",
+        "tonalRamp": [
+          "oklch(15% 0.0185 259.67)",
+          "oklch(26% 0.0185 259.67)",
+          "oklch(37% 0.0185 259.67)",
+          "oklch(48% 0.0185 259.67)",
+          "oklch(59% 0.0185 259.67)",
+          "oklch(70% 0.0185 259.67)",
+          "oklch(82% 0.0185 259.67)",
+          "oklch(95% 0.0185 259.67)"
+        ]
+      },
+      "text-secondary-light": {
+        "role": "neutral",
+        "displayName": "Text Secondary Light",
+        "tonalRamp": [
+          "oklch(15% 0.0298 257.68)",
+          "oklch(26% 0.0298 257.68)",
+          "oklch(37% 0.0298 257.68)",
+          "oklch(48% 0.0298 257.68)",
+          "oklch(59% 0.0298 257.68)",
+          "oklch(70% 0.0298 257.68)",
+          "oklch(82% 0.0298 257.68)",
+          "oklch(95% 0.0298 257.68)"
+        ]
+      },
+      "text-muted-light": {
+        "role": "neutral",
+        "displayName": "Text Muted Light",
+        "tonalRamp": [
+          "oklch(15% 0.0331 259.56)",
+          "oklch(26% 0.0331 259.56)",
+          "oklch(37% 0.0331 259.56)",
+          "oklch(48% 0.0331 259.56)",
+          "oklch(59% 0.0331 259.56)",
+          "oklch(70% 0.0331 259.56)",
+          "oklch(82% 0.0331 259.56)",
+          "oklch(95% 0.0331 259.56)"
+        ]
+      },
+      "accent-dark": {
+        "role": "secondary",
+        "displayName": "Accent Dark",
+        "tonalRamp": [
+          "oklch(15% 0.0231 248.10)",
+          "oklch(26% 0.0231 248.10)",
+          "oklch(37% 0.0231 248.10)",
+          "oklch(48% 0.0231 248.10)",
+          "oklch(59% 0.0231 248.10)",
+          "oklch(70% 0.0231 248.10)",
+          "oklch(82% 0.0231 248.10)",
+          "oklch(95% 0.0231 248.10)"
+        ]
+      },
+      "accent-light": {
+        "role": "secondary",
+        "displayName": "Accent Light",
+        "tonalRamp": [
+          "oklch(15% 0.1712 271.19)",
+          "oklch(26% 0.1712 271.19)",
+          "oklch(37% 0.1712 271.19)",
+          "oklch(48% 0.1712 271.19)",
+          "oklch(59% 0.1712 271.19)",
+          "oklch(70% 0.1712 271.19)",
+          "oklch(82% 0.1712 271.19)",
+          "oklch(95% 0.1712 271.19)"
+        ]
+      },
+      "on-primary": {
+        "role": "neutral",
+        "displayName": "On Primary",
+        "tonalRamp": [
+          "oklch(15% 0.0185 259.67)",
+          "oklch(26% 0.0185 259.67)",
+          "oklch(37% 0.0185 259.67)",
+          "oklch(48% 0.0185 259.67)",
+          "oklch(59% 0.0185 259.67)",
+          "oklch(70% 0.0185 259.67)",
+          "oklch(82% 0.0185 259.67)",
+          "oklch(95% 0.0185 259.67)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Marketing display",
+        "purpose": "Marketing headlines only; application chrome stays compact."
+      },
+      "conversation": {
+        "displayName": "Conversation body",
+        "purpose": "Readable agent replies with generous leading."
+      },
+      "data": {
+        "displayName": "Data and code",
+        "purpose": "Aligned measurements, IDs and commands."
+      }
+    },
+    "shadows": [
+      {
+        "name": "connection-notification",
+        "value": "0 8px 24px rgb(0 0 0 / .18)",
+        "purpose": "A floating connection-change notification."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(.16,1,.3,1)",
+        "purpose": "Existing navigation and state transition easing."
+      },
+      {
+        "name": "rail-expansion",
+        "value": "180ms",
+        "purpose": "Hover/focus rail expansion; removed for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "conversation-phone",
+        "value": "600px"
+      },
+      {
+        "name": "application-phone",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A direct action using Spawnt red.",
+      "html": "<button class=\"ds-primary\">Save preferences</button>",
+      "css": ".ds-primary{font-family:var(--sp-font-sans,Inter,Arial,sans-serif);font-size:13px;line-height:1.4;font-weight:600;min-height:44px;padding:9px 14px;background:var(--sp-primary);color:var(--sp-on-primary);border:1px solid transparent;border-radius:var(--sp-control-radius,6px);cursor:pointer}.ds-primary:hover{filter:brightness(.96)}.ds-primary:active{filter:brightness(.88)}.ds-primary:focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px;}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary-dark",
+      "description": "A quiet supporting action.",
+      "html": "<button class=\"ds-secondary\">Reload view</button>",
+      "css": ".ds-secondary{font-family:var(--sp-font-sans,Inter,Arial,sans-serif);font-size:13px;line-height:1.4;font-weight:500;min-height:44px;padding:9px 14px;background:var(--sp-surface-2);color:var(--sp-text);border:1px solid transparent;border-radius:var(--sp-control-radius,6px);cursor:pointer}.ds-secondary:hover{background:var(--sp-border)}.ds-secondary:active{filter:brightness(.88)}.ds-secondary:focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px;}"
+    },
+    {
+      "name": "Workspace field",
+      "kind": "input",
+      "description": "A labeled field for a local workspace.",
+      "html": "<label class=\"ds-label\" for=\"ds-workspace\">Workspace directory</label><input class=\"ds-field\" id=\"ds-workspace\" placeholder=\"Choose a folder or enter its path\">",
+      "css": ".ds-label{display:block;font-family:var(--sp-font-sans,Inter,Arial,sans-serif);font-size:13px;line-height:1.4;color:var(--sp-text-2);margin-bottom:8px}.ds-field{font-family:var(--sp-font-sans,Inter,Arial,sans-serif);font-size:13px;line-height:1.4;min-height:44px;padding:10px 12px;background:var(--sp-bg);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:var(--sp-control-radius,6px)}.ds-field:hover{border-color:var(--sp-border-strong)}.ds-field:focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px;}"
+    },
+    {
+      "name": "Rail destination",
+      "kind": "nav",
+      "description": "Compact icon and label for application navigation.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Example navigation\"><button class=\"ds-nav-item\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M4 4h16v12H9l-5 4V4Z\"/></svg>Workspace</button></nav>",
+      "css": ".ds-nav{padding:8px;background:var(--sp-surface)}.ds-nav-item{display:flex;align-items:center;gap:14px;min-height:44px;padding:10px 12px;border:0;border-radius:6px;background:var(--sp-surface-2);color:var(--sp-text);font-family:var(--sp-font-sans,Inter,Arial,sans-serif);font-size:13px;line-height:1.4;cursor:pointer}.ds-nav-item:hover{background:var(--sp-border)}.ds-nav-item:focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px;}"
+    },
+    {
+      "name": "Trust label",
+      "kind": "chip",
+      "description": "Plain provenance text for a measured value.",
+      "html": "<span class=\"ds-trust\">EXACT</span>",
+      "css": ".ds-trust{font:500 10px/1.4 var(--sp-font-mono,Consolas,monospace);color:var(--sp-text-3);white-space:nowrap}"
+    },
+    {
+      "name": "Divided settings section",
+      "kind": "card",
+      "description": "An open section rather than a floating dashboard card.",
+      "html": "<section class=\"ds-section\"><h2>Appearance</h2><p>Choose the appearance for this device.</p></section>",
+      "css": ".ds-section{padding:24px 0;border-bottom:1px solid var(--sp-border);color:var(--sp-text);font-family:var(--sp-font-sans,Inter,Arial,sans-serif)}.ds-section h2{font-size:20px;line-height:1.4;font-weight:600;margin:0 0 10px}.ds-section p{font-size:14px;line-height:1.6;color:var(--sp-text-2);margin:0;max-width:65ch}"
+    },
+    {
+      "name": "Agent reply",
+      "kind": "custom",
+      "refersTo": "agent-bubble-dark",
+      "description": "A neutral left-aligned reply.",
+      "html": "<article class=\"ds-agent\"><header>Agent</header><p>The login flow is ready for review.</p></article>",
+      "css": ".ds-agent{max-width:88%;padding:16px 20px;background:var(--sp-surface-2);color:var(--sp-text);border-radius:16px 16px 16px 4px;font:15px/1.75 var(--sp-font-sans,Inter,Arial,sans-serif);overflow-wrap:anywhere}.ds-agent header{font-size:12px;color:var(--sp-text-2);margin-bottom:10px}.ds-agent p{margin:0}"
+    },
+    {
+      "name": "User prompt",
+      "kind": "custom",
+      "description": "A red right-aligned prompt.",
+      "html": "<div class=\"ds-user-row\"><article class=\"ds-user\"><header>You</header><p>Review authentication</p></article></div>",
+      "css": ".ds-user-row{display:flex;justify-content:flex-end}.ds-user{max-width:88%;padding:16px 20px;background:var(--sp-primary);color:var(--sp-on-primary);border-radius:16px 16px 4px 16px;font:15px/1.75 var(--sp-font-sans,Inter,Arial,sans-serif);overflow-wrap:anywhere}.ds-user header{font-size:12px;margin-bottom:10px}.ds-user p{margin:0;white-space:pre-wrap}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Mission control",
+    "overview": "Spawnt keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.\n\nMarketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in [the console surface brief](docs/design/console-workspace.md); product and security behavior remain governed by [SPEC](docs/SPEC.md).",
+    "keyCharacteristics": [
+      "Canonical red accents and quiet neutral surfaces.",
+      "Sans-led hierarchy with monospace reserved for data and commands.",
+      "Restrained controls, open divided sections and geometric SVG icons.",
+      "Compact application chrome with independently scrolling work areas."
+    ],
+    "rules": [
+      {
+        "name": "The Foreground Pair Rule",
+        "body": "A control's foreground and background must switch theme together; never carry a light foreground onto a light fill or the reverse.",
+        "section": "colors"
+      },
+      {
+        "name": "The Task Before Chrome Rule",
+        "body": "Application headings identify the current task; they do not repeat a marketing hero above it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat At Rest Rule",
+        "body": "Elevation communicates a floating interaction layer, not an extra decoration behind content.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** use the canonical mark, shared palette and theme-specific foreground/background pairs.",
+      "**Do** use restrained control corners, aligned action groups and visible keyboard focus.",
+      "**Do** keep application chrome compact and make mobile conversation content fit its bubble.",
+      "**Do** label unknown values and numeric trust accurately, preserving the Rust-owned reporting boundary.",
+      "**Do** verify both themes, narrow layouts, open menus, dialogs and actual loading/error states."
+    ],
+    "donts": [
+      "**Don't** use emojis, oversized pills, decorative gradients or color-only status indicators.",
+      "**Don't** restore the oversized console hero, duplicate top navigation or debug-style action toolbar.",
+      "**Don't** turn ordinary dashboard sections into nested floating cards.",
+      "**Don't** use a font warning as a reason to replace the approved Inter family.",
+      "**Don't** infer release readiness, physical-device support or security certification from design captures."
+    ]
+  }
+}
