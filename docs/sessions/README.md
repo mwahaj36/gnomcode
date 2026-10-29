@@ -4,6 +4,7 @@ One file per recorded session or follow-up. Historical entries retain their orig
 
 For each new session, add a dated file with goals, outcomes, problems/root-cause fixes, decisions and verification, then link it here. Do not append session bodies to SESSION_LOG.md.
 
+- [2026-10-29 — Vercel documentation route recovery](2026-10-29-vercel-documentation-route-recovery.md)
 - [2026-10-29 — Marketing, SEO and documentation refresh](2026-10-29-marketing-seo-and-documentation-refresh.md)
 - [2026-10-29 - Remote mobile continuity and model-handoff follow-up](2026-10-29-remote-mobile-continuity-and-model-handoff-follow-up.md)
 - [2026-10-29 - Pairing-code and interaction follow-up](2026-10-29-pairing-code-and-interaction-follow-up.md)
