@@ -90,6 +90,8 @@ function scrubValue(key, val) {
     return out;
   }
   if (typeof val === "string") {
+    if (key === 'text' && val.trimStart().startsWith('<environment_context>')) return '<environment_context>[REDACTED]</environment_context>';
+    if (key === 'text' && val.startsWith('# AGENTS.md instructions for ')) return '# AGENTS.md instructions for [REDACTED]\n<INSTRUCTIONS>[REDACTED]</INSTRUCTIONS>';
     if (ID_KEYS.has(key)) return scrubId(val);
     if (PATH_KEYS.has(key)) return "/workspace/sample-project";
     if (key === "gitBranch" || key === "branch") return "main";

@@ -8,7 +8,7 @@ const source=readFileSync(new URL('../crates/daemon/src/console-app.js',import.m
 const file=ts.createSourceFile('console.js',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
 const fn=name=>file.statements.filter(ts.isFunctionDeclaration).find(node=>node.name?.text===name)?.getText(file)||'';
 const window={location:new URL('http://127.0.0.1:41738/?token=unit-local-token#overview')};
-const document={getElementById:()=>({setAttribute(){}}),querySelectorAll:()=>[]};
+const document={body:{dataset:{}},getElementById:()=>({setAttribute(){}}),querySelectorAll:()=>[]};
 const history={pushState(_state,_title,url){window.location=new URL(url,window.location);}};
 const navigate=new Function('document','window','history','URL',`let activeView;const activeChatSession='';${fn('consoleViewUrl')}\n${fn('setView')}\nreturn setView;`)(document,window,history,URL);
 for(const view of ['sessions','settings','overview']) {

@@ -56,6 +56,7 @@ pub struct PairingStatus {
 #[derive(Default)]
 pub struct RemoteManager {
     current: Mutex<Option<Arc<Room>>>,
+    discovery_changed: Arc<tokio::sync::Notify>,
 }
 
 struct Room {
@@ -70,6 +71,7 @@ struct Room {
     connected: AtomicBool,
     outgoing: mpsc::Sender<Value>,
     cancel: watch::Sender<bool>,
+    discovery_changed: Arc<tokio::sync::Notify>,
 }
 
 impl RemoteManager {
@@ -128,6 +130,7 @@ impl RemoteManager {
             relay_url,
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
             keys,
+            discovery_changed: self.discovery_changed.clone(),
             channel: Mutex::new(None),
             local_confirmed: AtomicBool::new(false),
             phone_confirmed: AtomicBool::new(false),
@@ -139,6 +142,7 @@ impl RemoteManager {
         if let Some(previous) = previous {
             let _ = previous.cancel.send(true);
         }
+        self.discovery_changed.notify_one();
         let status = room.status().await;
         tokio::spawn(run_room(room, db, socket, receiver, canceled));
         Ok(status)
@@ -188,6 +192,7 @@ impl RemoteManager {
             return Err(RemoteError::WrongCode);
         }
         room.local_confirmed.store(true, Ordering::Release);
+        self.discovery_changed.notify_one();
         room.outgoing
             .send(json!({"type":"confirm"}))
             .await
@@ -195,9 +200,15 @@ impl RemoteManager {
         Ok(room.status().await)
     }
 
+    /// Wakes metadata publication when the public pairing offer changes.
+    pub(crate) async fn discovery_changed(&self) {
+        self.discovery_changed.notified().await;
+    }
+
     /// Closes the room and destroys its ephemeral key material.
     pub async fn revoke(&self) -> bool {
         let previous = self.current.lock().await.take();
+        self.discovery_changed.notify_one();
         if let Some(room) = previous {
             let _ = room.cancel.send(true);
             true
@@ -245,6 +256,7 @@ struct ConnectionGuard(Arc<Room>);
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         self.0.connected.store(false, Ordering::Release);
+        self.0.discovery_changed.notify_one();
     }
 }
 
@@ -307,11 +319,14 @@ async fn run_room(
                 let Ok(value) = serde_json::from_slice::<Value>(&plaintext) else { break; };
                 if value.get("type").and_then(Value::as_str) == Some("confirm") {
                     room.phone_confirmed.store(true, Ordering::Release);
+                    room.discovery_changed.notify_one();
                     continue;
                 }
                 if !(room.local_confirmed.load(Ordering::Acquire)
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
-                let response = dispatch(&db, value).await;
+                let request_type = value.get("type").cloned().unwrap_or(Value::Null);
+                let mut response = dispatch(&db, value).await;
+                if response.get("type").and_then(Value::as_str) == Some("error") { response["request_type"] = request_type; }
                 if room.outgoing.send(response).await.is_err() { break; }
             }
         }
@@ -337,28 +352,61 @@ fn chunk_response(value: &Value) -> Result<Vec<Value>, serde_json::Error> {
 
 async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     match request.get("type").and_then(Value::as_str) {
+        Some("workspaces") => {
+            let path = request
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            if path
+                .as_ref()
+                .is_some_and(|path| path.len() > 4096 || path.chars().any(char::is_control))
+            {
+                return json!({"type":"error","message":"Invalid workspace path"});
+            }
+            match tokio::task::spawn_blocking(move || {
+                spawnt_platform::workspaces::browse(path.as_deref())
+            })
+            .await
+            {
+                Ok(Ok(listing)) => {
+                    let display = spawnt_platform::workspaces::display_path;
+                    json!({"type":"workspaces","path":display(&listing.path),"parent":listing.parent.as_deref().map(display),"roots":listing.roots.iter().map(|path| display(path)).collect::<Vec<_>>(),"folders":listing.folders.iter().map(|path| json!({"path":display(path),"name":path.file_name().unwrap_or_default().to_string_lossy()})).collect::<Vec<_>>(),"truncated":listing.truncated})
+                }
+                _ => {
+                    json!({"type":"error","message":"Cannot open that desktop folder. Choose another folder or enter its path."})
+                }
+            }
+        }
         Some("sessions") => {
             let result = db.lock().await.list_active_sessions(1000);
             match result {
                 Ok(sessions) => {
                     let hosted = spawnt_pty::list_active_sessions();
-                    let mut visible = sessions.iter().take(100).map(|session| {
-                        let can_prompt = session.state == spawnt_core::SessionState::Idle
-                            && prompt_host(session, &sessions, &hosted).is_some();
-                        json!({"id":session.id,"title":session.title,"agent":session.agent,"state":session.state,"can_prompt":can_prompt})
-                    }).collect::<Vec<_>>();
-                    for h in &hosted {
-                        if !visible
-                            .iter()
-                            .any(|v| v.get("id").and_then(Value::as_str) == Some(&h.session_id))
-                        {
-                            visible.push(json!({
-                                "id": h.session_id,
-                                "title": format!("{} ({})", h.agent, h.repo_path),
-                                "agent": h.agent,
-                                "state": "unknown",
-                                "can_prompt": false,
-                            }));
+                    let mut visible = remote_sessions(&sessions, &hosted);
+                    let bindings = session_bindings(&sessions, &hosted);
+                    let guard = db.lock().await;
+                    for row in &mut visible {
+                        if row["title"].as_str().is_none_or(str::is_empty) {
+                            let id = row["id"].as_str().unwrap_or_default();
+                            let native = bindings
+                                .iter()
+                                .find(|(_, record)| record.session_id == id)
+                                .map_or(id, |(session, _)| session.id.as_str());
+                            let title = crate::conversation_title(&guard, native)
+                                .or_else(|| {
+                                    guard
+                                        .get_session_focus_target(native)
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|target| target.repo_root)
+                                        .and_then(|root| {
+                                            Path::new(&root)
+                                                .file_name()
+                                                .map(|name| name.to_string_lossy().into_owned())
+                                        })
+                                })
+                                .unwrap_or_else(|| "New conversation".to_owned());
+                            row["title"] = json!(title);
                         }
                     }
                     json!({"type":"sessions","sessions":visible})
@@ -421,7 +469,9 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 conversation_session_id(session_id, &sessions, &spawnt_pty::list_active_sessions());
             match db.get_session_chat_before(&native_id, Some(limit as usize), before) {
                 Ok(events) => {
-                    let events = spawnt_adapters::antigravity::clean_stored_conversation(events);
+                    let events = spawnt_adapters::codex::clean_stored_conversation(
+                        spawnt_adapters::antigravity::clean_stored_conversation(events),
+                    );
                     json!({"type":"chat","session_id":session_id,"before":before,"events":events})
                 }
                 Err(_) => json!({"type":"error","message":"Could not load chat"}),
@@ -436,7 +486,9 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             };
             if text.trim().is_empty()
                 || text.len() > 4000
-                || text.chars().any(char::is_control)
+                || text
+                    .chars()
+                    .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
                 || text.trim_start().starts_with('/')
             {
                 return json!({"type":"error","message":"Invalid prompt"});
@@ -447,7 +499,8 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 .await
                 .list_active_sessions(1000)
                 .unwrap_or_default();
-            let session = sessions.iter().find(|session| session.id == session_id);
+            let native_id = conversation_session_id(session_id, &sessions, &hosted);
+            let session = sessions.iter().find(|session| session.id == native_id);
             let Some(session) = session else {
                 return json!({"type":"error","message":"Session unavailable; wait for the agent log to appear"});
             };
@@ -494,6 +547,39 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     }
 }
 
+fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -> Vec<Value> {
+    let bindings = session_bindings(sessions, hosted);
+    let mut visible = sessions.iter().take(100).map(|session| {
+        let host = bindings.iter().find(|(candidate, _)| candidate.id == session.id).map(|(_, record)| *record);
+        let can_prompt = session.state == spawnt_core::SessionState::Idle && host.is_some();
+        json!({"id":host.map_or(session.id.as_str(), |record| record.session_id.as_str()),"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"can_prompt":can_prompt,"last_event_at":session.last_event_at})
+    }).collect::<Vec<_>>();
+    for record in hosted {
+        if !matches!(
+            record.agent.as_str(),
+            "claude" | "claude-code" | "codex" | "gemini" | "gemini-cli"
+        ) {
+            continue;
+        }
+        if !visible
+            .iter()
+            .any(|row| row["id"].as_str() == Some(&record.session_id))
+        {
+            let title = Path::new(&record.repo_path).file_name().map_or_else(
+                || "New conversation".to_owned(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+            visible.push(json!({"id":record.session_id,"title":title,"agent":record.agent,"requested_model":record.model,"state":"waiting_for_history","can_prompt":false,"last_event_at":record.started_at}));
+        }
+    }
+    visible.sort_by(|a, b| {
+        b["last_event_at"]
+            .as_str()
+            .cmp(&a["last_event_at"].as_str())
+    });
+    visible
+}
+
 pub(crate) fn prompt_host<'a>(
     session: &Session,
     sessions: &[Session],
@@ -510,17 +596,10 @@ pub(crate) fn conversation_session_id(
     sessions: &[Session],
     hosted: &[spawnt_pty::SessionRecord],
 ) -> String {
-    let matches = sessions
-        .iter()
-        .filter(|session| {
-            session_host(session, sessions, hosted).is_some_and(|host| host.session_id == id)
-        })
-        .collect::<Vec<_>>();
-    if matches.len() == 1 {
-        matches[0].id.clone()
-    } else {
-        id.to_owned()
-    }
+    session_bindings(sessions, hosted)
+        .into_iter()
+        .find(|(_, record)| record.session_id == id)
+        .map_or_else(|| id.to_owned(), |(session, _)| session.id.clone())
 }
 
 pub(crate) fn session_host<'a>(
@@ -528,45 +607,64 @@ pub(crate) fn session_host<'a>(
     sessions: &[Session],
     hosted: &'a [spawnt_pty::SessionRecord],
 ) -> Option<&'a spawnt_pty::SessionRecord> {
-    if let Some(exact) = hosted
+    session_bindings(sessions, hosted)
+        .into_iter()
+        .find(|(candidate, _)| candidate.id == session.id)
+        .map(|(_, record)| record)
+}
+
+/// Resolves unique native/hosted pairs with repository discovery once per host.
+pub(crate) fn session_bindings<'s, 'h>(
+    sessions: &'s [Session],
+    hosted: &'h [spawnt_pty::SessionRecord],
+) -> Vec<(&'s Session, &'h spawnt_pty::SessionRecord)> {
+    let bindings = hosted
         .iter()
-        .find(|record| Some(record.child_pid) == session.pid || record.session_id == session.id)
-    {
-        return Some(exact);
-    }
-    let matching = |record: &spawnt_pty::SessionRecord, candidate: &Session| {
-        let agent = match record.agent.as_str() {
-            "claude" => "claude-code",
-            "gemini" => "gemini-cli",
-            other => other,
-        };
-        let path = Path::new(&record.repo_path);
-        let (root, remote) = spawnt_platform::resolve_git_repo_and_remote(path);
-        let root = root.as_deref().unwrap_or(path);
-        let project = Project::from_origin(remote.as_deref(), &root.to_string_lossy(), None);
-        let started = chrono::DateTime::parse_from_rfc3339(&record.started_at).ok();
-        agent == candidate.agent.as_str()
-            && project.id == candidate.project_id
-            && started.is_some_and(|start| {
-                let delta = candidate.started_at.signed_duration_since(start);
-                delta >= chrono::Duration::seconds(-5) && delta <= chrono::Duration::minutes(5)
-            })
-    };
-    let candidates = hosted
-        .iter()
-        .filter(|record| matching(record, session))
+        .filter_map(|record| {
+            let mut exact = sessions.iter().filter(|candidate| {
+                Some(record.child_pid) == candidate.pid || record.session_id == candidate.id
+            });
+            if let Some(candidate) = exact.next() {
+                return exact.next().is_none().then_some((candidate, record));
+            }
+            let agent = match record.agent.as_str() {
+                "claude" => "claude-code",
+                "gemini" => "gemini-cli",
+                other => other,
+            };
+            let path = Path::new(&record.repo_path);
+            let (root, remote) = spawnt_platform::resolve_git_repo_and_remote(path);
+            let root = root.as_deref().unwrap_or(path);
+            let project = Project::from_origin(remote.as_deref(), &root.to_string_lossy(), None);
+            let started = chrono::DateTime::parse_from_rfc3339(&record.started_at).ok()?;
+            let mut candidates = sessions.iter().filter(|candidate| {
+                !hosted.iter().any(|other| {
+                    other.session_id != record.session_id
+                        && (Some(other.child_pid) == candidate.pid
+                            || other.session_id == candidate.id)
+                }) && agent == candidate.agent.as_str()
+                    && project.id == candidate.project_id
+                    && {
+                        let delta = candidate.started_at.signed_duration_since(started);
+                        delta >= chrono::Duration::seconds(-5)
+                            && delta <= chrono::Duration::minutes(5)
+                    }
+            });
+            let candidate = candidates.next()?;
+            candidates.next().is_none().then_some((candidate, record))
+        })
         .collect::<Vec<_>>();
-    let record = *candidates.first()?;
-    if candidates.len() != 1
-        || sessions
-            .iter()
-            .filter(|candidate| matching(record, candidate))
-            .count()
-            != 1
-    {
-        return None;
-    }
-    Some(record)
+    bindings
+        .iter()
+        .filter(|(session, _)| {
+            bindings
+                .iter()
+                .filter(|(candidate, _)| candidate.id == session.id)
+                .count()
+                == 1
+        })
+        .copied()
+        .collect()
 }
 
 #[cfg(test)]
@@ -663,6 +761,28 @@ mod tests {
         );
         let mut other = session.clone();
         other.id = "codex:other".to_owned();
+        let visible = remote_sessions(
+            std::slice::from_ref(&session),
+            std::slice::from_ref(&record),
+        );
+        assert_eq!(visible.len(), 1, "a hosted session must not appear twice");
+        assert_eq!(visible[0]["id"], record.session_id);
+        assert_eq!(visible[0]["can_prompt"], true);
+        let mut exact = session.clone();
+        exact.pid = Some(record.child_pid);
+        let mut unbound = record.clone();
+        unbound.session_id = "new-unbound-host".into();
+        unbound.child_pid += 1;
+        assert_eq!(
+            session_host(
+                &exact,
+                std::slice::from_ref(&exact),
+                &[record.clone(), unbound]
+            )
+            .map(|record| record.session_id.as_str()),
+            Some(record.session_id.as_str()),
+            "an exact process binding wins over another terminal waiting for history"
+        );
         assert!(prompt_host(&session, &[session.clone(), other], &[record]).is_none());
     }
 
@@ -821,6 +941,38 @@ mod tests {
             serde_json::from_str(chunk["data"].as_str().expect("data")).expect("sessions");
         assert_eq!(sessions["type"], "sessions");
         assert_eq!(sessions["sessions"], json!([]));
+        let folder = tempfile::tempdir().expect("workspace browser root");
+        std::fs::create_dir(folder.path().join("sample-workspace")).expect("workspace");
+        std::fs::write(folder.path().join("private.txt"), "must not be returned").expect("file");
+        let request = phone_channel
+            .seal(
+                &serde_json::to_vec(&json!({"type":"workspaces","path":folder.path()}))
+                    .expect("request"),
+            )
+            .expect("seal");
+        phone_socket
+            .send(Message::Binary(
+                serde_json::to_vec(&request).expect("frame").into(),
+            ))
+            .await
+            .expect("send folders");
+        let bytes = phone_socket
+            .next()
+            .await
+            .expect("folder reply")
+            .expect("frame")
+            .into_data();
+        let frame: EncryptedRemoteFrame =
+            serde_json::from_slice(&bytes).expect("encrypted folder reply");
+        let chunk: Value =
+            serde_json::from_slice(&phone_channel.open(&frame).expect("decrypt folder reply"))
+                .expect("chunk");
+        let listing: Value =
+            serde_json::from_str(chunk["data"].as_str().expect("data")).expect("folders");
+        assert_eq!(listing["type"], "workspaces");
+        assert_eq!(listing["folders"].as_array().expect("folders").len(), 1);
+        assert_eq!(listing["folders"][0]["name"], "sample-workspace");
+        assert!(!listing.to_string().contains("private.txt"));
         assert!(manager.revoke().await);
         assert!(!manager.status().await.enabled);
         relay_task.abort();

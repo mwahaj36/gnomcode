@@ -41,7 +41,7 @@ test('agent replies render Markdown while user messages retain literal text', ()
   assert.match(markup, /<ul><li>First<\/li><li>Second<\/li><\/ul>/);
   assert.match(markup, /<pre><code[^>]*>let x = &quot;&lt;script&gt;&quot;;/);
   assert.match(markup, /<th>Check<\/th>/);
-  assert.match(markup, /<td>Pass<\/td>/);
+  assert.match(markup, /<td data-label="Result">Pass<\/td>/);
   assert.match(markup, /\*\*Keep this literal\*\*/);
   assert.doesNotMatch(markup, /<script>/);
 });
@@ -62,4 +62,30 @@ test('nested steps and multiline paragraphs retain their structure', () => {
 test('continued numbered steps keep the agent numbering', () => {
   const markup = presentation.renderChatCards([{role:'assistant',content:'4. Build\n5. Verify',created_at:'2026-10-29'}]);
   assert.match(markup, /<ol start="4"><li>Build<\/li><li>Verify<\/li><\/ol>/);
+});
+
+test('confirmed model changes appear as notices instead of chat bubbles', () => {
+  const markup = presentation.renderChatCards([
+    {role:'system',status:'model_changed',content:'Model changed from gpt-6.1-sol to o3',created_at:'2026-10-29'},
+    {role:'system',content:'Internal metadata',created_at:'2026-10-29'},
+  ]);
+  assert.match(markup, /sp-chat-notice/);
+  assert.match(markup, /Model changed from gpt-6.1-sol to o3/);
+  assert.doesNotMatch(markup, /sp-chat-card|Internal metadata/);
+});
+
+test('activity identifies the selected total and the plotted date window', () => {
+  const markup = presentation.renderActivity({range_label:'All time',total_tokens:2800000000,daily:[{date:'2026-08-24',total_tokens:118000000,chart_pct:20,turns:1},{date:'2026-10-29',total_tokens:128000000,chart_pct:30,turns:1}]});
+  assert.doesNotMatch(markup, /Daily activity/);
+  assert.match(markup,/All time/);
+  assert.match(markup,/Chart window:/);
+  assert.match(markup,/Aug 24, 2026/);
+  assert.match(markup,/Oct 29, 2026/);
+});
+
+test('wide Markdown tables keep escaped column labels for phone layout', () => {
+  const html = presentation.renderChatCards([{event_id:'wide',turn_index:1,role:'assistant',content:'| Name | Value | Unit | <img> |\n| --- | --- | --- | --- |\n| Test | 12 | ms | safe |',created_at:'2026-10-29T00:00:00Z'}]);
+  assert.match(html, /data-wide="true"/);
+  assert.match(html, /data-label="&lt;img&gt;"/);
+  assert.doesNotMatch(html, /<img>/);
 });

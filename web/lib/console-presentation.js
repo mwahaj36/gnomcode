@@ -56,9 +56,12 @@ export function renderActivity(report) {
   if (!report.daily.length) return '<section class="sp-activity"><h2>Activity</h2><p>No recorded usage in this period. Unobserved intervals are not counted as zero.</p></section>';
   const hours = report.range_label === 'Today';
   const days = report.daily.slice(-84);
+  const chartDate = value => new Date(value).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric',...(hours ? {} : {timeZone:'UTC'})});
+  const chartWindow = `${chartDate(days[0].date)} – ${chartDate(days.at(-1).date)}`;
   const label = day => hours ? new Date(day.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}) : day.date.slice(5);
   return `<section class="sp-activity" aria-label="Recorded token activity">
-    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Daily activity'}</h2><p>${hours ? 'Since local midnight · local time' : 'Recorded days · UTC'} · expand for details</p></div><div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-trust">Recorded tokens · ${escape(period(report))}</span></div></div></div>
+    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · local time' : `${escape(report.range_label || 'Selected period')} · daily totals · UTC`} · expand for details</p></div><div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-trust">Recorded tokens · ${escape(period(report))}</span></div></div></div>
+    <p class="sp-activity-caption">Chart window: ${escape(chartWindow)}. ${days.length < report.daily.length ? 'Latest 84 recorded intervals; the total above covers the full selected period.' : 'All recorded intervals in the selected period.'} Gaps are not counted as zero.</p>
     <div class="sp-activity-bars" role="img" aria-label="Recorded token volumes; measurements below">${days.map((day, index) => `<i style="--day-delay:${Math.min(index, 20) * 25}ms;--day-height:${Number.isFinite(day.chart_pct) ? Math.min(100, Math.max(0, day.chart_pct)) : 0}%" title="${escape(label(day))}: ${escape(tokens(day.total_tokens))} tokens"></i>`).join('')}</div>
     <div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(label(day))}</time><strong>${escape(tokens(day.total_tokens))}</strong></summary><div><span>API equivalent</span><strong>${cost(day, day.cost_usd)}</strong><span>${priced(day) ? coverage(day) : 'Price unavailable'}</span><span>${escape(day.turns)} recorded invocations</span></div></details>`).join('')}</div>
     <p class="sp-activity-caption">${days.length < report.daily.length ? 'Most recent 84 intervals. ' : ''}Only recorded activity is shown.</p>
@@ -163,8 +166,8 @@ function chatMarkdown(text) {
     if (line.includes('|') && lines[i + 1] && cells(lines[i + 1]).every(cell => /^:?-{3,}:?$/.test(cell))) {
       const head = cells(line); i += 2;
       const rows = [];
-      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(`<tr>${cells(lines[i++]).map(cell => `<td>${chatInline(cell)}</td>`).join('')}</tr>`);
-      html.push(`<div class="sp-chat-table"><table><thead><tr>${head.map(cell => `<th>${chatInline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(`<tr>${cells(lines[i++]).map((cell, index) => `<td data-label="${escape(head[index] || '')}">${chatInline(cell)}</td>`).join('')}</tr>`);
+      html.push(`<div class="sp-chat-table"${head.length > 3 ? ' data-wide="true"' : ''}><table><thead><tr>${head.map(cell => `<th>${chatInline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
       continue;
     }
     const list = line.match(/^\s*(?:([-+*])|\d+[.)])\s+(.+)$/);
@@ -191,11 +194,12 @@ function chatMarkdown(text) {
 }
 
 export function renderChatCards(events) {
-  events = events?.filter(evt => (evt.role === 'user' || evt.role === 'assistant') && evt.content?.trim());
+  events = events?.filter(evt => (evt.role === 'user' || evt.role === 'assistant' || (evt.role === 'system' && ['model_active','model_changed'].includes(evt.status))) && evt.content?.trim());
   if (!Array.isArray(events) || !events.length) {
     return '<div class="sp-chat-empty"><p>No conversation history recorded for this session.</p></div>';
   }
   return `<div class="sp-chat-stream">${events.map(evt => {
+    if (evt.role === 'system') return `<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleTimeString())}</time></div>`;
     const role = evt.role || 'system';
     const roleLabel = role === 'user' ? 'You' : 'Agent';
     const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';

@@ -1,11 +1,35 @@
 //! Pre-storage activity summary redaction engine (`SPEC §3.1`, Invariant 1).
 //!
-//! No prompts, file contents, or secrets may ever reach disk. Every short
-//! activity summary (`<= 120` chars) passes through [`redact_summary`] before
-//! creating an [`crate::ActivityEvent`].
+//! Activity summaries exclude prompts, file contents and secrets. Every short
+//! summary (`<= 120` chars) passes through [`redact_summary`] before creating an
+//! [`crate::ActivityEvent`]. Approved local conversation storage uses separate
+//! chat redaction and injected-context cleanup.
 
 /// Maximum character length of a persisted activity summary (`SPEC §4.1`).
 pub const MAX_SUMMARY_CHARS: usize = 120;
+
+/// Removes leading injected agent context while retaining any following user prompt.
+#[must_use]
+pub fn clean_user_text(mut text: &str) -> &str {
+    loop {
+        let trimmed = text.trim_start();
+        let closing = if trimmed.starts_with("# AGENTS.md instructions for ") {
+            "</INSTRUCTIONS>"
+        } else if trimmed.starts_with("<environment_context>") {
+            "</environment_context>"
+        } else if trimmed.starts_with("<user_instructions>") {
+            "</user_instructions>"
+        } else if trimmed.starts_with("<external_codex_apps_open_page>") {
+            "</external_codex_apps_open_page>"
+        } else {
+            return text;
+        };
+        let Some((_, remaining)) = trimmed.split_once(closing) else {
+            return "";
+        };
+        text = remaining.trim_start();
+    }
+}
 
 /// Redacts secrets, tokens, and sensitive environment variables from a tool
 /// activity summary, collapses whitespace onto a single line, and truncates to

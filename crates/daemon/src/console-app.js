@@ -1,3 +1,20 @@
+function showNotice(message) {
+      document.getElementById('app-notice-message').textContent = String(message);
+      document.getElementById('app-notice').hidden = false;
+    }
+    function confirmAction(message, actionLabel = 'Continue') {
+      const dialog = document.getElementById('confirm-dialog');
+      if (dialog.open) return Promise.resolve(false);
+      document.getElementById('confirm-heading').textContent = actionLabel;
+      document.getElementById('confirm-message').textContent = message;
+      document.getElementById('confirm-accept').textContent = actionLabel;
+      dialog.returnValue = 'cancel';
+      return new Promise(resolve => {
+        dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), {once:true});
+        dialog.showModal();
+      });
+    }
+
 function cycleTheme() {
       const current = document.documentElement.dataset.theme || 'system';
       const next = current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system';
@@ -22,7 +39,7 @@ function cycleTheme() {
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
     function jsArg(value) { return escapeHtml(JSON.stringify(String(value ?? ''))); }
     const consoleNavigation = document.querySelector('.sp-console-nav');
-    const updateNavOrientation = () => consoleNavigation.setAttribute('aria-orientation', matchMedia('(min-width: 761px)').matches ? 'vertical' : 'horizontal');
+    const updateNavOrientation = () => consoleNavigation.setAttribute('aria-orientation', 'vertical');
     updateNavOrientation(); window.addEventListener('resize', updateNavOrientation);
     let currentTimeline = 'all';
     let currentPage = 1;
@@ -48,7 +65,9 @@ function cycleTheme() {
     function setView(view, updateUrl = true) {
       document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view === 'auth' ? 'Account' : view[0].toUpperCase() + view.slice(1);
       activeView = view;
-      const titles = { overview: 'Your agent fleet', sessions: 'Sessions', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Settings' };
+      document.body.dataset.consoleView = view;
+      document.getElementById('chat-list-toggle').hidden = view !== 'sessions';
+      const titles = { overview: 'Dashboard', sessions: 'Workspace', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Profile', auth: 'Account' };
       document.getElementById('console-title').textContent = titles[view] || 'Your agent fleet';
       if (['overview', 'sessions', 'usage', 'limits'].includes(view)) {
         document.getElementById('view-console').setAttribute('aria-labelledby', `tab-btn-${view}`);
@@ -210,11 +229,11 @@ function cycleTheme() {
         }
         const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
         if (res.status === 402) {
-          alert("Exporting analytics requires a Pro license. Activate Pro under the 'Pro & Guardrails' tab.");
+          showNotice("Exporting analytics requires a Pro license. Activate Pro in Automations.");
           return;
         }
         if (!res.ok) {
-          alert("Failed to export data.");
+          showNotice("Failed to export data.");
           return;
         }
         const blob = await res.blob();
@@ -227,7 +246,7 @@ function cycleTheme() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(downloadUrl);
       } catch (err) {
-        alert("Export failed: " + err);
+        showNotice("Export failed: " + err);
       }
     }
 
@@ -330,9 +349,9 @@ function cycleTheme() {
           const pol = document.getElementById('relay-policy-select');
           const str = document.getElementById('relay-strategy-select');
           const thr = document.getElementById('relay-threshold-select');
-          if (pol) pol.value = data.config.policy;
-          if (str) str.value = data.config.strategy;
-          if (thr) thr.value = data.config.threshold_pct.toString();
+          for (const [select, value] of [[pol, data.config.policy], [str, data.config.strategy], [thr, data.config.threshold_pct]]) {
+            if (select && value != null && [...select.options].some(option => option.value === String(value))) select.value = String(value);
+          }
         }
         const table = document.getElementById('relay-table');
         if (table) {
@@ -374,19 +393,19 @@ function cycleTheme() {
           body: JSON.stringify({ policy: pol, strategy: str, threshold_pct: thr })
         });
         if (res.status === 402) {
-          alert('Context Relay configuration requires an active spawnt Pro license.');
+          showNotice('Context Relay configuration requires an active spawnt Pro license.');
           return;
         }
         if (res.ok) {
           loadRelayData();
         }
       } catch (err) {
-        alert('Failed to save config: ' + err.message);
+        showNotice('Failed to save config: ' + err.message);
       }
     }
 
     async function executeRelay(id) {
-      if (!confirm('Rotate session now? spawnt will create .spawnt/HANDOFF.md and spawn a clean session.')) return;
+      if (!await confirmAction('Rotate session now? spawnt will create .spawnt/HANDOFF.md and spawn a clean session.', 'Rotate session')) return;
       try {
         const res = await fetch('/api/v1/pro/relay/execute', {
           method: 'POST',
@@ -394,17 +413,17 @@ function cycleTheme() {
           body: JSON.stringify({ id })
         });
         if (res.status === 402) {
-          alert('Context Relay execution requires an active spawnt Pro license.');
+          showNotice('Context Relay execution requires an active spawnt Pro license.');
           return;
         }
         if (res.ok) {
-          alert('Context Relay handoff executed successfully! Clean session launched with 0 context tokens.');
+          showNotice('Context Relay handoff executed successfully! A fresh session was launched with a repository handoff.');
           loadRelayData();
         } else {
-          alert('Failed to execute relay handoff.');
+          showNotice('Failed to execute relay handoff.');
         }
       } catch (err) {
-        alert('Error: ' + err.message);
+        showNotice('Error: ' + err.message);
       }
     }
 
@@ -419,7 +438,7 @@ function cycleTheme() {
           loadRelayData();
         }
       } catch (err) {
-        alert('Error: ' + err.message);
+        showNotice('Error: ' + err.message);
       }
     }
 
@@ -450,12 +469,12 @@ function cycleTheme() {
     }
 
     async function removeLicenseKey() {
-      if (!confirm('Remove the saved offline license? Local features remain free.')) return;
+      if (!await confirmAction('Remove the saved offline license? Local features remain free.', 'Remove license')) return;
       try {
         await fetch('/api/v1/license', { method: 'DELETE', headers });
         loadProData();
       } catch (err) {
-        alert(err);
+        showNotice(err);
       }
     }
 
@@ -468,7 +487,7 @@ function cycleTheme() {
         });
         loadProData();
       } catch (err) {
-        alert(err);
+        showNotice(err);
       }
     }
 
@@ -477,7 +496,7 @@ function cycleTheme() {
         await fetch(`/api/v1/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE', headers });
         loadProData();
       } catch (err) {
-        alert(err);
+        showNotice(err);
       }
     }
 
@@ -626,6 +645,7 @@ function cycleTheme() {
       if (activeChatSession) chatDrafts.set(activeChatSession, input.value);
       activeChatSession = sessionId;
       input.value = chatDrafts.get(sessionId) || '';
+      requestAnimationFrame(resizePrompt);
       document.getElementById('chat-send-btn').disabled = pendingPrompts.has(sessionId);
       document.getElementById('chat-delivery-status').textContent = '';
     }
@@ -633,7 +653,7 @@ function cycleTheme() {
     async function renderIdeSessions() {
       const presentation = await import('/console-presentation.js');
       const known = new Set(ideSessions.map(session => session.id));
-      const hosted = hostedSessions.filter(session => !known.has(session.session_id)).map(session => ({ ...session, id: session.session_id, title: session.repo_path, last_event_at: session.started_at, state: 'hosted' }));
+      const hosted = hostedSessions.filter(session => !known.has(session.session_id)).map(session => ({ ...session, id: session.session_id, title: session.title || 'New conversation', last_event_at: session.started_at, state: 'hosted' }));
       document.getElementById('ide-session-list').innerHTML = presentation.renderSessionList([...hosted, ...ideSessions], activeChatSession, document.getElementById('ide-session-search').value);
     }
 
@@ -646,37 +666,67 @@ function cycleTheme() {
       renderIdeSessions(); loadInstalledAgents();
     }
 
+    function showCurrentChatModel() {
+      const select = document.getElementById('chat-model-select');
+      const session = ideSessions.find(session => session.id === activeChatSession);
+      const hosted = hostedSessions.find(session => session.session_id === activeChatSession);
+      const model = session?.model || hosted?.model || '';
+      const observed = Boolean(session?.model || hosted?.model_observed);
+      const status = document.getElementById('chat-model-status');
+      const message = (observed ? `Current model: ${model}` : model ? `Requested model: ${model} · awaiting agent confirmation` : 'CLI default · waiting for the agent to report its model') + (select.disabled ? ' · Model switching unavailable' : '');
+      if (status.textContent !== message) status.textContent = message;
+      if (select.dataset.sessionId !== activeChatSession || select.dataset.currentModel !== model) {
+        select.querySelectorAll('[data-current-only]').forEach(option => option.remove());
+        if (model && ![...select.options].some(option => option.value === model)) {
+          const option = document.createElement('option'); option.value = model; option.textContent = `${model} (current)`; option.disabled = true; option.dataset.currentOnly = ''; select.append(option);
+        }
+        select.value = model;
+        select.dataset.sessionId = activeChatSession;
+        select.dataset.currentModel = model;
+      }
+      document.getElementById('chat-switch-btn').disabled = select.disabled || !select.value || select.selectedOptions[0]?.disabled || select.value === select.dataset.currentModel;
+    }
+
     async function loadChatModels() {
       const select = document.getElementById('chat-model-select');
       const button = document.getElementById('chat-switch-btn');
-      const status = document.getElementById('chat-model-status');
+      const sessionId = activeChatSession;
       try {
         const models = await apiJson('/api/v1/models', { headers });
-        const selected = select.value;
-        select.innerHTML = '<option value="">Choose a model</option>';
+        if (sessionId !== activeChatSession) return;
+        select.innerHTML = '<option value="">Agent default</option>';
         const available = models.models || models;
         for (const model of available) {
           const option = document.createElement('option'); option.value = model.model;
           option.dataset.agent = model.agent; option.textContent = model.display_name || model.model; select.append(option);
         }
         select.disabled = available.length === 0; button.disabled = available.length === 0;
-        if (available.some(model => model.model === selected)) select.value = selected;
-        status.textContent = available.length ? `Codex CLI catalog${available[0].observed_at ? ' · ' + new Date(available[0].observed_at).toLocaleString() : ''}. Provider access is checked by the CLI.` : 'No fresh CLI model catalog. Open Codex CLI to refresh it; use other agents’ own model selectors.';
+        delete select.dataset.sessionId;
+        showCurrentChatModel();
       } catch {
+        if (sessionId !== activeChatSession) return;
         select.innerHTML = '<option value="">Model catalog unavailable</option>'; select.disabled = true; button.disabled = true;
-        status.textContent = 'Model list unavailable. Reopen this conversation to retry.';
+        delete select.dataset.sessionId;
+        showCurrentChatModel();
       }
     }
 
     async function switchChatModel() {
       const select = document.getElementById('chat-model-select');
       if (!activeChatSession || !select.value) return;
+      const sourceSession = activeChatSession;
+      const previousModel = select.dataset.currentModel || 'CLI default';
+      const targetModel = select.value;
       const button = document.getElementById('chat-switch-btn'); button.disabled = true;
       try {
         const result = await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/switch`, { method:'POST', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ target_model:select.value, agent:select.selectedOptions[0].dataset.agent }) });
-        await loadSessions(); await loadChat(result.session_id);
-      } catch { document.getElementById('chat-status').textContent = 'Model handoff failed. Check the target CLI installation and login, then retry.'; }
-      finally { button.disabled = false; }
+        await loadSessions();
+        if (activeChatSession === sourceSession) {
+          await loadChat(result.session_id);
+          document.getElementById('chat-delivery-status').textContent = `Requested model change from ${previousModel} to ${targetModel}. New session started; waiting for agent confirmation.`;
+        }
+      } catch { if (activeChatSession === sourceSession) document.getElementById('chat-delivery-status').textContent = 'Model handoff failed. Check the target CLI installation and login, then retry.'; }
+      finally { showCurrentChatModel(); }
     }
 
     async function focusChat() {
@@ -757,6 +807,21 @@ function cycleTheme() {
       }
     }
 
+    document.getElementById('launch-workspace-browse').hidden = !window.spawntDesktop?.chooseWorkspace;
+    async function chooseWorkspace() {
+      try {
+        const folder = await window.spawntDesktop?.chooseWorkspace();
+        if (folder) document.getElementById('launch-repo-input').value = folder;
+      } catch { document.getElementById('launch-status').textContent = 'Folder picker unavailable. Enter the workspace path and retry.'; }
+    }
+
+    function resizePrompt() {
+      const input = document.getElementById('chat-prompt-text');
+      input.style.height = 'auto';
+      input.style.height = `${Math.min(160, Math.max(36, input.scrollHeight))}px`;
+    }
+    document.getElementById('chat-prompt-text').addEventListener('input', resizePrompt);
+
     async function sendPrompt(event) {
       if (event) event.preventDefault();
       const input = document.getElementById('chat-prompt-text');
@@ -779,7 +844,7 @@ function cycleTheme() {
         }
         if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
         if (sessionId === activeChatSession) {
-          if (input.value.trim() === text) input.value = '';
+          if (input.value.trim() === text) { input.value = ''; resizePrompt(); }
           if (status) status.textContent = 'Prompt delivered to agent.';
           input.focus();
         }
@@ -856,9 +921,10 @@ function cycleTheme() {
       document.getElementById('ide-launcher').hidden = true;
       const session = ideSessions.find(session => session.id === sessionId);
       const hosted = hostedSessions.find(session => session.session_id === sessionId);
-      document.getElementById('session-chat-heading').textContent = session?.title || hosted?.repo_path || 'Conversation';
-      document.getElementById('chat-session-label').textContent = `${session?.agent || hosted?.agent || 'Agent'} · ${session?.state || 'hosted'} · ${sessionId}`;
+      document.getElementById('session-chat-heading').textContent = session?.title || hosted?.title || 'New conversation';
+      document.getElementById('chat-session-label').textContent = `${session?.agent || hosted?.agent || 'Agent'} · ${session?.state || 'hosted'}`;
       renderIdeSessions();
+      showCurrentChatModel();
       if (!silent) loadChatModels();
       const panel = document.getElementById('session-chat-panel');
       const status = document.getElementById('chat-status');
@@ -882,20 +948,40 @@ function cycleTheme() {
         const messageCount = chatEvents.filter(event => (event.role === 'user' || event.role === 'assistant') && event.content?.trim()).length;
         if (status) status.textContent = `${messageCount} recorded message${messageCount === 1 ? '' : 's'}`;
         panel.hidden = activeView !== 'sessions';
-        if (!earlier && !silent) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (!silent) requestAnimationFrame(resizePrompt);
       } catch {
         if (request !== chatRequest || sessionId !== activeChatSession) return;
         if (!silent && status) status.textContent = 'Could not load conversation history.';
         panel.hidden = activeView !== 'sessions';
+        if (!silent) requestAnimationFrame(resizePrompt);
       }
     }
 
     async function deleteChat() {
-      if (!activeChatSession || !confirm('Permanently delete local chat history for this session? This action cannot be undone.')) return;
+      if (!activeChatSession || !await confirmAction('Permanently delete local chat history for this session? This action cannot be undone.', 'Delete history')) return;
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/chat`, { method: 'DELETE', headers });
         await loadChat(activeChatSession);
       } catch { document.getElementById('chat-status').textContent = 'Could not delete local chat history.'; }
+    }
+
+    try {
+      const pinned = localStorage.getItem('spawnt-navigation-pinned') === 'true';
+      document.body.classList.toggle('navigation-pinned', pinned);
+      document.querySelector('.rail-pin').setAttribute('aria-pressed', String(pinned));
+    } catch (_) {}
+    if (matchMedia('(max-width: 760px)').matches) {
+      document.body.classList.add('chat-list-collapsed');
+      document.getElementById('chat-list-toggle').setAttribute('aria-expanded', 'false');
+    }
+    function pinNavigation() {
+      const pinned = document.body.classList.toggle('navigation-pinned');
+      document.querySelector('.rail-pin').setAttribute('aria-pressed', String(pinned));
+      try { localStorage.setItem('spawnt-navigation-pinned', String(pinned)); } catch (_) {}
+    }
+    function toggleChatList() {
+      const collapsed = document.body.classList.toggle('chat-list-collapsed');
+      document.getElementById('chat-list-toggle').setAttribute('aria-expanded', String(!collapsed));
     }
 
     document.addEventListener('click', event => {
@@ -941,7 +1027,8 @@ function cycleTheme() {
         if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
 
         summaryState.activeCount = res.ongoing_count ?? res.active_count ?? null; await refreshSummary();
-        document.getElementById('pagination-info').textContent = `Page ${res.page} of ${res.total_pages} (${res.total_count} total)`;
+        document.getElementById('pagination-info').textContent = res.total_pages > 1 ? `${res.page} / ${res.total_pages}` : `${res.total_count} conversation${res.total_count === 1 ? '' : 's'}`;
+        document.getElementById('pagination-controls').hidden = res.total_pages <= 1;
         document.getElementById('prev-btn').disabled = res.page <= 1;
         document.getElementById('next-btn').disabled = res.page >= res.total_pages;
 
@@ -1063,7 +1150,7 @@ function cycleTheme() {
 
     async function unpairSession() {
       if (accountWriteBusy) return;
-      if (!confirm('Disconnect this desktop from your account? Recorded local sessions will stay on this device.')) return;
+      if (!await confirmAction('Disconnect this desktop from your account? Recorded local sessions will stay on this device.', 'Disconnect desktop')) return;
       accountWriteBusy = true;
       const button = document.getElementById('auth-disconnect-button'); button.disabled = true; button.textContent = 'Disconnecting...';
       try {
@@ -1074,10 +1161,10 @@ function cycleTheme() {
         if (res.ok) {
           await checkAuthSession();
         } else {
-          alert('Could not disconnect. Reload the account status and retry.');
+          showNotice('Could not disconnect. Reload the account status and retry.');
         }
       } catch (err) {
-        alert('Connection could not be confirmed. Reload the account status before retrying.');
+        showNotice('Connection could not be confirmed. Reload the account status before retrying.');
       } finally { accountWriteBusy = false; button.disabled = false; button.textContent = 'Disconnect desktop'; }
     }
 
@@ -1126,10 +1213,11 @@ function cycleTheme() {
           document.getElementById('settings-claude-plan').value = user.claude_plan_usd || 20;
           document.getElementById('settings-google-plan').value = user.google_plan_usd || 0;
         }
-        if (stats) {
+        if (stats && [stats.total_turns, stats.total_projects, stats.db_size_bytes].every(Number.isFinite)) {
           document.getElementById('settings-db-stats').textContent =
             `Local Storage: ${stats.total_turns} turns EXACT across ${stats.total_projects} projects EXACT (${(stats.db_size_bytes / 1024 / 1024).toFixed(2)} MB EXACT)`;
         }
+        else document.getElementById('settings-db-stats').textContent = 'Storage measurements unavailable · UNKNOWN';
         await loadCustomPricingSettings();
         await loadRemoteStatus();
         return true;
@@ -1222,22 +1310,34 @@ function cycleTheme() {
     }
 
 
+    let remoteWasPaired = null;
+    let remoteNoticeTimer;
     function showRemoteStatus(status) {
+      const badge = document.getElementById('remote-connection-state');
+      if (remoteWasPaired !== null && Boolean(status.paired) !== remoteWasPaired) {
+        remoteWasPaired = Boolean(status.paired);
+        document.getElementById('remote-connection-message').textContent = status.paired ? 'Phone connected' : 'Phone disconnected';
+        badge.hidden = false;
+        clearTimeout(remoteNoticeTimer);
+        remoteNoticeTimer = setTimeout(() => { badge.hidden = true; }, 5000);
+      }
+      remoteWasPaired = Boolean(status.paired);
+      document.getElementById('remote-confirmation').hidden = !status.verify_code || status.paired;
       const output = document.getElementById('remote-status');
       const link = document.getElementById('remote-link');
       if (!output || !link) return;
       output.textContent = !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? `Compare code ${status.verify_code} with your phone, then confirm on both devices.` : 'Waiting for phone to open the pairing link.';
-      if (status.room_id && status.public_key && status.relay_url) {
+      if (!status.paired && status.room_id && status.public_key && status.relay_url) {
         const fragment = new URLSearchParams({ room: status.room_id, key: status.public_key, relay: status.relay_url });
         const productOrigin = new URL(document.querySelector('.sp-settings-resources a').href).origin;
         const pairingUrl = `${productOrigin}/remote#${fragment}`;
-        link.innerHTML = `<a href="${escapeHtml(pairingUrl)}" target="_blank" rel="noopener noreferrer">Open pairing link on your phone</a><p>Copy this link to your phone: <code>${escapeHtml(pairingUrl)}</code></p>`;
+        link.innerHTML = `${status.pairing_qr && !status.paired ? `<div class="pairing-qr" role="img" aria-label="Scan this QR code on your phone to pair">${status.pairing_qr}</div>` : ''}<p>On your phone, sign in and open <a href="${escapeHtml(productOrigin)}/console?view=settings" target="_blank" rel="noopener noreferrer">Profile</a> to find this desktop, or scan the code.</p><details><summary>Use a pairing link instead</summary><a href="${escapeHtml(pairingUrl)}" target="_blank" rel="noopener noreferrer">Open pairing link</a><p class="pairing-link">${escapeHtml(pairingUrl)}</p></details>`;
       } else link.textContent = '';
     }
 
     async function loadRemoteStatus() {
       try { showRemoteStatus(await apiJson('/api/v1/remote/status', { headers })); }
-      catch { document.getElementById('remote-status').textContent = 'Remote status unavailable.'; }
+      catch { document.getElementById('remote-status').textContent = 'Remote status unavailable.'; document.getElementById('remote-connection-state').hidden = true; }
     }
 
     async function startRemote() {
@@ -1263,7 +1363,7 @@ function cycleTheme() {
       const target = event.target.closest('[data-action]');
       if (!target) return;
       const action = target.dataset.action;
-      if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); return; }
+      if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); if (event.detail && matchMedia('(max-width:760px)').matches) document.querySelector('.view-content.active')?.focus({preventScroll:true}); return; }
       if (action.startsWith('export:')) { exportData(action.slice(7)); return; }
     async function handlePermissionAction(sessionId, action, toolCallId) {
       try {
@@ -1278,12 +1378,13 @@ function cycleTheme() {
       }
     }
 
-    const actions = { theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+    const actions = { 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'pin-navigation': pinNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
       'toggle-stream': toggleStream,
       'close-chat': showLauncher, 'new-session': showLauncher,
       'switch-model': switchChatModel, 'focus-chat': focusChat,
+      'choose-workspace': chooseWorkspace,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
@@ -1294,6 +1395,7 @@ function cycleTheme() {
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
     document.addEventListener('change', event => {
+      if (event.target.id === 'chat-model-select') { showCurrentChatModel(); return; }
       if (event.target.id === 'launch-agent-select') {
         updateAgentInstallHint();
         return;
@@ -1328,7 +1430,7 @@ function cycleTheme() {
     if (initialView === 'sessions') loadInstalledAgents();
     setInterval(() => {
       pollLocalData();
-      if (activeView === 'settings') loadRemoteStatus();
+      loadRemoteStatus();
       if (activeView === 'sessions' && !installedAgents.length) loadInstalledAgents();
       const chatPanel = document.getElementById('session-chat-panel');
       if (chatPanel && !chatPanel.hidden && activeChatSession) {
