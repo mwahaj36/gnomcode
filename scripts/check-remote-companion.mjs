@@ -18,11 +18,12 @@ async function reply(value) {
   const frame=await channel.seal({type:'chunk',data:JSON.stringify(value),final:true});
   desktop.send(new TextEncoder().encode(JSON.stringify(frame)));
 }
-function bindDesktop(){desktop.onmessage=event=>{
+function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=event=>{
   incoming=incoming.then(async()=>{
+    if(connection!==desktop)return;
     const frame=JSON.parse(new TextDecoder().decode(event.data));
-    if(frame.type==='hello') {const nonce=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');resumeContext=`${room}:${nonce}:${frame.public_key}`;channel=await createChannel(keys,frame.public_key,`${room}:${nonce}`,'desktop');desktop.send(new TextEncoder().encode(JSON.stringify({type:'challenge',nonce})));return;}
-    const message=await channel.open(frame); requests.push(message);
+    if(frame.type==='hello') {if(channel)return;const nonce=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');resumeContext=`${room}:${nonce}:${frame.public_key}`;const fresh=await createChannel(keys,frame.public_key,`${room}:${nonce}`,'desktop');if(connection!==desktop)return;channel=fresh;desktop.send(new TextEncoder().encode(JSON.stringify({type:'challenge',nonce})));return;}
+    const message=await channel.open(frame);if(connection!==desktop)return; requests.push(message);
     if(message.type==='confirm') {await reply({type:'confirm'});await reply({type:'trusted',secret:secretHex});}
     else if(message.type==='resume'){const proof=Uint8Array.from(message.proof.match(/../g),part=>parseInt(part,16));assert.equal(await crypto.subtle.verify('HMAC',proofKey,proof,new TextEncoder().encode(resumeContext)),true);resumes++;await reply({type:'resumed'});}
     else if(message.type==='sessions') { sessionReads++; await reply({type:'sessions',sessions:sessionReads===1?[]:[{id:'external-history',title:'External history',agent:'codex',state:'idle',hosted:false,can_prompt:false},...(launched?[{id:'codex:new',title:'New phone conversation',agent:'codex',state:'waiting_for_history',hosted:true,can_prompt:true}]:[]),{hosted:true,id:'codex-hosted',title:'Review authentication',agent:'codex',model:sessionReads>2?'gpt-6.1-sol':null,state:sessionReads>2?'idle':'waiting_for_history',can_prompt:sessionReads>2}]}); }
