@@ -454,10 +454,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             let Some(record) = prompt_host(session, &sessions, &hosted) else {
                 return json!({"type":"error","message":"Prompting requires an idle agent with a unique hosted session"});
             };
-            if spawnt_pty::send_input(record, format!("{text}\r").as_bytes())
-                .await
-                .is_ok()
-            {
+            if spawnt_pty::send_prompt(record, text).await.is_ok() {
                 json!({"type":"prompt_ack","session_id":session_id})
             } else {
                 json!({"type":"error","message":"Prompt could not be delivered"})
@@ -671,6 +668,26 @@ mod tests {
 
     #[tokio::test]
     async fn pairing_confirms_both_peers_and_serves_encrypted_sessions() {
+        if std::env::var_os("SPAWNT_TEST_ISOLATED_PAIRING").is_none() {
+            let home = tempfile::tempdir().expect("isolated pairing home");
+            let output =
+                std::process::Command::new(std::env::current_exe().expect("test executable"))
+                    .args([
+                        "--exact",
+                        "remote::tests::pairing_confirms_both_peers_and_serves_encrypted_sessions",
+                    ])
+                    .env("SPAWNT_HOME", home.path())
+                    .env("SPAWNT_TEST_ISOLATED_PAIRING", "1")
+                    .output()
+                    .expect("isolated pairing test");
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("listener");

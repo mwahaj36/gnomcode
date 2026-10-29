@@ -205,7 +205,7 @@ async fn main() -> Result<()> {
         Commands::Launch { agent, repo, model } => cmd_launch(&agent, repo, model).await,
         Commands::Stop { session_id } => cmd_stop(&session_id).await,
         Commands::Attach { session_id } => cmd_attach(&session_id).await,
-        Commands::Models => cmd_models(&db_path).await,
+        Commands::Models => cmd_models().await,
         Commands::Switch { session_id, model } => cmd_switch(&session_id, &model, &db_path).await,
         Commands::Resume { session_id, prompt } => cmd_resume(&session_id, prompt, &db_path).await,
         Commands::Policy { set } => cmd_policy(set, &db_path).await,
@@ -1038,80 +1038,24 @@ async fn cmd_attach(session_id: &str) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_models(db_path: &Path) -> Result<()> {
-    let db = spawnt_store::Database::open(db_path)?;
-    let quotas = db.get_latest_quota_snapshots().unwrap_or_default();
-
-    let candidates = [
-        (
-            "claude-code",
-            "claude-3-5-sonnet-20241022",
-            "Claude 3.5 Sonnet",
-            "anthropic",
-        ),
-        (
-            "claude-code",
-            "claude-3-opus-20240229",
-            "Claude 3 Opus",
-            "anthropic",
-        ),
-        (
-            "claude-code",
-            "claude-3-5-haiku-20241022",
-            "Claude 3.5 Haiku",
-            "anthropic",
-        ),
-        ("codex", "o3", "OpenAI o3", "openai"),
-        ("codex", "o4-mini", "OpenAI o4-mini", "openai"),
-        ("codex", "codex-mini", "OpenAI Codex Mini", "openai"),
-        ("gemini-cli", "gemini-2.5-pro", "Gemini 2.5 Pro", "google"),
-        (
-            "gemini-cli",
-            "gemini-2.5-flash",
-            "Gemini 2.5 Flash",
-            "google",
-        ),
-    ];
-
-    println!(
-        "{:<12} {:<28} {:<10} {:>10} {:>12} {:>12}",
-        "AGENT", "MODEL", "PROVIDER", "CONTEXT", "QUOTA REM.", "PRICE IN/OUT"
-    );
-    println!(
-        "{:-<12} {:-<28} {:-<10} {:-<10} {:-<12} {:-<12}",
-        "", "", "", "", "", ""
-    );
-
-    for (agent, model, _display, provider) in candidates {
-        let pricing = spawnt_core::pricing::lookup_model_pricing(model);
-        let (cw, in_cost, out_cost) = match pricing {
-            Some(p) => (
-                p.context_window,
-                p.input_per_mtok_usd,
-                p.output_per_mtok_usd,
-            ),
-            None => (128_000, 0.0, 0.0),
-        };
-
-        let quota_str = quotas
-            .iter()
-            .find(|q| q.provider == provider)
-            .map(|q| format!("{}%", (100.0 - q.used_pct).clamp(0.0, 100.0).round() as u32))
-            .unwrap_or_else(|| "100%".to_owned());
-
-        let price_str = format!("${:.1}/${:.1}", in_cost, out_cost);
-
+async fn cmd_models() -> Result<()> {
+    let models = tokio::task::spawn_blocking(spawnt_daemon::api::available_models).await?;
+    if models.is_empty() {
         println!(
-            "{:<12} {:<28} {:<10} {:>10} {:>12} {:>12}",
-            agent,
-            model,
-            provider,
-            format!("{}k", cw / 1000),
-            quota_str,
-            price_str
+            "No fresh CLI model catalog is available. Open Codex CLI to refresh its catalog; use other agents' own model selectors."
         );
+    } else {
+        println!(
+            "{:<12} {:<28} {:<20} OBSERVED (UTC)",
+            "AGENT", "MODEL", "SOURCE"
+        );
+        for model in models {
+            println!(
+                "{:<12} {:<28} {:<20} {}",
+                model.agent, model.model, model.availability_source, model.observed_at
+            );
+        }
     }
-
     Ok(())
 }
 

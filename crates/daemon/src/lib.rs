@@ -159,8 +159,7 @@ pub(crate) async fn execute_switch(
         "Continue the task from session {} in this workspace. Inspect the current files before editing.\n\nRecent user objectives:\n{}\n\nChanged files:\n{}\n",
         packet.session_id, packet.prompt_summary, files
     );
-    let input = format!("\x1b[200~{prompt}\x1b[201~\r");
-    let delivered = spawnt_pty::send_input(&record, input.as_bytes())
+    let delivered = spawnt_pty::send_prompt(&record, &prompt)
         .await
         .map_err(|_| HandoffError::Launch("could not send handoff prompt".to_owned()));
     if delivered.is_err() {

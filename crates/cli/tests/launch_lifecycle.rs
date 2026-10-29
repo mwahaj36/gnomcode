@@ -4,20 +4,22 @@ use std::process::Command;
 use std::time::Duration;
 
 #[test]
-fn models_command_runs_offline_and_lists_catalog() {
+fn models_command_reports_missing_catalog_without_inventing_models() {
     let root = tempfile::tempdir().expect("root");
     let binary = env!("CARGO_BIN_EXE_spawnt");
     let output = Command::new(binary)
         .arg("models")
         .env("SPAWNT_HOME", root.path())
+        .env("CODEX_HOME", root.path())
         .output()
         .expect("models command");
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("claude-code"));
-    assert!(stdout.contains("codex"));
-    assert!(stdout.contains("gemini-cli"));
+    assert!(stdout.contains("No fresh CLI model catalog"));
+    assert!(!stdout.contains("claude-3"));
+    assert!(!stdout.contains("codex-mini"));
+    assert!(!stdout.contains("gemini-2.5"));
 }
 
 #[test]
