@@ -201,7 +201,7 @@ export function renderChatCards(events) {
     return '<div class="sp-chat-empty"><p>No conversation history recorded for this session.</p></div>';
   }
   return `<div class="sp-chat-stream">${events.map(evt => {
-    if (evt.role === 'system') return `<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleTimeString())}</time></div>`;
+    if (evt.role === 'system') return `<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleString())}</time></div>`;
     const role = evt.role || 'system';
     const roleLabel = role === 'user' ? 'You' : 'Agent';
     const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';

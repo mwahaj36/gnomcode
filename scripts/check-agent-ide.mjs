@@ -118,13 +118,13 @@ try {
   assert.equal(await page.locator('#app-notice').isHidden(), true);
   await page.unroute('**/api/v1/sessions/*/prompt');
   await page.locator('#chat-model-select').selectOption('o3');
-  await page.locator('#chat-switch-btn').click();
   await page.getByRole('heading',{name:'Model handoff',exact:true}).waitFor();
   assert.doesNotMatch(await page.locator('#chat-session-label').textContent(), /codex-switched/);
   assert.deepEqual(writes.find(write => write.path.endsWith('/switch')).body, {target_model:'o3',agent:'codex'});
-  assert.equal(await page.locator('#chat-prompt-text').inputValue(), '', 'drafts must not leak into another session');
+  assert.equal(await page.locator('#chat-prompt-text').inputValue(), 'Keep my draft', 'an explicit model handoff carries the unsent draft');
   await page.getByRole('button', {name:/Review authentication/}).click();
-  assert.equal(await page.locator('#chat-prompt-text').inputValue(), 'Keep my draft', 'returning to a session restores its draft');
+  assert.equal(await page.locator('#chat-prompt-text').inputValue(), '', 'handoff moves the unsent draft to the target session');
+  await page.locator('#chat-prompt-text').fill('Keep my draft');
   let finishSend;
   const sendStarted = new Promise(resolve => {
     page.route('**/api/v1/sessions/*/prompt', route => { finishSend = () => route.fulfill({status:200,contentType:'application/json',body:'{}'}); resolve(); });
@@ -134,7 +134,6 @@ try {
   await page.locator('.sp-chat-user').filter({hasText:'Keep my draft'}).waitFor();
   await page.locator('.sp-chat-waiting').getByText('Sending...').waitFor();
   await page.locator('#chat-model-select').selectOption('o3');
-  await page.locator('#chat-switch-btn').click();
   await page.getByRole('heading',{name:'Model handoff',exact:true}).waitFor();
   await page.locator('#chat-prompt-text').fill('New session draft');
   await finishSend();
@@ -180,11 +179,10 @@ try {
     await page.evaluate(() => delete document.documentElement.dataset.theme);
   }
   await page.setViewportSize({width:1440,height:1000});
-  await page.locator('#navigation-toggle').click();
-  assert.equal(await page.locator('#navigation-toggle').getAttribute('aria-expanded'),'true');
-  await page.mouse.move(1000,500);
-  assert.equal(await page.locator('.sp-console-nav').evaluate(node=>Math.round(node.getBoundingClientRect().width)),208,'rail state does not change on pointer leave');
-  await page.locator('#navigation-toggle').click();
+  await page.locator('.sp-console-nav').hover();await page.waitForTimeout(200);
+  assert.equal(await page.locator('.sp-console-nav').evaluate(node=>Math.round(node.getBoundingClientRect().width)),208,'hover opens the rail');
+  await page.mouse.move(1000,500);await page.waitForTimeout(200);
+  assert.equal(await page.locator('.sp-console-nav').evaluate(node=>Math.round(node.getBoundingClientRect().width)),64,'pointer leave collapses the rail');
   await page.locator('#tab-btn-settings').click();
   await page.evaluate(() => {document.documentElement.dataset.theme = 'dark'; document.activeElement?.blur();});
   await page.mouse.move(1000, 500);

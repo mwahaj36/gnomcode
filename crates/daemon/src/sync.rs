@@ -133,6 +133,7 @@ fn discovery_offer(status: &crate::remote::PairingStatus, now: DateTime<Utc>) ->
         "expires_at": expires_at,
         "name": "My desktop",
         "pairing_code": status.pairing_code()?,
+        "protocol_version": 2,
     }))
 }
 
@@ -436,6 +437,8 @@ mod tests {
     fn discovery_offer_is_public_expiring_and_never_contains_the_confirmation_code() {
         let now = chrono::Utc::now();
         let mut status = crate::remote::PairingStatus {
+            remembered: false,
+            trust_expires_at: None,
             enabled: true,
             paired: false,
             room_id: Some("a".repeat(32)),
@@ -445,7 +448,7 @@ mod tests {
             expires_at: Some((now + chrono::Duration::minutes(5)).to_rfc3339()),
         };
         let offer = super::discovery_offer(&status, now).expect("offer");
-        assert_eq!(offer.as_object().expect("object").len(), 6);
+        assert_eq!(offer.as_object().expect("object").len(), 7);
         assert_eq!(offer["pairing_code"], "63311530");
         assert!(!offer.to_string().contains("123456"));
         assert!(offer.get("verify_code").is_none());
