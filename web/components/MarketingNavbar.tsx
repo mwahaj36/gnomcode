@@ -36,10 +36,10 @@ export default function MarketingNavbar({ showTheme = false }: { showTheme?: boo
         <Link href="/#agents" onClick={() => setMenuOpen(false)}>Agents</Link>
         <Link href="/docs">Docs</Link>
         <Link href="/pricing">Pricing</Link>
-        <AccountLink className="sp-site-mobile-login" onClick={() => setMenuOpen(false)} />
+        <Link className="sp-site-mobile-download" href="/downloads" onClick={() => setMenuOpen(false)}>Download</Link>
         {showTheme && <ThemeControl className="sp-mobile-theme" />}
       </nav>
-      <div className="sp-site-actions"><AccountLink className="sp-site-login" arrow />{showTheme && <ThemeControl className="sp-nav-theme" />}<Link className="sp-site-download" href="/downloads">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div>
+      <div className="sp-site-actions">{showTheme && <ThemeControl className="sp-nav-theme" />}<Link className="sp-site-download" href="/downloads">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link><AccountLink className="sp-site-login sp-account-cta" arrow /></div>
       <button className="sp-site-menu" type="button" aria-controls="marketing-navigation" aria-label="Toggle menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><span /><span /><span /></button>
     </div>
   </header>;
