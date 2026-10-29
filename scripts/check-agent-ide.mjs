@@ -108,11 +108,14 @@ try {
   await page.route('**/api/v1/sessions/*/prompt', route => route.fulfill({status:502,contentType:'application/json',body:'{}'}));
   await page.locator('#chat-prompt-text').fill('Keep my draft');
   await page.locator('#chat-prompt-text').press('Enter');
-  await page.getByText(/Prompt delivery failed:/).waitFor();
+  await page.getByText(/Could not send\./).waitFor();
   assert.equal(await page.locator('#chat-prompt-text').inputValue(), 'Keep my draft');
   assert.equal(await page.locator('#chat-send-btn').isDisabled(), false);
   await page.waitForTimeout(2300);
-  assert.match(await page.locator('#chat-delivery-status').textContent(), /Prompt delivery failed:/, 'polling must preserve send errors');
+  assert.match(await page.locator('#app-notice-message').textContent(), /Could not send\./, 'polling must preserve the error toast');
+  assert.equal(await page.locator('#chat-delivery-status').textContent(), '');
+  await page.locator('[data-action="dismiss-notice"]').click();
+  assert.equal(await page.locator('#app-notice').isHidden(), true);
   await page.unroute('**/api/v1/sessions/*/prompt');
   await page.locator('#chat-model-select').selectOption('o3');
   await page.locator('#chat-switch-btn').click();
@@ -238,6 +241,18 @@ try {
     }
     console.log('PASS: all eight native views and confirmation dialog at desktop/phone sizes in both themes');
   }
+  for (const width of [180,240,320,390,1440]) {
+    const overflow = await page.evaluate(async width => {
+      const {renderActivity}=await import('/console-presentation.js');
+      const host=document.createElement('div');host.style.cssText=`position:fixed;left:0;top:0;width:${width}px;z-index:1000`;
+      host.innerHTML=renderActivity({range_label:'All time',activity_interval:'week',total_tokens:840,daily:Array.from({length:84},(_,i)=>({date:'2025-12-29',total_tokens:10,chart_pct:50,turns:1}))});
+      document.body.append(host);
+      const result=[host,...host.querySelectorAll('.sp-activity,.sp-activity-bars,.sp-activity-grid')].some(node=>node.scrollWidth>node.clientWidth+1);
+      host.remove();return result;
+    },width);
+    assert.equal(overflow,false,`activity must fit without horizontal scrolling at ${width}px`);
+  }
+  console.log('PASS: maximum activity intervals fit 180–1440px without horizontal scrolling');
   assert.deepEqual(errors, []);
   console.log('PASS: session selection, clean chat, multiline prompt, model handoff, installation hints, launcher and responsive layout');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

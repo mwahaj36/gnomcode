@@ -640,6 +640,7 @@ function cycleTheme() {
     const chatDrafts = new Map();
     const pendingPrompts = new Set();
     const optimisticPrompts = new Map();
+    const chatDeletionGenerations = new Map();
     const handoffNotices = new Map();
     async function renderCurrentChat() {
       const sessionId = activeChatSession;
@@ -848,6 +849,7 @@ function cycleTheme() {
       if (!text || !activeChatSession || document.getElementById('chat-send-btn').disabled) return;
       const status = document.getElementById('chat-delivery-status');
       const sessionId = activeChatSession;
+      const deletionGeneration = chatDeletionGenerations.get(sessionId) || 0;
       const optimistic = {id:crypto.randomUUID(),text,created_at:new Date().toISOString(),baseline:chatEvents.map(event => event.event_id),delivered:false};
       optimisticPrompts.set(sessionId, [...(optimisticPrompts.get(sessionId) || []),optimistic]);
       void renderCurrentChat();
@@ -862,9 +864,9 @@ function cycleTheme() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || (res.status === 404 ? 'This session is not controlled by Spawnt. Start an agent with New Session to send messages here.' : 'The terminal did not accept the prompt. Check Terminal stream and retry.'));
+          throw new Error(err.message || (res.status === 404 ? 'The agent terminal is no longer connected. Open Terminal stream to check it, or start a new conversation. Your draft is saved.' : 'The terminal did not accept the prompt. Check Terminal stream and retry.'));
         }
-        if (!(optimisticPrompts.get(sessionId) || []).includes(optimistic)) return;
+        if ((chatDeletionGenerations.get(sessionId) || 0) !== deletionGeneration) return;
         optimistic.delivered = true;
         if (sessionId === activeChatSession) void renderCurrentChat();
         if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
@@ -877,7 +879,7 @@ function cycleTheme() {
       } catch (err) {
         optimisticPrompts.set(sessionId, (optimisticPrompts.get(sessionId) || []).filter(item => item.id !== optimistic.id));
         if (sessionId === activeChatSession) void renderCurrentChat();
-        if (sessionId === activeChatSession && status) status.textContent = `Prompt delivery failed: ${err.message}`;
+        if (sessionId === activeChatSession) showNotice(`Could not send. ${err.message}`);
       } finally {
         pendingPrompts.delete(sessionId);
         button.disabled = pendingPrompts.has(activeChatSession);
@@ -1028,6 +1030,7 @@ function cycleTheme() {
       const sessionId = activeChatSession;
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });
+        chatDeletionGenerations.set(sessionId, (chatDeletionGenerations.get(sessionId) || 0) + 1);
         optimisticPrompts.delete(sessionId);
         handoffNotices.delete(sessionId);
         if (activeChatSession === sessionId) await loadChat(sessionId);

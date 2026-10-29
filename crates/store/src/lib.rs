@@ -249,21 +249,24 @@ pub struct DailyUsage {
 }
 
 fn group_activity(rows: Vec<DailyUsage>, range: &str) -> (Vec<DailyUsage>, &'static str) {
-    let span = rows
-        .first()
-        .zip(rows.last())
-        .and_then(|(first, last)| {
-            let start =
-                chrono::NaiveDate::parse_from_str(first.date.get(..10)?, "%Y-%m-%d").ok()?;
-            let end = chrono::NaiveDate::parse_from_str(last.date.get(..10)?, "%Y-%m-%d").ok()?;
-            Some((end - start).num_days())
-        })
-        .unwrap_or_default();
+    let bounds = rows.first().zip(rows.last()).and_then(|(first, last)| {
+        Some((
+            chrono::NaiveDate::parse_from_str(first.date.get(..10)?, "%Y-%m-%d").ok()?,
+            chrono::NaiveDate::parse_from_str(last.date.get(..10)?, "%Y-%m-%d").ok()?,
+        ))
+    });
+    let monday = |date: chrono::NaiveDate| {
+        date - chrono::Duration::days(i64::from(date.weekday().num_days_from_monday()))
+    };
     let unit = if range == "today" {
         "hour"
-    } else if range != "all" || span <= 62 {
+    } else if range != "all" || bounds.is_none_or(|(start, end)| (end - start).num_days() < 30) {
         "day"
-    } else if span <= 730 {
+    } else if bounds.is_some_and(|(start, end)| (monday(end) - monday(start)).num_weeks() < 30) {
+        "week"
+    } else if bounds.is_some_and(|(start, end)| {
+        (end.year() - start.year()) * 12 + end.month() as i32 - (start.month() as i32) < 30
+    }) {
         "month"
     } else {
         "year"
@@ -273,12 +276,20 @@ fn group_activity(rows: Vec<DailyUsage>, range: &str) -> (Vec<DailyUsage>, &'sta
     }
     let mut groups = std::collections::BTreeMap::<String, DailyUsage>::new();
     for mut row in rows {
-        let length = if unit == "month" { 7 } else { 4 };
-        let key = row.date.get(..length).unwrap_or(&row.date).to_owned();
-        row.date = if unit == "month" {
-            format!("{key}-01")
+        let key = if unit == "week" {
+            chrono::NaiveDate::parse_from_str(&row.date, "%Y-%m-%d")
+                .map(|date| monday(date).to_string())
+                .unwrap_or_else(|_| row.date.clone())
         } else {
-            format!("{key}-01-01")
+            row.date
+                .get(..if unit == "month" { 7 } else { 4 })
+                .unwrap_or(&row.date)
+                .to_owned()
+        };
+        row.date = match unit {
+            "week" => key.clone(),
+            "month" => format!("{key}-01"),
+            _ => format!("{key}-01-01"),
         };
         groups
             .entry(key)
@@ -338,7 +349,7 @@ pub struct TimelineReport {
     /// Daily UTC measurements for charts; missing dates are not fabricated zeros.
     #[serde(default)]
     pub daily: Vec<DailyUsage>,
-    /// Chart bucket unit: hour, day, month or year.
+    /// Chart bucket unit: hour, day, ISO calendar week, month or year.
     #[serde(default)]
     pub activity_interval: String,
     /// Measured tokens with provider-specific cache accounting applied once.
@@ -2762,7 +2773,7 @@ mod tests {
     #[test]
     fn all_time_activity_groups_by_span_without_losing_totals() {
         use super::{DailyUsage, group_activity};
-        let rows = ["2024-01-01", "2024-01-31", "2024-05-01"]
+        let rows = ["2024-01-01", "2024-01-31", "2024-10-01"]
             .map(|date| DailyUsage {
                 date: date.into(),
                 total_tokens: 10,
@@ -2788,6 +2799,47 @@ mod tests {
         assert_eq!(rows.len(), 2);
     }
 
+    #[test]
+    fn activity_uses_calendar_weeks_and_only_recorded_intervals() {
+        let row = |date: &str| super::DailyUsage {
+            date: date.into(),
+            total_tokens: 10,
+            cost_usd: 1.0,
+            cost_basis: TrustLevel::Estimated,
+            turns: 1,
+            priced_turns: 1,
+            unpriced_turns: 0,
+            chart_pct: 0.0,
+        };
+        assert_eq!(
+            super::group_activity(vec![row("2026-01-01"), row("2026-01-30")], "all").1,
+            "day"
+        );
+        let (weeks, unit) = super::group_activity(
+            vec![
+                row("2025-12-01"),
+                row("2025-12-29"),
+                row("2026-01-01"),
+                row("2026-01-04"),
+                row("2026-01-05"),
+            ],
+            "all",
+        );
+        assert_eq!(unit, "week");
+        assert_eq!(weeks.len(), 3);
+        assert_eq!(weeks[1].date, "2025-12-29");
+        assert_eq!(weeks[1].total_tokens, 30);
+        assert_eq!(weeks[2].date, "2026-01-05");
+        assert_eq!(weeks.iter().map(|row| row.total_tokens).sum::<u64>(), 50);
+        assert_eq!(
+            super::group_activity(vec![row("2024-01-01"), row("2025-01-01")], "all").1,
+            "month"
+        );
+        assert_eq!(
+            super::group_activity(vec![row("2024-01-01"), row("2026-07-01")], "all").1,
+            "year"
+        );
+    }
     #[test]
     fn retired_cloud_rows_stay_hidden_without_deleting_history() {
         let mut db = Database::open_in_memory().expect("database");

@@ -126,3 +126,7 @@ test('identical pending prompts keep ownership across repeated polls and empty h
  assert.equal(presentation.reconcileChat([],pending).pending[1],pending[1]);
  assert.equal(second.events.filter(e=>e.role==='user').length,2);
 });
+test('calendar week labels use ISO week-year at the year boundary', () => {
+ const html=presentation.renderActivity({range_label:'All time',activity_interval:'week',total_tokens:10,daily:[{date:'2025-12-29',total_tokens:10,turns:1,chart_pct:100}]});
+ assert.match(html,/2026 · Week 1/);assert.match(html,/weekly totals/);
+});

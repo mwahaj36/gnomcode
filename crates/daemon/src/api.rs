@@ -909,17 +909,19 @@ async fn prompt_session_handler(
     }
 
     let hosted = spawnt_pty::list_active_sessions();
-    let record = spawnt_pty::load_session_record(&id)
-        .ok()
-        .or_else(|| hosted.iter().find(|r| r.session_id == id).cloned())
-        .or_else(|| {
-            let db = state.db.try_lock().ok()?;
-            let sessions = db.list_active_sessions(1000).ok()?;
-            let session = sessions.iter().find(|s| s.id == id)?;
-            let matched = crate::remote::prompt_host(session, &sessions, &hosted)?;
-            Some((*matched).clone())
-        });
-
+    let record = if let Some(record) = hosted.iter().find(|record| record.session_id == id) {
+        Some(record.clone())
+    } else {
+        let db = state.db.lock().await;
+        let sessions = db
+            .list_active_sessions(1000)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        sessions
+            .iter()
+            .find(|session| session.id == id)
+            .and_then(|session| crate::remote::session_host(session, &sessions, &hosted))
+            .cloned()
+    };
     let Some(record) = record else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -3033,6 +3035,33 @@ mod tests {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 
+    #[tokio::test]
+    async fn prompt_resolution_waits_for_database_instead_of_reporting_missing() {
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
+        let guard = db.lock().await;
+        let app = build_router(AppState {
+            db: db.clone(),
+            bearer_token: "prompt-test".into(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/missing/prompt")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-test")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"text":"Hello"}"#))
+            .expect("request");
+        let task = tokio::spawn(async move { app.oneshot(request).await.expect("response") });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        assert!(
+            !task.is_finished(),
+            "database contention must not become a missing session"
+        );
+        drop(guard);
+        assert_eq!(task.await.expect("task").status(), StatusCode::NOT_FOUND);
+    }
     #[tokio::test]
     async fn multiline_prompt_is_validated_before_host_lookup() {
         let app = build_router(AppState {
