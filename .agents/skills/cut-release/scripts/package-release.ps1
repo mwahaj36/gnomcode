@@ -21,18 +21,21 @@ if ($LASTEXITCODE -ne 0) { throw "Native tray icon regression failed" }
 
 & $Cargo build --locked -p spawnt --release
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
-$NativeExe = Join-Path $RepoRoot "target/release/spawnt.exe"
+$TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $RepoRoot "target" }
+$NativeExe = Join-Path $TargetDir "release/spawnt.exe"
 if ((& $NativeExe --version) -ne "spawnt $Version") { throw "Binary version mismatch" }
 & $Cargo about generate about.hbs --output-file "$Out/THIRD_PARTY_NOTICES.html"
 if ($LASTEXITCODE -ne 0) { throw "Third-party notices generation failed; install cargo-about --features cli --locked" }
 $FontNotices = Get-ChildItem "$RepoRoot/web/public/fonts/*-LICENSE.txt" | ForEach-Object { "<h2>$($_.BaseName)</h2><pre>$([System.Net.WebUtility]::HtmlEncode((([IO.File]::ReadAllText($_.FullName) -split "`n" | ForEach-Object { $_.TrimEnd() }) -join "`n")))</pre>" }
 [IO.File]::AppendAllText("$Out/THIRD_PARTY_NOTICES.html", ($FontNotices -join "`n"), [Text.Encoding]::UTF8)
+$NoticeLines = [IO.File]::ReadAllText("$Out/THIRD_PARTY_NOTICES.html") -split "`n" | ForEach-Object { $_.TrimEnd() }
+[IO.File]::WriteAllText("$Out/THIRD_PARTY_NOTICES.html", ($NoticeLines -join "`n"), (New-Object Text.UTF8Encoding($false)))
 Copy-Item $NativeExe "$Out/spawnt.exe" -Force
 Copy-Item "LICENSE" "$Out/LICENSE" -Force
 $CompilerArgs = @(
     "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/spawnt.ico",
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
-    "/resource:$RepoRoot/target/release/spawnt.exe,spawnt.exe",
+    "/resource:$NativeExe,spawnt.exe",
     "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/spawnt.ico,spawnt.ico", "/resource:$RepoRoot/scripts/spawnt-tray.ico,spawnt-tray.ico",
     "/resource:$RepoRoot/web/public/icons/spawnt-512.png,spawnt-mark.png",
     "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
@@ -52,17 +55,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
 } finally { Remove-Item $Checker -Force -ErrorAction SilentlyContinue }
 
-$Archive = Join-Path $Out "Spawnt-v$Version-windows-x64.zip"
-$Files = @("$Out/spawnt.exe", "$Out/Spawnt-Setup.exe", "$Out/LICENSE", "$Out/THIRD_PARTY_NOTICES.html",
-    "scripts/spawnt.ico", "scripts/spawnt-tray.ico", "scripts/tray.ps1", "scripts/run-tray.vbs", "scripts/open-console.vbs", "scripts/open-dashboard.vbs")
-Compress-Archive -Path $Files -DestinationPath $Archive -Force
-# Include already-built Unix archives when preparing a combined release.
-$Assets = @((Get-Item "$Out/spawnt.exe"), (Get-Item "$Out/Spawnt-Setup.exe"), (Get-Item $Archive))
-$Assets += @(Get-ChildItem "$Out/spawnt-v$Version-*.tar.gz" -ErrorAction SilentlyContinue)
-$Rows = @($Assets | Sort-Object Name | ForEach-Object { "$( (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() )  $($_.Name)" })
-$Manifest = ($Rows -join "`n") + "`n"
-[IO.File]::WriteAllText("$Out/SHA256SUMS-v$Version.txt", $Manifest, [Text.Encoding]::ASCII)
-[IO.File]::WriteAllText("$Out/SHA256SUMS", $Manifest, [Text.Encoding]::ASCII)
+& python scripts/package-artifacts.py --windows-exe $NativeExe --windows-setup "$Out/Spawnt-Setup.exe"
+if ($LASTEXITCODE -ne 0) { throw "Release archive and checksum generation failed" }
 & npm run build --prefix web
 if ($LASTEXITCODE -ne 0) { throw "Web production build failed" }
 Write-Output "spawnt v$Version release packaged with verified installer payload and SHA-256 manifests."

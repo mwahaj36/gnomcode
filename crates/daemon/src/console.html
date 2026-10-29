@@ -565,6 +565,7 @@
             <div><label for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="3" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Ask the agent to work on something..."></textarea><small id="chat-prompt-help">Enter to send · Shift+Enter for a new line. Login and approvals appear in Terminal stream.</small></div>
             <button type="submit" class="btn-primary" id="chat-send-btn">Send</button>
           </form>
+          <p id="chat-delivery-status" role="status"></p>
           <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div>
         </section>
       </div>

@@ -178,7 +178,8 @@ function chatMarkdown(text) {
         while (i < lines.length && lines[i].trim() && lines[i].match(/^\s*/)[0].length > indent) continuation.push(lines[i++].slice(indent + 2));
         items.push(`<li>${chatInline(item[2])}${continuation.length ? chatMarkdown(continuation.join('\n')) : ''}</li>`);
       }
-      html.push(`<${tag}>${items.join('')}</${tag}>`); continue;
+      const start = tag === 'ol' ? Number.parseInt(line.trim(), 10) : 1;
+      html.push(`<${tag}${start !== 1 ? ` start="${start}"` : ''}>${items.join('')}</${tag}>`); continue;
     }
     if (/^>\s?/.test(line)) { html.push(`<blockquote>${chatInline(line.replace(/^>\s?/, ''))}</blockquote>`); i++; continue; }
     if (/^\s*(?:---+|\*\*\*+|___+)\s*$/.test(line)) { html.push('<hr>'); i++; continue; }

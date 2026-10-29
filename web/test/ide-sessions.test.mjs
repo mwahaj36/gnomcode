@@ -58,3 +58,8 @@ test('nested steps and multiline paragraphs retain their structure', () => {
   assert.match(markup, /<p>First line<br>second line<\/p>/);
   assert.match(markup, /<ol><li>Run checks<ul><li>Unit tests<\/li><li>Browser tests<\/li><\/ul><\/li><li>Review changes<\/li><\/ol>/);
 });
+
+test('continued numbered steps keep the agent numbering', () => {
+  const markup = presentation.renderChatCards([{role:'assistant',content:'4. Build\n5. Verify',created_at:'2026-10-29'}]);
+  assert.match(markup, /<ol start="4"><li>Build<\/li><li>Verify<\/li><\/ol>/);
+});
