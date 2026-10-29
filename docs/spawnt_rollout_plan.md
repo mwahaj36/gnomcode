@@ -10,7 +10,7 @@ Windows retains its script tray and authenticated browser app window. Linux/macO
 
 ## Rollout order
 
-Use one focused branch and PR per phase. Update `docs/SESSION_LOG.md` for each. Keep the landing preview available for comparison until the shared design system replaces its scoped tokens.
+Use one focused branch and PR per phase. Add a dated record under `docs/sessions/` and update its index for each. Keep the landing preview available for comparison until the shared design system replaces its scoped tokens.
 
 | Phase | Work | Acceptance |
 | :--- | :--- | :--- |

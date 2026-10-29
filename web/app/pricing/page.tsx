@@ -1,10 +1,7 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "../../lib/seo";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "Pricing — spawnt",
-  description: "All local features are free. Remote and Teams are planned paid features.",
-};
+export const metadata = pageMetadata("/pricing", "Spawnt Pricing — Free Local, Paid Remote & Teams", "All local Spawnt features are free. Remote access and Teams are paid categories. Your agent provider bills inference separately.");
 
 const tiers = [
   {
@@ -14,31 +11,31 @@ const tiers = [
     action: "Download free", href: "/downloads",
   },
   {
-    name: "Remote", note: "PLANNED", price: "Planned", cadence: "paid feature",
+    name: "Remote", note: "PAID ACCESS", price: "Remote", cadence: "terms in documentation",
     description: "Access your own sessions from your phone.",
-    features: ["Encrypted remote access is planned", "Pair and revoke devices", "View sessions and respond to requests"],
-    action: "Remote is planned", href: null,
+    features: ["End-to-end encrypted access", "Pair and revoke devices", "View sessions and respond to requests"],
+    action: "Explore Remote", href: "/docs/remote-access",
   },
   {
-    name: "Teams", note: "PLANNED", price: "Planned", cadence: "paid feature",
+    name: "Teams", note: "PAID CATEGORY", price: "Teams", cadence: "product direction in docs",
     description: "Shared visibility and controls for teams.",
-    features: ["Team dashboard and member rollups", "Shared budgets and policies", "Role-based access", "Team notifications"],
-    action: "Teams is planned", href: null,
+    features: ["Shared visibility is the Teams direction", "Scope and service terms in documentation"],
+    action: "Read the FAQ", href: "/docs/faq",
   },
 ];
 
 const questions = [
   {
     question: "Does spawnt store prompts, code, or tool output?",
-    answer: "Current monitoring stores redacted metadata. Local chat history is planned for session continuity and model switching.",
+    answer: "Spawnt stores redacted local history for continuity. Account metadata sync excludes chat events; paired Remote carries conversations through E2EE.",
   },
   {
     question: "Can I use spawnt without an account?",
     answer: "Yes. All local features run without an account. Existing cloud sync is optional and is not end-to-end encrypted.",
   },
   {
-    question: "What will be paid?",
-    answer: "Remote and Teams are planned paid features. Pricing has not been announced.",
+    question: "Where can I read service terms?",
+    answer: "Read the documentation for Remote and Teams service details. Your agent provider bills inference separately.",
   },
 ];
 
@@ -47,7 +44,7 @@ export default function PricingPage() {
     <div className="sp-console-shell sp-pricing-page mx-auto max-w-7xl px-6 py-16 font-sans">
       <header className="sp-pricing-intro">
         <h1>All local features are free.</h1>
-        <p>Use the CLI and local dashboard without an account. Remote and Teams are planned paid features.</p>
+        <p>Use the CLI and local dashboard without an account. Remote access and Teams are paid categories. Provider inference is billed separately.</p>
       </header>
 
       <section className="sp-pricing-grid" aria-label="Plans">
@@ -81,7 +78,7 @@ export default function PricingPage() {
         <dl>
           <div><dt>Agent activity</dt><dd>See running, waiting, idle, and error states.</dd></div>
           <div><dt>Usage and quota</dt><dd>Every measurement carries its source and trust level.</dd></div>
-          <div><dt>Privacy</dt><dd>Monitoring metadata is redacted. Local chat history is planned.</dd></div>
+          <div><dt>Privacy</dt><dd>Redacted local history; optional metadata sync; encrypted Remote.</dd></div>
         </dl>
       </section>
 

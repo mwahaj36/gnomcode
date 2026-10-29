@@ -38,7 +38,7 @@ assert.equal(writes,1);assert.equal(values.some(value=>value.changed),false);
 updateSummary(element,{activeCount:1});assert.equal(writes,1,'unchanged polling must not rewrite markup');
 updateSummary(element,{activeCount:2});assert.equal(writes,2);assert.equal(values.filter(value=>value.changed).length,1,'only changed values animate');
 
-const webConsole = await readFile(new URL('../web/app/console/page.tsx', import.meta.url), 'utf8');
+const webConsole = await readFile(new URL('../web/app/console/Client.tsx', import.meta.url), 'utf8');
 assert.doesNotMatch(webConsole, /spawnt_cloud_sessions_live/, 'retired hosted sessions must not be queried');
 assert.match(webConsole, /spawnt_sync_state/, 'desktop summary sync remains available');
 
@@ -63,7 +63,7 @@ const sharedCss=await readFile(new URL('../web/app/spawnt-console.css',import.me
 assert.doesNotMatch(sharedCss,/var\(--(?:text(?:-\d)?|border|primary-text|surface|bg)\)/,'shared console styles must use shared tokens, not marketing-only aliases');
 
 const recentIdle=renderOngoing([{id:'idle-grace',title:'Recent idle',is_active:false,is_ongoing:true,presence:'recently_idle',state:'idle',last_event_at:new Date().toISOString()}]);
-assert.match(recentIdle,/Recent idle/);assert.match(recentIdle,/Recently idle/);assert.match(recentIdle,/Last activity/);
+assert.match(recentIdle,/Recent idle/);assert.match(recentIdle,/<b>Idle<\/b>/);assert.match(recentIdle,/Last activity/);
 const windows=renderQuota([{provider:'codex',window:'five_hour',used_pct:50,remaining_pct:50,basis:'exact'},{provider:'codex',window:'weekly',used_pct:8,remaining_pct:92,basis:'exact'}],new Date().toISOString());
 assert.equal((windows.match(/class="sp-limit-windows"/g)||[]).length,1,'one compact row groups both provider windows');
 assert.match(windows,/50.0%/);assert.match(windows,/8.0%/);

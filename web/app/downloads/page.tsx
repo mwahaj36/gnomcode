@@ -1,14 +1,10 @@
+import { pageMetadata } from "../../lib/seo";
 import branding from "../../branding.json";
-import type { Metadata } from "next";
 import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata: Metadata = {
-  title: "Downloads — spawnt",
-  description: "Spawnt downloads are being prepared.",
-  alternates: { canonical: `${branding.baseUrl}/downloads` },
-};
+export const metadata = pageMetadata("/downloads", "Download Spawnt — Windows, macOS, Linux", "Download the Spawnt AI agent orchestrator for your platform. All local features are free, with no account required.");
 
 export default function DownloadsPage() {
   return (
@@ -16,12 +12,13 @@ export default function DownloadsPage() {
       <header className="sp-downloads-header">
         <div>
           <h1>Download spawnt</h1>
-          <p>Spawnt desktop and CLI builds are being verified. Your agent logs stay on your machine.</p>
+          <p>One place to launch, switch and control AI coding agents. Choose Windows, macOS or Linux.</p>
         </div>
-        <span className="sp-download-release">NEXT RELEASE · v{packageInfo.version}</span>
+        <span className="sp-download-release">SPAWNT · v{packageInfo.version}</span>
       </header>
 
       <PlatformDownloads />
+      <p className="sp-download-help">By downloading, you agree to the <Link href="/terms">Terms of Service</Link>. Read our <Link href="/privacy">Privacy notice</Link>.</p>
 
       <section className="sp-download-help" aria-label="Release verification">
         <div>
