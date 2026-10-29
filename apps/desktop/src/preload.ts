@@ -33,7 +33,8 @@ window.addEventListener('DOMContentLoaded', () => {
     body.sp-desktop-window .sp-console-workspace>.sp-console-nav{top:32px;height:calc(100dvh - 32px)}
     body.sp-desktop-window[data-console-view=sessions] .sp-console-content{height:calc(100dvh - 32px)}
     body.sp-desktop-window .ide-layout{height:calc(100dvh - 97px)}
-    @media(max-width:600px){body.sp-desktop-window .ide-layout{height:calc(100dvh - 32px)}body.sp-desktop-window #chat-list-toggle{top:44px!important}body.sp-desktop-window .ide-sidebar{top:104px}}
+    @media(max-width:600px){body.sp-desktop-window .ide-layout{height:calc(100dvh - 32px)}body.sp-desktop-window #chat-list-toggle{top:44px!important}}
+    @media(max-width:760px){body.sp-desktop-window .ide-sidebar{top:104px}}
   `;
   if (process.platform === 'darwin') style.textContent += '.desktop-titlebar{padding-left:80px}';
   document.head.append(style);
