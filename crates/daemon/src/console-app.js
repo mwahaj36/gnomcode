@@ -639,11 +639,24 @@ function cycleTheme() {
     let chatRequest = 0;
     const chatDrafts = new Map();
     const pendingPrompts = new Set();
+    const optimisticPrompts = new Map();
+    const chatDeletionGenerations = new Map();
+    const handoffNotices = new Map();
+    async function renderCurrentChat() {
+      const sessionId = activeChatSession;
+      const presentation = await import('/console-presentation.js');
+      if (sessionId !== activeChatSession) return;
+      const state = ideSessions.find(session => session.id === activeChatSession)?.state;
+      const result = presentation.reconcileChat([...(handoffNotices.get(activeChatSession) || []),...chatEvents], optimisticPrompts.get(activeChatSession) || [], state);
+      optimisticPrompts.set(activeChatSession, result.pending);
+      presentation.updateChat(document.getElementById('chat-stream'), result.events);
+    }
 
     function selectChatSession(sessionId) {
       const input = document.getElementById('chat-prompt-text');
       if (activeChatSession) chatDrafts.set(activeChatSession, input.value);
       activeChatSession = sessionId;
+      document.getElementById('workspace-terminal-pane').hidden = true;
       input.value = chatDrafts.get(sessionId) || '';
       requestAnimationFrame(resizePrompt);
       document.getElementById('chat-send-btn').disabled = pendingPrompts.has(sessionId);
@@ -673,7 +686,7 @@ function cycleTheme() {
       const model = session?.model || hosted?.model || '';
       const observed = Boolean(session?.model || hosted?.model_observed);
       const status = document.getElementById('chat-model-status');
-      const message = (observed ? `Current model: ${model}` : model ? `Requested model: ${model} · awaiting agent confirmation` : 'CLI default · waiting for the agent to report its model') + (select.disabled ? ' · Model switching unavailable' : '');
+      const message = (observed ? '' : model ? `Requested model: ${model} · awaiting agent confirmation` : 'CLI default · waiting for the agent to report its model') + (select.disabled ? (observed ? 'Model switching unavailable' : ' · Model switching unavailable') : '');
       if (status.textContent !== message) status.textContent = message;
       if (select.dataset.sessionId !== activeChatSession || select.dataset.currentModel !== model) {
         select.querySelectorAll('[data-current-only]').forEach(option => option.remove());
@@ -692,15 +705,19 @@ function cycleTheme() {
       const button = document.getElementById('chat-switch-btn');
       const sessionId = activeChatSession;
       try {
-        const models = await apiJson('/api/v1/models', { headers });
+        const [models, installed] = await Promise.all([apiJson('/api/v1/models', { headers }),apiJson('/api/v1/agents/installed', { headers })]);
         if (sessionId !== activeChatSession) return;
         select.innerHTML = '<option value="">Agent default</option>';
         const available = models.models || models;
+        for (const agent of (installed.agents || []).filter(agent => agent.installed && agent.id !== 'terminal')) {
+          const group = document.createElement('optgroup'); group.label = agent.name;
+          const option = document.createElement('option'); option.value = `default:${agent.id}`; option.dataset.agent = agent.id; option.dataset.model = '@default'; option.textContent = `${agent.name} · default model`; group.append(option); select.append(group);
+        }
         for (const model of available) {
           const option = document.createElement('option'); option.value = model.model;
           option.dataset.agent = model.agent; option.textContent = model.display_name || model.model; select.append(option);
         }
-        select.disabled = available.length === 0; button.disabled = available.length === 0;
+        select.disabled = select.options.length <= 1; button.disabled = select.disabled;
         delete select.dataset.sessionId;
         showCurrentChatModel();
       } catch {
@@ -716,14 +733,17 @@ function cycleTheme() {
       if (!activeChatSession || !select.value) return;
       const sourceSession = activeChatSession;
       const previousModel = select.dataset.currentModel || 'CLI default';
-      const targetModel = select.value;
+      const targetModel = select.selectedOptions[0].dataset.model || select.value;
+      const targetAgent = select.selectedOptions[0].dataset.agent;
       const button = document.getElementById('chat-switch-btn'); button.disabled = true;
       try {
-        const result = await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/switch`, { method:'POST', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ target_model:select.value, agent:select.selectedOptions[0].dataset.agent }) });
+        const result = await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/switch`, { method:'POST', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ target_model:targetModel, agent:targetAgent }) });
+        handoffNotices.set(result.session_id, [{event_id:`handoff:${result.session_id}`,role:'system',status:'model_changed',created_at:new Date().toISOString(),content:`Agent/model change requested: ${ideSessions.find(session=>session.id === sourceSession)?.agent || 'Agent'} / ${previousModel} → ${targetAgent} / ${targetModel === '@default' ? 'agent default' : targetModel}. Waiting for confirmation.`}]);
         await loadSessions();
         if (activeChatSession === sourceSession) {
           await loadChat(result.session_id);
-          document.getElementById('chat-delivery-status').textContent = `Requested model change from ${previousModel} to ${targetModel}. New session started; waiting for agent confirmation.`;
+          document.getElementById('chat-delivery-status').textContent = '';
+          void renderCurrentChat();
         }
       } catch { if (activeChatSession === sourceSession) document.getElementById('chat-delivery-status').textContent = 'Model handoff failed. Check the target CLI installation and login, then retry.'; }
       finally { showCurrentChatModel(); }
@@ -829,9 +849,13 @@ function cycleTheme() {
       if (!text || !activeChatSession || document.getElementById('chat-send-btn').disabled) return;
       const status = document.getElementById('chat-delivery-status');
       const sessionId = activeChatSession;
+      const deletionGeneration = chatDeletionGenerations.get(sessionId) || 0;
+      const optimistic = {id:crypto.randomUUID(),text,created_at:new Date().toISOString(),baseline:chatEvents.map(event => event.event_id),delivered:false};
+      optimisticPrompts.set(sessionId, [...(optimisticPrompts.get(sessionId) || []),optimistic]);
+      void renderCurrentChat();
       pendingPrompts.add(sessionId);
       const button = document.getElementById('chat-send-btn'); button.disabled = true;
-      if (status) status.textContent = 'Sending prompt...';
+      if (status) status.textContent = '';
       try {
         const res = await fetch(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/prompt`, {
           method: 'POST',
@@ -840,17 +864,22 @@ function cycleTheme() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || (res.status === 404 ? 'This session is not controlled by Spawnt. Start an agent with New Session to send messages here.' : 'The terminal did not accept the prompt. Check Terminal stream and retry.'));
+          throw new Error(err.message || (res.status === 404 ? 'The agent terminal is no longer connected. Open Terminal stream to check it, or start a new conversation. Your draft is saved.' : 'The terminal did not accept the prompt. Check Terminal stream and retry.'));
         }
+        if ((chatDeletionGenerations.get(sessionId) || 0) !== deletionGeneration) return;
+        optimistic.delivered = true;
+        if (sessionId === activeChatSession) void renderCurrentChat();
         if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
         if (sessionId === activeChatSession) {
           if (input.value.trim() === text) { input.value = ''; resizePrompt(); }
-          if (status) status.textContent = 'Prompt delivered to agent.';
+          if (status) status.textContent = '';
           input.focus();
         }
         if (sessionId === activeChatSession) setTimeout(() => loadChat(sessionId, false, true), 1000);
       } catch (err) {
-        if (sessionId === activeChatSession && status) status.textContent = `Prompt delivery failed: ${err.message}`;
+        optimisticPrompts.set(sessionId, (optimisticPrompts.get(sessionId) || []).filter(item => item.id !== optimistic.id));
+        if (sessionId === activeChatSession) void renderCurrentChat();
+        if (sessionId === activeChatSession) showNotice(`Could not send. ${err.message}`);
       } finally {
         pendingPrompts.delete(sessionId);
         button.disabled = pendingPrompts.has(activeChatSession);
@@ -880,6 +909,45 @@ function cycleTheme() {
         if (btn) btn.textContent = 'Terminal stream';
         if (chatWs) { chatWs.close(); chatWs = null; }
       }
+    }
+
+    const workspaceTerminals = new Map();
+    let workspaceTerminalBusy = false;
+    async function openWorkspaceTerminal() {
+      if (!activeChatSession || workspaceTerminalBusy) return;
+      const source = activeChatSession;
+      workspaceTerminalBusy = true;
+      try {
+        let entry = workspaceTerminals.get(source);
+        if (!entry) {
+          const record = await apiJson(`/api/v1/sessions/${encodeURIComponent(source)}/terminal`, {method:'POST',headers});
+          document.querySelectorAll('#workspace-terminal-screen [data-disconnected]').forEach(node => node.remove());
+          const element = document.createElement('div');
+          const terminal = new Terminal({cols:80,rows:12,scrollback:3000,fontSize:13,fontFamily:'Consolas, monospace',theme:{background:'#0d0d0f',foreground:'#f6f7f8'},allowProposedApi:false});
+          document.getElementById('workspace-terminal-screen').append(element);
+          const fit = new FitAddon.FitAddon(); terminal.loadAddon(fit);
+          terminal.open(element);
+          const url = new URL(`/api/v1/sessions/${encodeURIComponent(record.session_id)}/pty`,location.href);
+          url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          url.searchParams.set('token',token);
+          const socket = new WebSocket(url); socket.binaryType = 'arraybuffer';
+          const resize = () => {if (element.hidden || document.getElementById('workspace-terminal-pane').hidden) return; fit.fit(); if(socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({resize:{cols:terminal.cols,rows:terminal.rows}}));};
+          const observer = new ResizeObserver(resize); observer.observe(document.getElementById('workspace-terminal-screen'));
+          socket.onopen = resize;
+          socket.onmessage = event => terminal.write(typeof event.data === 'string' ? event.data : new Uint8Array(event.data));
+          socket.onerror = () => terminal.writeln('\r\nTerminal connection unavailable. Close and reopen this pane.');
+          socket.onclose = () => { observer.disconnect(); workspaceTerminals.delete(source); terminal.dispose(); element.textContent = 'Terminal disconnected. Reopen the pane to reconnect.'; element.dataset.disconnected = 'true'; };
+          terminal.onData(data => { if (socket.readyState === WebSocket.OPEN) socket.send(new TextEncoder().encode(data)); });
+          entry = {element,terminal,socket,record,resize}; workspaceTerminals.set(source,entry);
+        }
+        if (source !== activeChatSession) return;
+        document.querySelectorAll('#workspace-terminal-screen>div').forEach(element => element.hidden = element !== entry.element);
+        document.getElementById('workspace-terminal-path').textContent = entry.record.repo_path;
+        document.getElementById('workspace-terminal-pane').hidden = false;
+        requestAnimationFrame(entry.resize);
+        entry.terminal.focus();
+      } catch { document.getElementById('chat-delivery-status').textContent = 'Could not open a shell in this workspace. Check that the directory still exists.'; }
+      finally { workspaceTerminalBusy = false; }
     }
 
     function connectTerminalWs() {
@@ -940,13 +1008,13 @@ function cycleTheme() {
         const stream = document.getElementById('chat-stream');
         const oldHeight = stream.scrollHeight;
         const oldTop = stream.scrollTop;
-        presentation.updateChat(stream, chatEvents);
+        await renderCurrentChat();
         if (earlier) stream.scrollTop = oldTop + stream.scrollHeight - oldHeight;
         else if (!silent) stream.scrollTop = stream.scrollHeight;
         if (!silent) document.getElementById('chat-earlier').hidden = page.length < 500;
         document.getElementById('chat-delete').hidden = chatEvents.length === 0;
         const messageCount = chatEvents.filter(event => (event.role === 'user' || event.role === 'assistant') && event.content?.trim()).length;
-        if (status) status.textContent = `${messageCount} recorded message${messageCount === 1 ? '' : 's'}`;
+        if (status) status.textContent = messageCount ? `${messageCount} message${messageCount === 1 ? '' : 's'}` : '';
         panel.hidden = activeView !== 'sessions';
         if (!silent) requestAnimationFrame(resizePrompt);
       } catch {
@@ -959,25 +1027,23 @@ function cycleTheme() {
 
     async function deleteChat() {
       if (!activeChatSession || !await confirmAction('Permanently delete local chat history for this session? This action cannot be undone.', 'Delete history')) return;
+      const sessionId = activeChatSession;
       try {
-        await apiJson(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/chat`, { method: 'DELETE', headers });
-        await loadChat(activeChatSession);
+        await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });
+        chatDeletionGenerations.set(sessionId, (chatDeletionGenerations.get(sessionId) || 0) + 1);
+        optimisticPrompts.delete(sessionId);
+        handoffNotices.delete(sessionId);
+        if (activeChatSession === sessionId) await loadChat(sessionId);
       } catch { document.getElementById('chat-status').textContent = 'Could not delete local chat history.'; }
     }
 
-    try {
-      const pinned = localStorage.getItem('spawnt-navigation-pinned') === 'true';
-      document.body.classList.toggle('navigation-pinned', pinned);
-      document.querySelector('.rail-pin').setAttribute('aria-pressed', String(pinned));
-    } catch (_) {}
     if (matchMedia('(max-width: 760px)').matches) {
       document.body.classList.add('chat-list-collapsed');
       document.getElementById('chat-list-toggle').setAttribute('aria-expanded', 'false');
     }
-    function pinNavigation() {
-      const pinned = document.body.classList.toggle('navigation-pinned');
-      document.querySelector('.rail-pin').setAttribute('aria-pressed', String(pinned));
-      try { localStorage.setItem('spawnt-navigation-pinned', String(pinned)); } catch (_) {}
+    function toggleNavigation() {
+      const expanded = document.body.classList.toggle('navigation-expanded');
+      document.getElementById('navigation-toggle').setAttribute('aria-expanded', String(expanded));
     }
     function toggleChatList() {
       const collapsed = document.body.classList.toggle('chat-list-collapsed');
@@ -1312,6 +1378,7 @@ function cycleTheme() {
 
     let remoteWasPaired = null;
     let remoteNoticeTimer;
+    let remotePairingMarkup = '';
     function showRemoteStatus(status) {
       const badge = document.getElementById('remote-connection-state');
       if (remoteWasPaired !== null && Boolean(status.paired) !== remoteWasPaired) {
@@ -1326,13 +1393,12 @@ function cycleTheme() {
       const output = document.getElementById('remote-status');
       const link = document.getElementById('remote-link');
       if (!output || !link) return;
-      output.textContent = !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? `Compare code ${status.verify_code} with your phone, then confirm on both devices.` : 'Waiting for phone to open the pairing link.';
+      output.textContent = !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? `Compare code ${status.verify_code} with your phone, then confirm on both devices.` : 'Waiting for the code to be entered on the web.';
       if (!status.paired && status.room_id && status.public_key && status.relay_url) {
-        const fragment = new URLSearchParams({ room: status.room_id, key: status.public_key, relay: status.relay_url });
-        const productOrigin = new URL(document.querySelector('.sp-settings-resources a').href).origin;
-        const pairingUrl = `${productOrigin}/remote#${fragment}`;
-        link.innerHTML = `${status.pairing_qr && !status.paired ? `<div class="pairing-qr" role="img" aria-label="Scan this QR code on your phone to pair">${status.pairing_qr}</div>` : ''}<p>On your phone, sign in and open <a href="${escapeHtml(productOrigin)}/console?view=settings" target="_blank" rel="noopener noreferrer">Profile</a> to find this desktop, or scan the code.</p><details><summary>Use a pairing link instead</summary><a href="${escapeHtml(pairingUrl)}" target="_blank" rel="noopener noreferrer">Open pairing link</a><p class="pairing-link">${escapeHtml(pairingUrl)}</p></details>`;
-      } else link.textContent = '';
+        const markup = `<div class="desktop-pairing-code"><label for="desktop-pairing-code">Enter this code in web Profile</label><input id="desktop-pairing-code" readonly value="${escapeHtml(status.pairing_code || '')}" aria-label="Desktop pairing code"><small>Expires in five minutes. Sign in to the same account on both devices.</small></div>`;
+        if (remotePairingMarkup !== markup) { link.innerHTML = markup; remotePairingMarkup = markup; }
+      } else if (remotePairingMarkup) { link.textContent = ''; remotePairingMarkup = ''; }
+
     }
 
     async function loadRemoteStatus() {
@@ -1378,10 +1444,10 @@ function cycleTheme() {
       }
     }
 
-    const actions = { 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'pin-navigation': pinNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+    const actions = { 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
-      'toggle-stream': toggleStream,
+      'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': showLauncher, 'new-session': showLauncher,
       'switch-model': switchChatModel, 'focus-chat': focusChat,
       'choose-workspace': chooseWorkspace,

@@ -47,3 +47,34 @@ const pair=new Function('document','fetch','checkAuthSession',`const headers={};
 const pendingPair=pair();await pair();assert.equal(requests,1,'concurrent pairing must be ignored');
 finishPair({ok:true});await pendingPair;assert.equal(accountNodes.get('auth-token-input').value,'');assert.equal(accountNodes.get('auth-pair-button').disabled,false);
 console.log('PASS: account connected/disconnected/error states and duplicate pairing prevention without reload');
+
+const presentationSource=readFileSync(new URL('../web/lib/console-presentation.js',import.meta.url),'utf8');
+const {reconcileChat}=await import(`data:text/javascript;base64,${Buffer.from(presentationSource).toString('base64')}`);
+for (const deleted of [false,true]) {
+ const input={value:'Hi',focus(){}},button={disabled:false},status={textContent:''};
+ const promptDocument={getElementById:id=>id==='chat-prompt-text'?input:id==='chat-send-btn'?button:status};
+ const optimisticPrompts=new Map(),chatDeletionGenerations=new Map(),chatDrafts=new Map([['sample','Hi']]);
+ let acknowledge;
+ const submit=new Function('document','fetch','optimisticPrompts','chatDeletionGenerations','chatDrafts','setTimeout',`
+  const activeChatSession='sample',chatEvents=[],headers={},pendingPrompts=new Set();
+  const renderCurrentChat=()=>{},resizePrompt=()=>{},loadChat=()=>{},showNotice=message=>{throw new Error(message)};
+  ${fn('sendPrompt')}
+  return sendPrompt;
+ `)(promptDocument,()=>new Promise(resolve=>{acknowledge=resolve;}),optimisticPrompts,chatDeletionGenerations,chatDrafts,()=>{});
+ const submission=submit();
+ assert.equal(button.disabled,true);
+ if (deleted) {
+  chatDeletionGenerations.set('sample',1);
+  optimisticPrompts.delete('sample');
+ } else {
+  const recorded=[{event_id:'user',role:'user',content:'Hi'},{event_id:'reply',role:'assistant',content:'Hello'}];
+  optimisticPrompts.set('sample',reconcileChat(recorded,optimisticPrompts.get('sample'),'idle').pending);
+  assert.equal(optimisticPrompts.get('sample').length,0,'a complete recorded reply reconciles before the HTTP acknowledgement');
+ }
+ acknowledge({ok:true});
+ await submission;
+ assert.equal(input.value,deleted?'Hi':'',deleted?'deletion cancels draft clearing by the outstanding acknowledgement':'a successful acknowledgement clears the unchanged draft even after reconciliation');
+ assert.equal(chatDrafts.has('sample'),deleted,'only a non-deleted successful send clears its saved draft');
+ assert.equal(button.disabled,false);
+}
+console.log('PASS: delayed prompt acknowledgements distinguish completed replies from deleted history');

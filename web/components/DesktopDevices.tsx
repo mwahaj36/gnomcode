@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
 
-type Offer = {room:string; key:string; relay:string; expires_at:string; name:string};
+type Offer = {room:string; key:string; relay:string; expires_at:string; name:string; pairing_code:string};
 
-export default function DesktopDevices() {
+export default function DesktopDevices({onPair}: {onPair?:(offer:Offer)=>void} = {}) {
   const [userId, setUserId] = useState<string | null>();
   const [offer, setOffer] = useState<Offer | null>(null);
+  const [pairingCode, setPairingCode] = useState('');
+  const [codeError, setCodeError] = useState('');
   const [status, setStatus] = useState("Checking desktop availability...");
   useEffect(() => {
     const {data:{subscription}} = supabase.auth.onAuthStateChange((_event, session) => {
@@ -37,12 +39,19 @@ export default function DesktopDevices() {
         setOffer(valid ? value : null);
         setStatus(valid ? "Ready to pair. Compare and confirm the code on both devices." : "No desktop is offering pairing. On your desktop, open Profile and choose Start pairing.");
       } catch {
-        if (active) { setOffer(null); setStatus("Desktop discovery unavailable. Retry here or use a pairing link."); }
+        if (active) { setOffer(null); setStatus("Desktop discovery unavailable. Check your connection and retry."); }
       } finally { clearTimeout(timeout); busy = false; }
     }
     void refresh();
     const timer = setInterval(() => void refresh(), 5000);
     return () => { active = false; clearInterval(timer); controller?.abort(); };
   }, [userId]);
-  return <section className="web-profile-section" aria-label="Desktop devices"><h2>Desktop devices</h2><p role="status">{status}</p>{offer && <div className="desktop-device-row"><div><strong>My desktop</strong><p>Pairing expires {new Date(offer.expires_at).toLocaleTimeString()}</p></div><Link className="sp-console-action" href={`/remote#${new URLSearchParams({room:offer.room,key:offer.key,relay:offer.relay})}`}>Connect securely</Link></div>}{userId === null && <Link className="sp-console-action" href="/auth">Sign in</Link>}<p>Signing in finds your desktop. Access still requires matching codes and confirmation on both devices.</p></section>;
+  function pair(event: React.FormEvent) {
+    event.preventDefault();
+    if (!offer || Date.parse(offer.expires_at) <= Date.now()) { setCodeError('This code expired. Start pairing again on your desktop.'); return; }
+    if (pairingCode.replace(/\s/g, '') !== offer.pairing_code) { setCodeError('Code does not match this desktop. Check the eight digits and retry.'); return; }
+    if (onPair) onPair(offer);
+    else { sessionStorage.setItem('spawnt-pairing-offer', JSON.stringify(offer)); window.location.assign('/remote'); }
+  }
+  return <section className="web-profile-section" aria-label="Desktop devices"><h2>Pair your desktop</h2><p role="status">{status}</p>{userId && <form className="pairing-code-form" onSubmit={pair}><label htmlFor="pairing-code">Code shown in desktop Profile</label><div><input id="pairing-code" inputMode="numeric" autoComplete="one-time-code" value={pairingCode} onChange={event => {setPairingCode(event.target.value.replace(/\D/g, '').slice(0,8));setCodeError('');}} maxLength={8} placeholder="00000000" required /><button className="sp-console-action" type="submit" disabled={pairingCode.length !== 8}>Pair desktop</button></div>{codeError && <p role="alert">{codeError}</p>}</form>}{userId === null && <Link className="sp-console-action" href="/auth">Sign in</Link>}<p>The code lasts five minutes. You will then confirm the matching security code on both devices.</p></section>;
 }

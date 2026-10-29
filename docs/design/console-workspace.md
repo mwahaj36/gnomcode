@@ -8,11 +8,11 @@ Mode: Operate. Primary artifact: `crates/daemon/src/console.html`. Related surfa
 
 **OWN-WORLD:** Spawnt near-black/light canvases, Inter body text, red primary actions and right-hand user bubbles, neutral gray agent replies, geometric SVG icons, hairline divisions and restrained 6px controls. Avoid oversized headers, pills and debug-style toolbars.
 
-**STORY:** Find a readable conversation, choose a desktop workspace, prompt the actual CLI and read formatted replies. Track usage separately. Pair a phone from Profile without weakening the matching-code confirmation.
+**STORY:** Find a readable conversation, choose a desktop workspace, prompt the actual CLI and read formatted replies. Track usage separately. Pair by entering the desktop code in web Profile, without links or QR and without weakening the matching-code confirmation.
 
-**FIRST VIEWPORT:** Far-left collapsing navigation, independently collapsible conversation list, compact conversation title/actions, readable center transcript and a one-line composer growing to 160px. Phone uses one title toolbar and a drawer; content wraps within bubbles.
+**FIRST VIEWPORT:** Far-left explicitly collapsing navigation, independently collapsible conversation list, compact conversation title/actions, readable center transcript and a one-line composer growing to 160px. Phone uses one title toolbar and a drawer; content wraps within bubbles.
 
-**FORM:** Code-led application panes prescribed by the user's Codex/Antigravity references. Signature interaction: rail expands on hover/focus with optional desktop pinning; composer grows with input. Reduced motion removes nonessential transitions. seed: none (unavailable).
+**FORM:** Code-led application panes prescribed by the user's Codex/Antigravity references. Signature interaction: rail expands and collapses only through its toggle; composer grows with input. Reduced motion removes nonessential transitions. seed: none (unavailable).
 
 **FINISH:** unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 

@@ -132,6 +132,7 @@ fn discovery_offer(status: &crate::remote::PairingStatus, now: DateTime<Utc>) ->
         "relay": status.relay_url.as_deref()?,
         "expires_at": expires_at,
         "name": "My desktop",
+        "pairing_code": status.pairing_code()?,
     }))
 }
 
@@ -437,14 +438,15 @@ mod tests {
         let mut status = crate::remote::PairingStatus {
             enabled: true,
             paired: false,
-            room_id: Some("public-room".into()),
+            room_id: Some("a".repeat(32)),
             public_key: Some("public-key".into()),
             verify_code: Some("123456".into()),
             relay_url: Some("wss://relay.example/relay".into()),
             expires_at: Some((now + chrono::Duration::minutes(5)).to_rfc3339()),
         };
         let offer = super::discovery_offer(&status, now).expect("offer");
-        assert_eq!(offer.as_object().expect("object").len(), 5);
+        assert_eq!(offer.as_object().expect("object").len(), 6);
+        assert_eq!(offer["pairing_code"], "63311530");
         assert!(!offer.to_string().contains("123456"));
         assert!(offer.get("verify_code").is_none());
         status.paired = true;

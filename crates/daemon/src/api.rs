@@ -83,6 +83,33 @@ pub fn build_router(state: AppState) -> Router {
         .route("/spawnt.svg", get(svg_icon_handler))
         .route("/spawnt-mark.svg", get(svg_icon_handler))
         .route("/theme-init.js", get(theme_init_handler))
+        .route(
+            "/vendor/xterm.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript")],
+                    include_str!("../../../web/public/vendor/xterm.js"),
+                )
+            }),
+        )
+        .route(
+            "/vendor/xterm.css",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/css")],
+                    include_str!("../../../web/public/vendor/xterm.css"),
+                )
+            }),
+        )
+        .route(
+            "/vendor/xterm-addon-fit.js",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript")],
+                    include_str!("../../../web/public/vendor/xterm-addon-fit.js"),
+                )
+            }),
+        )
         .route("/console-app.js", get(console_app_handler))
         .route("/spawnt-tokens.css", get(tokens_handler))
         .route("/spawnt-console.css", get(console_styles_handler))
@@ -100,6 +127,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
         .route("/api/v1/sessions/{id}/prompt", post(prompt_session_handler))
         .route("/api/v1/sessions/{id}/pty", get(pty_stream_handler))
+        .route(
+            "/api/v1/sessions/{id}/terminal",
+            post(workspace_terminal_handler),
+        )
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
         .route("/api/v1/agents/installed", get(installed_agents_handler))
         .route("/api/v1/models", get(models_handler))
@@ -757,6 +788,48 @@ async fn launch_session_handler(
     }
 }
 
+static WORKSPACE_TERMINAL_LAUNCH: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+async fn workspace_terminal_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let _launch = WORKSPACE_TERMINAL_LAUNCH.lock().await;
+    let hosted = spawnt_pty::list_active_sessions();
+    let repo = if let Some(record) = hosted.iter().find(|record| record.session_id == id) {
+        record.repo_path.clone()
+    } else {
+        state
+            .db
+            .lock()
+            .await
+            .get_session_focus_target(&id)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .and_then(|target| target.repo_root)
+            .ok_or(StatusCode::NOT_FOUND)?
+    };
+    use sha2::Digest as _;
+    let digest = sha2::Sha256::digest(format!("{id}:{repo}").as_bytes());
+    let hash = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let session_id = format!("workspace-terminal-{hash}");
+    if let Some(record) = hosted
+        .into_iter()
+        .find(|record| record.session_id == session_id)
+    {
+        return Ok(Json(record));
+    }
+    let record =
+        spawnt_pty::launch_session(&session_id, "terminal", std::path::Path::new(&repo), None)
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    Ok(Json(record))
+}
+
 async fn stop_session_handler(
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -836,17 +909,19 @@ async fn prompt_session_handler(
     }
 
     let hosted = spawnt_pty::list_active_sessions();
-    let record = spawnt_pty::load_session_record(&id)
-        .ok()
-        .or_else(|| hosted.iter().find(|r| r.session_id == id).cloned())
-        .or_else(|| {
-            let db = state.db.try_lock().ok()?;
-            let sessions = db.list_active_sessions(1000).ok()?;
-            let session = sessions.iter().find(|s| s.id == id)?;
-            let matched = crate::remote::prompt_host(session, &sessions, &hosted)?;
-            Some((*matched).clone())
-        });
-
+    let record = if let Some(record) = hosted.iter().find(|record| record.session_id == id) {
+        Some(record.clone())
+    } else {
+        let db = state.db.lock().await;
+        let sessions = db
+            .list_active_sessions(1000)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        sessions
+            .iter()
+            .find(|session| session.id == id)
+            .and_then(|session| crate::remote::session_host(session, &sessions, &hosted))
+            .cloned()
+    };
     let Some(record) = record else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -1042,6 +1117,7 @@ async fn installed_agents_handler(
             "install_command": "npm install -g @google/gemini-cli",
             "login_command": "gemini"
         }),
+        json!({"id":"antigravity","name":"Antigravity CLI","installed":spawnt_platform::executables::executable_available("agy"),"install_command":"Install Antigravity CLI from antigravity.google","login_command":"agy"}),
         json!({
             "id": "terminal",
             "name": "Terminal Shell",
@@ -1432,6 +1508,39 @@ async fn switch_session_handler(
             crate::HandoffError::UnsupportedTarget => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         })?;
+    {
+        let db = state.db.lock().await;
+        let sessions = db
+            .list_active_sessions(1000)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let source = crate::remote::conversation_session_id(
+            &id,
+            &sessions,
+            &spawnt_pty::list_active_sessions(),
+        );
+        let last = db
+            .get_session_chat(&source, Some(1))
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let event = spawnt_core::ChatEvent {
+            event_id: format!("handoff:{}", record.session_id),
+            session_id: source,
+            turn_index: last
+                .last()
+                .map_or(0, |event| event.turn_index.saturating_add(1)),
+            role: spawnt_core::ChatRole::System,
+            content: format!(
+                "Agent/model handoff requested: {} / {}. New session started; waiting for agent confirmation.",
+                record.agent,
+                record.model.as_deref().unwrap_or("agent default")
+            ),
+            created_at: chrono::Utc::now(),
+            tool_name: None,
+            status: Some("model_changed".to_owned()),
+        };
+        if db.insert_chat_event(&event).is_err() {
+            tracing::warn!("handoff notice could not be recorded");
+        }
+    }
     Ok(Json(json!({
         "ok": true,
         "source_session_id": id,
@@ -1554,24 +1663,8 @@ async fn remote_pairing_handler(
 
 fn remote_pairing_view(status: &crate::remote::PairingStatus) -> serde_json::Value {
     let mut body = json!(status);
-    if let (Some(room), Some(key), Some(relay)) = (
-        status.room_id.as_deref().filter(|_| !status.paired),
-        status.public_key.as_deref(),
-        status.relay_url.as_deref(),
-    ) {
-        let base = spawnt_core::branding::branding()
-            .map(|branding| branding.base_url.as_str())
-            .unwrap_or("https://spawntv.vercel.app");
-        let url = format!("{base}/remote#room={room}&key={key}&relay={relay}");
-        body["pairing_url"] = json!(url);
-        if let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
-            body["pairing_qr"] = json!(
-                code.render::<qrcode::render::svg::Color<'_>>()
-                    .min_dimensions(240, 240)
-                    .build()
-            );
-        }
-    }
+    body["pairing_code"] = json!(status.pairing_code());
+
     body
 }
 
@@ -2685,7 +2778,7 @@ mod tests {
     }
 
     #[test]
-    fn pairing_view_renders_a_local_qr_only_before_confirmation() {
+    fn pairing_view_has_code_only_before_confirmation() {
         let mut status = crate::remote::PairingStatus {
             enabled: true,
             paired: false,
@@ -2696,16 +2789,10 @@ mod tests {
             expires_at: Some((chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339()),
         };
         let view = super::remote_pairing_view(&status);
-        assert!(view["pairing_qr"].as_str().expect("QR").contains("<svg"));
-        assert!(
-            view["pairing_url"]
-                .as_str()
-                .expect("URL")
-                .contains("/remote#room=")
-        );
+        assert_eq!(view["pairing_code"].as_str().map(str::len), Some(8));
         status.paired = true;
         let view = super::remote_pairing_view(&status);
-        assert!(view.get("pairing_qr").is_none());
+        assert!(view["pairing_code"].is_null());
         assert!(view.get("pairing_url").is_none());
     }
 
@@ -2948,6 +3035,33 @@ mod tests {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 
+    #[tokio::test]
+    async fn prompt_resolution_waits_for_database_instead_of_reporting_missing() {
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
+        let guard = db.lock().await;
+        let app = build_router(AppState {
+            db: db.clone(),
+            bearer_token: "prompt-test".into(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/missing/prompt")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-test")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"text":"Hello"}"#))
+            .expect("request");
+        let task = tokio::spawn(async move { app.oneshot(request).await.expect("response") });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        assert!(
+            !task.is_finished(),
+            "database contention must not become a missing session"
+        );
+        drop(guard);
+        assert_eq!(task.await.expect("task").status(), StatusCode::NOT_FOUND);
+    }
     #[tokio::test]
     async fn multiline_prompt_is_validated_before_host_lookup() {
         let app = build_router(AppState {

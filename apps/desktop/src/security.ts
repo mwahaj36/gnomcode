@@ -65,3 +65,8 @@ export function isAllowedExternalUrl(input: string): boolean {
     return false;
   }
 }
+
+export function windowChrome(platform: string, dark: boolean): Pick<Electron.BrowserWindowConstructorOptions, 'titleBarStyle' | 'titleBarOverlay' | 'autoHideMenuBar'> {
+  return {autoHideMenuBar:true,titleBarStyle:platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(platform === 'darwin' ? {} : {titleBarOverlay:{color:dark ? '#0d0d0f' : '#f6f7f8',symbolColor:dark ? '#ededee' : '#15191f',height:32}})};
+}
