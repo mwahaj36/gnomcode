@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
-import { updateChat } from '../lib/console-presentation';
+import DesktopDevices from './DesktopDevices';
+import { reconcileChat, type PendingChat, updateChat } from '../lib/console-presentation';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
 type Session = { id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean };
@@ -12,7 +13,8 @@ type Reply = { type: string; request_type?: string; message?: string; sessions?:
 
 export default function RemoteCompanion({ embedded = false }: { embedded?: boolean }) {
   const [link, setLink] = useState({ room: '', key: '', relay: '' });
-  const [pairingInput, setPairingInput] = useState('');
+  const autoConnect = useRef(false);
+  const [optimistic, setOptimistic] = useState<Record<string,PendingChat[]>>({});
   const [phase, setPhase] = useState<'ready' | 'connecting' | 'verify' | 'paired'>('ready');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -37,7 +39,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const historyAnchor = useRef<{top:number; height:number} | null>(null);
   const drafts = useRef(new Map<string,string>());
   const promptRef = useRef('');
-  const pendingPrompt = useRef<{session:string; text:string} | null>(null);
+  const pendingPrompt = useRef<{session:string; text:string; id:string} | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const channel = useRef<Channel | null>(null);
   const phoneConfirmed = useRef(false);
@@ -50,17 +52,24 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const chunks = useRef('');
 
   useEffect(() => {
-    const params = new URLSearchParams(location.hash.slice(1));
-    setLink({ room: params.get('room') || '', key: params.get('key') || '', relay: params.get('relay') || '' });
+    try {
+      const value = sessionStorage.getItem('spawnt-pairing-offer');
+      sessionStorage.removeItem('spawnt-pairing-offer');
+      if (value) { const offer = JSON.parse(value); if (Date.parse(offer.expires_at) > Date.now()) {autoConnect.current = true; setLink(offer);} }
+    } catch { setError('Pairing code expired. Generate a fresh code on your desktop.'); }
     return () => { if (poll.current) clearInterval(poll.current); socket.current?.close(); };
   }, []);
 
   useEffect(() => {
     const element = chatContainer.current;
     if (!element) return;
-    updateChat(element, events);
+    const result = reconcileChat(events, optimistic[selected] || [], sessions.find(session=>session.id === selected)?.state);
+    if (result.pending.length !== (optimistic[selected] || []).length) setOptimistic(current=>({...current,[selected]:result.pending}));
+    updateChat(element, result.events);
     if (historyAnchor.current) { element.scrollTop = historyAnchor.current.top + element.scrollHeight - historyAnchor.current.height; historyAnchor.current = null; }
-  }, [events, selected]);
+  }, [events, selected, optimistic, sessions]);
+
+  useEffect(() => { if (autoConnect.current && link.room) {autoConnect.current = false; void connect();} });
 
   useEffect(() => {
     const input = promptInput.current;
@@ -73,26 +82,20 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   async function submitPrompt() {
     if (!sessions.find(session => session.id === selectedRef.current)?.can_prompt || pendingPrompt.current || !promptRef.current.trim()) return;
-    pendingPrompt.current = {session:selectedRef.current,text:promptRef.current};
-    setSending(true); setError(''); setNotice('Sending prompt...');
+    const id = crypto.randomUUID();
+    const sourceSession = selectedRef.current;
+    pendingPrompt.current = {session:sourceSession,text:promptRef.current,id};
+    const pending:PendingChat = {id,text:promptRef.current,created_at:new Date().toISOString(),baseline:events.map(event=>event.event_id),delivered:false};
+    setOptimistic(current=>({...current,[selectedRef.current]:[...(current[selectedRef.current] || []),pending]}));
+    setSending(true); setError(''); setNotice('');
     try { await send({type:'prompt',session_id:selectedRef.current,text:promptRef.current}); }
-    catch { pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
+    catch { setOptimistic(current=>({...current,[sourceSession]:(current[sourceSession] || []).filter(item=>item.id !== id)})); pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
   }
 
   async function browseFolders(path?: string) {
     setFoldersLoading(true); setError('');
     try { await send({type:'workspaces',path}); }
     catch { setFoldersLoading(false); setError('Desktop folders unavailable. Check the connection and retry.'); }
-  }
-
-  function usePairingLink() {
-    try {
-      const url = new URL(pairingInput);
-      if (url.origin !== location.origin || url.pathname !== '/remote') throw new Error('Invalid pairing link');
-      const params = new URLSearchParams(url.hash.slice(1));
-      setLink({ room: params.get('room') || '', key: params.get('key') || '', relay: params.get('relay') || '' });
-      setError('');
-    } catch { setError('Paste the full pairing link shown on your desktop.'); }
   }
 
   async function send(value: object) {
@@ -145,12 +148,12 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if (pending && (!reply.session_id || reply.session_id === pending.session)) {
         if (drafts.current.get(pending.session) === pending.text) drafts.current.delete(pending.session);
         if (pending.session === selectedRef.current && promptRef.current === pending.text) changePrompt('');
-        pendingPrompt.current = null; setSending(false); setNotice('Prompt delivered to agent.');
+        pendingPrompt.current = null; setSending(false); setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).map(item=>item.id === pending.id ? {...item,delivered:true} : item)})); setNotice('');
       }
     }
     else if (reply.type === 'switch_ack') { setNotice('New model session started. Waiting for the agent to confirm it.'); await send({ type: 'sessions' }); if (reply.new_session_id) selectSession(reply.new_session_id); }
     else if (reply.type === 'error') {
-      if (!reply.request_type || reply.request_type === 'prompt') { pendingPrompt.current = null; setSending(false); }
+      if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
       if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
       if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
       setError(reply.message || 'Remote request failed.');
@@ -162,9 +165,10 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     setNotice('');
     if (!/^[a-zA-Z0-9_-]{16,128}$/.test(link.room) || !/^[0-9a-f]{64}$/.test(link.key)
       || !(/^wss:\/\//.test(link.relay) || /^ws:\/\/(127\.0\.0\.1|localhost):/.test(link.relay))) {
-      setError('Use a valid pairing link from your desktop.'); return;
+      setError('Pairing code is invalid or expired. Generate a new code on your desktop.'); return;
     }
     try {
+      setOptimistic({});
       selectedRef.current = ''; setSelected(''); setSessions([]); setEvents([]);
       pendingPrompt.current = null; setSending(false); loadingHistory.current = false; setHistoryLoading(false);
       setFolderBrowser(null); setFoldersLoading(false); changePrompt(''); drafts.current.clear();
@@ -216,6 +220,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   }
 
   function disconnect() {
+    setOptimistic({});
     const previous = socket.current; socket.current = null; previous?.close(); if (poll.current) clearInterval(poll.current);
     selectedRef.current = ''; setSelected(''); pendingPrompt.current = null; setSending(false); setError(''); setNotice('');
     setPhase('ready'); setCode(''); setSessions([]); setEvents([]); setConfirmed(false); setHistoryLoading(false);
@@ -226,7 +231,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     <header className="remote-heading"><button className="remote-sidebar-toggle" type="button" aria-label="Toggle conversations" aria-controls="remote-session-sidebar" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" /></svg></button><div><h1>{phase === 'paired' ? active?.title || 'Workspace' : 'Connect your desktop'}</h1>{phase === 'paired' && <p>{active?.agent || 'Encrypted conversation'}</p>}</div><details key={phase} className="remote-actions"><summary>Actions</summary><div><a href="/console?view=settings">Profile</a>{phase === 'paired' && <><p>Encrypted connection active.</p>        <details><summary>Switch model</summary><form onSubmit={event => { event.preventDefault(); void send({ type: 'switch', session_id: selected, model: targetModel }).catch(() => setError('Model switch could not be sent.')); }}><label htmlFor="remote-model">Switch to model</label><input id="remote-model" value={targetModel} onChange={event => setTargetModel(event.target.value)} maxLength={128} /><button type="submit" disabled={!targetModel.trim()}>Handoff and switch</button></form></details><button type="button" onClick={disconnect}>Disconnect</button></>}</div></details></header>
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
-    {phase === 'ready' && <section><p><a href="/console?view=settings">Find your desktop in Profile</a>, or use a pairing link.</p><p>On the desktop, open Profile and choose Start pairing. Open the generated link here, compare the six-digit codes, then confirm on both devices.</p>{embedded && <div><label htmlFor="remote-pairing-link">Desktop pairing link</label><input id="remote-pairing-link" type="url" value={pairingInput} onChange={event => setPairingInput(event.target.value)} /><button type="button" onClick={usePairingLink}>Use link</button></div>}{link.room ? <button type="button" onClick={connect}>Connect securely</button> : <p role="status">Waiting for a desktop pairing link.</p>}</section>}
+    {phase === 'ready' && <DesktopDevices onPair={offer => {autoConnect.current = true;setLink(offer);setError('');}} />}
     {phase === 'connecting' && <p role="status">Connecting to the relay...</p>}
     {phase === 'verify' && <section><h2>Verify this device</h2><p>Compare this code with the code on your desktop. Confirm on both devices only if they match.</p><strong style={{ fontSize: 32, letterSpacing: 6 }}>{code}</strong><p><button type="button" onClick={confirm} disabled={confirmed}>Codes match</button></p>{confirmed && <p role="status">Waiting for desktop confirmation...</p>}<button type="button" onClick={disconnect}>Disconnect</button></section>}
     {phase === 'paired' && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>

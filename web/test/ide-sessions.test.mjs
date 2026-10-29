@@ -89,3 +89,44 @@ test('wide Markdown tables keep escaped column labels for phone layout', () => {
   assert.match(html, /data-label="&lt;img&gt;"/);
   assert.doesNotMatch(html, /<img>/);
 });
+
+test('pending prompts survive empty history and reconcile without duplicate bubbles', () => {
+  const pending = [{id:'local-1',text:'Hello',created_at:'2026-10-29T00:00:01Z',baseline:['old'],delivered:false}];
+  const initial = presentation.reconcileChat([],pending,'idle');
+  assert.equal(initial.events[0].content,'Hello');
+  assert.equal(initial.events.at(-1).content,'Sending...');
+  pending[0].delivered = true;
+  const recorded = [{event_id:'user',role:'user',content:'Hello',created_at:'2026-10-29T00:00:02Z'}];
+  const waiting = presentation.reconcileChat(recorded,pending,'thinking');
+  assert.equal(waiting.events.filter(event=>event.role==='user').length,1);
+  assert.equal(waiting.events.at(-1).content,'Thinking...');
+  const replied = presentation.reconcileChat([...recorded,{event_id:'reply',role:'assistant',content:'Hi',created_at:'2026-10-29T00:00:03Z'}],pending,'idle');
+  assert.equal(replied.pending.length,0);
+  assert.equal(replied.events.length,2);
+});
+
+test('identical pending prompts consume distinct logged turns and ended sessions stop waiting', () => {
+ const one={id:'one',text:'again',created_at:'2026-10-29',baseline:[],delivered:true};
+ const two={...one,id:'two'};
+ const events=[{event_id:'u1',role:'user',content:'again',created_at:'2026-10-29'},{event_id:'a1',role:'assistant',content:'done',created_at:'2026-10-29'}];
+ const result=presentation.reconcileChat(events,[one,two],'idle');
+ assert.equal(result.pending.length,1);assert.equal(result.pending[0].id,'two');
+ assert.match(presentation.reconcileChat([], [one], 'ended').events.at(-1).content,/ended/);
+});
+test('identical pending prompts keep ownership across repeated polls and empty history', () => {
+ const pending=['one','two'].map(id=>({id,text:'again',created_at:'2026-10-29',baseline:[],delivered:true}));
+ assert.equal(presentation.reconcileChat([],pending).events.filter(e=>e.role==='user').length,2);
+ const events=[{event_id:'u1',role:'user',content:'again'},{event_id:'a1',role:'assistant',content:'done'}];
+ const first=presentation.reconcileChat(events,pending);
+ const second=presentation.reconcileChat(events,first.pending);
+ assert.equal(second.pending.length,1);
+ assert.equal(second.pending[0].id,'two');
+ assert.equal(second.pending[0],pending[1]);
+ pending[1].delivered=false;
+ assert.equal(presentation.reconcileChat([],pending).pending[1],pending[1]);
+ assert.equal(second.events.filter(e=>e.role==='user').length,2);
+});
+test('calendar week labels use ISO week-year at the year boundary', () => {
+ const html=presentation.renderActivity({range_label:'All time',activity_interval:'week',total_tokens:10,daily:[{date:'2025-12-29',total_tokens:10,turns:1,chart_pct:100}]});
+ assert.match(html,/2026 · Week 1/);assert.match(html,/weekly totals/);
+});

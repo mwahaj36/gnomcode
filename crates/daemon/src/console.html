@@ -449,11 +449,12 @@
   </style>
 <link rel="stylesheet" href="/spawnt-tokens.css">
 <link rel="stylesheet" href="/spawnt-console.css">
+<link rel="stylesheet" href="/vendor/xterm.css">
 </head>
 <body class="sp-native-console">
       <div class="sp-console-workspace"><nav class="nav-tabs sp-console-nav" role="tablist" aria-label="Console views">
         <a class="app-brand" href="#" data-action="view:overview" aria-label="Spawnt dashboard"><span class="sp-brand-mark" aria-hidden="true"></span><span class="rail-label">spawnt</span></a>
-        <button type="button" class="rail-pin" data-action="pin-navigation" aria-label="Pin navigation" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7"/></svg><span class="rail-label">Pin navigation</span></button>
+        <button type="button" id="navigation-toggle" data-action="toggle-navigation" aria-label="Toggle navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16"/></svg><span class="rail-label">Collapse navigation</span></button>
         <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg><span class="rail-label">Dashboard</span></button>
         <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span class="rail-label">Workspace</span></button>
         <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:usage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7"/></svg><span class="rail-label">Usage</span></button>
@@ -508,8 +509,8 @@
           <h2 id="launcher-heading">New agent session</h2>
           <p>Choose an agent and workspace to begin. Use the terminal shell to install a CLI or sign in with your provider.</p>
           <form id="launch-agent-form" data-submit="launch-agent">
-            <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="terminal">Terminal Shell</option></select></div>
-            <div><label for="launch-repo-input">Workspace directory</label><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" hidden>Choose folder</button></div>
+            <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="terminal">Terminal Shell</option></select></div>
+            <div><label for="launch-repo-input">Workspace directory</label><div class="workspace-field"><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" aria-label="Choose folder" title="Choose folder" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg></button></div></div>
             <div><label for="launch-model-input">Model (optional)</label><input id="launch-model-input" type="text" placeholder="Use the agent default" maxlength="128" /></div>
             <p id="launch-agent-hint" role="status">Checking installed agents...</p>
             <button type="submit" class="btn-primary" id="launch-agent-btn">Launch Agent</button>
@@ -517,7 +518,7 @@
           <p id="launch-status" role="status"></p>
         </section>
         <section id="session-chat-panel" aria-labelledby="session-chat-heading" hidden>
-          <div class="conversation-heading"><div><h2 id="session-chat-heading">Conversation</h2><p id="chat-session-label"></p></div><details class="conversation-menu"><summary aria-label="Conversation actions">Actions</summary><div><button type="button" class="btn-control" data-action="focus-chat">Focus Window</button><button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Terminal stream</button><button type="button" class="btn-control" data-action="close-chat">Close</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div></details></div>
+          <div class="conversation-heading"><div><h2 id="session-chat-heading">Conversation</h2><p id="chat-session-label"></p></div><button class="btn-control" type="button" data-action="workspace-terminal" aria-controls="workspace-terminal-pane">Terminal</button><details class="conversation-menu"><summary aria-label="Conversation actions">Actions</summary><div><button type="button" class="btn-control" data-action="focus-chat">Focus Window</button><button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Terminal stream</button><button type="button" class="btn-control" data-action="close-chat">Close</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div></details></div>
           <p id="chat-status" role="status"></p>
           <p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden data-action="copy-workspace">Copy workspace path</button>
           <div id="chat-stream" role="log" aria-label="Conversation" aria-live="polite" tabindex="0"></div>
@@ -527,6 +528,7 @@
             <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
             <small id="chat-prompt-help">Enter to send · Shift+Enter for a new line</small>
           </form>
+          <section id="workspace-terminal-pane" hidden aria-label="Workspace terminal"><div class="workspace-terminal-heading"><span id="workspace-terminal-path">Terminal</span><button type="button" class="btn-control" data-action="hide-workspace-terminal">Hide</button></div><div id="workspace-terminal-screen"></div></section>
           <p id="chat-delivery-status" role="status"></p>
           <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button></div>
         </section>
@@ -540,7 +542,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <div class="sp-settings-resources"><a href="__SPAWNT_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__SPAWNT_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
+    <div class="sp-settings-resources"><a href="__SPAWNT_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__SPAWNT_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__SPAWNT_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
     <section class="profile-devices" aria-labelledby="remote-heading">
       <h2 id="remote-heading">Desktop and phone</h2>
@@ -783,6 +785,8 @@
   <p id="connection-status" role="alert" hidden class="local-view-message"></p>
   <div id="app-notice" class="app-notice" role="status" hidden><p id="app-notice-message"></p><button type="button" class="btn-control" data-action="dismiss-notice">Dismiss</button></div>
   <dialog id="confirm-dialog" aria-labelledby="confirm-heading" aria-describedby="confirm-message"><form method="dialog"><h2 id="confirm-heading">Confirm action</h2><p id="confirm-message"></p><div class="dialog-actions"><button class="btn-control" value="cancel" autofocus>Cancel</button><button class="btn-primary" id="confirm-accept" value="confirm">Continue</button></div></form></dialog>
+  <script src="/vendor/xterm.js"></script>
+  <script src="/vendor/xterm-addon-fit.js"></script>
   <script src="/console-app.js"></script>
 </body>
 </html>

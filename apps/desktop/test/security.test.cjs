@@ -83,3 +83,14 @@ test('external links do not carry arbitrary fragments', () => {
   assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/docs#privacy'), true);
   assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/docs#secret'), false);
 });
+
+test('desktop chrome uses themed native window controls on each platform', () => {
+ const {windowChrome}=require('../dist/security.js');
+ for (const platform of ['win32','linux']) {
+  const dark=windowChrome(platform,true),light=windowChrome(platform,false);
+  assert.equal(dark.titleBarStyle,'hidden');assert.equal(dark.titleBarOverlay.height,32);
+  assert.notEqual(dark.titleBarOverlay.color,light.titleBarOverlay.color);
+  assert.notEqual(dark.titleBarOverlay.symbolColor,dark.titleBarOverlay.color);
+ }
+ assert.equal(windowChrome('darwin',true).titleBarStyle,'hiddenInset');
+});

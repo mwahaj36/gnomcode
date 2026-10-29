@@ -20,7 +20,7 @@ try {
   },{theme,project});
   await context.route('**/auth/v1/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'00000000-0000-4000-8000-000000000001',aud:'authenticated',role:'authenticated',email:'preview@example.invalid'})}));
   await context.route('**/rest/v1/**',route=>{
-   const value={display_name:'Preview user',openai_plan_usd:20,claude_plan_usd:20,google_plan_usd:0,custom_pricing:[],remote_offer:{room:"a".repeat(32),key:"b".repeat(64),relay:"wss://relay.example/relay",expires_at:new Date(Date.now()+300000).toISOString(),name:"My desktop"},live_snapshot:{generated_at:new Date().toISOString(),sessions:[],quota:[],active_count:0,ongoing_count:0,timelines:{}},updated_at:new Date().toISOString()};
+   const value={display_name:'Preview user',openai_plan_usd:20,claude_plan_usd:20,google_plan_usd:0,custom_pricing:[],remote_offer:{room:"a".repeat(32),key:"b".repeat(64),relay:"wss://relay.example/relay",expires_at:new Date(Date.now()+300000).toISOString(),name:"My desktop",pairing_code:"87654321"},live_snapshot:{generated_at:new Date().toISOString(),sessions:[],quota:[],active_count:0,ongoing_count:0,timelines:{}},updated_at:new Date().toISOString()};
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
   });
   const page=await context.newPage();
@@ -32,7 +32,9 @@ try {
    await page.evaluate(()=>document.fonts.ready);
    await page.waitForTimeout(300);
    if(['/','/docs'].includes(route)) assert.ok(await page.getByRole('link',{name:'Console',exact:true}).count() > 0, 'signed-in marketing navigation opens Console directly');
-   if(route==='/console?view=settings') { const connect=page.getByRole('link',{name:'Connect securely',exact:true}); await connect.waitFor(); assert.match(await connect.getAttribute('href'), /\/remote#room=a{32}&key=b{64}/); }
+   if(route==='/console?view=settings') { await page.locator('#pairing-code').fill('00000000'); await page.getByRole('button',{name:'Pair desktop',exact:true}).click(); await page.getByRole('alert').filter({hasText:'Code does not match'}).waitFor(); await page.locator('#pairing-code').fill('87654321');
+   assert.equal(await page.getByRole('button',{name:'Pair desktop',exact:true}).isEnabled(),true); }
+
    if(route==='/auth') assert.ok(await page.locator('#auth-email').isVisible(), 'Auth capture must show the signed-out form');
    const label=route==='/'?'home':route.replace(/[/?=]/g,'-').replace(/^-/, '');
    const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,headings:[...document.querySelectorAll('h1')].map(node=>node.textContent),invalid:/undefined|NaN/.test(document.body.innerText)}));
