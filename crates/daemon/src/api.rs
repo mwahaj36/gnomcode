@@ -1258,9 +1258,17 @@ async fn chat_get_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let requested = id.clone();
     let id =
         crate::remote::conversation_session_id(&id, &sessions, &spawnt_pty::list_active_sessions());
-    match db.get_session_chat_before(&id, query.limit, query.before.as_deref()) {
+    match crate::remote::conversation_chat(
+        &db,
+        &requested,
+        &id,
+        &sessions,
+        query.limit,
+        query.before.as_deref(),
+    ) {
         Ok(events) => Ok(Json(spawnt_adapters::codex::clean_stored_conversation(
             spawnt_adapters::antigravity::clean_stored_conversation(events),
         ))),
@@ -1276,9 +1284,14 @@ async fn chat_delete_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
-    let id =
-        crate::remote::conversation_session_id(&id, &sessions, &spawnt_pty::list_active_sessions());
-    match db.delete_session_chat(&id) {
+    let hosted = spawnt_pty::list_active_sessions();
+    let native = crate::remote::conversation_session_id(&id, &sessions, &hosted);
+    let host = sessions
+        .iter()
+        .find(|session| session.id == native)
+        .and_then(|session| crate::remote::session_host(session, &sessions, &hosted))
+        .map_or(id.as_str(), |record| record.session_id.as_str());
+    match db.delete_session_chat_with_host(&native, host) {
         Ok(deleted_count) => Ok(Json(json!({
             "ok": true,
             "session_id": id,
@@ -1479,7 +1492,7 @@ async fn switch_session_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
     Json(payload): Json<SwitchSessionRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<axum::response::Response, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let prepared = {
         let db = state.db.lock().await;
@@ -1495,19 +1508,15 @@ async fn switch_session_handler(
             &payload.target_model,
             payload.agent.as_deref(),
         )
-    }
-    .map_err(|error| match error {
-        crate::HandoffError::MissingSession => StatusCode::NOT_FOUND,
-        crate::HandoffError::UnsupportedTarget => StatusCode::BAD_REQUEST,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
-    })?;
-    let record = crate::execute_switch(prepared)
-        .await
-        .map_err(|error| match error {
-            crate::HandoffError::MissingSession => StatusCode::NOT_FOUND,
-            crate::HandoffError::UnsupportedTarget => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        })?;
+    };
+    let prepared = match prepared {
+        Ok(value) => value,
+        Err(error) => return Ok(handoff_error_response(error)),
+    };
+    let record = match crate::execute_switch(prepared).await {
+        Ok(value) => value,
+        Err(error) => return Ok(handoff_error_response(error)),
+    };
     {
         let db = state.db.lock().await;
         let sessions = db
@@ -1518,27 +1527,8 @@ async fn switch_session_handler(
             &sessions,
             &spawnt_pty::list_active_sessions(),
         );
-        let last = db
-            .get_session_chat(&source, Some(1))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let event = spawnt_core::ChatEvent {
-            event_id: format!("handoff:{}", record.session_id),
-            session_id: source,
-            turn_index: last
-                .last()
-                .map_or(0, |event| event.turn_index.saturating_add(1)),
-            role: spawnt_core::ChatRole::System,
-            content: format!(
-                "Agent/model handoff requested: {} / {}. New session started; waiting for agent confirmation.",
-                record.agent,
-                record.model.as_deref().unwrap_or("agent default")
-            ),
-            created_at: chrono::Utc::now(),
-            tool_name: None,
-            status: Some("model_changed".to_owned()),
-        };
-        if db.insert_chat_event(&event).is_err() {
-            tracing::warn!("handoff notice could not be recorded");
+        if crate::remote::record_model_change(&db, &source, &record).is_err() {
+            tracing::warn!("model change notice could not be saved");
         }
     }
     Ok(Json(json!({
@@ -1547,7 +1537,34 @@ async fn switch_session_handler(
         "session_id": record.session_id,
         "agent": record.agent,
         "model": record.model
-    })))
+    }))
+    .into_response())
+}
+
+fn handoff_error_response(error: crate::HandoffError) -> axum::response::Response {
+    let (status, message) = match error {
+        crate::HandoffError::MissingSession => (
+            StatusCode::NOT_FOUND,
+            "The source session or workspace is no longer available. Reload conversations and retry.",
+        ),
+        crate::HandoffError::UnsupportedTarget => (
+            StatusCode::BAD_REQUEST,
+            "The selected model is not supported by that agent.",
+        ),
+        crate::HandoffError::Platform(_) => (
+            StatusCode::CONFLICT,
+            "The workspace could not be inspected. Check folder access and Git status.",
+        ),
+        crate::HandoffError::Store(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Conversation metadata could not be read. Reload and retry.",
+        ),
+        crate::HandoffError::Launch(_) => (
+            StatusCode::BAD_GATEWAY,
+            "The target agent could not start or accept the handoff. Check its installation and desktop login.",
+        ),
+    };
+    (status, Json(json!({"message":message}))).into_response()
 }
 
 /// Request payload to resume an idle or suspended session.
@@ -1706,7 +1723,11 @@ async fn remote_revoke_handler(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let revoked = state.remote.revoke().await;
+    let revoked = state
+        .remote
+        .revoke()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({"ok": true, "revoked": revoked})))
 }
 
@@ -2780,6 +2801,8 @@ mod tests {
     #[test]
     fn pairing_view_has_code_only_before_confirmation() {
         let mut status = crate::remote::PairingStatus {
+            remembered: false,
+            trust_expires_at: None,
             enabled: true,
             paired: false,
             room_id: Some("a".repeat(32)),

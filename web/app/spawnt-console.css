@@ -427,3 +427,53 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 #workspace-terminal-screen>div{min-width:0;width:100%}.conversation-heading>.btn-control{flex:none;white-space:nowrap;min-width:72px}.conversation-heading>div:first-child{min-width:0;flex:1}.conversation-heading h2{overflow-wrap:anywhere}@media(max-width:600px){.conversation-heading>.btn-control{min-width:44px;padding-inline:8px;font-size:11px}}
 
 .sp-activity{min-width:0;max-width:100%;overflow-wrap:anywhere}
+
+/* Remote owns a bounded viewport; only messages and drawers scroll. */
+.sp-remote:is(.is-paired,.is-reconnecting){position:fixed;inset:0;z-index:40;height:var(--remote-viewport-height,100dvh);min-height:0;overflow:hidden;background:var(--sp-bg);padding:0}
+.sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:64px}
+.sp-remote .remote-heading{gap:8px;flex-wrap:nowrap}
+.sp-remote .remote-heading>div{min-width:0;flex:1}
+.sp-remote .remote-heading h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-remote .remote-heading p{margin:3px 0 0;font-size:12px}
+.sp-remote .remote-new{flex:none;min-width:44px;min-height:44px;margin:0;padding:8px 12px;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:6px}
+.sp-remote .remote-conversation{overflow:hidden;padding-bottom:max(12px,env(safe-area-inset-bottom));box-sizing:border-box}
+.sp-remote .sp-remote-chat{overscroll-behavior:contain;overflow-x:hidden}
+.sp-remote .remote-session-sidebar{overscroll-behavior:contain}
+.sp-remote .remote-composer{padding-bottom:max(10px,env(safe-area-inset-bottom));margin-bottom:0}
+.sp-remote .remote-readonly{flex:none;padding:12px;border-top:1px solid var(--sp-border);font-size:13px;color:var(--sp-text-2)}
+.sp-remote .remote-empty button{margin:8px 8px 0 0}
+.sp-remote .sp-primary-action{background:var(--sp-primary);color:var(--sp-on-primary);border-color:transparent}
+.sp-remote .remote-folder-modal{width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:0;border:1px solid var(--sp-border-strong);border-radius:8px;background:var(--sp-surface);color:var(--sp-text)}
+.sp-remote .remote-folder-modal[open]{display:flex;flex-direction:column}
+.sp-remote .remote-folder-modal::backdrop{background:rgb(0 0 0 / .55)}
+.sp-remote .remote-folder-modal header{padding:20px;border-bottom:1px solid var(--sp-border);flex:none}
+.sp-remote .remote-folder-modal h2{font-size:18px;margin:0 0 8px}
+.sp-remote .remote-folder-modal header p{overflow-wrap:anywhere;margin:0;font-size:12px;color:var(--sp-text-2)}
+.sp-remote .remote-folder-content{overflow:auto;min-height:0;padding:16px 20px;overscroll-behavior:contain}
+.sp-remote .remote-folder-roots{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.sp-remote .remote-folder-modal footer{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--sp-border);flex:none}
+.sp-remote .remote-folder-modal footer button{margin:0;min-height:44px}
+@media(max-width:760px){.sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:0}.sp-remote .remote-conversation{padding:12px 12px max(12px,env(safe-area-inset-bottom))}.sp-remote .show-sessions .remote-session-sidebar{width:100%;border:0}.sp-remote .remote-heading h1{font-size:15px}.sp-remote .remote-heading{min-height:60px}}
+/* Desktop hover reveals labels without moving the conversation. */
+@media(hover:hover) and (pointer:fine){
+ body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:width .16s ease}
+ body.sp-native-console .sp-console-nav .rail-label,.sp-web-app .sp-console-nav button>span,.sp-web-app .web-download-link span{opacity:0!important}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)),.sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important}
+ body.sp-native-console .sp-console-nav:is(:hover,:has(:focus-visible)) .rail-label,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) button>span,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) .web-download-link span{opacity:1!important}
+ body.sp-native-console #navigation-toggle,.sp-web-app .sp-console-nav>button:first-of-type{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{transition:none!important}}
+.sp-chat-notice{width:100%;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px}.sp-chat-notice::before,.sp-chat-notice::after{content:"";height:1px;min-width:16px;flex:1;background:var(--sp-border)}.sp-chat-notice time{flex-basis:100%}
+
+/* Shared renderer scrollbars follow the current Spawnt theme. */
+*{scrollbar-width:thin;scrollbar-color:var(--sp-text-3) var(--sp-surface)}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:var(--sp-surface)}
+*::-webkit-scrollbar-thumb{background:var(--sp-text-3);border:2px solid var(--sp-surface);border-radius:4px}
+@media(forced-colors:active){*{scrollbar-color:auto}}
+.ide-sidebar-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.ide-sidebar-title h2{font:600 14px/1.4 var(--sp-font-sans);margin:0}.ide-sidebar-title button{padding:8px;min-width:36px;min-height:36px;background:transparent}
+.sp-remote .remote-sidebar-toggle{display:flex;align-items:center;justify-content:center;flex:none;min-width:44px;height:44px;background:transparent;border:0;padding:8px;margin:0}
+@media(min-width:761px){.sp-remote .remote-workspace:not(.show-sessions){grid-template-columns:minmax(0,1fr)}.sp-remote .remote-workspace:not(.show-sessions)>.remote-session-sidebar{display:none}}
+@media(hover:hover) and (pointer:fine) and (max-width:760px){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
+.sp-activity-heading{flex-wrap:wrap}.sp-activity-heading>div{min-width:0;max-width:100%}.sp-activity-totals{min-width:0;max-width:100%}.sp-activity-bars{box-sizing:border-box;width:100%}
+.sp-remote .remote-folder-modal footer button.sp-primary-action{background:var(--sp-primary);color:var(--sp-on-primary);border-color:transparent}

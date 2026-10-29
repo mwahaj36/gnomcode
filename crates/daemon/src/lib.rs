@@ -4,6 +4,7 @@
 pub mod api;
 pub mod pro;
 pub mod remote;
+mod remote_trust;
 pub mod sync;
 
 use chrono::Utc;
@@ -470,6 +471,12 @@ mod tests {
         assert_eq!(packet.touched_files, ["new file.txt"]);
         assert!(packet.prompt_summary.contains("Fix tests"));
         assert!(!packet.prompt_summary.contains("secret-value"));
+        std::fs::remove_dir_all(repo.path().join(".git")).expect("remove fixture git metadata");
+        let prepared = super::prepare_switch(&db, "codex:test", "gpt-5.6-luna", Some("codex"))
+            .expect("non-Git workspace handoff");
+        assert_eq!(prepared.agent, "codex");
+        assert_eq!(prepared.packet.target_model, "gpt-5.6-luna");
+        assert!(prepared.packet.touched_files.is_empty());
     }
     #[test]
     fn handoff_preparation_rejects_unknown_session() {

@@ -1,5 +1,6 @@
 //! Opt-in outbound encrypted Remote pairing and bounded chat commands.
 
+use crate::remote_trust::{DeviceTrust, IDLE_SECONDS};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -8,7 +9,7 @@ use spawnt_core::{EncryptedRemoteFrame, Project, Session};
 use spawnt_store::Database;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use thiserror::Error;
 use tokio::sync::{Mutex, mpsc, watch};
 use tokio_tungstenite::tungstenite::Message;
@@ -31,11 +32,18 @@ pub enum RemoteError {
     /// The pairing has expired.
     #[error("remote pairing expired")]
     Expired,
+    /// Local device trust could not be saved securely.
+    #[error("could not save device trust securely")]
+    Persistence,
 }
 
 /// Current pairing state returned only by the authenticated loopback API.
 #[derive(Clone, Serialize)]
 pub struct PairingStatus {
+    /// Whether an unexpired device credential is retained locally.
+    pub remembered: bool,
+    /// Unix timestamp when saved device trust expires without further activity.
+    pub trust_expires_at: Option<i64>,
     /// Whether a pairing room exists.
     pub enabled: bool,
     /// Whether both devices have confirmed the same code.
@@ -55,7 +63,7 @@ pub struct PairingStatus {
 impl PairingStatus {
     /// Temporary owner-scoped locator; encrypted device confirmation still controls access.
     pub(crate) fn pairing_code(&self) -> Option<String> {
-        if !self.enabled || self.paired {
+        if !self.enabled || self.paired || self.remembered {
             return None;
         }
         let expires = chrono::DateTime::parse_from_rfc3339(self.expires_at.as_deref()?).ok()?;
@@ -73,6 +81,8 @@ impl PairingStatus {
 pub struct RemoteManager {
     current: Mutex<Option<Arc<Room>>>,
     discovery_changed: Arc<tokio::sync::Notify>,
+    generation: Arc<AtomicU64>,
+    persistence: Arc<Mutex<()>>,
 }
 
 struct Room {
@@ -88,6 +98,11 @@ struct Room {
     outgoing: mpsc::Sender<Value>,
     cancel: watch::Sender<bool>,
     discovery_changed: Arc<tokio::sync::Notify>,
+    identity: DeviceTrust,
+    trusted: Mutex<Option<DeviceTrust>>,
+    generation: Arc<AtomicU64>,
+    expected_generation: u64,
+    persistence: Arc<Mutex<()>>,
 }
 
 impl RemoteManager {
@@ -112,6 +127,7 @@ impl RemoteManager {
         db: Arc<Mutex<Database>>,
         relay_url: String,
     ) -> Result<PairingStatus, RemoteError> {
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
         if !relay_url.starts_with("wss://")
             && !relay_url.starts_with("ws://127.0.0.1:")
             && !relay_url.starts_with("ws://localhost:")
@@ -129,6 +145,75 @@ impl RemoteManager {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect::<String>();
+        let mut secret = [0; 32];
+        getrandom::fill(&mut secret).map_err(|_| RemoteError::Relay)?;
+        {
+            let _gate = self.persistence.lock().await;
+            clear_trust().await?;
+        }
+        self.start_record(
+            db,
+            DeviceTrust {
+                room: id,
+                relay: relay_url,
+                private,
+                secret,
+                last_activity: chrono::Utc::now().timestamp(),
+            },
+            false,
+            generation,
+        )
+        .await
+    }
+
+    /// Restores unexpired locally protected device trust after a daemon restart.
+    pub async fn restore(&self, db: Arc<Mutex<Database>>) -> Result<(), RemoteError> {
+        let generation = self.generation.load(Ordering::Acquire);
+        let record = tokio::task::spawn_blocking(|| {
+            std::fs::read(crate::remote_trust::path())
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<DeviceTrust>(&bytes).ok())
+        })
+        .await
+        .map_err(|_| RemoteError::Persistence)?;
+        if let Some(record) = record.filter(|record| record.valid(chrono::Utc::now().timestamp())) {
+            if !valid_relay(&record.relay) || record.room.len() != 32 {
+                return Err(RemoteError::NotConfigured);
+            }
+            loop {
+                if generation != self.generation.load(Ordering::Acquire)
+                    || self.current.lock().await.is_some()
+                    || !record.valid(chrono::Utc::now().timestamp())
+                {
+                    break;
+                }
+                if self
+                    .start_record(db.clone(), record.clone(), true, generation)
+                    .await
+                    .is_ok()
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn start_record(
+        &self,
+        db: Arc<Mutex<Database>>,
+        identity: DeviceTrust,
+        trusted: bool,
+        generation: u64,
+    ) -> Result<PairingStatus, RemoteError> {
+        let id = identity.room.clone();
+        let relay_url = identity.relay.clone();
+        let private = identity.private;
+        if !valid_relay(&relay_url) || id.len() != 32 || !id.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(RemoteError::NotConfigured);
+        }
         let url = format!("{}/{id}?role=desktop", relay_url.trim_end_matches('/'));
         let (socket, _) = tokio::time::timeout(
             std::time::Duration::from_secs(10),
@@ -153,8 +238,18 @@ impl RemoteManager {
             connected: AtomicBool::new(true),
             outgoing,
             cancel,
+            trusted: Mutex::new(trusted.then(|| identity.clone())),
+            identity,
+            generation: self.generation.clone(),
+            expected_generation: generation,
+            persistence: self.persistence.clone(),
         });
-        let previous = self.current.lock().await.replace(room.clone());
+        let mut current = self.current.lock().await;
+        if generation != self.generation.load(Ordering::Acquire) {
+            return Err(RemoteError::NotPaired);
+        }
+        let previous = current.replace(room.clone());
+        drop(current);
         if let Some(previous) = previous {
             let _ = previous.cancel.send(true);
         }
@@ -169,6 +264,8 @@ impl RemoteManager {
         match self.current.lock().await.clone() {
             Some(room) => room.status().await,
             None => PairingStatus {
+                remembered: false,
+                trust_expires_at: None,
                 enabled: false,
                 paired: false,
                 room_id: None,
@@ -213,6 +310,7 @@ impl RemoteManager {
             .send(json!({"type":"confirm"}))
             .await
             .map_err(|_| RemoteError::Relay)?;
+        room.establish_trust().await?;
         Ok(room.status().await)
     }
 
@@ -222,40 +320,79 @@ impl RemoteManager {
     }
 
     /// Closes the room and destroys its ephemeral key material.
-    pub async fn revoke(&self) -> bool {
+    pub async fn revoke(&self) -> Result<bool, RemoteError> {
+        self.generation.fetch_add(1, Ordering::AcqRel);
         let previous = self.current.lock().await.take();
         self.discovery_changed.notify_one();
-        if let Some(room) = previous {
+        if let Some(room) = previous.as_ref() {
             let _ = room.cancel.send(true);
-            true
-        } else {
-            false
         }
+        let _gate = self.persistence.lock().await;
+        clear_trust().await?;
+        Ok(previous.is_some())
     }
 }
 
 impl Room {
-    async fn status(&self) -> PairingStatus {
-        if !self.connected.load(Ordering::Acquire) {
-            return PairingStatus {
-                enabled: false,
-                paired: false,
-                room_id: None,
-                public_key: None,
-                verify_code: None,
-                relay_url: None,
-                expires_at: None,
-            };
+    async fn establish_trust(&self) -> Result<(), RemoteError> {
+        let mut trusted = self.trusted.lock().await;
+        let _gate = self.persistence.lock().await;
+        if self.generation.load(Ordering::Acquire) != self.expected_generation {
+            return Err(RemoteError::NotPaired);
         }
-        let verify_code = self
-            .channel
-            .lock()
-            .await
+        if self.local_confirmed.load(Ordering::Acquire)
+            && self.phone_confirmed.load(Ordering::Acquire)
+            && trusted.is_none()
+        {
+            let mut trust = self.identity.clone();
+            trust.last_activity = chrono::Utc::now().timestamp();
+            let saved = trust.clone();
+            tokio::task::spawn_blocking(move || saved.save())
+                .await
+                .map_err(|_| RemoteError::Persistence)??;
+            *trusted = Some(trust.clone());
+            self.outgoing.send(json!({"type":"trusted","secret":crate::remote_trust::hex(&trust.secret),"expires_at":trust.last_activity+IDLE_SECONDS})).await.map_err(|_|RemoteError::Relay)?;
+        }
+        Ok(())
+    }
+
+    async fn activity(&self) {
+        let mut trusted = self.trusted.lock().await;
+        let _gate = self.persistence.lock().await;
+        if self.generation.load(Ordering::Acquire) != self.expected_generation {
+            return;
+        }
+        if let Some(trust) = trusted.as_mut() {
+            let now = chrono::Utc::now().timestamp();
+            if trust.valid(now) && now - trust.last_activity >= 60 {
+                trust.last_activity = now;
+                let saved = trust.clone();
+                let _ = tokio::task::spawn_blocking(move || saved.save()).await;
+            }
+        }
+    }
+    async fn status(&self) -> PairingStatus {
+        let trusted = self.trusted.lock().await;
+        let trusted = trusted
             .as_ref()
-            .map(|channel| channel.verify_code().to_owned());
+            .filter(|trust| trust.valid(chrono::Utc::now().timestamp()));
+        let remembered = trusted.is_some();
+        let connected = self.connected.load(Ordering::Acquire);
+        let verify_code = if remembered {
+            None
+        } else {
+            self.channel
+                .lock()
+                .await
+                .as_ref()
+                .map(|channel| channel.verify_code().to_owned())
+        };
         PairingStatus {
-            enabled: self.connected.load(Ordering::Acquire),
-            paired: self.connected.load(Ordering::Acquire)
+            remembered,
+            trust_expires_at: trusted.map(|trust| trust.last_activity + IDLE_SECONDS),
+            enabled: connected || remembered,
+            paired: connected
+                && remembered
                 && self.local_confirmed.load(Ordering::Acquire)
                 && self.phone_confirmed.load(Ordering::Acquire),
             room_id: Some(self.id.clone()),
@@ -279,20 +416,94 @@ impl Drop for ConnectionGuard {
 async fn run_room(
     room: Arc<Room>,
     db: Arc<Mutex<Database>>,
-    socket: tokio_tungstenite::WebSocketStream<
+    mut socket: tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
     mut outgoing: mpsc::Receiver<Value>,
     mut canceled: watch::Receiver<bool>,
 ) {
     let _connection = ConnectionGuard(room.clone());
+    loop {
+        while outgoing.try_recv().is_ok() {}
+        *room.channel.lock().await = None;
+        room.local_confirmed.store(false, Ordering::Release);
+        room.phone_confirmed.store(false, Ordering::Release);
+        room.connected.store(true, Ordering::Release);
+        run_connection(&room, &db, socket, &mut outgoing, &mut canceled).await;
+        room.connected.store(false, Ordering::Release);
+        room.discovery_changed.notify_one();
+        if *canceled.borrow()
+            || !room
+                .trusted
+                .lock()
+                .await
+                .as_ref()
+                .is_some_and(|trust| trust.valid(chrono::Utc::now().timestamp()))
+        {
+            break;
+        }
+        loop {
+            tokio::select! {_=canceled.changed()=>return,_=tokio::time::sleep(std::time::Duration::from_secs(1))=>{}}
+            let url = format!("{}/{}?role=desktop", room.relay_url, room.id);
+            if let Ok(Ok((next, _))) = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                tokio_tungstenite::connect_async(&url),
+            )
+            .await
+            {
+                socket = next;
+                break;
+            }
+            if !room
+                .trusted
+                .lock()
+                .await
+                .as_ref()
+                .is_some_and(|trust| trust.valid(chrono::Utc::now().timestamp()))
+            {
+                return;
+            }
+        }
+    }
+}
+
+fn valid_relay(value: &str) -> bool {
+    (value.starts_with("wss://")
+        || value.starts_with("ws://127.0.0.1:")
+        || value.starts_with("ws://localhost:"))
+        && value.ends_with("/relay")
+        && !value.contains(['?', '#', '&'])
+}
+
+async fn clear_trust() -> Result<(), RemoteError> {
+    tokio::task::spawn_blocking(|| match std::fs::remove_file(crate::remote_trust::path()) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(RemoteError::Persistence),
+    })
+    .await
+    .map_err(|_| RemoteError::Persistence)?
+}
+
+async fn run_connection(
+    room: &Arc<Room>,
+    db: &Arc<Mutex<Database>>,
+    socket: tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    outgoing: &mut mpsc::Receiver<Value>,
+    canceled: &mut watch::Receiver<bool>,
+) {
     let (mut writer, mut reader) = socket.split();
+    let mut resume_context = String::new();
     let mut timer = tokio::time::interval(std::time::Duration::from_secs(10));
     loop {
         tokio::select! {
             _ = canceled.changed() => break,
             _ = timer.tick() => {
-                if chrono::Utc::now() > room.expires_at
+                let trusted=room.trusted.lock().await;
+                if trusted.as_ref().is_some_and(|trust|!trust.valid(chrono::Utc::now().timestamp())) {break;}
+                if trusted.is_none() && chrono::Utc::now() > room.expires_at
                     && !(room.local_confirmed.load(Ordering::Acquire)
                         && room.phone_confirmed.load(Ordering::Acquire)) { break; }
             }
@@ -315,13 +526,22 @@ async fn run_room(
             inbound = reader.next() => {
                 let Some(Ok(Message::Binary(bytes))) = inbound else { break; };
                 if bytes.len() > 65536 { break; }
+                if room.channel.lock().await.is_some() && serde_json::from_slice::<Value>(&bytes).ok().and_then(|v|v.get("type").and_then(Value::as_str).map(str::to_owned)).as_deref()==Some("hello") {continue;}
                 if room.channel.lock().await.is_none() {
                     let Ok(value) = serde_json::from_slice::<Value>(&bytes) else { break; };
                     if value.get("type").and_then(Value::as_str) != Some("hello") { break; }
                     let Some(public) = value.get("public_key").and_then(Value::as_str) else { break; };
+                    let public_hex=public.to_owned();
                     let Ok(public) = RemoteKeyPair::parse_public_hex(public) else { break; };
-                    let Ok(channel) = RemoteChannel::new(&room.keys, public, &room.id, PeerRole::Desktop) else { break; };
+                    let mut nonce=[0;16];if getrandom::fill(&mut nonce).is_err(){break;}
+                    let nonce=crate::remote_trust::hex(&nonce);
+                    let context=format!("{}:{nonce}",room.id);
+                    resume_context=format!("{context}:{public_hex}");
+                    let Ok(channel) = RemoteChannel::new(&room.keys, public, &context, PeerRole::Desktop) else { break; };
                     *room.channel.lock().await = Some(channel);
+                    let challenge=json!({"type":"challenge","nonce":nonce});
+                    let Ok(bytes)=serde_json::to_vec(&challenge) else {break;};
+                    if writer.send(Message::Binary(bytes.into())).await.is_err(){break;}
                     continue;
                 }
                 let Ok(frame) = serde_json::from_slice::<EncryptedRemoteFrame>(&bytes) else { break; };
@@ -333,15 +553,28 @@ async fn run_room(
                     }
                 };
                 let Ok(value) = serde_json::from_slice::<Value>(&plaintext) else { break; };
+                if room.generation.load(Ordering::Acquire)!=room.expected_generation {break;}
+                if value.get("type").and_then(Value::as_str)==Some("resume") {
+                    let trusted=room.trusted.lock().await;
+                    if !trusted.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp()) && trust.verify(&resume_context,value.get("proof").and_then(Value::as_str).unwrap_or(""))) {drop(trusted);let _=room.outgoing.send(json!({"type":"resume_rejected"})).await;continue;}
+                    drop(trusted);
+                    room.local_confirmed.store(true,Ordering::Release);room.phone_confirmed.store(true,Ordering::Release);room.discovery_changed.notify_one();
+                    let _=room.outgoing.send(json!({"type":"resumed"})).await;continue;
+                }
                 if value.get("type").and_then(Value::as_str) == Some("confirm") {
+                    if room.trusted.lock().await.is_some(){break;}
                     room.phone_confirmed.store(true, Ordering::Release);
                     room.discovery_changed.notify_one();
+                    if room.establish_trust().await.is_err(){break;}
                     continue;
                 }
                 if !(room.local_confirmed.load(Ordering::Acquire)
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
+                if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
-                let mut response = dispatch(&db, value).await;
+                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces")) {room.activity().await;}
+                if request_type.as_str()==Some("activity") {continue;}
+                let mut response = dispatch(db, value).await;
                 if response.get("type").and_then(Value::as_str) == Some("error") { response["request_type"] = request_type; }
                 if room.outgoing.send(response).await.is_err() { break; }
             }
@@ -489,7 +722,14 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             let sessions = db.list_active_sessions(1000).unwrap_or_default();
             let native_id =
                 conversation_session_id(session_id, &sessions, &spawnt_pty::list_active_sessions());
-            match db.get_session_chat_before(&native_id, Some(limit as usize), before) {
+            match conversation_chat(
+                &db,
+                session_id,
+                &native_id,
+                &sessions,
+                Some(limit as usize),
+                before,
+            ) {
                 Ok(events) => {
                     let events = spawnt_adapters::codex::clean_stored_conversation(
                         spawnt_adapters::antigravity::clean_stored_conversation(events),
@@ -521,12 +761,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 .await
                 .list_active_sessions(1000)
                 .unwrap_or_default();
-            let native_id = conversation_session_id(session_id, &sessions, &hosted);
-            let session = sessions.iter().find(|session| session.id == native_id);
-            let Some(session) = session else {
-                return json!({"type":"error","message":"Session unavailable; wait for the agent log to appear"});
-            };
-            let Some(record) = prompt_host(session, &sessions, &hosted) else {
+            let Some(record) = remote_prompt_target(session_id, &sessions, &hosted) else {
                 return json!({"type":"error","message":"Prompting requires an idle agent with a unique hosted session"});
             };
             if spawnt_pty::send_prompt(record, text).await.is_ok() {
@@ -560,6 +795,10 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             };
             match crate::execute_switch(prepared).await {
                 Ok(record) => {
+                    let guard = db.lock().await;
+                    if record_model_change(&guard, session_id, &record).is_err() {
+                        tracing::warn!("model change notice could not be saved");
+                    }
                     json!({"type":"switch_ack","session_id":session_id,"new_session_id":record.session_id})
                 }
                 Err(_) => json!({"type":"error","message":"Model switch failed"}),
@@ -569,12 +808,65 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     }
 }
 
+pub(crate) fn record_model_change(
+    db: &Database,
+    source: &str,
+    target: &spawnt_pty::SessionRecord,
+) -> Result<(), spawnt_store::Error> {
+    let last = db.get_session_chat(source, Some(1))?;
+    let event = spawnt_core::ChatEvent {
+        event_id: format!("handoff:{}:source", target.session_id),
+        session_id: source.to_owned(),
+        turn_index: last
+            .last()
+            .map_or(0, |event| event.turn_index.saturating_add(1)),
+        role: spawnt_core::ChatRole::System,
+        content: format!(
+            "Agent/model change requested: {} / {}. Waiting for the agent to confirm the model.",
+            target.agent,
+            target.model.as_deref().unwrap_or("agent default")
+        ),
+        created_at: chrono::Utc::now(),
+        tool_name: None,
+        status: Some("model_changed".into()),
+    };
+    db.insert_chat_event(&event)
+}
+
+pub(crate) fn conversation_chat(
+    db: &Database,
+    requested: &str,
+    native: &str,
+    sessions: &[Session],
+    limit: Option<usize>,
+    before: Option<&str>,
+) -> Result<Vec<spawnt_core::ChatEvent>, spawnt_store::Error> {
+    let hosted = spawnt_pty::list_active_sessions();
+    let host = sessions
+        .iter()
+        .find(|session| session.id == native)
+        .and_then(|session| session_host(session, sessions, &hosted))
+        .map_or(requested, |record| record.session_id.as_str());
+    let mut events = db.get_session_chat_before(native, limit, before)?;
+    if let Some(mut event) = db.handoff_notice(host)? {
+        event.event_id = format!("handoff:{host}:target");
+        event.session_id = native.to_owned();
+        event.turn_index = 0;
+        if !events.iter().any(|row| row.event_id == event.event_id)
+            && (before.is_none() || events.first().is_some_and(|row| row.turn_index == 0))
+        {
+            events.insert(0, event);
+        }
+    }
+    Ok(events)
+}
+
 fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -> Vec<Value> {
     let bindings = session_bindings(sessions, hosted);
     let mut visible = sessions.iter().take(100).map(|session| {
         let host = bindings.iter().find(|(candidate, _)| candidate.id == session.id).map(|(_, record)| *record);
         let can_prompt = session.state == spawnt_core::SessionState::Idle && host.is_some();
-        json!({"id":host.map_or(session.id.as_str(), |record| record.session_id.as_str()),"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"can_prompt":can_prompt,"last_event_at":session.last_event_at})
+        json!({"id":host.map_or(session.id.as_str(), |record| record.session_id.as_str()),"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"hosted":host.is_some(),"can_prompt":can_prompt,"last_event_at":session.last_event_at})
     }).collect::<Vec<_>>();
     for record in hosted {
         if !matches!(
@@ -591,7 +883,7 @@ fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -
                 || "New conversation".to_owned(),
                 |name| name.to_string_lossy().into_owned(),
             );
-            visible.push(json!({"id":record.session_id,"title":title,"agent":record.agent,"requested_model":record.model,"state":"waiting_for_history","can_prompt":false,"last_event_at":record.started_at}));
+            visible.push(json!({"id":record.session_id,"title":title,"agent":record.agent,"requested_model":record.model,"state":"waiting_for_history","hosted":true,"can_prompt":true,"last_event_at":record.started_at}));
         }
     }
     visible.sort_by(|a, b| {
@@ -611,6 +903,41 @@ pub(crate) fn prompt_host<'a>(
         return None;
     }
     session_host(session, sessions, hosted)
+}
+
+fn remote_prompt_target<'a>(
+    id: &str,
+    sessions: &[Session],
+    hosted: &'a [spawnt_pty::SessionRecord],
+) -> Option<&'a spawnt_pty::SessionRecord> {
+    let native = conversation_session_id(id, sessions, hosted);
+    if let Some(session) = sessions.iter().find(|session| session.id == native) {
+        return prompt_host(session, sessions, hosted).filter(|record| {
+            matches!(
+                record.agent.as_str(),
+                "claude"
+                    | "claude-code"
+                    | "codex"
+                    | "gemini"
+                    | "gemini-cli"
+                    | "antigravity"
+                    | "agy"
+            )
+        });
+    }
+    hosted.iter().find(|record| {
+        record.session_id == id
+            && matches!(
+                record.agent.as_str(),
+                "claude"
+                    | "claude-code"
+                    | "codex"
+                    | "gemini"
+                    | "gemini-cli"
+                    | "antigravity"
+                    | "agy"
+            )
+    })
 }
 
 pub(crate) fn conversation_session_id(
@@ -743,6 +1070,27 @@ mod tests {
             "codex:native"
         );
         assert!(prompt_host(&session, std::slice::from_ref(&session), &[record]).is_none());
+        let record = spawnt_pty::SessionRecord {
+            session_id: "first-turn".into(),
+            agent: "codex".into(),
+            repo_path: std::env::temp_dir().to_string_lossy().into_owned(),
+            model: None,
+            host_pid: 1,
+            child_pid: 2,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        assert!(remote_prompt_target("first-turn", &[], std::slice::from_ref(&record)).is_some());
+        assert_eq!(
+            remote_sessions(&[], std::slice::from_ref(&record))[0]["can_prompt"],
+            true
+        );
+        let shell = spawnt_pty::SessionRecord {
+            agent: "terminal".into(),
+            ..record.clone()
+        };
+        assert!(remote_prompt_target("first-turn", &[], &[shell]).is_none());
     }
 
     #[test]
@@ -836,36 +1184,38 @@ mod tests {
             .expect("listener");
         let port = listener.local_addr().expect("address").port();
         let relay_task = tokio::spawn(async move {
-            let (desktop_tcp, _) = listener.accept().await.expect("desktop");
-            let desktop = tokio_tungstenite::accept_async(desktop_tcp)
-                .await
-                .expect("desktop websocket");
-            let (phone_tcp, _) = listener.accept().await.expect("phone");
-            let phone = tokio_tungstenite::accept_async(phone_tcp)
-                .await
-                .expect("phone websocket");
-            let (mut desktop_out, mut desktop_in) = desktop.split();
-            let (mut phone_out, mut phone_in) = phone.split();
             loop {
-                tokio::select! {
-                    message = desktop_in.next() => {
-                        let Some(Ok(message)) = message else { break; };
-                        if phone_out.send(message).await.is_err() { break; }
-                    }
-                    message = phone_in.next() => {
-                        let Some(Ok(message)) = message else { break; };
-                        if desktop_out.send(message).await.is_err() { break; }
+                let (desktop_tcp, _) = listener.accept().await.expect("desktop");
+                let desktop = tokio_tungstenite::accept_async(desktop_tcp)
+                    .await
+                    .expect("desktop websocket");
+                let (phone_tcp, _) = listener.accept().await.expect("phone");
+                let phone = tokio_tungstenite::accept_async(phone_tcp)
+                    .await
+                    .expect("phone websocket");
+                let (mut desktop_out, mut desktop_in) = desktop.split();
+                let (mut phone_out, mut phone_in) = phone.split();
+                loop {
+                    tokio::select! {
+                        message = desktop_in.next() => {
+                            let Some(Ok(message)) = message else { break; };
+                            if phone_out.send(message).await.is_err() { break; }
+                        }
+                        message = phone_in.next() => {
+                            let Some(Ok(message)) = message else { break; };
+                            if desktop_out.send(message).await.is_err() { break; }
+                        }
                     }
                 }
             }
         });
-        let manager = RemoteManager::new();
+        let mut manager = Arc::new(RemoteManager::new());
         let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
         // Network verification is explicit; normal test runs stay on loopback.
         let base = std::env::var("SPAWNT_TEST_REMOTE_RELAY_URL")
             .unwrap_or_else(|_| format!("ws://127.0.0.1:{port}/relay"));
         let status = manager
-            .start_with_url(db, base.clone())
+            .start_with_url(db.clone(), base.clone())
             .await
             .expect("pairing");
         let room = status.room_id.expect("room");
@@ -876,9 +1226,7 @@ mod tests {
                 .await
                 .expect("phone connect");
         let phone_keys = RemoteKeyPair::from_private([23; 32]);
-        let mut phone_channel =
-            RemoteChannel::new(&phone_keys, desktop_public, &room, PeerRole::Phone)
-                .expect("phone channel");
+
         phone_socket
             .send(Message::Binary(
                 serde_json::to_vec(
@@ -889,6 +1237,17 @@ mod tests {
             ))
             .await
             .expect("send hello");
+        let challenge = phone_socket
+            .next()
+            .await
+            .expect("challenge")
+            .expect("frame")
+            .into_data();
+        let challenge: Value = serde_json::from_slice(&challenge).expect("challenge json");
+        let context = format!("{room}:{}", challenge["nonce"].as_str().expect("nonce"));
+        let mut phone_channel =
+            RemoteChannel::new(&phone_keys, desktop_public, &context, PeerRole::Phone)
+                .expect("channel");
         tokio::time::timeout(std::time::Duration::from_secs(2), async {
             loop {
                 if manager.status().await.verify_code.is_some() {
@@ -940,6 +1299,24 @@ mod tests {
         })
         .await
         .expect("paired");
+        let trusted = phone_socket
+            .next()
+            .await
+            .expect("trust")
+            .expect("frame")
+            .into_data();
+        let trusted: EncryptedRemoteFrame = serde_json::from_slice(&trusted).expect("trust frame");
+        let trusted: Value =
+            serde_json::from_slice(&phone_channel.open(&trusted).expect("trust decrypt"))
+                .expect("trust chunk");
+        let trusted: Value = serde_json::from_str(trusted["data"].as_str().expect("trust data"))
+            .expect("trust packet");
+        assert_eq!(trusted["type"], "trusted");
+        let saved: DeviceTrust = serde_json::from_slice(
+            &std::fs::read(crate::remote_trust::path()).expect("private trust file"),
+        )
+        .expect("trust");
+        assert!(saved.valid(chrono::Utc::now().timestamp()));
         let request = phone_channel
             .seal(br#"{"type":"sessions"}"#)
             .expect("seal request");
@@ -996,9 +1373,171 @@ mod tests {
         assert_eq!(listing["folders"].as_array().expect("folders").len(), 1);
         assert_eq!(listing["folders"][0]["name"], "sample-workspace");
         assert!(!listing.to_string().contains("private.txt"));
-        assert!(manager.revoke().await);
+        for restart in [false, true] {
+            phone_socket
+                .close(None)
+                .await
+                .expect("phone background close");
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            if restart {
+                let old = manager.current.lock().await.take().expect("old room");
+                let _ = old.cancel.send(true);
+                manager = Arc::new(RemoteManager::new());
+                manager
+                    .restore(db.clone())
+                    .await
+                    .expect("restore protected trust");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+            let (mut next, _) =
+                tokio_tungstenite::connect_async(format!("{base}/{room}?role=phone"))
+                    .await
+                    .expect("reconnect phone");
+            let keys = RemoteKeyPair::from_private([if restart { 25 } else { 24 }; 32]);
+            next.send(Message::Binary(
+                serde_json::to_vec(&json!({"type":"hello","public_key":keys.public_key_hex()}))
+                    .expect("hello")
+                    .into(),
+            ))
+            .await
+            .expect("hello");
+            let challenge = next
+                .next()
+                .await
+                .expect("challenge")
+                .expect("frame")
+                .into_data();
+            let challenge: Value = serde_json::from_slice(&challenge).expect("challenge json");
+            let fresh_context = format!("{room}:{}", challenge["nonce"].as_str().expect("nonce"));
+            assert_ne!(
+                fresh_context, context,
+                "reconnect must use fresh directional keys"
+            );
+            let proof_context = format!("{fresh_context}:{}", keys.public_key_hex());
+            use hmac::{KeyInit as _, Mac as _};
+            let mut proof =
+                hmac::Hmac::<sha2::Sha256>::new_from_slice(&saved.secret).expect("proof key");
+            proof.update(proof_context.as_bytes());
+            let proof = crate::remote_trust::hex(&proof.finalize().into_bytes());
+            let mut fresh =
+                RemoteChannel::new(&keys, desktop_public, &fresh_context, PeerRole::Phone)
+                    .expect("fresh channel");
+            let frame = fresh
+                .seal(&serde_json::to_vec(&json!({"type":"resume","proof":proof})).expect("proof"))
+                .expect("sealed proof");
+            next.send(Message::Binary(
+                serde_json::to_vec(&frame).expect("frame").into(),
+            ))
+            .await
+            .expect("resume");
+            let frame = next
+                .next()
+                .await
+                .expect("resumed")
+                .expect("frame")
+                .into_data();
+            let frame: EncryptedRemoteFrame = serde_json::from_slice(&frame).expect("frame");
+            let packet: Value =
+                serde_json::from_slice(&fresh.open(&frame).expect("authenticated resumed"))
+                    .expect("chunk");
+            let packet: Value =
+                serde_json::from_str(packet["data"].as_str().expect("data")).expect("packet");
+            assert_eq!(packet["type"], "resumed");
+            assert!(manager.status().await.paired);
+            phone_socket = next;
+        }
+        let old_room = manager.current.lock().await.clone().expect("room");
+        old_room
+            .trusted
+            .lock()
+            .await
+            .as_mut()
+            .expect("trust")
+            .last_activity -= 61;
+        let gate = manager.persistence.lock().await;
+        let old = old_room.clone();
+        let activity = tokio::spawn(async move {
+            old.activity().await;
+        });
+        tokio::task::yield_now().await;
+        let revoke_manager = manager.clone();
+        let revoke = tokio::spawn(async move { revoke_manager.revoke().await });
+        while manager.generation.load(Ordering::Acquire) == old_room.expected_generation {
+            tokio::task::yield_now().await;
+        }
+        drop(gate);
+        activity.await.expect("old activity");
+        assert!(revoke.await.expect("revoke task").expect("revoke"));
+        assert!(
+            !crate::remote_trust::path().exists(),
+            "a delayed save must not resurrect revoked trust"
+        );
+        assert!(
+            old_room.establish_trust().await.is_err(),
+            "a delayed confirmation must not resurrect revoked trust"
+        );
+
         assert!(!manager.status().await.enabled);
         relay_task.abort();
+    }
+
+    #[test]
+    fn handoff_notice_persists_in_new_conversation_and_deletes_without_resurrection() {
+        let db = Database::open_in_memory().expect("db");
+        let mut db = db;
+        let now = chrono::Utc::now();
+        let project = Project::from_origin(None, "fixture", None);
+        let sessions = ["source", "new-native"].map(|id| Session {
+            id: id.into(),
+            agent: spawnt_core::AgentId::Codex,
+            surface: spawnt_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: spawnt_core::SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        });
+        let cp = spawnt_store::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(&[project], &sessions, &[], &[], &[], &cp)
+            .expect("source metadata");
+        let target = spawnt_pty::SessionRecord {
+            session_id: "new-host".into(),
+            agent: "codex".into(),
+            repo_path: "fixture".into(),
+            model: Some("gpt-5.6-luna".into()),
+            host_pid: 1,
+            child_pid: 2,
+            port: 1,
+            token: "test".into(),
+            started_at: chrono::Utc::now().to_rfc3339(),
+        };
+        record_model_change(&db, "source", &target).expect("persist request notice");
+        let rows = conversation_chat(&db, "new-host", "new-native", &[], Some(500), None)
+            .expect("bind notice");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].content.contains("gpt-5.6-luna"));
+        assert_eq!(
+            conversation_chat(&db, "new-host", "new-native", &[], Some(500), None)
+                .expect("reload")
+                .len(),
+            1
+        );
+        db.delete_session_chat_with_host("new-native", "new-host")
+            .expect("delete both identities");
+        assert!(
+            conversation_chat(&db, "new-host", "new-native", &[], Some(500), None)
+                .expect("reload after deletion")
+                .is_empty()
+        );
     }
 
     #[test]
