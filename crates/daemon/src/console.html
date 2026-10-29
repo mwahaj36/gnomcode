@@ -30,9 +30,9 @@
     .ide-launcher input, .ide-launcher select { width:100%; }
     .ide-chat-controls { display:flex; flex-wrap:wrap; align-items:end; gap:8px; margin:16px 0; }
     .ide-chat-controls label { margin:0; }
-    #chat-stream { min-height:300px; max-height:55vh; overflow:auto; }
+    #chat-stream { min-height:300px; height:52vh; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:0 8px; }
     #chat-terminal-view { min-height:300px; max-height:55vh; overflow:auto; padding:16px; background:var(--sp-surface); color:var(--sp-text); font:13px/1.6 var(--sp-font-mono); white-space:pre-wrap; overflow-wrap:anywhere; }
-    #chat-prompt-form { display:flex; gap:12px; align-items:end; margin-top:20px; }
+    #chat-prompt-form { display:flex; gap:12px; align-items:end; margin-top:20px; padding:16px; border:1px solid var(--sp-border-strong,var(--sp-border)); border-radius:6px; background:var(--sp-surface); }
     #chat-prompt-form > div { flex:1; min-width:0; }
     #chat-prompt-text { width:100%; resize:vertical; }
     .ide-layout :focus-visible { outline:2px solid var(--sp-primary); outline-offset:3px; }
@@ -559,10 +559,10 @@
           </div>
           <p id="chat-status" role="status"></p>
           <p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden data-action="copy-workspace">Copy workspace path</button>
-          <div id="chat-stream" aria-live="polite"></div>
+          <div id="chat-stream" role="log" aria-label="Conversation" aria-live="polite" tabindex="0"></div>
           <div id="chat-terminal-view" role="log" aria-label="Interactive terminal. Click here to type; Control C interrupts." tabindex="0" hidden></div>
           <form id="chat-prompt-form" data-submit="send-prompt">
-            <div><label for="chat-prompt-text">Send instructions</label><textarea id="chat-prompt-text" rows="3" maxlength="4000" placeholder="Write instructions for this agent"></textarea></div>
+            <div><label for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="3" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Ask the agent to work on something..."></textarea><small id="chat-prompt-help">Enter to send · Shift+Enter for a new line. Login and approvals appear in Terminal stream.</small></div>
             <button type="submit" class="btn-primary" id="chat-send-btn">Send</button>
           </form>
           <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div>
