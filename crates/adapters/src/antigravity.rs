@@ -80,22 +80,36 @@ impl SourceAdapter for AntigravityAdapter {
             let step_idx = obj.get("step_index").and_then(Value::as_u64).unwrap_or(0);
             let step_type = obj.get("type").and_then(Value::as_str).unwrap_or("");
             let source = obj.get("source").and_then(Value::as_str).unwrap_or("");
-            let role = if step_type == "USER_INPUT" {
-                Some(ChatRole::User)
-            } else if source == "MODEL" && matches!(step_type, "GENERIC" | "PLANNER_RESPONSE") {
-                Some(ChatRole::Assistant)
-            } else {
-                None
-            };
-            if let (Some(role), Some(content)) = (role, obj.get("content").and_then(Value::as_str))
-            {
-                if !content.trim().is_empty() && !content.contains("<USER_SETTINGS_CHANGE>") {
+            if let Some(raw_content) = obj.get("content").and_then(Value::as_str) {
+                let clean = if step_type == "USER_INPUT" {
+                    extract_antigravity_user_prompt(raw_content)
+                } else if source == "MODEL" && matches!(step_type, "GENERIC" | "PLANNER_RESPONSE") {
+                    if is_antigravity_tool_output(raw_content) {
+                        None
+                    } else {
+                        let trimmed = raw_content.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_owned())
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(content) = clean {
+                    let role = if step_type == "USER_INPUT" {
+                        ChatRole::User
+                    } else {
+                        ChatRole::Assistant
+                    };
                     batch.chat_events.push(ChatEvent {
                         event_id: format!("{session_id}:{step_idx}"),
                         session_id: session_id.clone(),
                         turn_index: i64::try_from(step_idx).unwrap_or(i64::MAX),
                         role,
-                        content: redact_chat_content(content),
+                        content: redact_chat_content(&content),
                         tool_name: None,
                         status: None,
                         created_at: ts,
@@ -358,5 +372,72 @@ pub fn find_repo_root_from_path(file_path: &str) -> Option<String> {
         Some(check.to_string_lossy().into_owned())
     } else {
         None
+    }
+}
+
+/// Cleans legacy Antigravity chat rows at read time without changing stored or agent-owned history.
+#[must_use]
+pub fn clean_stored_conversation(events: Vec<ChatEvent>) -> Vec<ChatEvent> {
+    events
+        .into_iter()
+        .map(|mut event| {
+            if event.session_id.starts_with("antigravity:") {
+                match event.role {
+                    ChatRole::User => {
+                        event.content =
+                            extract_antigravity_user_prompt(&event.content).unwrap_or_default();
+                    }
+                    ChatRole::Assistant if is_antigravity_tool_output(&event.content) => {
+                        event.content.clear();
+                        event.role = ChatRole::Tool;
+                    }
+                    _ => {}
+                }
+            }
+            event
+        })
+        .collect()
+}
+
+/// Checks whether an Antigravity model step content is raw tool execution output.
+#[must_use]
+pub fn is_antigravity_tool_output(content: &str) -> bool {
+    let trimmed = content.trim_start();
+    trimmed.starts_with("Created At: ")
+        || trimmed.starts_with("Command output:")
+        || trimmed.starts_with("Command exited with code")
+        || trimmed.starts_with("Task: ")
+        || trimmed.starts_with("Tool is running")
+        || trimmed.starts_with("File is empty")
+        || trimmed.starts_with("Log output:")
+        || (trimmed.starts_with("At line:") && trimmed.contains("CategoryInfo"))
+        || trimmed.starts_with("Select-String :")
+}
+
+/// Extracts a clean user prompt from an Antigravity `USER_INPUT` content string.
+#[must_use]
+pub fn extract_antigravity_user_prompt(content: &str) -> Option<String> {
+    if let Some(start) = content.find("<USER_REQUEST>") {
+        let after = &content[start + "<USER_REQUEST>".len()..];
+        if let Some(end) = after.find("</USER_REQUEST>") {
+            let prompt = after[..end].trim();
+            if !prompt.is_empty() {
+                return Some(prompt.to_owned());
+            }
+        }
+    }
+
+    let mut text = content;
+    if let Some(pos) = text.find("<ADDITIONAL_METADATA>") {
+        text = &text[..pos];
+    }
+    if let Some(pos) = text.find("<USER_SETTINGS_CHANGE>") {
+        text = &text[..pos];
+    }
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
     }
 }

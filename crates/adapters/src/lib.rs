@@ -153,14 +153,29 @@ mod tests {
         use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
         let bytes = concat!(
             "{\"step_index\":0,\"type\":\"USER_INPUT\",\"content\":\"<USER_SETTINGS_CHANGE>model</USER_SETTINGS_CHANGE>\"}\n",
-            "{\"step_index\":1,\"type\":\"USER_INPUT\",\"content\":\"Question\"}\n",
+            "{\"step_index\":1,\"type\":\"USER_INPUT\",\"content\":\"<USER_REQUEST>\\nQuestion\\n</USER_REQUEST>\\n<ADDITIONAL_METADATA>meta</ADDITIONAL_METADATA>\"}\n",
             "{\"step_index\":2,\"source\":\"MODEL\",\"type\":\"GENERIC\",\"content\":\"Answer\"}\n",
             "{\"step_index\":3,\"source\":\"TOOL\",\"type\":\"GENERIC\",\"content\":\"secret output\"}\n",
+            "{\"step_index\":4,\"source\":\"MODEL\",\"type\":\"GENERIC\",\"content\":\"Created At: 2026-10-29\\nCommand output:\\ntool output\"}\n",
         );
         let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes.as_bytes());
         assert_eq!(batch.chat_events.len(), 2);
         assert_eq!(batch.chat_events[0].content, "Question");
         assert_eq!(batch.chat_events[1].content, "Answer");
+        let mut legacy = batch.chat_events.clone();
+        legacy[0].content =
+            "<USER_REQUEST>Question</USER_REQUEST><ADDITIONAL_METADATA>noise</ADDITIONAL_METADATA>"
+                .into();
+        legacy[1].content = "Created At: yesterday\nCommand output: private output".into();
+        let cleaned = super::antigravity::clean_stored_conversation(legacy);
+        assert_eq!(
+            cleaned.len(),
+            2,
+            "cursor pages must retain their original size"
+        );
+        assert_eq!(cleaned[0].content, "Question");
+        assert_eq!(cleaned[1].role, spawnt_core::ChatRole::Tool);
+        assert!(cleaned[1].content.is_empty());
     }
 
     #[test]
