@@ -46,6 +46,12 @@ try {
   assert.ok(info?.port, `daemon publishes its actual loopback port: ${daemonLog}`);
   const base=`http://127.0.0.1:${info.port}`;
   const headers={Authorization:`Bearer ${info.token}`, 'Content-Type':'application/json'};
+  let healthy=false;
+  for(let attempt=0;attempt<100 && !healthy;attempt++) {
+    try { healthy=(await httpCall(base+'/health','GET',headers)).status===200; } catch {}
+    if(!healthy) await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  assert.ok(healthy,'daemon accepts authenticated requests before launching a session');
   async function api(route, body) {
     const response=await httpCall(base+route,body?'POST':'GET',headers,body?JSON.stringify(body):undefined);
     assert.equal(response.status,200,route); return JSON.parse(response.text);

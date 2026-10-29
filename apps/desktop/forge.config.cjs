@@ -6,6 +6,7 @@ module.exports = {
   packagerConfig: {
     name: 'Spawnt',
     executableName: 'spawnt-desktop',
+    icon: path.join(__dirname, '../../scripts/spawnt.ico'),
     appBundleId: 'app.spawnt.desktop',
     asar: true,
     extraResource: [
@@ -22,7 +23,7 @@ module.exports = {
     ignore: file => Boolean(file && file !== '/package.json' && file !== '/dist' && !file.startsWith('/dist/') && file !== '/node_modules' && !file.startsWith('/node_modules/')),
   },
   makers: [
-    { name: '@electron-forge/maker-squirrel', platforms: ['win32'], config: { name: 'spawnt', authors: 'Wahaj' } },
+    { name: '@electron-forge/maker-squirrel', platforms: ['win32'], config: { name: 'spawnt', authors: 'Wahaj', setupIcon: path.join(__dirname, '../../scripts/spawnt.ico') } },
     { name: '@electron-forge/maker-zip', platforms: ['win32', 'darwin', 'linux'] },
     { name: '@electron-forge/maker-deb', platforms: ['linux'], config: {} },
     { name: '@electron-forge/maker-rpm', platforms: ['linux'], config: {} },
