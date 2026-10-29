@@ -8,6 +8,7 @@ import ThemeControl from "../components/ThemeControl";
 import { PlatformDownloads } from "./downloads/PlatformDownloads";
 import { landingFaq } from "../lib/landing-faq";
 import { ConsoleTourView } from "./components/ConsoleTourView";
+import HeroWorkflow from "./components/HeroWorkflow";
 
 const agents = [
   { name: "Claude Code", icons: ["claudecode"] },
@@ -129,23 +130,22 @@ export default function LandingPage() {
           <a href="#agents" onClick={() => setMenuOpen(false)}>Agents</a>
           <Link href="/docs">Docs</Link>
           <Link href="/pricing">Pricing</Link>
-          <AccountLink className="sp-nav-login-mobile" onClick={() => setMenuOpen(false)} />
+          <Link className="sp-nav-download-mobile" href="/downloads" onClick={() => setMenuOpen(false)}>Download</Link>
         </nav>
-        <div className="sp-nav-right"><AccountLink className="sp-nav-login" arrow /><Link href="/downloads" className="sp-nav-cta">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div>
+        <div className="sp-nav-right"><Link href="/downloads" className="sp-nav-cta">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link><AccountLink className="sp-nav-login sp-account-cta" arrow /></div>
         <button className="sp-menu" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="marketing-navigation" aria-label="Toggle menu"><span /><span /><span /></button>
       </div>
     </header>
 
     <main id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><h1>The runtime for your AI coding agents.</h1><p>Launch agents, switch models mid-task and send the next instruction from your phone over an encrypted connection.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download for Windows <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Windows, macOS and Linux. All local features free.</small><section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><div className="sp-marquee-window" onMouseEnter={() => setMarqueeSpeed(0)} onMouseLeave={() => setMarqueeSpeed(1)}><div className="sp-marquee-track" ref={marqueeRef}>{[false, true].map((duplicate) => <div className="sp-agent-list" aria-hidden={duplicate || undefined} key={String(duplicate)}>{agents.map((agent) => <span className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></span>)}</div>)}</div></div></div></section></div>
-        <div className="sp-hero-shot" aria-label="Illustrative console preview">
-          <div className="sp-shot-head"><span><Mark /> spawnt <b>/</b> overview</span><span className="sp-demo-label">ILLUSTRATIVE PREVIEW</span></div>
-          <div className="sp-shot-body"><ConsoleTourView kind="overview" compact /></div>
-        </div>
+        <div className="sp-hero-copy"><h1>The runtime for your AI coding agents.</h1><p>Launch agents, switch models mid-task and send the next instruction from your phone over an encrypted connection.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download for Windows <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Windows, macOS and Linux. All local features free.</small></div>
+        <HeroWorkflow />
       </section>
 
 
+
+      <section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><div className="sp-marquee-window" onMouseEnter={() => setMarqueeSpeed(0)} onMouseLeave={() => setMarqueeSpeed(1)}><div className="sp-marquee-track" ref={marqueeRef}>{[false, true].map((duplicate) => <div className="sp-agent-list" aria-hidden={duplicate || undefined} key={String(duplicate)}>{agents.map((agent) => <span className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></span>)}</div>)}</div></div></div></section>
 
       <section className="sp-features sp-width" id="features" data-reveal><div className="sp-section-head"><h2>Keep working across agents.</h2><span>LAUNCH / SWITCH / CONTINUE</span></div><div className="sp-feature-grid">{features.map(([title, copy]) => <article key={title}><h3>{title}</h3><p>{copy}</p><span className="sp-feature-line" aria-hidden="true" /></article>)}</div></section>
 

@@ -206,7 +206,7 @@ Opt-out update-manifest check and approved signed/hash-verified release flow. Do
 
 ### 6.5 Website and docs
 
-Next.js marketing presents launch, continuity, encrypted Remote and free-local value. Every route exports unique metadata; indexable pages use canonical/OG/Twitter fields. Sitemap contains actual public content routes; console/auth/settings are excluded and noindexed. Shared docs guide pages answer the question first, cite vendor sources where needed and link related content. Privacy and Terms live in marketing navigation, not the console rail. No analytics. Product limitations belong in technical docs and launch gates, without invented marketing availability claims.
+Next.js marketing presents launch, continuity, encrypted Remote and free-local value. The hero illustrates conversation continuity and a phone instruction rather than reporting metrics. The moving supported-agent strip is an independent full-width section; reduced motion renders it static. Log in/Console is the primary red navigation action on desktop and phone; Download is secondary on desktop and available in the phone menu. Every route exports unique metadata; indexable pages use canonical/OG/Twitter fields. Sitemap contains actual public content routes; console/auth/settings are excluded and noindexed. Shared docs guide pages answer the question first, cite vendor sources where needed and link related content. Privacy and Terms live in marketing navigation, not the console rail. No analytics. Product limitations belong in technical docs and launch gates, without invented marketing availability claims.
 
 ### 6.6 Support
 

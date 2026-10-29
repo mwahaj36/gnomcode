@@ -453,3 +453,9 @@ body {
 .sp-guide-related a { display: inline-block; padding-block: 8px; }
 .sp-guide-page .sp-docs-article > section > div > p { margin-top: 8px; }
 @media (max-width: 600px) { .sp-guide-related { grid-template-columns: 1fr; } .sp-guide-page { padding-top: 36px; } }
+
+.sp-site-actions > .sp-site-download { background: transparent; color: var(--sp-text-2); border: 1px solid var(--sp-border-strong); }
+.sp-site-actions > .sp-account-cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border-radius: 6px; background: var(--sp-primary); color: var(--sp-on-primary); font: 600 13px/20px var(--sp-font-sans); text-transform: none; letter-spacing: 0; }
+.sp-site-actions > .sp-account-cta:hover { background: #ff4d66; color: var(--sp-on-primary); }
+.sp-site-mobile-download { display: none; }
+@media (max-width: 760px) { .sp-site-actions > .sp-site-download { display: none; } .sp-site-actions > .sp-account-cta { display: inline-flex; } .sp-site-links .sp-site-mobile-download { display: block; } }
