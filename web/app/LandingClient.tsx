@@ -5,6 +5,8 @@ import AccountLink from "../components/AccountLink";
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
 import ThemeControl from "../components/ThemeControl";
+import { PlatformDownloads } from "./downloads/PlatformDownloads";
+import { landingFaq } from "../lib/landing-faq";
 import { ConsoleTourView } from "./components/ConsoleTourView";
 
 const agents = [
@@ -14,6 +16,7 @@ const agents = [
   { name: "Gemini CLI", icons: ["gemini"] },
   { name: "Cline / Roo", icons: ["cline", "roocode"] },
   { name: "Cursor", icons: ["cursor"] },
+  { name: "Aider", icons: [] },
 ];
 const tours = [
   { name: "Overview", title: "Everything happening now.", detail: "See active sessions, spend and the limits that need attention.", kind: "overview" },
@@ -22,14 +25,14 @@ const tours = [
   { name: "Limits", title: "See what is left.", detail: "Quota usage, remaining capacity and reset times at a glance.", kind: "limits" },
 ];
 const features = [
-  ["See it live", "Every session, its status and which ones need you, in one list."],
-  ["Know the cost", "Tokens and spend per agent, model and repo. Every number says how sure we are."],
-  ["Stay under limits", "Track what is left in each plan and pick up where you stopped when it resets."],
+  ["Hit a limit. Keep the task moving.", "Switch supported agents with a compact briefing of objectives and changed files. Keep the original history and continue with another model."],
+  ["Away from your desk. Still in control.", "Pair your phone, read the conversation and send the next instruction over an end-to-end encrypted channel."],
+  ["One fleet. One view of usage.", "Compare recorded tokens, estimated API-equivalent spend and quota across agents. Every measurement carries its trust level."],
 ];
 const plans = [
   { name: "Local", price: "$0", term: "forever", promise: "Run locally without an account.", points: ["Session and quota view", "Guardrails and resume", "Analytics and export"], href: "/downloads", action: "Download" },
-  { name: "Remote", price: "Planned", term: "paid feature", promise: "Connect to your sessions from your phone.", points: ["Encrypted access planned", "Device pairing", "Session controls"], href: "/pricing", action: "Learn more" },
-  { name: "Teams", price: "Planned", term: "paid feature", promise: "Shared visibility for a team.", points: ["Team dashboard", "Shared budgets", "Team alerts"], href: "/pricing", action: "Learn more" },
+  { name: "Remote", price: "Remote", term: "paid access", promise: "Connect to your sessions from your phone.", points: ["End-to-end encrypted access", "Device pairing", "Session controls"], href: "/pricing", action: "Learn more" },
+  { name: "Teams", price: "Teams", term: "paid category", promise: "Shared visibility for a team.", points: ["Shared visibility", "Product direction in docs", "Terms before purchase"], href: "/pricing", action: "Learn more" },
 ];
 
 function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="true" />; }
@@ -135,16 +138,16 @@ export default function LandingPage() {
 
     <main id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><span className="sp-eyebrow">WINDOWS · MACOS · LINUX</span><h1>See, stop, and control your agents.</h1><p>Know who is blocked on approval, halt runaway loops before they drain your API bill, and auto-resume at quota reset.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download spawnt <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Local-first. Cloud sync is optional.</small></div>
+        <div className="sp-hero-copy"><h1>The runtime for your AI coding agents.</h1><p>Launch agents, switch models mid-task and send the next instruction from your phone over an encrypted connection.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download for Windows <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Windows, macOS and Linux. All local features free.</small><section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><div className="sp-marquee-window" onMouseEnter={() => setMarqueeSpeed(0)} onMouseLeave={() => setMarqueeSpeed(1)}><div className="sp-marquee-track" ref={marqueeRef}>{[false, true].map((duplicate) => <div className="sp-agent-list" aria-hidden={duplicate || undefined} key={String(duplicate)}>{agents.map((agent) => <span className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></span>)}</div>)}</div></div></div></section></div>
         <div className="sp-hero-shot" aria-label="Illustrative console preview">
           <div className="sp-shot-head"><span><Mark /> spawnt <b>/</b> overview</span><span className="sp-demo-label">ILLUSTRATIVE PREVIEW</span></div>
           <div className="sp-shot-body"><ConsoleTourView kind="overview" compact /></div>
         </div>
       </section>
 
-      <section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><div className="sp-marquee-window" onMouseEnter={() => setMarqueeSpeed(0)} onMouseLeave={() => setMarqueeSpeed(1)}><div className="sp-marquee-track" ref={marqueeRef}>{[false, true].map((duplicate) => <div className="sp-agent-list" aria-hidden={duplicate || undefined} key={String(duplicate)}>{agents.map((agent) => <span className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></span>)}</div>)}</div></div></div></section>
 
-      <section className="sp-features sp-width" id="features" data-reveal><div className="sp-section-head"><h2>One place to see it all.</h2><span>STATUS / COST / LIMITS</span></div><div className="sp-feature-grid">{features.map(([title, copy], index) => <article key={title}><span className="sp-feature-index">0{index + 1}</span><h3>{title}</h3><p>{copy}</p><span className="sp-feature-line" aria-hidden="true" /></article>)}</div></section>
+
+      <section className="sp-features sp-width" id="features" data-reveal><div className="sp-section-head"><h2>Keep working across agents.</h2><span>LAUNCH / SWITCH / CONTINUE</span></div><div className="sp-feature-grid">{features.map(([title, copy]) => <article key={title}><h3>{title}</h3><p>{copy}</p><span className="sp-feature-line" aria-hidden="true" /></article>)}</div></section>
 
       <section className="sp-tour sp-width" aria-labelledby="tour-title" data-reveal>
         <div className="sp-section-head"><div><h2 id="tour-title">A closer look at the console.</h2><p>Find what matters without opening every agent window.</p></div><span>ILLUSTRATIVE PRODUCT TOUR</span></div>
@@ -166,18 +169,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Your logs stay on your machine.</h2><span>PRIVACY / BY DESIGN</span></div><div className="sp-privacy-grid">{[["Local only", "Reads logs on your machine."], ["Metadata only", "Activity metadata is redacted before storage."], ["No telemetry", "No product telemetry. Optional services are disclosed."], ["Loopback", "Only your machine can reach it."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
+      <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Local by default. Encrypted when remote.</h2><span>PRIVACY / BY DESIGN</span></div><div className="sp-privacy-grid">{[["Local history", "Keep redacted conversations on your desktop."], ["Encrypted Remote", "Conversations reach your paired device through E2EE."], ["No telemetry", "No product analytics or tracking."], ["Your choice", "Account metadata sync is optional and separately disclosed."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
 
-      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote and Teams are planned paid features.</p></div><Link href="/pricing">Compare plans <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></article>)}</div></section>
+      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote access and Teams are paid categories. Provider inference is billed separately.</p></div><Link href="/pricing">Compare plans <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></article>)}</div></section>
 
-      <section className="sp-final sp-width" data-reveal><h2>Start in a minute.</h2><p>Download spawnt and open your first session.</p><Link className="sp-button-primary" href="/downloads">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></section>
+      <section className="sp-width sp-landing-downloads" data-reveal><div className="sp-section-head"><h2>Choose your platform.</h2></div><PlatformDownloads /></section>
+
+      <section className="sp-width sp-landing-faq" aria-labelledby="faq-title"><h2 id="faq-title">Questions before you start?</h2>{landingFaq.map(item => <details key={item.question}><summary>{item.question}</summary><p>{item.answer}</p></details>)}</section>
+      <section className="sp-final sp-width" data-reveal><h2>Open your next session.</h2><p>Bring your agents into one workspace.</p><Link className="sp-button-primary" href="/downloads">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></section>
     </main>
     <footer className="sp-footer" data-reveal>
       <div className="sp-width sp-footer-grid">
-        <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Know what is running.</h2><p>spawnt reads local logs and stores redacted monitoring metadata. Local chat history is planned.</p></div>
+        <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Keep your agents moving.</h2><p>Launch, switch and control AI coding agents. Local-first, with encrypted access from paired devices.</p></div>
         <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
-        <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs#privacy">Privacy</Link></div>
-        <div><span>MORE</span><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>
+        <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs/supported-agents">Supported agents</Link></div>
+        <div><span>LEGAL</span><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>
       </div>
       <div className="sp-width sp-footer-wordmark" aria-hidden="true">spawnt<span>.</span></div>
       <div className="sp-width sp-footer-bottom"><span>© 2026 spawnt</span><span>LOCAL-FIRST SOFTWARE</span><a href="#content">Back to top <span aria-hidden="true">↑</span></a></div>
