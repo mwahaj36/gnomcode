@@ -1,3 +1,44 @@
+## 2026-10-29 - Agent IDE completion follow-up
+
+- Goal: finish session navigation, clean conversations, CLI/shell launch, prompt submission, model handoff and the encrypted companion on the existing feature branch.
+- Implemented the two-column Sessions workspace using current design tokens, searchable paged history, launcher, install/login hints, clean user/assistant cards, model switch and focus controls. Browser checks cover prompt and switch payloads, missing-CLI hints, launch and 1440/390 px overflow.
+- Fixed binary terminal decoding and added keyboard input with bounded visible output. An isolated real-binary smoke test executes a PowerShell command over the prompt endpoint, receives output over the daemon WebSocket proxy and confirms the PTY survives daemon exit.
+- Fixed multiline local prompt validation and bracketed paste for agents. Preserved earlier history during refresh and ignored stale session responses. Hosted sessions resolve to uniquely matched native history while retaining idle-only remote prompting.
+- Cleaned old Antigravity rows on read so previously ingested tool output does not reappear as assistant chat. Blank tool placeholders preserve page sizes and cursors; stored and agent-owned history remain untouched.
+- Moved new shell and executable discovery into the platform crate. Windows npm shims resolve package-declared Node entry points without shell interpolation. Reused workspace serde_json for installed package manifests.
+- The handoff's `suave-station` relay hostname had no public DNS record. After owner Cloudflare login, deployed `https://spawnt-remote-relay.mwahaj25.workers.dev` (version `34d956c4-f625-4d0e-9523-56187a8cbb59`) and corrected the daemon default. Live encrypted browser-client checks pass.
+- Live Rust pairing exposed missing WebSocket TLS support that loopback tests could not catch. Enabled rustls and public WebPKI roots on the existing tokio-tungstenite dependency. The same Rust pairing, confirmation and history test passes through the public relay. Normal tests use loopback unless an explicit test relay URL is supplied.
+- Remote launch uses the encrypted protocol and accepts only agent CLIs. It cannot launch a shell or bypass native-agent idle checks. Physical phone acceptance and independent security review remain required before production availability.
+- Verification: the full Rust gate passes (140 tests, formatting, clippy, dependency advisories/licenses and core purity). Web tests/build and all 15 desktop tests plus desktop lint pass; the web build retains two pre-existing React hook warnings in console/page.tsx and SettingsPanel.tsx. Relay tests pass (6).
+- The real companion browser passes pairing, code comparison, encrypted chat, prompt and launch checks at phone width against both the local production build and the public `https://spawntv.vercel.app` deployment. Production deployment `dpl_495CzndFtwJV329PYENcEpYkM9LA` is ready. The initial public test caught the stale companion; the updated deployment passes. Added a Vercel ignore file to exclude unrelated generated binaries from website uploads.
+- Real release-binary smoke tests pass for PowerShell and a synthetic Windows npm agent entry point, including PTY survival after daemon exit. Packaged Windows binary SHA-256: `30D7E246D03E374C788AFE41B7B728F8AB431205FCDB31C21CFB5DA61224530C`. Native inspection confirms the new Sessions workspace opens in the packaged Electron shell. Restored the canonical executable and setup icons in the packaging config.
+- Environment issues: low C: disk space initially prevented Squirrel packaging. Automatic approval review rejected bulk deletion of stale test executables; no deletion occurred. Retried installer packaging with temporary files on D:. Vercel's initial source upload exceeded its 100 MB file limit; excluding unrelated build output resolved it. An optional local Vercel build failed to spawn cmd.exe; the hosted production build succeeded.
+- Final packaged-binary retesting exposed intermittent prompt loss: the short-lived input WebSocket could disconnect while the host was writing terminal output, before its input was consumed. Added a bounded authenticated PTY-owner `POST /input` with acknowledgement and reused it for local prompts, encrypted Remote prompts and model handoff. Interactive terminal streaming remains bidirectional WebSocket. Added queuing/auth/origin regression coverage; the real npm-agent smoke test passes three consecutive runs after the fix.
+- Added `docs/TEST_AGENT_IDE.md` with upgrade/restart instructions and manual acceptance checks. Existing PTY owners retain their old binary, so interactive acceptance starts a fresh hosted session.
+- Final packaging succeeded using D: temporary storage. The Windows installer is `apps/desktop/out/make/squirrel.windows/x64/Spawnt-0.9.0 Setup.exe` (160641536 bytes), SHA-256 `212cb0b74681716351b423314e876bdd2d307daa6f3d37ca582fc60c0a0067a2`. The ZIP and Squirrel package both contain the verified release binary. Archive CRCs, RELEASES name/size/SHA-1, PE format, Electron fuses, release DevTools setting and absence of sourcemaps pass. This remains an unsigned development artifact; installation/physical-phone/provider acceptance steps are documented for the owner.
+- Final release smoke checks pass for PowerShell and three consecutive synthetic npm-agent runs after the acknowledgement fix. The Rust public-relay pairing/confirmation/history test also passes against the deployed Cloudflare Worker. All 140 workspace tests and the complete gate pass. The smoke harness waits for authenticated daemon readiness and uses native HTTP for internal ephemeral ports to avoid browser restricted-port rules.
+
+## 2026-10-29 — Agent IDE workspace, clean conversation filtering, live relay deployment & launcher APIs
+
+- **Branch**: `feat/chat-launcher-and-remote`
+- **Clean conversation extraction (`crates/adapters/src/antigravity.rs`)**:
+  - Filtered out 113+ raw tool execution logs (`Created At:`, `Command output:`, `Task:`) from being parsed as Assistant messages.
+  - Implemented `extract_antigravity_user_prompt` to extract clean user request text inside `<USER_REQUEST>` and strip metadata tags (`<ADDITIONAL_METADATA>`, `<USER_SETTINGS_CHANGE>`).
+  - Updated adapter tests in `crates/adapters/src/lib.rs` (18/18 passing).
+- **Backend API additions (`crates/daemon/src/api.rs`, `crates/pty/src/lib.rs`)**:
+  - Added `POST /api/v1/sessions/{id}/prompt`: delivers prompt directly into active hosted PTY sessions via loopback WebSocket without requiring shell keystroke hacks.
+  - Added `GET /api/v1/sessions/hosted`: lists currently active PTY hosted sessions.
+  - Added `GET /api/v1/agents/installed`: inspects host system PATH (`where.exe` on Windows / `which` on Unix) to check if Claude Code, Codex, or Gemini CLI are installed, providing installation hints (`npm install -g ...`) and login commands.
+  - Extended `spawnt_pty` to support `"terminal"` and `"shell"` (`powershell.exe` on Windows, `$SHELL` on Unix), allowing in-app terminal sessions for tool installation and login.
+- **Production Cloudflare Remote Relay (`workers/remote-relay`)**:
+  - Fixed Durable Objects configuration migration to `new_sqlite_classes = ["RelayRoom"]` for free tier compatibility.
+  - Deployed live Cloudflare Worker relay: `https://spawnt-remote-relay.suave-station.workers.dev` (`wss://.../relay`).
+  - Added default fallback in `crates/daemon/src/remote.rs` to point to the live relay if `SPAWNT_REMOTE_RELAY_URL` is unset, resolving the 503 "Remote relay is not configured" error.
+  - Created standalone Node.js fallback dev relay (`workers/remote-relay/dev-server.mjs`).
+- **Remote dispatch extensions (`crates/daemon/src/remote.rs`)**:
+  - Added `launch` command to encrypted remote WebSocket protocol, allowing remote session creation from phone/browser.
+  - Enabled direct prompt delivery to hosted session IDs over encrypted remote channel.
+
 ## 2026-10-28 — Phase 5: M9 Remote prototype (incomplete)
 
 - ADR 0019 and a preliminary threat model describe the intended protocol. They are design documents, not an independent security review.

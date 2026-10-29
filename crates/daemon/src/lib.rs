@@ -159,23 +159,10 @@ pub(crate) async fn execute_switch(
         "Continue the task from session {} in this workspace. Inspect the current files before editing.\n\nRecent user objectives:\n{}\n\nChanged files:\n{}\n",
         packet.session_id, packet.prompt_summary, files
     );
-    use futures_util::SinkExt as _;
-    let url = format!(
-        "ws://127.0.0.1:{}/stream?token={}",
-        record.port, record.token
-    );
-    let delivered = async {
-        let (mut stream, _) = tokio_tungstenite::connect_async(&url)
-            .await
-            .map_err(|_| HandoffError::Launch("could not connect to agent session".to_owned()))?;
-        stream
-            .send(tokio_tungstenite::tungstenite::Message::Binary(
-                format!("{prompt}\r").into_bytes().into(),
-            ))
-            .await
-            .map_err(|_| HandoffError::Launch("could not send handoff prompt".to_owned()))
-    }
-    .await;
+    let input = format!("\x1b[200~{prompt}\x1b[201~\r");
+    let delivered = spawnt_pty::send_input(&record, input.as_bytes())
+        .await
+        .map_err(|_| HandoffError::Launch("could not send handoff prompt".to_owned()));
     if delivered.is_err() {
         let _ = spawnt_pty::stop_session(&new_id).await;
     }

@@ -21,3 +21,7 @@ Session owners add a detached background worker process per session. Process lif
 
 - Daemon-owned PTY: closing the daemon risks terminating the agent and loses the terminal endpoint.
 - Terminal owned by Electron: closing the UI would interrupt the agent.
+
+## Prompt delivery follow-up (2026-10-29)
+
+Prompt submission and model handoff use a bounded, authenticated loopback `POST /input` on the PTY owner. The owner acknowledges queuing the input independently of terminal output; a short-lived streaming WebSocket could previously disconnect before its input was consumed. Interactive terminals continue to use the bidirectional WebSocket. Existing PTY owners retain their running binary, so interactive acceptance tests must start a fresh hosted session after upgrading.

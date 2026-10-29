@@ -1,0 +1,13 @@
+target/
+apps/
+npm/
+crates/
+fixtures/
+workers/
+docs/
+.agents/
+.github/
+.tmp/
+**/node_modules/
+**/.next/
+**/.env*
