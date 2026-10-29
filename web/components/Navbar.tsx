@@ -2,16 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import MarketingNavbar from "./MarketingNavbar";
-import AppNavbar from "./AppNavbar";
 
 export default function Navbar() {
   const pathname = usePathname();
-  if (pathname === "/") return null;
-  const isAppRoute = pathname.startsWith("/console") || pathname.startsWith("/settings");
-
-  if (isAppRoute) {
-    return <AppNavbar />;
-  }
-
+  if (pathname === "/" || pathname.startsWith("/console") || pathname.startsWith("/settings") || pathname.startsWith("/remote")) return null;
   return <MarketingNavbar showTheme={pathname === "/auth"} />;
 }

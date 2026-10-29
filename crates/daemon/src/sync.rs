@@ -118,8 +118,28 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
     }))
 }
 
+fn discovery_offer(status: &crate::remote::PairingStatus, now: DateTime<Utc>) -> Option<Value> {
+    if !status.enabled || status.paired {
+        return None;
+    }
+    let expires_at = status.expires_at.as_deref()?;
+    if DateTime::parse_from_rfc3339(expires_at).ok()? <= now {
+        return None;
+    }
+    Some(json!({
+        "room": status.room_id.as_deref()?,
+        "key": status.public_key.as_deref()?,
+        "relay": status.relay_url.as_deref()?,
+        "expires_at": expires_at,
+        "name": "My desktop",
+    }))
+}
+
 /// Pushes a privacy-filtered live snapshot every minute after the user pairs an account.
-pub fn spawn_cloud_sync(db: Arc<Mutex<Database>>) -> JoinHandle<()> {
+pub fn spawn_cloud_sync(
+    db: Arc<Mutex<Database>>,
+    remote: Arc<crate::remote::RemoteManager>,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let Ok(client) = reqwest::Client::builder()
             .https_only(true)
@@ -131,14 +151,17 @@ pub fn spawn_cloud_sync(db: Arc<Mutex<Database>>) -> JoinHandle<()> {
         };
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
         loop {
-            ticker.tick().await;
+            tokio::select! {
+                _ = ticker.tick() => {},
+                () = remote.discovery_changed() => {},
+            }
             {
                 let mut status = SYNC_STATUS.lock().await;
                 status.state = "publishing";
                 status.last_attempt_at = Some(Utc::now().to_rfc3339());
                 status.message = "Publishing the latest metadata snapshot.";
             }
-            let result = push_snapshot(&client, &db).await;
+            let result = push_snapshot(&client, &db, &remote).await;
             let mut status = SYNC_STATUS.lock().await;
             match result {
                 Ok(true) => {
@@ -163,6 +186,7 @@ pub fn spawn_cloud_sync(db: Arc<Mutex<Database>>) -> JoinHandle<()> {
 async fn push_snapshot(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
+    remote: &crate::remote::RemoteManager,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let session_path = spawnt_platform::spawnt_home().join("session.json");
     let Some(CloudAuth {
@@ -176,11 +200,13 @@ async fn push_snapshot(
     };
 
     let db = Arc::clone(db);
-    let snapshot = tokio::task::spawn_blocking(move || {
+    let mut snapshot = tokio::task::spawn_blocking(move || {
         let guard = db.blocking_lock();
         build_remote_snapshot(&guard)
     })
     .await??;
+    snapshot["remote_offer"] =
+        discovery_offer(&remote.status().await, Utc::now()).unwrap_or(Value::Null);
     client
         .post(format!(
             "{base_url}/rest/v1/spawnt_sync_state?on_conflict=user_id"
@@ -403,6 +429,32 @@ mod tests {
         assert_ne!(h1, h3);
         assert!(h1.starts_with("proj_"));
         assert_eq!(h1.len(), 5 + 32);
+    }
+
+    #[test]
+    fn discovery_offer_is_public_expiring_and_never_contains_the_confirmation_code() {
+        let now = chrono::Utc::now();
+        let mut status = crate::remote::PairingStatus {
+            enabled: true,
+            paired: false,
+            room_id: Some("public-room".into()),
+            public_key: Some("public-key".into()),
+            verify_code: Some("123456".into()),
+            relay_url: Some("wss://relay.example/relay".into()),
+            expires_at: Some((now + chrono::Duration::minutes(5)).to_rfc3339()),
+        };
+        let offer = super::discovery_offer(&status, now).expect("offer");
+        assert_eq!(offer.as_object().expect("object").len(), 5);
+        assert!(!offer.to_string().contains("123456"));
+        assert!(offer.get("verify_code").is_none());
+        status.paired = true;
+        assert!(super::discovery_offer(&status, now).is_none());
+        status.paired = false;
+        status.enabled = false;
+        assert!(super::discovery_offer(&status, now).is_none());
+        status.enabled = true;
+        status.expires_at = Some((now - chrono::Duration::seconds(1)).to_rfc3339());
+        assert!(super::discovery_offer(&status, now).is_none());
     }
 
     #[test]

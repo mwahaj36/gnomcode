@@ -187,6 +187,20 @@ pub fn prepare_handoff(
         .ok_or(HandoffError::MissingSession)
 }
 
+/// Derives a bounded display-only label without adding chat text to sync metadata.
+pub(crate) fn conversation_title(db: &Database, session_id: &str) -> Option<String> {
+    db.conversation_title_candidates(session_id)
+        .ok()?
+        .into_iter()
+        .find_map(|text| {
+            let clean = spawnt_core::redact::clean_user_text(&text);
+            clean
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .map(|line| line.trim().chars().take(72).collect())
+        })
+}
+
 /// Metadata written to `~/.spawnt/daemon.json` for local API clients (`SPEC §3.1`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonInfo {

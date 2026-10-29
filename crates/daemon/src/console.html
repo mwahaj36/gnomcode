@@ -450,49 +450,19 @@
 <link rel="stylesheet" href="/spawnt-tokens.css">
 <link rel="stylesheet" href="/spawnt-console.css">
 </head>
-<body>
-  <header class="app-header">
-    <div class="header-left">
-      <a class="app-brand" href="/" data-action="view:overview" aria-label="spawnt local console">
-        <span class="sp-brand-mark" aria-hidden="true"></span>
-        <span>spawnt</span>
-      </a>
-<nav class="header-links" aria-label="App navigation"><a href="#settings" data-action="view:settings">Settings</a></nav>
-    </div>
-    <div class="header-right">
-      <button class="theme-control" id="theme-control" type="button" data-action="theme" aria-label="Theme: system. Switch mode">Theme / system</button>
-    </div>
-  </header>
-
-  <section class="console-hero" aria-labelledby="console-title">
-    <div class="console-hero-lockup">
-      <span class="sp-brand-mark console-hero-mark" aria-hidden="true"></span>
-      <div>
-        <h1 id="console-title">Your agent fleet</h1>
-        <div class="console-status" aria-live="polite">
-          <span class="console-status-marker" aria-hidden="true"></span>
-          <span id="sync-state">Connecting</span>
-        </div>
-      </div>
-    </div>
-    <div class="console-hero-side">
-      <div class="console-hero-actions">
-        <button class="btn-control" id="reload-view" type="button" data-action="reload">Reload view</button>
-        <button class="btn-control" id="resync-data" type="button" data-action="resync">Resync local data</button>
-      </div>
-      <span id="last-updated" aria-live="polite">Last successful update: not yet</span>
-    </div>
-  </section>
-
+<body class="sp-native-console">
       <div class="sp-console-workspace"><nav class="nav-tabs sp-console-nav" role="tablist" aria-label="Console views">
-        <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview">Overview</button>
-        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions">Sessions</button>
-        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:usage">Usage</button>
-        <button class="tab-btn" id="tab-btn-limits" data-view="limits" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:limits">Limits</button>
-        <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" data-action="view:projects">Projects</button>
-        <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" data-action="view:automations">Automations</button>
-        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" data-action="view:settings">Settings</button>
+        <a class="app-brand" href="#" data-action="view:overview" aria-label="Spawnt dashboard"><span class="sp-brand-mark" aria-hidden="true"></span><span class="rail-label">spawnt</span></a>
+        <button type="button" class="rail-pin" data-action="pin-navigation" aria-label="Pin navigation" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7"/></svg><span class="rail-label">Pin navigation</span></button>
+        <button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg><span class="rail-label">Dashboard</span></button>
+        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span class="rail-label">Workspace</span></button>
+        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:usage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7"/></svg><span class="rail-label">Usage</span></button>
+        <button class="tab-btn" id="tab-btn-limits" data-view="limits" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:limits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 16 0 M12 12l5-5 M4 20h16"/></svg><span class="rail-label">Limits</span></button>
+        <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" data-action="view:projects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg><span class="rail-label">Projects</span></button>
+        <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" data-action="view:automations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/></svg><span class="rail-label">Automations</span></button>
+        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" data-action="view:settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3"/></svg><span class="rail-label">Profile</span></button>
       </nav><div class="sp-console-content">
+  <div class="console-context"><h1 id="console-title">Dashboard</h1><div class="console-status visually-hidden" aria-live="polite"><span id="sync-state">Connecting</span></div><div id="remote-connection-state" class="connection-toast" role="status" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span id="remote-connection-message">Phone connected</span><button type="button" class="connection-dismiss" data-action="dismiss-connection" aria-label="Dismiss connection notification"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div><button type="button" class="btn-control" data-action="toggle-chat-list" aria-controls="ide-session-sidebar" aria-expanded="true" id="chat-list-toggle" aria-label="Toggle conversations" title="Toggle conversations" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button></div>
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
     <!-- Timeline Filter Bar -->
     <div class="timeline-bar" data-local-view="overview,usage,projects"><div class="timeline-label" id="timeline-label">All time</div><div class="sp-period-actions"><select id="timeline-select" aria-label="Reporting period" data-change="timeline"><option value="today">Today</option><option value="month">This month</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all" selected>All time</option></select><details class="sp-export-menu"><summary>Export</summary><div><button type="button" class="btn-control" data-action="export:csv">CSV</button><button type="button" class="btn-control" data-action="export:json">JSON</button></div></details></div></div>
@@ -520,18 +490,18 @@
     <div id="quota-table" data-local-view="limits"><p>Loading provider limits...</p></div>
     <div id="sessions-ongoing" hidden></div>
     <section class="ide-layout" data-local-view="sessions" aria-label="Agent workspace">
-      <aside class="ide-sidebar" aria-label="Session history">
-        <button class="btn-primary" type="button" data-action="new-session">+ New Session</button>
+      <aside class="ide-sidebar" id="ide-session-sidebar" aria-label="Session history">
+        <button class="btn-primary" type="button" data-action="new-session">New conversation</button>
         <label for="ide-session-search">Search this page</label>
         <input id="ide-session-search" type="search" placeholder="Find a conversation" />
-        <div class="filters">
+        <details class="conversation-filters"><summary>Filter conversations</summary><div class="filters">
           <label>Project <select id="project-filter" data-change="project-filter"><option value="">All projects</option></select></label>
           <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option><option value="gemini-cli">Gemini CLI</option></select>
           <select id="status-filter" aria-label="Session status" data-change="filter"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="active">Running or waiting</option><option value="idle">Idle</option><option value="ended">Ended</option></select>
         </div>
-        <div id="ide-session-list">Loading conversations...</div>
+        </details><div id="ide-session-list">Loading conversations...</div>
         <div id="sessions-table" hidden></div>
-        <div class="pagination"><span id="pagination-info">Page 1 of 1</span><div><button class="btn-control" id="prev-btn" data-action="previous">Previous</button><button class="btn-control" id="next-btn" data-action="next">Next</button></div></div>
+        <div class="pagination"><span id="pagination-info">Loading</span><div id="pagination-controls" hidden><button class="btn-control" id="prev-btn" data-action="previous">Previous</button><button class="btn-control" id="next-btn" data-action="next">Next</button></div></div>
       </aside>
       <div class="ide-main">
         <section id="ide-launcher" class="ide-launcher" aria-labelledby="launcher-heading">
@@ -539,7 +509,7 @@
           <p>Choose an agent and workspace to begin. Use the terminal shell to install a CLI or sign in with your provider.</p>
           <form id="launch-agent-form" data-submit="launch-agent">
             <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="terminal">Terminal Shell</option></select></div>
-            <div><label for="launch-repo-input">Workspace directory</label><input id="launch-repo-input" type="text" placeholder="Absolute path to your repository" required /></div>
+            <div><label for="launch-repo-input">Workspace directory</label><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" hidden>Choose folder</button></div>
             <div><label for="launch-model-input">Model (optional)</label><input id="launch-model-input" type="text" placeholder="Use the agent default" maxlength="128" /></div>
             <p id="launch-agent-hint" role="status">Checking installed agents...</p>
             <button type="submit" class="btn-primary" id="launch-agent-btn">Launch Agent</button>
@@ -547,26 +517,18 @@
           <p id="launch-status" role="status"></p>
         </section>
         <section id="session-chat-panel" aria-labelledby="session-chat-heading" hidden>
-          <h2 id="session-chat-heading" class="section-title">Conversation</h2>
-          <p id="chat-session-label"></p>
-          <p id="chat-model-status" role="status"></p>
-          <div class="ide-chat-controls">
-            <label for="chat-model-select">Model<select id="chat-model-select"><option value="">Choose a model</option></select></label>
-            <button type="button" class="btn-control" id="chat-switch-btn" data-action="switch-model">Switch</button>
-            <button type="button" class="btn-control" data-action="focus-chat">Focus Window</button>
-            <button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Terminal stream</button>
-            <button type="button" class="btn-control" data-action="close-chat">Close</button>
-          </div>
+          <div class="conversation-heading"><div><h2 id="session-chat-heading">Conversation</h2><p id="chat-session-label"></p></div><details class="conversation-menu"><summary aria-label="Conversation actions">Actions</summary><div><button type="button" class="btn-control" data-action="focus-chat">Focus Window</button><button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Terminal stream</button><button type="button" class="btn-control" data-action="close-chat">Close</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div></details></div>
           <p id="chat-status" role="status"></p>
           <p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden data-action="copy-workspace">Copy workspace path</button>
           <div id="chat-stream" role="log" aria-label="Conversation" aria-live="polite" tabindex="0"></div>
           <div id="chat-terminal-view" role="log" aria-label="Interactive terminal. Click here to type; Control C interrupts." tabindex="0" hidden></div>
           <form id="chat-prompt-form" data-submit="send-prompt">
-            <div><label for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="3" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Ask the agent to work on something..."></textarea><small id="chat-prompt-help">Enter to send · Shift+Enter for a new line. Login and approvals appear in Terminal stream.</small></div>
-            <button type="submit" class="btn-primary" id="chat-send-btn">Send</button>
+            <label class="visually-hidden" for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="1" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Message the agent..."></textarea>
+            <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
+            <small id="chat-prompt-help">Enter to send · Shift+Enter for a new line</small>
           </form>
           <p id="chat-delivery-status" role="status"></p>
-          <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div>
+          <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button></div>
         </section>
       </div>
     </section>
@@ -580,24 +542,37 @@
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
     <div class="sp-settings-resources"><a href="__SPAWNT_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__SPAWNT_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
-    <div class="settings-grid">
+    <section class="profile-devices" aria-labelledby="remote-heading">
+      <h2 id="remote-heading">Desktop and phone</h2>
+      <p>Pair a phone to read available conversations and prompt an idle agent. Confirm the matching code on both devices.</p>
+      <div class="profile-actions"><button type="button" class="btn-primary" data-action="remote-start">Start pairing</button>
+      <button type="button" class="btn-control" data-action="remote-revoke">Revoke connection</button></div>
+      <div id="remote-status" role="status" style="margin-top: 12px; white-space: pre-wrap;"></div>
+      <div id="remote-link" style="margin-top: 8px;"></div>
+      <div id="remote-confirmation" hidden><label for="remote-code">Code shown on both devices</label>
+      <input id="remote-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
+      <button type="button" class="btn-control" data-action="remote-confirm">Confirm matching code</button></div>
+    </section>
+    <section class="profile-appearance"><h2>Appearance</h2><p>Choose the appearance for this device.</p><button class="theme-control" id="theme-control" type="button" data-action="theme" aria-label="Theme: system. Switch mode">Theme / system</button></section>
+    <section class="profile-data"><h2>Data and sync</h2><p id="last-updated" aria-live="polite">Last successful update: not yet</p><div class="console-hero-actions"><button class="btn-control" id="reload-view" type="button" data-action="reload">Reload view</button><button class="btn-control" id="resync-data" type="button" data-action="resync">Resync local data</button><button type="button" class="btn-control" data-action="export:csv">Export CSV</button><button type="button" class="btn-control" data-action="export:json">Export JSON</button></div><p>Exports use the reporting period selected in Dashboard.</p></section>
+    <details class="profile-disclosure"><summary>Plans and model pricing</summary>    <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
         <div class="section-title" style="margin-bottom: 16px;">Local Profile & Subscriptions</div>
         <div class="form-group">
-          <label>Display Name</label>
+          <label for="settings-display-name">Display Name</label>
           <input type="text" id="settings-display-name" placeholder="Developer">
         </div>
         <div class="form-group">
-          <label>OpenAI Monthly Plan ($/mo)</label>
+          <label for="settings-openai-plan">OpenAI Monthly Plan ($/mo)</label>
           <input type="number" id="settings-openai-plan" placeholder="20.00" step="1">
         </div>
         <div class="form-group">
-          <label>Anthropic / Claude Monthly Plan ($/mo)</label>
+          <label for="settings-claude-plan">Anthropic / Claude Monthly Plan ($/mo)</label>
           <input type="number" id="settings-claude-plan" placeholder="20.00" step="1">
         </div>
         <div class="form-group">
-          <label>Google Monthly Plan ($/mo)</label>
+          <label for="settings-google-plan">Google Monthly Plan ($/mo)</label>
           <input type="number" id="settings-google-plan" placeholder="0.00" step="1">
         </div>
         <div style="margin-top: 20px;">
@@ -612,7 +587,7 @@
         <div id="settings-pricing-list" style="margin-bottom: 14px; font-family: var(--font-mono); font-size: 11px;"></div>
         
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 20px;">
+        <div class="profile-pricing-fields">
           <input type="text" id="settings-model-pattern" aria-label="Model name or pattern" placeholder="Model (e.g. claude-3-5)">
           <input type="number" id="settings-model-in" aria-label="Input price per million tokens" placeholder="In $" step="0.1">
           <input type="number" id="settings-model-out" aria-label="Output price per million tokens" placeholder="Out $" step="0.1">
@@ -627,38 +602,8 @@
         </div>
       </div>
     </div>
-    <section class="card" aria-labelledby="remote-heading" style="margin-top: 20px;">
-      <h2 id="remote-heading" class="section-title">Encrypted Remote</h2>
-      <p>Pair a phone to read available conversations and prompt an idle agent. Confirm the matching code on both devices.</p>
-      <button type="button" class="btn-primary" data-action="remote-start">Start pairing</button>
-      <button type="button" class="btn-control" data-action="remote-revoke">Revoke connection</button>
-      <div id="remote-status" role="status" style="margin-top: 12px; white-space: pre-wrap;"></div>
-      <div id="remote-link" style="margin-top: 8px;"></div>
-      <label for="remote-code">Code shown on both devices</label>
-      <input id="remote-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
-      <button type="button" class="btn-control" data-action="remote-confirm">Confirm matching code</button>
-    </section>
-  </main>
-
-  <!-- ==================== VIEW 3: ACCOUNT ==================== -->
-  <main id="view-auth" class="view-content" tabindex="0">
-    <section class="sp-account-panel" aria-labelledby="account-heading">
-      <div class="sp-account-intro"><div><span class="sp-account-label">THIS DESKTOP</span><h2 id="account-heading">Your account, on this device.</h2><p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p></div><a href="__SPAWNT_BASE_URL__/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a></div>
-      <div class="sp-account-state"><span class="sp-account-label">CONNECTION</span><p id="auth-cloud-status" role="status" tabindex="-1">Checking account connection...</p><p id="auth-publication-status">Checking the last desktop update...</p></div>
-      <div class="sp-account-columns">
-        <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Pairing shares this desktop's activity metadata, usage and quota snapshots with your account. Prompts, code and tool output are never synced.</p><p>Snapshots update about once a minute while spawnt is running. Local monitoring works without an account.</p></div>
-        <div>
-          <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This device is paired. Disconnecting keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" data-action="unpair">Disconnect desktop</button></div>
-          <div id="auth-unpaired-card" hidden><h3>Connect this desktop</h3><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy desktop pairing token</strong>.</li><li>Paste the token below and connect.</li></ol><form data-submit="pair"><label for="auth-token-input">Desktop pairing token</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your pairing token" required><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local spawnt app.</p></form></div>
-          <p id="auth-pair-status" role="status" hidden></p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
-  <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
-    <div class="sp-license-export">
+</details>
+    <details class="profile-disclosure"><summary>Offline license</summary>
       <!-- License Activation Card -->
       <div class="card">
         <div class="card-title">Legacy Offline License</div>
@@ -682,20 +627,27 @@
         <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
       </div>
 
-      <!-- Quick Export Card -->
-      <div class="card">
-        <div class="card-title">Analytics & Data Export</div>
-        <p style="font-size: 11px; color: var(--text-muted); margin: 8px 0 16px 0; line-height: 1.5;">
-          Export complete normalized usage records, token breakdowns, model spend, and prompt cache savings for accounting or reporting.
-        </p>
-        <div style="display: flex; gap: 10px;">
-          <button class="btn-primary" data-action="export:csv">Export CSV (Excel / Sheets)</button>
-          <button class="btn-control" data-action="export:json">Export JSON</button>
+  </details>
+  </main>
+
+  <!-- ==================== VIEW 3: ACCOUNT ==================== -->
+  <main id="view-auth" class="view-content" tabindex="0">
+    <section class="sp-account-panel" aria-labelledby="account-heading">
+      <div class="sp-account-intro"><div><span class="sp-account-label">THIS DESKTOP</span><h2 id="account-heading">Your account, on this device.</h2><p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p></div><a href="__SPAWNT_BASE_URL__/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a></div>
+      <div class="sp-account-state"><span class="sp-account-label">CONNECTION</span><p id="auth-cloud-status" role="status" tabindex="-1">Checking account connection...</p><p id="auth-publication-status">Checking the last desktop update...</p></div>
+      <div class="sp-account-columns">
+        <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Pairing shares this desktop's activity metadata, usage and quota snapshots with your account. Prompts, code and tool output are never synced.</p><p>Snapshots update about once a minute while spawnt is running. Local monitoring works without an account.</p></div>
+        <div>
+          <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This device is paired. Disconnecting keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" data-action="unpair">Disconnect desktop</button></div>
+          <div id="auth-unpaired-card" hidden><h3>Connect this desktop</h3><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy desktop pairing token</strong>.</li><li>Paste the token below and connect.</li></ol><form data-submit="pair"><label for="auth-token-input">Desktop pairing token</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your pairing token" required><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local spawnt app.</p></form></div>
+          <p id="auth-pair-status" role="status" hidden></p>
         </div>
       </div>
-    </div>
+    </section>
+  </main>
 
-    <!-- Resume Queue Section -->
+  <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
+  <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
     <div class="table-container" style="margin-bottom: 20px;">
       <div class="table-header-controls">
         <div style="font-weight: 600; font-size: 13px;">Auto-Resume Queue (Rate-Limited Sessions)</div>
@@ -770,20 +722,20 @@
           <span class="badge" style="font-size: 10px; font-weight: 700;">PRO LABS</span>
         </div>
         <div style="font-size: 11px; color: var(--text-muted);">
-          Zero-token session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 0;">.spawnt/HANDOFF.md</code>
+          Fresh-session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 0;">.spawnt/HANDOFF.md</code>
         </div>
       </div>
 
       <!-- Explainer Box (SPEC §3.14 & Transparency) -->
       <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
-        <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. spawnt maintains strict privacy invariants and does not access closed GUI databases. Rotated sessions launch in your terminal pane with a clean context window (0 tokens), continuing your workspace task via repository checkpoints without token degradation.
+        <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. spawnt maintains strict privacy invariants and does not access closed GUI databases. Rotated sessions launch in your terminal pane with a repository handoff summary. The new agent may still receive its own startup instructions and context.
       </div>
 
       <!-- Relay Controls Form -->
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
         <div>
           <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Execution Policy</label>
-          <select id="relay-policy-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; color: var(--text);">
+          <select id="relay-policy-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--sp-control-radius); padding: 6px 10px; font-size: 11px; color: var(--text);">
             <option value="ask_first">Ask First (Recommended / Default)</option>
             <option value="auto">Auto-Relay (Zero-Touch Rotation)</option>
             <option value="disabled">Disabled (Manual Only)</option>
@@ -791,14 +743,14 @@
         </div>
         <div>
           <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Strategy</label>
-          <select id="relay-strategy-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; color: var(--text);">
+          <select id="relay-strategy-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--sp-control-radius); padding: 6px 10px; font-size: 11px; color: var(--text);">
             <option value="same_agent">Same Agent & Model (Default)</option>
             <option value="failover">Failover on Rate Limit (Claude to Codex)</option>
           </select>
         </div>
         <div>
           <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Safety Buffer Threshold</label>
-          <select id="relay-threshold-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; color: var(--text);">
+          <select id="relay-threshold-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--sp-control-radius); padding: 6px 10px; font-size: 11px; color: var(--text);">
             <option value="85">85% Context Fill</option>
             <option value="90">90% Context Fill (Recommended)</option>
             <option value="95">95% Context Fill</option>
@@ -808,7 +760,7 @@
 
       <!-- Pending & Recent Relays Table -->
       <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px;">Relay History & Pending Rotations</div>
-      <table>
+      <div class="table-container"><table>
         <thead>
           <tr>
             <th>Session ID</th>
@@ -823,12 +775,14 @@
         <tbody id="relay-table">
           <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No active context relays recorded.</td></tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   </main>
 
   </div></div>
   <p id="connection-status" role="alert" hidden class="local-view-message"></p>
+  <div id="app-notice" class="app-notice" role="status" hidden><p id="app-notice-message"></p><button type="button" class="btn-control" data-action="dismiss-notice">Dismiss</button></div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-heading" aria-describedby="confirm-message"><form method="dialog"><h2 id="confirm-heading">Confirm action</h2><p id="confirm-message"></p><div class="dialog-actions"><button class="btn-control" value="cancel" autofocus>Cancel</button><button class="btn-primary" id="confirm-accept" value="confirm">Continue</button></div></form></dialog>
   <script src="/console-app.js"></script>
 </body>
 </html>

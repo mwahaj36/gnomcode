@@ -8,6 +8,7 @@
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter, claude::fallback_id_from_path};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
+use spawnt_core::redact::clean_user_text;
 use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
     SessionState, Surface, TrustLevel, UsageRecord,
@@ -21,6 +22,7 @@ pub struct CodexAdapter {
     seen_dedup_keys: HashSet<String>,
     raw_session_id: Option<String>,
     active_model: Option<String>,
+    last_turn_model: Option<String>,
 }
 
 impl CodexAdapter {
@@ -46,6 +48,9 @@ impl SourceAdapter for CodexAdapter {
 
         if self.active_model.is_none() {
             self.active_model.clone_from(&ctx.fallback_model);
+        }
+        if self.last_turn_model.is_none() && ctx.source_offset > 0 {
+            self.last_turn_model.clone_from(&ctx.fallback_model);
         }
 
         let default_cwd = ctx.fallback_cwd.as_deref().unwrap_or("/unknown");
@@ -174,12 +179,34 @@ impl SourceAdapter for CodexAdapter {
                     {
                         let text = content
                             .iter()
-                            .filter_map(|part| match part.get("type").and_then(Value::as_str) {
-                                Some("input_text" | "output_text") => {
-                                    part.get("text").and_then(Value::as_str)
-                                }
-                                _ => None,
+                            .enumerate()
+                            .filter(|(index, _)| {
+                                let provenance = payload
+                                    .get("internal_chat_message_metadata_passthrough")
+                                    .and_then(|meta| meta.get("content_item_metadata"))
+                                    .and_then(|items| items.get(*index))
+                                    .and_then(|item| item.get("provenance"))
+                                    .and_then(|value| value.get("type"))
+                                    .and_then(Value::as_str);
+                                role != spawnt_core::ChatRole::User
+                                    || !matches!(provenance, Some("agents_md" | "harness"))
                             })
+                            .filter_map(|(_, part)| {
+                                match part.get("type").and_then(Value::as_str) {
+                                    Some("input_text" | "output_text") => {
+                                        part.get("text").and_then(Value::as_str)
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .map(|text| {
+                                if role == spawnt_core::ChatRole::User {
+                                    clean_user_text(text)
+                                } else {
+                                    text
+                                }
+                            })
+                            .filter(|text| !text.is_empty())
                             .collect::<Vec<_>>()
                             .join("\n");
                         if !text.is_empty() {
@@ -233,6 +260,29 @@ impl SourceAdapter for CodexAdapter {
                 });
                 if let Some(m) = turn_model {
                     if !m.trim().is_empty() {
+                        if line_type == "turn_context" && self.last_turn_model.as_deref() != Some(m)
+                        {
+                            let (content, status) = self.last_turn_model.as_ref().map_or_else(
+                                || (format!("Model active: {m}"), "model_active"),
+                                |previous| {
+                                    (
+                                        format!("Model changed from {previous} to {m}"),
+                                        "model_changed",
+                                    )
+                                },
+                            );
+                            batch.chat_events.push(spawnt_core::ChatEvent {
+                                event_id: format!("{session_id}:{current_offset}:model"),
+                                session_id: session_id.clone(),
+                                turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
+                                role: spawnt_core::ChatRole::System,
+                                content: spawnt_core::redact::redact_chat_content(&content),
+                                tool_name: None,
+                                status: Some(status.to_owned()),
+                                created_at: ts,
+                            });
+                            self.last_turn_model = Some(m.to_owned());
+                        }
                         self.active_model = Some(m.to_owned());
                         sess.model = Some(m.to_owned());
                     }
@@ -305,6 +355,19 @@ impl SourceAdapter for CodexAdapter {
         }
         batch
     }
+}
+
+/// Hides injected Codex context in legacy rows without changing history or paging cursors.
+#[must_use]
+pub fn clean_stored_conversation(
+    mut events: Vec<spawnt_core::ChatEvent>,
+) -> Vec<spawnt_core::ChatEvent> {
+    for event in &mut events {
+        if event.session_id.starts_with("codex:") && event.role == spawnt_core::ChatRole::User {
+            event.content = clean_user_text(&event.content).to_owned();
+        }
+    }
+    events
 }
 
 fn build_codex_usage(
