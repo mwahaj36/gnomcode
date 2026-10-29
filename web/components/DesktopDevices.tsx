@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
 
-type Offer = {room:string; key:string; relay:string; expires_at:string; name:string; pairing_code:string};
+type Offer = {room:string; key:string; relay:string; expires_at:string; name:string; pairing_code:string; protocol_version?:number};
 
 export default function DesktopDevices({onPair}: {onPair?:(offer:Offer)=>void} = {}) {
   const [userId, setUserId] = useState<string | null>();

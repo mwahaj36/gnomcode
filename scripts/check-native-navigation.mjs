@@ -17,7 +17,7 @@ for(const view of ['sessions','settings','overview']) {
 }
 const nodes=new Map();
 const errorDocument={getElementById(id){if(!nodes.has(id))nodes.set(id,{textContent:'Loading daily activity...',hidden:true});return nodes.get(id);}};
-const load=new Function('document','fetch',`const headers={};const currentTimeline='all';let lastReportJson='';const summaryState={};const refreshSummary=async()=>{};const console={error(){}};${fn('apiJson')}\n${fn('showConnectionError')}\n${fn('loadReport')}\nreturn loadReport;`)(errorDocument,async()=>({ok:false,status:401}));
+const load=new Function('document','fetch',`const headers={};const currentTimeline='all';let lastReportJson='';const summaryState={};const refreshSummary=async()=>{};const console={error(){}};${fn('apiJson')}\n${fn('showConnectionError')}\n${fn('loadReport')}\nreturn loadReport;`)(errorDocument,async()=>({ok:false,status:401,json:async()=>({})}));
 assert.equal(await load(),false);
 assert.doesNotMatch(nodes.get('daily-activity')?.textContent||'Loading',/Loading/,'failed requests must resolve the loading state');
 assert.match(nodes.get('connection-status')?.textContent||'',/authoriz|reopen|tray/i,'missing authorization needs an actionable message');

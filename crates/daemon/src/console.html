@@ -492,6 +492,7 @@
     <div id="sessions-ongoing" hidden></div>
     <section class="ide-layout" data-local-view="sessions" aria-label="Agent workspace">
       <aside class="ide-sidebar" id="ide-session-sidebar" aria-label="Session history">
+        <div class="ide-sidebar-title"><h2>Conversations</h2><button type="button" class="btn-control" data-action="toggle-chat-list" aria-label="Collapse conversations" title="Collapse conversations"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2"/></svg></button></div>
         <button class="btn-primary" type="button" data-action="new-session">New conversation</button>
         <label for="ide-session-search">Search this page</label>
         <input id="ide-session-search" type="search" placeholder="Find a conversation" />
@@ -525,7 +526,7 @@
           <div id="chat-terminal-view" role="log" aria-label="Interactive terminal. Click here to type; Control C interrupts." tabindex="0" hidden></div>
           <form id="chat-prompt-form" data-submit="send-prompt">
             <label class="visually-hidden" for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="1" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Message the agent..."></textarea>
-            <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
+            <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
             <small id="chat-prompt-help">Enter to send · Shift+Enter for a new line</small>
           </form>
           <section id="workspace-terminal-pane" hidden aria-label="Workspace terminal"><div class="workspace-terminal-heading"><span id="workspace-terminal-path">Terminal</span><button type="button" class="btn-control" data-action="hide-workspace-terminal">Hide</button></div><div id="workspace-terminal-screen"></div></section>

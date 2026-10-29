@@ -716,6 +716,13 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
     let remote = Arc::new(spawnt_daemon::remote::RemoteManager::new());
+    let restore_remote = remote.clone();
+    let restore_db = orchestrator.db();
+    tokio::spawn(async move {
+        if restore_remote.restore(restore_db).await.is_err() {
+            tracing::warn!("Saved remote connection could not be restored");
+        }
+    });
     let _cloud_sync_handle =
         spawnt_daemon::sync::spawn_cloud_sync(orchestrator.db(), remote.clone());
 
