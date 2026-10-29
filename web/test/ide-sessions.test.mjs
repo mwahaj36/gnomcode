@@ -29,3 +29,37 @@ test('conversation view excludes tool and system output', () => {
   assert.match(markup, /I found a bug/);
   assert.doesNotMatch(markup, /Command output|Task: metadata/);
 });
+
+test('agent replies render Markdown while user messages retain literal text', () => {
+  const markup = presentation.renderChatCards([
+    { role: 'user', content: '**Keep this literal**', created_at: '2026-10-29' },
+    { role: 'assistant', content: '# Result\n\n**Fixed** with `cargo test`.\n\n- First\n- Second\n\n```rust\nlet x = "<script>";\n```\n\n| Check | Result |\n| --- | --- |\n| Tests | Pass |', created_at: '2026-10-29' },
+  ]);
+  assert.match(markup, /<h1>Result<\/h1>/);
+  assert.match(markup, /<strong>Fixed<\/strong>/);
+  assert.match(markup, /<code>cargo test<\/code>/);
+  assert.match(markup, /<ul><li>First<\/li><li>Second<\/li><\/ul>/);
+  assert.match(markup, /<pre><code[^>]*>let x = &quot;&lt;script&gt;&quot;;/);
+  assert.match(markup, /<th>Check<\/th>/);
+  assert.match(markup, /<td>Pass<\/td>/);
+  assert.match(markup, /\*\*Keep this literal\*\*/);
+  assert.doesNotMatch(markup, /<script>/);
+});
+
+test('reply formatting never enables HTML or executable links', () => {
+  const markup = presentation.renderChatCards([{ role: 'assistant', content: '<img src=x onerror=alert(1)>\n\n[bad](javascript:alert) [safe](https://example.com)\n\n```html\n**literal**\n```', created_at: '2026-10-29' }]);
+  assert.doesNotMatch(markup, /<img|href="javascript:/);
+  assert.match(markup, /href="https:\/\/example.com"/);
+  assert.match(markup, /<code[^>]*>\*\*literal\*\*/);
+});
+
+test('nested steps and multiline paragraphs retain their structure', () => {
+  const markup = presentation.renderChatCards([{role:'assistant', content:'First line\nsecond line\n\n1. Run checks\n   - Unit tests\n   - Browser tests\n2. Review changes', created_at:'2026-10-29'}]);
+  assert.match(markup, /<p>First line<br>second line<\/p>/);
+  assert.match(markup, /<ol><li>Run checks<ul><li>Unit tests<\/li><li>Browser tests<\/li><\/ul><\/li><li>Review changes<\/li><\/ol>/);
+});
+
+test('continued numbered steps keep the agent numbering', () => {
+  const markup = presentation.renderChatCards([{role:'assistant',content:'4. Build\n5. Verify',created_at:'2026-10-29'}]);
+  assert.match(markup, /<ol start="4"><li>Build<\/li><li>Verify<\/li><\/ol>/);
+});
