@@ -832,30 +832,15 @@ async fn prompt_session_handler(
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let url = format!(
-        "ws://127.0.0.1:{}/stream?token={}",
-        record.port, record.token
-    );
-    let sent = async {
-        use futures_util::SinkExt;
-        let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.ok()?;
-        socket
-            .send(tokio_tungstenite::tungstenite::Message::Binary(
-                if text.contains('\n') && !matches!(record.agent.as_str(), "terminal" | "shell") {
-                    format!("\x1b[200~{text}\x1b[201~\r")
-                } else {
-                    format!("{text}\r")
-                }
-                .into_bytes()
-                .into(),
-            ))
-            .await
-            .ok()?;
-        Some(())
-    }
-    .await;
-
-    if sent.is_some() {
+    let input = if text.contains('\n') && !matches!(record.agent.as_str(), "terminal" | "shell") {
+        format!("\x1b[200~{text}\x1b[201~\r")
+    } else {
+        format!("{text}\r")
+    };
+    if spawnt_pty::send_input(&record, input.as_bytes())
+        .await
+        .is_ok()
+    {
         Ok(Json(json!({ "ok": true, "session_id": id })))
     } else {
         Err(StatusCode::BAD_GATEWAY)

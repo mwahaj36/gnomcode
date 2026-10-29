@@ -4,6 +4,17 @@ import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:net';
+import { request } from 'node:http';
+
+function httpCall(url, method, headers, body) {
+  return new Promise((resolve,reject)=>{
+    const req=request(url,{method,headers},response=>{
+      let text=''; response.on('data',chunk=>{text+=chunk;});
+      response.on('end',()=>resolve({status:response.statusCode,text})); response.on('error',reject);
+    });
+    req.setTimeout(10000,()=>req.destroy(Error('Local API timeout'))); req.on('error',reject); req.end(body);
+  });
+}
 
 const binary = path.resolve(process.env.SPAWNT_BINARY || 'target/release/spawnt.exe');
 const home = await mkdtemp(path.join(tmpdir(), 'spawnt-ide-check-'));
@@ -36,8 +47,8 @@ try {
   const base=`http://127.0.0.1:${info.port}`;
   const headers={Authorization:`Bearer ${info.token}`, 'Content-Type':'application/json'};
   async function api(route, body) {
-    const response=await fetch(base+route,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined});
-    assert.equal(response.status,200,route); return response.json();
+    const response=await httpCall(base+route,body?'POST':'GET',headers,body?JSON.stringify(body):undefined);
+    assert.equal(response.status,200,route); return JSON.parse(response.text);
   }
   const agent=process.env.SPAWNT_TEST_NPM_SHIM === '1' ? 'codex' : 'terminal';
   hosted=await api('/api/v1/sessions/launch',{agent,repo_path:home});
@@ -57,11 +68,11 @@ try {
   socket.close();
   daemon.kill();
   await new Promise(resolve=>setTimeout(resolve,300));
-  const health=await fetch(`http://127.0.0.1:${hosted.port}/health`,{headers:{Authorization:`Bearer ${hosted.token}`}});
+  const health=await httpCall(`http://127.0.0.1:${hosted.port}/health`,'GET',{Authorization:`Bearer ${hosted.token}`});
   assert.equal(health.status,200,'PTY owner survives daemon shutdown');
   if(agent==='codex') assert.match(output,/SPAWNT_NPM_READY/, 'npm entry point launches through Node');
   console.log(`PASS: fresh binary launches ${agent}, submits input, streams output and preserves the PTY after daemon shutdown`);
 } finally {
   socket?.close(); daemon.kill();
-  if(hosted) await fetch(`http://127.0.0.1:${hosted.port}/stop`,{method:'POST',headers:{Authorization:`Bearer ${hosted.token}`}}).catch(()=>{});
+  if(hosted) await httpCall(`http://127.0.0.1:${hosted.port}/stop`,'POST',{Authorization:`Bearer ${hosted.token}`}).catch(()=>{});
 }

@@ -454,20 +454,10 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             let Some(record) = prompt_host(session, &sessions, &hosted) else {
                 return json!({"type":"error","message":"Prompting requires an idle agent with a unique hosted session"});
             };
-            let url = format!(
-                "ws://127.0.0.1:{}/stream?token={}",
-                record.port, record.token
-            );
-            let sent = async {
-                let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.ok()?;
-                socket
-                    .send(Message::Binary(format!("{text}\r").into_bytes().into()))
-                    .await
-                    .ok()?;
-                Some(())
-            }
-            .await;
-            if sent.is_some() {
+            if spawnt_pty::send_input(record, format!("{text}\r").as_bytes())
+                .await
+                .is_ok()
+            {
                 json!({"type":"prompt_ack","session_id":session_id})
             } else {
                 json!({"type":"error","message":"Prompt could not be delivered"})

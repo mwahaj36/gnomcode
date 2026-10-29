@@ -435,6 +435,8 @@ pub async fn run_pty_host(
     let app = Router::new()
         .route("/health", get(host_health_handler))
         .route("/stream", get(host_stream_handler))
+        .route("/input", post(host_input_handler))
+        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .route("/stop", post(host_stop_handler))
         .with_state(state);
 
@@ -498,6 +500,30 @@ async fn host_health_handler(
         "child_pid": state.child_pid,
     }))
     .into_response()
+}
+
+async fn host_input_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+    body: axum::body::Bytes,
+) -> StatusCode {
+    if !valid_loopback_headers(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
+    let authenticated = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.strip_prefix("Bearer ") == Some(state.token.as_str()));
+    if !authenticated {
+        return StatusCode::UNAUTHORIZED;
+    }
+    if body.is_empty() {
+        return StatusCode::BAD_REQUEST;
+    }
+    if state.input_tx.send(body.to_vec()).is_err() {
+        return StatusCode::GONE;
+    }
+    StatusCode::OK
 }
 
 async fn host_stop_handler(
@@ -669,9 +695,81 @@ async fn send_stop(record: &SessionRecord) -> Result<(), Error> {
     Ok(())
 }
 
+/// Queues terminal input through an authenticated endpoint independently of terminal output.
+///
+/// # Errors
+/// Returns [`Error`] if the host cannot acknowledge the input.
+pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Error> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|error| Error::Process(error.to_string()))?
+        .post(format!("http://127.0.0.1:{}/input", record.port))
+        .bearer_auth(&record.token)
+        .body(input.to_vec())
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|error| Error::Process(error.to_string()))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn prompt_input_is_acknowledged_without_opening_an_output_stream() {
+        let (input_tx, input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let state = Arc::new(HostState {
+            token: "input-test".into(),
+            session_id: "input-test".into(),
+            child_pid: 0,
+            scrollback: Arc::new(Mutex::new(Scrollback::new(16))),
+            output_tx,
+            input_tx,
+            stopping: Arc::new(AtomicBool::new(false)),
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let port = listener.local_addr().expect("address").port();
+        let app = Router::new()
+            .route("/input", post(host_input_handler))
+            .with_state(state);
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.expect("server") });
+        let record = SessionRecord {
+            session_id: "input-test".into(),
+            agent: "codex".into(),
+            repo_path: ".".into(),
+            model: None,
+            host_pid: 0,
+            child_pid: 0,
+            port,
+            token: "input-test".into(),
+            started_at: String::new(),
+        };
+        send_input(&record, b"hello\r")
+            .await
+            .expect("acknowledged input");
+        assert_eq!(input_rx.try_recv().expect("queued input"), b"hello\r");
+        let mut invalid = record.clone();
+        invalid.token = "wrong".into();
+        assert!(send_input(&invalid, b"forbidden").await.is_err());
+        assert!(input_rx.try_recv().is_err());
+        let denied = reqwest::Client::new()
+            .post(format!("http://127.0.0.1:{port}/input"))
+            .bearer_auth("input-test")
+            .header("Origin", "https://untrusted.example")
+            .body("forbidden")
+            .send()
+            .await
+            .expect("response");
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+        assert!(input_rx.try_recv().is_err());
+        server.abort();
+    }
 
     #[test]
     fn owner_rejects_non_loopback_origin_and_host() {
