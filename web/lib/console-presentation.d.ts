@@ -16,6 +16,8 @@ export function renderOngoing(sessions: unknown): string;
 export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: string | null): void;
 
 export function renderChatCards(events: unknown): string;
+export type ConversationLimit = {label:string; remaining_pct:number | null; basis:string; observed_at?:string; stale?:boolean};
+export function renderConversationLimits(limits?:ConversationLimit[]):string;
 export function renderSessionList(sessions: unknown[], selected?: string, query?: string): string;
 export function updateChat(element: HTMLElement, events: unknown): void;
 

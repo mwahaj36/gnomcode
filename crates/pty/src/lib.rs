@@ -96,6 +96,30 @@ pub fn launch_command(
 }
 
 /// Information about an independently running PTY session.
+///
+/// # Errors
+/// Returns an error for unsupported agents or unsafe session identifiers.
+pub fn resume_command(agent: &str, repo: &Path, native_id: &str) -> Result<LaunchCommand, Error> {
+    if native_id.is_empty()
+        || native_id.starts_with('-')
+        || native_id.len() > 128
+        || !native_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_".contains(&byte))
+    {
+        return Err(Error::SessionNotFound(native_id.to_owned()));
+    }
+    let mut command = launch_command(agent, repo, None)?;
+    let verb = match agent {
+        "codex" => "resume",
+        "claude" | "claude-code" | "gemini" | "gemini-cli" => "--resume",
+        _ => return Err(Error::UnsupportedAgent(agent.to_owned())),
+    };
+    command.arguments = vec![verb.to_owned(), native_id.to_owned()];
+    Ok(command)
+}
+
+/// Information about an independently running PTY session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionRecord {
     /// Unique session identifier.
@@ -279,6 +303,21 @@ pub async fn run_pty_host(
     model: Option<&str>,
     override_command: Option<(&str, &[&str])>,
 ) -> Result<(), Error> {
+    run_pty_host_resuming(session_id, agent, repo, model, override_command, None).await
+}
+
+/// Runs a host with an optional official native resume command.
+///
+/// # Errors
+/// Returns an error if validation, process creation or host startup fails.
+pub async fn run_pty_host_resuming(
+    session_id: &str,
+    agent: &str,
+    repo: &Path,
+    model: Option<&str>,
+    override_command: Option<(&str, &[&str])>,
+    resume_id: Option<&str>,
+) -> Result<(), Error> {
     if !valid_session_id(session_id) {
         return Err(Error::SessionNotFound(session_id.to_owned()));
     }
@@ -298,7 +337,10 @@ pub async fn run_pty_host(
         let (cmd, args) = if let Some((c, a)) = override_command {
             (c.to_owned(), a.iter().map(|s| (*s).to_owned()).collect())
         } else {
-            let launch = launch_command(agent, repo, model)?;
+            let launch = match resume_id {
+                Some(id) => resume_command(agent, repo, id)?,
+                None => launch_command(agent, repo, model)?,
+            };
             let (executable, mut arguments) =
                 spawnt_platform::executables::agent_command(&launch.executable);
             arguments.extend(launch.arguments);
@@ -323,7 +365,10 @@ pub async fn run_pty_host(
         let (cmd, args) = if let Some((c, a)) = override_command {
             (c.to_owned(), a.iter().map(|s| (*s).to_owned()).collect())
         } else {
-            let launch = launch_command(agent, repo, model)?;
+            let launch = match resume_id {
+                Some(id) => resume_command(agent, repo, id)?,
+                None => launch_command(agent, repo, model)?,
+            };
             (launch.executable, launch.arguments)
         };
 
@@ -660,10 +705,36 @@ pub async fn launch_session(
     repo: &Path,
     model: Option<&str>,
 ) -> Result<SessionRecord, Error> {
+    launch_session_with_resume(session_id, agent, repo, model, None).await
+}
+
+/// Reopens an exact saved native session in an independent hosted terminal.
+///
+/// # Errors
+/// Returns an error if the agent cannot resume or the host cannot start.
+pub async fn resume_session(
+    session_id: &str,
+    agent: &str,
+    repo: &Path,
+    native_id: &str,
+) -> Result<SessionRecord, Error> {
+    launch_session_with_resume(session_id, agent, repo, None, Some(native_id)).await
+}
+
+async fn launch_session_with_resume(
+    session_id: &str,
+    agent: &str,
+    repo: &Path,
+    model: Option<&str>,
+    resume_id: Option<&str>,
+) -> Result<SessionRecord, Error> {
     if !valid_session_id(session_id) {
         return Err(Error::SessionNotFound(session_id.to_owned()));
     }
     let _ = launch_command(agent, repo, model)?;
+    if let Some(id) = resume_id {
+        let _ = resume_command(agent, repo, id)?;
+    }
     let exe = std::env::current_exe().map_err(Error::Io)?;
 
     let mut args = vec![
@@ -674,6 +745,9 @@ pub async fn launch_session(
     ];
     if let Some(m) = model {
         args.push(m.to_owned());
+    }
+    if let Some(id) = resume_id {
+        args.extend(["--resume-session".to_owned(), id.to_owned()]);
     }
 
     #[cfg(windows)]
@@ -751,6 +825,31 @@ pub async fn send_prompt(record: &SessionRecord, text: &str) -> Result<(), Error
     send_input(record, b"\r").await
 }
 
+/// Changes the model through the official CLI without starting a new session.
+/// Delivery is acknowledged by the host; model activation still requires observation.
+///
+/// # Errors
+/// Returns an error for unsupported agents, unsafe model names, or failed delivery.
+pub async fn switch_model(record: &SessionRecord, model: &str) -> Result<(), Error> {
+    if model.is_empty()
+        || model.starts_with('-')
+        || model.len() > 128
+        || !model
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/".contains(&byte))
+    {
+        return Err(Error::InvalidModel(model.to_owned()));
+    }
+    let command = match record.agent.as_str() {
+        "codex" | "claude" | "claude-code" => format!("/model {model}"),
+        "gemini" | "gemini-cli" => format!("/model set {model}"),
+        _ => return Err(Error::UnsupportedAgent(record.agent.clone())),
+    };
+    send_input(record, command.as_bytes()).await?;
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    send_input(record, b"\r").await
+}
+
 /// Queues terminal input through an authenticated endpoint independently of terminal output.
 ///
 /// # Errors
@@ -773,6 +872,33 @@ pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resume_uses_the_exact_native_session_without_permission_flags() {
+        let repo = tempfile::tempdir().expect("workspace");
+        assert_eq!(
+            resume_command("codex", repo.path(), "saved-123")
+                .expect("codex")
+                .arguments,
+            ["resume", "saved-123"]
+        );
+        assert_eq!(
+            resume_command("claude-code", repo.path(), "saved-123")
+                .expect("claude")
+                .arguments,
+            ["--resume", "saved-123"]
+        );
+        assert_eq!(
+            resume_command("gemini-cli", repo.path(), "saved-123")
+                .expect("gemini")
+                .arguments,
+            ["--resume", "saved-123"]
+        );
+        for id in ["", "--last", "--yolo", "saved\r/exit", "saved another"] {
+            assert!(resume_command("codex", repo.path(), id).is_err());
+        }
+        assert!(resume_command("terminal", repo.path(), "saved").is_err());
+    }
 
     #[tokio::test]
     async fn prompt_input_is_acknowledged_without_opening_an_output_stream() {
@@ -819,6 +945,18 @@ mod tests {
             b"\x1b[200~one line\x1b[201~"
         );
         assert_eq!(input_rx.try_recv().expect("submit frame"), b"\r");
+        switch_model(&record, "gpt-5.6-luna")
+            .await
+            .expect("native switch");
+        assert_eq!(
+            input_rx.try_recv().expect("model command"),
+            b"/model gpt-5.6-luna"
+        );
+        assert_eq!(input_rx.try_recv().expect("model submit"), b"\r");
+        for invalid_model in ["gpt-test\r/exit", "gpt-test --yolo", "", "--yolo"] {
+            assert!(switch_model(&record, invalid_model).await.is_err());
+            assert!(input_rx.try_recv().is_err());
+        }
         let mut shell = record.clone();
         shell.agent = "terminal".into();
         send_prompt(&shell, "echo test")

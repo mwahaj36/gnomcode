@@ -463,7 +463,11 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
  body.sp-native-console #navigation-toggle,.sp-web-app .sp-console-nav>button:first-of-type{display:none!important}
 }
 @media(prefers-reduced-motion:reduce){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{transition:none!important}}
-.sp-chat-notice{width:100%;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px}.sp-chat-notice::before,.sp-chat-notice::after{content:"";height:1px;min-width:16px;flex:1;background:var(--sp-border)}.sp-chat-notice time{flex-basis:100%}
+.sp-chat-notice{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sp-conversation-limits{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font:12px/1.5 var(--sp-font-sans);color:var(--sp-text-2)}
+.sp-conversation-limit{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px}.sp-conversation-limit strong{font-weight:500;color:var(--sp-text)}.sp-conversation-limits small{font-size:10px;color:var(--sp-text-3)}
+.conversation-heading>.sp-conversation-limits{margin-left:auto;max-width:48%}.remote-heading .sp-conversation-limits{margin-top:6px}
+@media(max-width:700px){.sp-native-console .conversation-heading{flex-wrap:wrap}.conversation-heading>.sp-conversation-limits{order:5;flex-basis:100%;max-width:100%;margin:0}.remote-heading .sp-conversation-limits{gap:4px 12px}}
 
 /* Shared renderer scrollbars follow the current Spawnt theme. */
 *{scrollbar-width:thin;scrollbar-color:var(--sp-text-3) var(--sp-surface)}
