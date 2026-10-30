@@ -122,6 +122,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/callback", get(auth_callback_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
+        .route("/api/v1/conversations", get(list_conversations_handler))
         .route("/api/v1/sessions/hosted", get(list_hosted_sessions_handler))
         .route("/api/v1/sessions/launch", post(launch_session_handler))
         .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
@@ -205,6 +206,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/repos/diff", get(repo_diff_get_handler))
         .route("/api/v1/sessions/{id}/switch", post(switch_session_handler))
         .route("/api/v1/sessions/{id}/resume", post(resume_session_handler))
+        .route(
+            "/api/v1/sessions/{id}/continue",
+            post(continue_session_handler),
+        )
         .route(
             "/api/v1/routing/policy",
             get(routing_policy_get_handler).post(routing_policy_post_handler),
@@ -851,17 +856,43 @@ async fn list_hosted_sessions_handler(
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
     let bindings = crate::remote::session_bindings(&sessions, &hosted);
+    crate::remote::sync_conversation_bindings(&db, &sessions, &hosted)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let records: Vec<serde_json::Value> = hosted
         .iter()
+        .filter(|record| {
+            db.conversation_target(&record.session_id)
+                .ok()
+                .flatten()
+                .is_none_or(|(host, _, _)| host == record.session_id)
+        })
         .map(|r| {
+            let root = db
+                .conversation_id(&r.session_id)
+                .unwrap_or_else(|_| r.session_id.clone());
+            let saved_native = db
+                .conversation_target(&r.session_id)
+                .ok()
+                .flatten()
+                .and_then(|(_, native, _)| native);
             let native = bindings
                 .iter()
                 .find(|(_, record)| record.session_id == r.session_id)
-                .map(|(session, _)| *session);
+                .map(|(session, _)| *session)
+                .or_else(|| {
+                    sessions
+                        .iter()
+                        .find(|session| Some(session.id.as_str()) == saved_native.as_deref())
+                });
             let observed = native.and_then(|session| session.model.as_ref());
-            let title = native
-                .and_then(|session| session.title.clone())
-                .or_else(|| native.and_then(|session| crate::conversation_title(&db, &session.id)))
+            let requested = db
+                .conversation_launch(&root)
+                .ok()
+                .flatten()
+                .and_then(|launch| launch.model);
+            let pending = requested.as_ref().filter(|model| Some(*model) != observed);
+            let title = crate::conversation_title(&db, &root)
+                .or_else(|| native.and_then(|session| session.title.clone()))
                 .unwrap_or_else(|| {
                     std::path::Path::new(&r.repo_path).file_name().map_or_else(
                         || "New conversation".to_owned(),
@@ -869,12 +900,12 @@ async fn list_hosted_sessions_handler(
                     )
                 });
             json!({
-                "session_id": r.session_id,
+                "session_id": root,
                 "agent": r.agent,
                 "title": title,
                 "repo_path": r.repo_path,
-                "model": observed.or(r.model.as_ref()),
-                "model_observed": observed.is_some(),
+                "model": pending.or(observed).or(r.model.as_ref()),
+                "model_observed": pending.is_none() && observed.is_some(),
                 "started_at": r.started_at,
                 "child_pid": r.child_pid,
             })
@@ -908,28 +939,10 @@ async fn prompt_session_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let hosted = spawnt_pty::list_active_sessions();
-    let record = if let Some(record) = hosted.iter().find(|record| record.session_id == id) {
-        Some(record.clone())
-    } else {
-        let db = state.db.lock().await;
-        let sessions = db
-            .list_active_sessions(1000)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        sessions
-            .iter()
-            .find(|session| session.id == id)
-            .and_then(|session| crate::remote::session_host(session, &sessions, &hosted))
-            .cloned()
-    };
-    let Some(record) = record else {
-        return Err(StatusCode::NOT_FOUND);
-    };
-
-    if spawnt_pty::send_prompt(&record, text).await.is_ok() {
-        Ok(Json(json!({ "ok": true, "session_id": id })))
-    } else {
-        Err(StatusCode::BAD_GATEWAY)
+    match crate::deliver_conversation_prompt(&state.db, &id, text).await {
+        Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id }))),
+        Err(crate::HandoffError::MissingSession) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::BAD_GATEWAY),
     }
 }
 
@@ -950,25 +963,17 @@ async fn pty_stream_handler(
     validate_pty_auth(&headers, query.token.as_deref(), &state.bearer_token)?;
 
     let hosted = spawnt_pty::list_active_sessions();
-    let sessions = state
-        .db
-        .lock()
-        .await
-        .list_active_sessions(1000)
-        .unwrap_or_default();
-    let record = hosted
-        .iter()
-        .find(|record| record.session_id == id)
-        .or_else(|| {
-            let session = sessions.iter().find(|session| session.id == id)?;
-            crate::remote::session_host(session, &sessions, &hosted)
-        })
+    let db = state.db.lock().await;
+    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let record = crate::remote::conversation_host(&db, &id, &sessions, &hosted)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let backend_url = format!(
         "ws://127.0.0.1:{}/stream?token={}",
         record.port, record.token
     );
+    drop(db);
 
     Ok(ws.on_upgrade(move |client_ws| async move {
         proxy_pty_ws(client_ws, backend_url).await;
@@ -1285,7 +1290,8 @@ async fn chat_delete_handler(
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
     let hosted = spawnt_pty::list_active_sessions();
-    let native = crate::remote::conversation_session_id(&id, &sessions, &hosted);
+    let native = crate::remote::active_conversation_id(&db, &id, &sessions, &hosted)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let host = sessions
         .iter()
         .find(|session| session.id == native)
@@ -1494,21 +1500,14 @@ async fn switch_session_handler(
     Json(payload): Json<SwitchSessionRequest>,
 ) -> Result<axum::response::Response, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let prepared = {
-        let db = state.db.lock().await;
-        let sessions = db.list_active_sessions(1000).unwrap_or_default();
-        let native_id = crate::remote::conversation_session_id(
-            &id,
-            &sessions,
-            &spawnt_pty::list_active_sessions(),
-        );
-        crate::prepare_switch(
-            &db,
-            &native_id,
-            &payload.target_model,
-            payload.agent.as_deref(),
-        )
-    };
+    let _control = crate::CONVERSATION_CONTROL.lock().await;
+    let prepared = crate::prepare_model_change(
+        &state.db,
+        &id,
+        &payload.target_model,
+        payload.agent.as_deref(),
+    )
+    .await;
     let prepared = match prepared {
         Ok(value) => value,
         Err(error) => return Ok(handoff_error_response(error)),
@@ -1519,22 +1518,13 @@ async fn switch_session_handler(
     };
     {
         let db = state.db.lock().await;
-        let sessions = db
-            .list_active_sessions(1000)
+        crate::remote::record_model_change(&db, &id, &record)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let source = crate::remote::conversation_session_id(
-            &id,
-            &sessions,
-            &spawnt_pty::list_active_sessions(),
-        );
-        if crate::remote::record_model_change(&db, &source, &record).is_err() {
-            tracing::warn!("model change notice could not be saved");
-        }
     }
     Ok(Json(json!({
         "ok": true,
         "source_session_id": id,
-        "session_id": record.session_id,
+        "session_id": id,
         "agent": record.agent,
         "model": record.model
     }))
@@ -1565,6 +1555,19 @@ fn handoff_error_response(error: crate::HandoffError) -> axum::response::Respons
         ),
     };
     (status, Json(json!({"message":message}))).into_response()
+}
+
+/// Request payload to resume an idle or suspended session.
+async fn continue_session_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<axum::response::Response, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(match crate::resume_conversation(&state.db, &id).await {
+        Ok(_) => Json(json!({"ok":true,"session_id":id})).into_response(),
+        Err(error) => handoff_error_response(error),
+    })
 }
 
 /// Request payload to resume an idle or suspended session.
@@ -1778,6 +1781,41 @@ async fn health_handler(
     }))
 }
 
+async fn list_conversations_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<SessionQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let sessions = db
+        .list_active_sessions(1000)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut rows =
+        crate::remote::conversation_sessions(&db, &sessions, &spawnt_pty::list_active_sessions())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    rows.retain(|row| {
+        let id = row["id"].as_str().unwrap_or_default();
+        let source = db.conversation_source(id).unwrap_or_else(|_| id.to_owned());
+        let project_matches = params
+            .project
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .is_none_or(|project| {
+                sessions
+                    .iter()
+                    .any(|session| session.id == source && session.project_id == project)
+            });
+        let agent_matches = params
+            .agent
+            .as_deref()
+            .filter(|value| !value.is_empty() && *value != "all")
+            .is_none_or(|agent| row["agent"] == agent);
+        project_matches && agent_matches
+    });
+    Ok(Json(rows))
+}
+
 async fn list_sessions_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -1801,12 +1839,7 @@ async fn list_sessions_handler(
 
     let host = spawnt_platform::hostname();
     for s in &mut sessions {
-        if s.title
-            .as_deref()
-            .is_none_or(|title| title.trim().is_empty())
-        {
-            s.title = crate::conversation_title(&db, &s.id);
-        }
+        s.title = crate::conversation_title(&db, &s.id).or(s.title.take());
         if s.device_name.is_none() {
             s.device_name = Some(host.clone());
         }
@@ -2095,6 +2128,26 @@ pub(crate) fn quota_views(snapshots: Vec<spawnt_core::QuotaSnapshot>) -> Vec<Quo
             }
         })
         .collect()
+}
+
+pub(crate) fn conversation_quota(
+    snapshots: &[spawnt_core::QuotaSnapshot],
+    agent: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Vec<Value> {
+    let provider = crate::agent_for_model("@default", Some(agent)).unwrap_or(agent);
+    let pools: std::collections::HashSet<_> = snapshots
+        .iter()
+        .filter(|snapshot| snapshot.provider == provider)
+        .map(|snapshot| snapshot.limit_id.as_str())
+        .collect();
+    quota_views(snapshots.iter().filter(|snapshot|snapshot.provider==provider).cloned().collect()).into_iter().map(|pool| {
+        let window = match pool.snapshot.window {spawnt_core::QuotaWindow::FiveHour=>"5h",spawnt_core::QuotaWindow::Weekly=>"Weekly",spawnt_core::QuotaWindow::Monthly=>"Monthly"};
+        let label = if pools.len()>1 {format!("{} {window}",pool.snapshot.limit_id.replace(['-','_']," "))}else{window.to_owned()};
+        let expired = pool.snapshot.resets_at.is_some_and(|reset|reset<=now);
+        let stale = expired || now.signed_duration_since(pool.snapshot.observed_at)>chrono::Duration::minutes(2);
+        json!({"label":label,"remaining_pct":if expired {None}else{pool.remaining_pct},"basis":pool.snapshot.basis,"observed_at":pool.snapshot.observed_at,"stale":stale})
+    }).collect()
 }
 
 async fn custom_pricing_get_handler(
@@ -2831,6 +2884,52 @@ mod tests {
         );
         quota.basis = spawnt_core::TrustLevel::Unknown;
         assert_eq!(quota_views(vec![quota])[0].remaining_pct, None);
+    }
+
+    #[test]
+    fn conversation_limits_follow_provider_observations_and_expire_after_reset() {
+        let now = chrono::Utc::now();
+        let mut snapshot = spawnt_core::QuotaSnapshot {
+            provider: "codex".into(),
+            limit_id: "codex".into(),
+            window: spawnt_core::QuotaWindow::FiveHour,
+            used_pct: 25.0,
+            resets_at: Some(now + chrono::Duration::hours(1)),
+            plan: None,
+            basis: spawnt_core::TrustLevel::Exact,
+            observed_at: now,
+        };
+        let views = super::conversation_quota(std::slice::from_ref(&snapshot), "codex", now);
+        assert_eq!(views[0]["remaining_pct"], 75.0);
+        assert_eq!(views[0]["label"], "5h");
+        assert_eq!(views[0]["stale"], false);
+        snapshot.used_pct = 40.0;
+        assert_eq!(
+            super::conversation_quota(std::slice::from_ref(&snapshot), "codex", now)[0]["remaining_pct"],
+            60.0
+        );
+        assert!(
+            super::conversation_quota(std::slice::from_ref(&snapshot), "claude-code", now)
+                .is_empty()
+        );
+        assert_eq!(
+            super::conversation_quota(
+                std::slice::from_ref(&snapshot),
+                "codex",
+                now + chrono::Duration::minutes(3)
+            )[0]["stale"],
+            true
+        );
+        assert!(
+            super::conversation_quota(
+                std::slice::from_ref(&snapshot),
+                "codex",
+                now + chrono::Duration::hours(2)
+            )[0]["remaining_pct"]
+                .is_null()
+        );
+        snapshot.basis = spawnt_core::TrustLevel::Unknown;
+        assert!(super::conversation_quota(&[snapshot], "codex", now)[0]["remaining_pct"].is_null());
     }
 
     #[tokio::test]
