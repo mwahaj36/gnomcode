@@ -49,7 +49,7 @@ const browser=await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executabl
 try {
   const page=await browser.newPage({viewport:{width:390,height:844}});
   page.on('pageerror',error=>failures.push(error.message));
-  await page.addInitScript(offer => {if(!sessionStorage.getItem('offer-seeded')){sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(offer));sessionStorage.setItem('offer-seeded','yes');}const Native=window.WebSocket;window.testSockets=[];window.WebSocket=class extends Native{constructor(...args){super(...args);window.testSockets.push(this);}};},{room,key:keys.publicHex,relay,protocol_version:2,expires_at:new Date(Date.now()+300000).toISOString()});
+  await page.addInitScript(offer => {if(!sessionStorage.getItem('offer-seeded')){sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(offer));sessionStorage.setItem('offer-seeded','yes');}const Native=window.WebSocket;window.testSockets=[];window.WebSocket=class extends Native{constructor(...args){super(...args);window.testSockets.push(this);this.addEventListener("message",event=>{if(window.dropRemoteFrames)event.stopImmediatePropagation();});}};},{room,key:keys.publicHex,relay,protocol_version:2,expires_at:new Date(Date.now()+300000).toISOString()});
   await page.goto(`${site}/remote`);
   assert.equal(await page.locator('footer').count(),0,'Remote must use the app shell, without the marketing footer');
   const remoteBox = await page.locator('.remote-heading').boundingBox();
@@ -89,11 +89,11 @@ try {
     await page.waitForTimeout(220);
     assert.equal(await page.locator('.sp-remote-chat').evaluate(element=>[...element.querySelectorAll('.sp-chat-body,pre,.sp-chat-table')].every(node=>node.scrollWidth<=node.clientWidth+1)),true,`Remote bubbles fit ${width}/${theme}`);
     await page.screenshot({path:new URL(`../.tmp/remote-verification/paired-${theme}-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-    await page.locator('.remote-actions > summary').click();
+    await page.getByRole('button',{name:'Desktop connection',exact:true}).click();
     await page.waitForTimeout(220);
-    assert.equal(await page.getByRole('button',{name:'Disconnect',exact:true}).evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(246, 247, 248)':'rgb(12, 17, 25)','Remote action foreground follows theme');
+    assert.equal(await page.getByRole('link',{name:'Profile',exact:true}).isVisible(),true,'desktop panel keeps navigation visible');
     await page.screenshot({path:new URL(`../.tmp/remote-verification/actions-${theme}-${width}.png`,import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-    await page.locator('.remote-actions > summary').click();
+    await page.getByRole('button',{name:'Close desktop connection',exact:true}).click();
   }
   await page.locator('.remote-new').click();
   await page.getByRole('button',{name:'Browse desktop folders',exact:true}).click();
@@ -116,16 +116,38 @@ try {
   await page.reload();
   await page.locator('.sp-remote.is-paired').waitFor();
   await page.getByText('First phone prompt received.',{exact:true}).waitFor();
+  await page.locator('#remote-prompt').fill('Draft survives reconnect\nKeep this second line');
+  await page.evaluate(()=>{window.dropRemoteFrames=true;});
+  await page.getByRole('button',{name:'Try again',exact:true}).waitFor({timeout:25000});
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Draft survives reconnect\nKeep this second line');
+  assert.equal(await page.locator('.remote-composer').evaluate(node=>{const input=node.querySelector('textarea').getBoundingClientRect(),toolbar=node.querySelector('.remote-composer-toolbar').getBoundingClientRect();return input.bottom<=toolbar.top+1;}),true,'composer text never overlaps its controls');
+  assert.equal(await page.getByRole('link',{name:'Profile',exact:true}).count(),1);
+  assert.equal(await page.getByRole('link',{name:'Dashboard',exact:true}).isVisible(),true);
+  assert.equal(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),true);
+  await page.setViewportSize({width:390,height:350});
+  await page.locator('#remote-prompt').focus();
+  const reconnectSend=await page.getByRole('button',{name:'Send',exact:true}).boundingBox();
+  assert.ok(reconnectSend && reconnectSend.y>=0 && reconnectSend.y+reconnectSend.height<=350,'Send stays visible under a short reconnect keyboard');
+  await page.screenshot({path:new URL('../.tmp/remote-verification/reconnecting-chat.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.evaluate(()=>{window.dropRemoteFrames=false;});
+  await page.getByRole('button',{name:'Try again',exact:true}).click();
+  await page.locator('.sp-remote.is-paired').waitFor();
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Draft survives reconnect\nKeep this second line');
+  assert.equal(await page.getByText('Actions',{exact:true}).count(),0);
+  await page.screenshot({path:new URL('../.tmp/remote-verification/recovered-chat.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   assert.ok(resumes>=1,'reload authenticates saved nonextractable device trust');
   assert.equal(await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('spawnt-remote-device',1);r.onsuccess=()=>{const db=r.result;const q=db.transaction('devices').objectStore('devices').get('desktop');q.onsuccess=()=>{resolve(q.result.proofKey.extractable);db.close();};q.onerror=reject;};r.onerror=reject;})),false,'remembered proof key is not exportable');
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'reload does not ask for pairing');
   await page.evaluate(()=>{window.testSockets.at(-1).close();document.dispatchEvent(new Event('visibilitychange'));setTimeout(()=>document.dispatchEvent(new Event('visibilitychange')),10);});
   await page.locator('.sp-remote.is-paired').waitFor();
   await page.waitForFunction(()=>document.querySelector('.remote-heading h1')?.textContent==='New phone conversation');
-  for(const height of [600,350,844]){
-    await page.setViewportSize({width:390,height});await page.waitForTimeout(100);
+  for(const width of [320,390]) for(const height of [600,350,844]){
+    await page.setViewportSize({width,height});await page.locator('#remote-prompt').focus();await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed','keyboard focus cannot scroll the document');
+    assert.equal(await page.locator('.remote-composer').evaluate(node=>{const input=node.querySelector('textarea').getBoundingClientRect(),toolbar=node.querySelector('.remote-composer-toolbar').getBoundingClientRect();return input.bottom<=toolbar.top;}),true,'text and buttons occupy separate rows');
     const send=await page.getByRole('button',{name:'Send',exact:true}).boundingBox();
-    assert.ok(send && send.y>=0 && send.y+send.height<=height,`Send visible without page scroll at height ${height}`);
+    assert.ok(send && send.y>=0 && send.y+send.height<=height,`Send visible without page scroll at ${width}x${height}`);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
   await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
@@ -136,30 +158,30 @@ try {
   assert.deepEqual(await page.locator('.sp-remote [role=alert]').allTextContents(),[]);
   await page.screenshot({path:new URL('../.tmp/remote-verification/phone-readonly.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
+  await page.locator('#remote-history-search').fill('Saved');
+  assert.equal(await page.locator('.remote-session-list button').count(),1);
   await page.getByRole('button',{name:/Saved conversation/}).click();
   await page.getByRole('button',{name:'Resume conversation',exact:true}).click();
   await page.getByText('Ready to continue.',{exact:true}).waitFor();
   await page.locator('.remote-composer').waitFor();
   assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation','native resume retains the selected conversation');
   await page.locator('#remote-prompt').fill('Continue this saved chat');
-  await page.locator('.remote-actions > summary').click();
-  await page.getByText('Switch model',{exact:true}).first().click();
+  await page.getByRole('button',{name:'Change model',exact:true}).click();
   await page.locator('#remote-model').fill('gpt-5.6-luna');
   await page.getByRole('button',{name:'Switch model',exact:true}).click();
   await page.getByText('Switching model...',{exact:true}).waitFor();
   assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation');
   assert.equal(await page.locator('#remote-prompt').inputValue(),'Continue this saved chat','model change retains the phone draft');
-  await page.locator('.remote-actions > summary').click();
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.waitForFunction(()=>document.getElementById('remote-prompt').value==='');
   assert.equal(requests.filter(request=>request.type==='prompt').at(-1).session_id,'saved-session','continued prompt targets the same saved conversation');
   await page.screenshot({path:new URL('../.tmp/remote-verification/phone-resumed.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-  await page.locator('.remote-actions > summary').click();
-  await page.getByRole('button',{name:'Disconnect',exact:true}).click();
+  await page.getByRole('button',{name:'Desktop connection',exact:true}).click();
+  await page.getByRole('button',{name:'Forget this desktop',exact:true}).click();
   await page.getByRole('heading',{name:'Pair your desktop',exact:true}).waitFor();
   await page.waitForTimeout(100);
   assert.deepEqual(await page.locator('.sp-remote [role="alert"]').allTextContents(),[],'intentional disconnect must not show a connection failure');
   assert.deepEqual(failures,[]);
-  console.log('PASS: encrypted phone launch/first prompt, modal folder picker, visible composer, read-only history, saved-session resume, continuous model switching, nonexportable trust reload and background reconnect');
+  console.log('PASS: encrypted mobile pairing, touch sheets, searchable history, visible composer, resume/model switch, trust reload, stalled-open-socket recovery with preserved draft and usable navigation');
 } finally {finished=true;clearTimeout(reconnectTimer);await browser.close(); desktop.close();}
 process.exit(0);
