@@ -7,7 +7,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const [site, relay] = process.argv.slice(2);
 if (!site || !relay?.startsWith('wss://')) throw Error('Usage: node scripts/check-remote-companion.mjs <site> <public-wss-relay>');
 const keys=await generateKeyPair(); const room=crypto.randomUUID().replaceAll('-','');
-let finished=false,reconnectTimer,launched=false,firstPrompt=false,resumes=0;
+let finished=false,reconnectTimer,launched=false,firstPrompt=false,resumes=0,savedResumed=false;
 let desktop=new WebSocket(`${relay}/${room}?role=desktop`); desktop.binaryType='arraybuffer';
 await new Promise((resolve,reject)=>{desktop.onopen=resolve;desktop.onerror=reject;setTimeout(()=>reject(Error('Relay timeout')),15000).unref();});
 const secret=crypto.getRandomValues(new Uint8Array(32));const secretHex=Array.from(secret,b=>b.toString(16).padStart(2,'0')).join('');
@@ -26,13 +26,15 @@ function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=e
     const message=await channel.open(frame);if(connection!==desktop)return; requests.push(message);
     if(message.type==='confirm') {await reply({type:'confirm'});await reply({type:'trusted',secret:secretHex});}
     else if(message.type==='resume'){const proof=Uint8Array.from(message.proof.match(/../g),part=>parseInt(part,16));assert.equal(await crypto.subtle.verify('HMAC',proofKey,proof,new TextEncoder().encode(resumeContext)),true);resumes++;await reply({type:'resumed'});}
-    else if(message.type==='sessions') { sessionReads++; await reply({type:'sessions',sessions:sessionReads===1?[]:[{id:'external-history',title:'External history',agent:'codex',state:'idle',hosted:false,can_prompt:false},...(launched?[{id:'codex:new',title:'New phone conversation',agent:'codex',state:'waiting_for_history',hosted:true,can_prompt:true}]:[]),{hosted:true,id:'codex-hosted',title:'Review authentication',agent:'codex',model:sessionReads>2?'gpt-6.1-sol':null,state:sessionReads>2?'idle':'waiting_for_history',can_prompt:sessionReads>2}]}); }
+    else if(message.type==='sessions') { sessionReads++; await reply({type:'sessions',sessions:sessionReads===1?[]:[{id:'saved-session',title:'Saved conversation',agent:'codex',state:savedResumed?'idle':'ended',hosted:savedResumed,can_prompt:savedResumed,can_resume:!savedResumed},{id:'external-history',title:'External history',agent:'codex',state:'idle',hosted:false,can_prompt:false},...(launched?[{id:'codex:new',title:'New phone conversation',agent:'codex',state:'waiting_for_history',hosted:true,can_prompt:true}]:[]),{hosted:true,id:'codex-hosted',limits:[{label:'5h',remaining_pct:sessionReads>4?37:75,basis:'exact',observed_at:new Date().toISOString(),stale:false}],title:'Review authentication',agent:'codex',model:sessionReads>2?'gpt-6.1-sol':null,state:sessionReads>2?'idle':'waiting_for_history',can_prompt:sessionReads>2}]}); }
     else if(message.type==='chat') await reply({type:'chat',session_id:message.session_id,events:message.session_id==='codex:new' ? (firstPrompt?[{event_id:'new-reply',turn_index:1,role:'assistant',content:'First phone prompt received.',created_at:new Date().toISOString()}]:[]) : [
       {event_id:'0',turn_index:0,role:'system',status:'model_active',content:'Model active: gpt-6.1-sol',created_at:'2026-10-29T00:00:00Z'},
       {event_id:'1',turn_index:1,role:'user',content:'Review authentication',created_at:'2026-10-29T00:00:00Z'},
       {event_id:'2',turn_index:2,role:'assistant',content:'The login flow is **ready** for review.',created_at:'2026-10-29T00:00:01Z'},
       {event_id:'3',turn_index:3,role:'tool',content:'Command output: hidden',created_at:'2026-10-29T00:00:02Z'},
     ]});
+    else if(message.type==='resume_session') {assert.equal(message.session_id,'saved-session');savedResumed=true;await reply({type:'resume_session_ack',session_id:message.session_id});}
+    else if(message.type==='switch') {await reply({type:'switch_ack',session_id:message.session_id,new_session_id:message.session_id});}
     else if(message.type==='prompt') {if(message.session_id==='codex:new')firstPrompt=true;await reply({type:'prompt_ack',session_id:message.session_id});}
     else if(message.type==='launch') {launched=true;await reply({type:'launch_ack',session_id:'codex:new'});}
     else if(message.type==='workspaces') {
@@ -64,6 +66,7 @@ try {
   await page.getByText('The login flow is ready for review.').waitFor();
   assert.equal(await page.locator('.remote-session-list button[aria-current]').count(),1,'newest session is discovered and opened without manual selection');
   await page.locator('.sp-chat-body strong').getByText('ready').waitFor();
+  await page.locator('.remote-heading').getByText('37% left',{exact:true}).waitFor();
   const chatWidth = await page.locator('.sp-remote-chat').evaluate(node => node.clientWidth - parseFloat(getComputedStyle(node).paddingLeft) - parseFloat(getComputedStyle(node).paddingRight));
   const streamBox = await page.locator('.sp-chat-stream').boundingBox();
   assert.ok(streamBox.width >= chatWidth - 1,`phone bubbles use the available conversation width (${streamBox.width}/${chatWidth})`);
@@ -127,17 +130,36 @@ try {
   }
   await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
   await page.getByRole('button',{name:/External history/}).click();
-  await page.getByText('Read-only history. This conversation has no live Spawnt-controlled agent.').waitFor();
+  await page.getByText('Read-only history.',{exact:true}).waitFor();
   assert.equal(await page.locator('.remote-composer').count(),0);
   await page.getByRole('status').filter({hasText:'Loading messages...'}).waitFor({state:'hidden'});
   assert.deepEqual(await page.locator('.sp-remote [role=alert]').allTextContents(),[]);
   await page.screenshot({path:new URL('../.tmp/remote-verification/phone-readonly.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
+  await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
+  await page.getByRole('button',{name:/Saved conversation/}).click();
+  await page.getByRole('button',{name:'Resume conversation',exact:true}).click();
+  await page.getByText('Ready to continue.',{exact:true}).waitFor();
+  await page.locator('.remote-composer').waitFor();
+  assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation','native resume retains the selected conversation');
+  await page.locator('#remote-prompt').fill('Continue this saved chat');
+  await page.locator('.remote-actions > summary').click();
+  await page.getByText('Switch model',{exact:true}).first().click();
+  await page.locator('#remote-model').fill('gpt-5.6-luna');
+  await page.getByRole('button',{name:'Switch model',exact:true}).click();
+  await page.getByText('Switching model...',{exact:true}).waitFor();
+  assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation');
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Continue this saved chat','model change retains the phone draft');
+  await page.locator('.remote-actions > summary').click();
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await page.waitForFunction(()=>document.getElementById('remote-prompt').value==='');
+  assert.equal(requests.filter(request=>request.type==='prompt').at(-1).session_id,'saved-session','continued prompt targets the same saved conversation');
+  await page.screenshot({path:new URL('../.tmp/remote-verification/phone-resumed.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   await page.locator('.remote-actions > summary').click();
   await page.getByRole('button',{name:'Disconnect',exact:true}).click();
   await page.getByRole('heading',{name:'Pair your desktop',exact:true}).waitFor();
   await page.waitForTimeout(100);
   assert.deepEqual(await page.locator('.sp-remote [role="alert"]').allTextContents(),[],'intentional disconnect must not show a connection failure');
   assert.deepEqual(failures,[]);
-  console.log('PASS: encrypted phone launch/first prompt, modal folder picker, visible composer, read-only history, nonexportable trust reload and background reconnect');
+  console.log('PASS: encrypted phone launch/first prompt, modal folder picker, visible composer, read-only history, saved-session resume, continuous model switching, nonexportable trust reload and background reconnect');
 } finally {finished=true;clearTimeout(reconnectTimer);await browser.close(); desktop.close();}
 process.exit(0);

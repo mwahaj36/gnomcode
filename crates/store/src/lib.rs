@@ -10,6 +10,9 @@ use spawnt_core::{
 use std::path::Path;
 use thiserror::Error;
 
+mod conversation;
+pub use conversation::ConversationLaunch;
+
 /// Storage layer error type.
 #[derive(Debug, Error)]
 pub enum Error {
@@ -760,6 +763,18 @@ impl Database {
             )?;
         }
 
+        self.conn.execute_batch(obfstr::obfstr!(r#"
+            CREATE TABLE IF NOT EXISTS conversation_member (
+                host_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                native_id TEXT UNIQUE,
+                position INTEGER NOT NULL,
+                needs_context INTEGER NOT NULL DEFAULT 0,
+                agent TEXT, repo TEXT, requested_model TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_conversation_member ON conversation_member(conversation_id, position);
+            INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (9, datetime('now'));
+        "#))?;
         Ok(())
     }
 
@@ -951,6 +966,9 @@ impl Database {
         session_id: &str,
         host_id: &str,
     ) -> Result<usize, Error> {
+        if self.conversation_target(host_id)?.is_some() {
+            return self.delete_conversation_chat(host_id);
+        }
         Ok(self.conn.execute(
             obfstr::obfstr!("DELETE FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3"),
             params![session_id, host_id, format!("handoff:{host_id}:source")],

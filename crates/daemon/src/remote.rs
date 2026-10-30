@@ -631,16 +631,20 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             match result {
                 Ok(sessions) => {
                     let hosted = spawnt_pty::list_active_sessions();
-                    let mut visible = remote_sessions(&sessions, &hosted);
-                    let bindings = session_bindings(&sessions, &hosted);
                     let guard = db.lock().await;
+                    let mut visible = match conversation_sessions(&guard, &sessions, &hosted) {
+                        Ok(rows) => rows,
+                        Err(_) => {
+                            return json!({"type":"error","message":"Could not load conversations."});
+                        }
+                    };
                     for row in &mut visible {
                         if row["title"].as_str().is_none_or(str::is_empty) {
                             let id = row["id"].as_str().unwrap_or_default();
-                            let native = bindings
-                                .iter()
-                                .find(|(_, record)| record.session_id == id)
-                                .map_or(id, |(session, _)| session.id.as_str());
+                            let source = guard
+                                .conversation_source(id)
+                                .unwrap_or_else(|_| id.to_owned());
+                            let native = source.as_str();
                             let title = crate::conversation_title(&guard, native)
                                 .or_else(|| {
                                     guard
@@ -755,22 +759,32 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             {
                 return json!({"type":"error","message":"Invalid prompt"});
             }
-            let hosted = spawnt_pty::list_active_sessions();
-            let sessions = db
-                .lock()
+            if crate::deliver_conversation_prompt(db, session_id, text)
                 .await
-                .list_active_sessions(1000)
-                .unwrap_or_default();
-            let Some(record) = remote_prompt_target(session_id, &sessions, &hosted) else {
-                return json!({"type":"error","message":"Prompting requires an idle agent with a unique hosted session"});
-            };
-            if spawnt_pty::send_prompt(record, text).await.is_ok() {
+                .is_ok()
+            {
                 json!({"type":"prompt_ack","session_id":session_id})
             } else {
                 json!({"type":"error","message":"Prompt could not be delivered"})
             }
         }
+        Some("resume_session") => {
+            let Some(id) = request
+                .get("session_id")
+                .and_then(Value::as_str)
+                .filter(|id| id.len() <= 128)
+            else {
+                return json!({"type":"error","message":"Choose a conversation to resume."});
+            };
+            match crate::resume_conversation(db, id).await {
+                Ok(_) => json!({"type":"resume_session_ack","session_id":id}),
+                Err(_) => {
+                    json!({"type":"error","message":"Could not resume this conversation. Check the agent on your laptop and try again."})
+                }
+            }
+        }
         Some("switch") => {
+            let _control = crate::CONVERSATION_CONTROL.lock().await;
             let Some(session_id) = request.get("session_id").and_then(Value::as_str) else {
                 return json!({"type":"error","message":"Missing session"});
             };
@@ -780,16 +794,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             if session_id.len() > 128 || model.len() > 128 {
                 return json!({"type":"error","message":"Invalid switch request"});
             }
-            let prepared = {
-                let guard = db.lock().await;
-                let sessions = guard.list_active_sessions(1000).unwrap_or_default();
-                let native_id = conversation_session_id(
-                    session_id,
-                    &sessions,
-                    &spawnt_pty::list_active_sessions(),
-                );
-                crate::prepare_switch(&guard, &native_id, model, None)
-            };
+            let prepared = crate::prepare_model_change(db, session_id, model, None).await;
             let Ok(prepared) = prepared else {
                 return json!({"type":"error","message":"Could not prepare model switch"});
             };
@@ -797,9 +802,9 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 Ok(record) => {
                     let guard = db.lock().await;
                     if record_model_change(&guard, session_id, &record).is_err() {
-                        tracing::warn!("model change notice could not be saved");
+                        return json!({"type":"error","message":"Could not save the model change. Reload and try again."});
                     }
-                    json!({"type":"switch_ack","session_id":session_id,"new_session_id":record.session_id})
+                    json!({"type":"switch_ack","session_id":session_id,"new_session_id":session_id})
                 }
                 Err(_) => json!({"type":"error","message":"Model switch failed"}),
             }
@@ -813,17 +818,38 @@ pub(crate) fn record_model_change(
     source: &str,
     target: &spawnt_pty::SessionRecord,
 ) -> Result<(), spawnt_store::Error> {
-    let last = db.get_session_chat(source, Some(1))?;
+    let sessions = db.list_active_sessions(1000)?;
+    sync_conversation_bindings(db, &sessions, &spawnt_pty::list_active_sessions())?;
+    let previous_native = db
+        .conversation_target(source)?
+        .and_then(|(_, native, _)| native);
+    let same_host = db
+        .conversation_target(source)?
+        .is_some_and(|(host, _, _)| host == target.session_id);
+    if !same_host {
+        db.continue_conversation(source, &target.session_id)?;
+    }
+    db.save_conversation_launch(
+        &target.session_id,
+        &target.agent,
+        &target.repo_path,
+        target.model.as_deref(),
+    )?;
+    let source = previous_native.unwrap_or(db.conversation_source(source)?);
+    let last = db.get_session_chat(&source, Some(1))?;
     let event = spawnt_core::ChatEvent {
-        event_id: format!("handoff:{}:source", target.session_id),
-        session_id: source.to_owned(),
+        event_id: format!(
+            "handoff:{}:{}",
+            target.session_id,
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ),
+        session_id: source,
         turn_index: last
             .last()
             .map_or(0, |event| event.turn_index.saturating_add(1)),
         role: spawnt_core::ChatRole::System,
         content: format!(
-            "Agent/model change requested: {} / {}. Waiting for the agent to confirm the model.",
-            target.agent,
+            "Switching to {}...",
             target.model.as_deref().unwrap_or("agent default")
         ),
         created_at: chrono::Utc::now(),
@@ -831,6 +857,50 @@ pub(crate) fn record_model_change(
         status: Some("model_changed".into()),
     };
     db.insert_chat_event(&event)
+}
+
+pub(crate) fn sync_conversation_bindings(
+    db: &Database,
+    sessions: &[Session],
+    hosted: &[spawnt_pty::SessionRecord],
+) -> Result<(), spawnt_store::Error> {
+    for (session, record) in session_bindings(sessions, hosted) {
+        db.bind_conversation_host(&record.session_id, &session.id)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn active_conversation_id(
+    db: &Database,
+    id: &str,
+    sessions: &[Session],
+    hosted: &[spawnt_pty::SessionRecord],
+) -> Result<String, spawnt_store::Error> {
+    sync_conversation_bindings(db, sessions, hosted)?;
+    Ok(db.conversation_target(id)?.map_or_else(
+        || conversation_session_id(id, sessions, hosted),
+        |(host, native, _)| native.unwrap_or(host),
+    ))
+}
+
+pub(crate) fn conversation_host<'a>(
+    db: &Database,
+    id: &str,
+    sessions: &[Session],
+    hosted: &'a [spawnt_pty::SessionRecord],
+) -> Result<Option<&'a spawnt_pty::SessionRecord>, spawnt_store::Error> {
+    if let Some((host, _, _)) = db.conversation_target(id)? {
+        return Ok(hosted.iter().find(|record| record.session_id == host));
+    }
+    Ok(hosted
+        .iter()
+        .find(|record| record.session_id == id)
+        .or_else(|| {
+            sessions
+                .iter()
+                .find(|session| session.id == id)
+                .and_then(|session| session_host(session, sessions, hosted))
+        }))
 }
 
 pub(crate) fn conversation_chat(
@@ -841,32 +911,39 @@ pub(crate) fn conversation_chat(
     limit: Option<usize>,
     before: Option<&str>,
 ) -> Result<Vec<spawnt_core::ChatEvent>, spawnt_store::Error> {
-    let hosted = spawnt_pty::list_active_sessions();
-    let host = sessions
-        .iter()
-        .find(|session| session.id == native)
-        .and_then(|session| session_host(session, sessions, &hosted))
-        .map_or(requested, |record| record.session_id.as_str());
-    let mut events = db.get_session_chat_before(native, limit, before)?;
-    if let Some(mut event) = db.handoff_notice(host)? {
-        event.event_id = format!("handoff:{host}:target");
-        event.session_id = native.to_owned();
-        event.turn_index = 0;
-        if !events.iter().any(|row| row.event_id == event.event_id)
-            && (before.is_none() || events.first().is_some_and(|row| row.turn_index == 0))
-        {
-            events.insert(0, event);
+    sync_conversation_bindings(db, sessions, &spawnt_pty::list_active_sessions())?;
+    if requested != native && db.conversation_target(requested)?.is_some() {
+        // History can arrive after the new host was linked, including after restart.
+        let target = db.conversation_target(requested)?;
+        if let Some((host, None, _)) = target {
+            if host == requested {
+                db.bind_conversation_host(&host, native)?;
+            }
+        }
+    }
+    let id = if db.conversation_target(requested)?.is_some() {
+        requested
+    } else {
+        native
+    };
+    let mut events = db.conversation_chat(id, limit, before)?;
+    for event in &mut events {
+        if event.role == spawnt_core::ChatRole::User {
+            if let Some((_, message)) = event
+                .content
+                .strip_prefix("<spawnt_context>")
+                .and_then(|text| text.split_once("</spawnt_context>"))
+            {
+                event.content = message.trim_start().to_owned();
+            }
         }
     }
     Ok(events)
 }
 
 fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -> Vec<Value> {
-    let bindings = session_bindings(sessions, hosted);
     let mut visible = sessions.iter().take(100).map(|session| {
-        let host = bindings.iter().find(|(candidate, _)| candidate.id == session.id).map(|(_, record)| *record);
-        let can_prompt = session.state == spawnt_core::SessionState::Idle && host.is_some();
-        json!({"id":host.map_or(session.id.as_str(), |record| record.session_id.as_str()),"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"hosted":host.is_some(),"can_prompt":can_prompt,"last_event_at":session.last_event_at})
+        json!({"id":session.id,"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"last_event_at":session.last_event_at})
     }).collect::<Vec<_>>();
     for record in hosted {
         if !matches!(
@@ -894,50 +971,100 @@ fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -
     visible
 }
 
-pub(crate) fn prompt_host<'a>(
-    session: &Session,
+pub(crate) fn conversation_sessions(
+    db: &Database,
     sessions: &[Session],
-    hosted: &'a [spawnt_pty::SessionRecord],
-) -> Option<&'a spawnt_pty::SessionRecord> {
-    if session.state != spawnt_core::SessionState::Idle {
-        return None;
+    hosted: &[spawnt_pty::SessionRecord],
+) -> Result<Vec<Value>, spawnt_store::Error> {
+    sync_conversation_bindings(db, sessions, hosted)?;
+    let quota = db.get_latest_quota_snapshots()?;
+    let mut visible = Vec::new();
+    let mut candidates = remote_sessions(sessions, hosted);
+    for root in db.conversation_ids()? {
+        let target = db.conversation_target(&root)?;
+        if let Some((host, None, _)) = target {
+            if candidates.iter().any(|row| row["id"] == host) {
+                continue;
+            }
+            if let Some(launch) = db.conversation_launch(&root)? {
+                candidates.push(json!({"id":host,"agent":launch.agent,"title":crate::conversation_title(db,&root),"state":"ended","can_prompt":false,"hosted":false}));
+            }
+        }
     }
-    session_host(session, sessions, hosted)
-}
-
-fn remote_prompt_target<'a>(
-    id: &str,
-    sessions: &[Session],
-    hosted: &'a [spawnt_pty::SessionRecord],
-) -> Option<&'a spawnt_pty::SessionRecord> {
-    let native = conversation_session_id(id, sessions, hosted);
-    if let Some(session) = sessions.iter().find(|session| session.id == native) {
-        return prompt_host(session, sessions, hosted).filter(|record| {
-            matches!(
-                record.agent.as_str(),
-                "claude"
-                    | "claude-code"
-                    | "codex"
-                    | "gemini"
-                    | "gemini-cli"
-                    | "antigravity"
-                    | "agy"
-            )
+    for mut row in candidates {
+        let id = row["id"].as_str().unwrap_or_default();
+        let mapping = db.conversation_target(id)?;
+        if mapping
+            .as_ref()
+            .is_some_and(|(host, native, _)| host != id && native.as_deref() != Some(id))
+        {
+            continue;
+        }
+        let root = db.conversation_id(id)?;
+        let host = conversation_host(db, id, sessions, hosted)?;
+        let native = mapping
+            .as_ref()
+            .and_then(|(_, native, _)| native.as_deref())
+            .unwrap_or(id);
+        let observed = sessions.iter().find(|session| session.id == native);
+        let launch = db.conversation_launch(id)?;
+        let agent = host
+            .map(|record| record.agent.as_str())
+            .or_else(|| observed.map(|session| session.agent.as_str()))
+            .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
+            .unwrap_or_default();
+        let can_resume = host.is_none()
+            && (matches!(
+                agent,
+                "codex" | "claude-code" | "claude" | "gemini-cli" | "gemini"
+            ) || launch.as_ref().is_some_and(|launch| {
+                matches!(
+                    launch.agent.as_str(),
+                    "codex" | "claude-code" | "gemini-cli" | "antigravity"
+                )
+            }));
+        let can_prompt = host.is_some_and(|record| {
+            observed.is_none_or(|session| {
+                session.state == spawnt_core::SessionState::Idle
+                    || chrono::DateTime::parse_from_rfc3339(&record.started_at)
+                        .is_ok_and(|started| session.last_event_at < started)
+            })
         });
+        let limits = crate::api::conversation_quota(&quota, agent, chrono::Utc::now());
+        row["agent"] = json!(agent);
+        if let Some(session) = observed {
+            row["model"] = json!(session.model);
+            row["state"] = json!(session.state);
+        }
+        row["id"] = json!(root);
+        row["hosted"] = json!(host.is_some());
+        row["can_prompt"] = json!(can_prompt);
+        row["can_resume"] = json!(can_resume);
+        row["limits"] = json!(limits);
+        if host.is_some_and(|record| {
+            observed.is_none_or(|session| {
+                chrono::DateTime::parse_from_rfc3339(&record.started_at)
+                    .is_ok_and(|started| session.last_event_at < started)
+            })
+        }) {
+            row["state"] = json!("waiting_for_history");
+        }
+        if let Some(title) = crate::conversation_title(db, &root) {
+            row["title"] = json!(title);
+        }
+        if let Some(model) = launch.and_then(|launch| launch.model) {
+            if observed.and_then(|session| session.model.as_deref()) != Some(model.as_str()) {
+                row["requested_model"] = json!(model);
+            }
+        }
+        if !visible
+            .iter()
+            .any(|existing: &Value| existing["id"] == row["id"])
+        {
+            visible.push(row);
+        }
     }
-    hosted.iter().find(|record| {
-        record.session_id == id
-            && matches!(
-                record.agent.as_str(),
-                "claude"
-                    | "claude-code"
-                    | "codex"
-                    | "gemini"
-                    | "gemini-cli"
-                    | "antigravity"
-                    | "agy"
-            )
-    })
+    Ok(visible)
 }
 
 pub(crate) fn conversation_session_id(
@@ -1069,7 +1196,12 @@ mod tests {
             ),
             "codex:native"
         );
-        assert!(prompt_host(&session, std::slice::from_ref(&session), &[record]).is_none());
+        let db = Database::open_in_memory().expect("db");
+        assert_eq!(
+            conversation_sessions(&db, std::slice::from_ref(&session), &[record])
+                .expect("busy conversation")[0]["can_prompt"],
+            false
+        );
         let record = spawnt_pty::SessionRecord {
             session_id: "first-turn".into(),
             agent: "codex".into(),
@@ -1081,16 +1213,24 @@ mod tests {
             token: "test".into(),
             started_at: now.to_rfc3339(),
         };
-        assert!(remote_prompt_target("first-turn", &[], std::slice::from_ref(&record)).is_some());
         assert_eq!(
-            remote_sessions(&[], std::slice::from_ref(&record))[0]["can_prompt"],
+            conversation_sessions(&db, &[], std::slice::from_ref(&record))
+                .expect("new conversation")[0]["can_prompt"],
+            true
+        );
+        assert_eq!(
+            conversation_sessions(&db, &[], std::slice::from_ref(&record)).expect("hosted")[0]["can_prompt"],
             true
         );
         let shell = spawnt_pty::SessionRecord {
             agent: "terminal".into(),
             ..record.clone()
         };
-        assert!(remote_prompt_target("first-turn", &[], &[shell]).is_none());
+        assert!(
+            conversation_sessions(&db, &[], &[shell])
+                .expect("no shells")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1123,7 +1263,7 @@ mod tests {
             started_at: now.to_rfc3339(),
         };
         assert!(
-            prompt_host(
+            session_host(
                 &session,
                 std::slice::from_ref(&session),
                 std::slice::from_ref(&record)
@@ -1132,10 +1272,13 @@ mod tests {
         );
         let mut other = session.clone();
         other.id = "codex:other".to_owned();
-        let visible = remote_sessions(
+        let db = Database::open_in_memory().expect("db");
+        let visible = conversation_sessions(
+            &db,
             std::slice::from_ref(&session),
             std::slice::from_ref(&record),
-        );
+        )
+        .expect("one conversation");
         assert_eq!(visible.len(), 1, "a hosted session must not appear twice");
         assert_eq!(visible[0]["id"], record.session_id);
         assert_eq!(visible[0]["can_prompt"], true);
@@ -1154,7 +1297,7 @@ mod tests {
             Some(record.session_id.as_str()),
             "an exact process binding wins over another terminal waiting for history"
         );
-        assert!(prompt_host(&session, &[session.clone(), other], &[record]).is_none());
+        assert!(session_host(&session, &[session.clone(), other], &[record]).is_none());
     }
 
     #[tokio::test]
@@ -1521,15 +1664,57 @@ mod tests {
             started_at: chrono::Utc::now().to_rfc3339(),
         };
         record_model_change(&db, "source", &target).expect("persist request notice");
+        db.insert_chat_event(&spawnt_core::ChatEvent {
+            event_id: "original-message".into(),
+            session_id: "source".into(),
+            turn_index: 0,
+            role: spawnt_core::ChatRole::User,
+            content: "Keep our conversation".into(),
+            created_at: now,
+            tool_name: None,
+            status: None,
+        })
+        .expect("original chat");
         let rows = conversation_chat(&db, "new-host", "new-native", &[], Some(500), None)
             .expect("bind notice");
-        assert_eq!(rows.len(), 1);
-        assert!(rows[0].content.contains("gpt-5.6-luna"));
+        assert!(
+            rows.iter()
+                .any(|row| row.content == "Keep our conversation")
+        );
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().any(|row| row.content.contains("gpt-5.6-luna")));
         assert_eq!(
             conversation_chat(&db, "new-host", "new-native", &[], Some(500), None)
                 .expect("reload")
                 .len(),
-            1
+            2
+        );
+        let visible = conversation_sessions(&db, &sessions, &[]).expect("disconnected history");
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0]["id"], "source");
+        assert_eq!(visible[0]["can_resume"], true);
+        assert_eq!(visible[0]["title"], "Keep our conversation");
+        db.insert_chat_event(&spawnt_core::ChatEvent {
+            event_id: "continued-prompt".into(),
+            session_id: "new-native".into(),
+            turn_index: 1,
+            role: spawnt_core::ChatRole::User,
+            content:
+                "<spawnt_context>\nInternal continuation data\n</spawnt_context>\n\nHello again"
+                    .into(),
+            created_at: now,
+            tool_name: None,
+            status: None,
+        })
+        .expect("continued prompt");
+        let continued = conversation_chat(&db, "source", "source", &sessions, Some(500), None)
+            .expect("same chat");
+        assert_eq!(continued.len(), 3);
+        assert_eq!(continued.last().expect("last").content, "Hello again");
+        assert!(
+            continued
+                .iter()
+                .all(|event| !event.content.contains("Internal continuation data"))
         );
         db.delete_session_chat_with_host("new-native", "new-host")
             .expect("delete both identities");
