@@ -464,6 +464,33 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 }
 @media(prefers-reduced-motion:reduce){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{transition:none!important}}
 .sp-chat-notice{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sp-remote.is-reconnecting{display:flex;flex-direction:column;max-width:none;margin:0;min-height:0}
+.sp-remote.is-reconnecting .remote-workspace{min-height:0}
+.sp-remote.is-reconnecting>.remote-heading{padding:12px 24px;margin:0;flex:none}
+.sp-remote.is-reconnecting .remote-sidebar-toggle{display:flex}
+.sp-remote .remote-desktop-button{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:10px;border:0;background:transparent}
+.sp-remote .remote-model-button{display:flex;align-items:center;gap:8px;max-width:70%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 13px/1.4 var(--sp-font-sans);padding:8px;background:transparent!important}
+.sp-remote .remote-model-button svg{flex:none}
+.sp-remote :is(input,select,textarea){box-sizing:border-box}
+.sp-remote #remote-prompt{box-sizing:border-box;width:100%;display:block}
+.sp-remote:is(.is-paired,.is-reconnecting){top:var(--remote-viewport-top,0px);bottom:auto}
+.sp-remote .remote-composer{display:flex;flex-direction:column;gap:8px;min-width:0;box-sizing:border-box}
+.sp-remote .remote-composer #remote-prompt{flex:none;margin:0;max-height:min(160px,22dvh);overflow-y:auto;resize:none}
+.sp-remote .remote-composer-toolbar{flex:none;flex-wrap:nowrap;min-width:0;min-height:44px}
+.sp-remote .remote-composer-toolbar>button[type="submit"]{flex:none}
+.sp-remote dialog:is(.remote-sheet,.remote-folder-modal){max-height:calc(var(--remote-viewport-height,100dvh) - 24px)}
+.sp-remote #remote-prompt:focus-visible{outline:0}
+.sp-remote .remote-composer:has(#remote-prompt:focus-visible){box-shadow:inset 0 0 0 2px var(--sp-primary)}
+.sp-remote .remote-reconnect{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;border-bottom:1px solid var(--sp-border);flex:none;font:13px/1.5 var(--sp-font-sans);color:var(--sp-text-2)}
+.sp-remote .remote-reconnect>div{flex:1;min-width:180px}.sp-remote .remote-reconnect p{margin:4px 0}.sp-remote .remote-reconnect a{min-height:44px;display:inline-flex;align-items:center;color:var(--sp-primary-text)}
+.sp-remote .remote-sheet{width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:24px;border:1px solid var(--sp-border);border-radius:16px;background:var(--sp-surface);color:var(--sp-text);overflow:auto;overscroll-behavior:contain}
+.sp-remote .remote-sheet::backdrop{background:rgb(0 0 0 / .45)}
+.sp-remote .remote-sheet header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}.sp-remote .remote-sheet h2{font:600 18px/1.4 var(--sp-font-sans);margin:0}
+.sp-remote .remote-sheet nav,.sp-remote .remote-sheet form{display:grid;gap:12px}.sp-remote .remote-sheet nav a{display:flex;align-items:center;min-height:48px;padding:0 12px;border-radius:6px;color:var(--sp-text);background:var(--sp-surface-2)}
+.sp-remote .remote-drawer-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.sp-remote .remote-drawer-heading h2{margin:0;font:600 18px/1.4 var(--sp-font-sans)}.sp-remote .remote-drawer-heading button{display:none}.sp-remote .remote-history-search{display:grid;gap:8px;margin:20px 0 12px;font:12px/1.5 var(--sp-font-sans);color:var(--sp-text-2)}.sp-remote .remote-history-search input{width:100%;min-height:44px;box-sizing:border-box}
+@media(max-width:760px){.sp-remote .remote-drawer-heading button{display:block}.sp-remote .remote-session-sidebar input,.sp-remote .remote-session-sidebar select{font-size:16px}}
+@media(max-width:760px){.sp-remote.is-reconnecting>.remote-heading{padding:8px 12px}.sp-remote .remote-heading{padding-inline:12px!important}.sp-remote .remote-new{padding:8px;min-width:44px}.sp-remote .remote-sheet{position:fixed;inset:auto 0 0;margin:0;width:100%;max-width:none;max-height:min(85dvh,calc(var(--remote-viewport-height,100dvh) - 16px));box-sizing:border-box;border-radius:20px 20px 0 0;padding:20px 20px max(20px,env(safe-area-inset-bottom))}.sp-remote .remote-reconnect{padding:8px 12px;gap:4px 12px}.sp-remote .remote-reconnect>div{min-width:0}.sp-remote .remote-reconnect p,.sp-remote.is-reconnecting .remote-composer>p{display:none}.sp-remote .remote-composer textarea,.sp-remote .remote-sheet input,.sp-remote .remote-folder-modal input{font-size:16px}.sp-remote .remote-session-sidebar{padding:16px}.sp-remote .remote-session-list button{padding:14px 12px}.sp-remote .remote-heading .sp-conversation-limits{font-size:11px;gap:2px 10px}}
+@media(max-height:500px){.sp-remote .remote-heading{min-height:0;padding-block:6px}.sp-remote .remote-composer{padding:8px;margin-top:8px}.sp-remote .remote-conversation{padding-block:8px}}
 .sp-conversation-limits{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font:12px/1.5 var(--sp-font-sans);color:var(--sp-text-2)}
 .sp-conversation-limit{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px}.sp-conversation-limit strong{font-weight:500;color:var(--sp-text)}.sp-conversation-limits small{font-size:10px;color:var(--sp-text-3)}
 .conversation-heading>.sp-conversation-limits{margin-left:auto;max-width:48%}.remote-heading .sp-conversation-limits{margin-top:6px}
