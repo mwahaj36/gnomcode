@@ -2,7 +2,7 @@
 
 | Field | Current value |
 | :--- | :--- |
-| Updated | 2026-10-29 |
+| Updated | 2026-10-30 |
 | Status | Prelaunch; local orchestrator implemented, Remote production gates open |
 | Version | 0.9.0 development builds; earlier unpublished 1.x artifacts retired |
 | Owner | Wahaj (@mwahaj36) |
@@ -29,7 +29,8 @@ Lead with orchestration, continuity and encrypted remote control. Monitoring and
 
 - Launch an installed official supported CLI in a selected folder; use chat for prompts and Terminal stream for native interaction/login/approval.
 - View imported history without assuming ownership of its process.
-- Switch to a supported target model/provider by launching a fresh session with a locally compiled redacted briefing. Preserve source history.
+- Change supported models in the existing official CLI session. Cross-provider changes keep the same Spawnt conversation, title and history, with bounded local context sent privately with the next user message.
+- Resume saved supported conversations after laptop sleep/restart from desktop or a paired phone while the laptop and Spawnt are online.
 - Pair a phone/browser and use encrypted history, prompting, supported CLI launch and bounded directory browsing.
 - Read usage/quota with provenance; configure free local guardrails, alerts, resume and routing policy.
 
@@ -105,11 +106,13 @@ Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle 
 
 Default SQLite: `~/.spawnt/state.db`, or `SPAWNT_HOME/state.db`; CLI `--db` may select another database. Store sessions/projects, usage, quotas, source checkpoints, rules/queue/profile and redacted chat events. UTC storage, local conversion in presentation. Blocking SQLite runs off async execution paths. Migrations preserve existing data.
 
+Schema v9 adds local-only conversation membership, ordered native/host bindings, requested model and launch metadata, and pending-context delivery state. These mappings contain no credentials and are excluded from metadata sync. Retain them across restarts and chat deletion so routing does not resurrect deleted chat. Chat deletion removes rows for every linked native/host identity; retention applies to all chat rows under the existing timestamp policy. Agent-owned logs remain untouched.
+
 Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; retention primitives exist, but configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; directory browsing is bounded and not persisted.
 
 ### 3.7 Session and conversation state
 
-Internal states retain thinking/tool/approval/idle/error/ended distinctions. Public status badges use Running, Waiting, Idle and Error; explicit ended/disconnected information remains lifecycle feedback rather than false activity. State inference declares its limits. Pending local bubbles reconcile once with recorded turns, preserving identical repeated prompts and per-session drafts. Replies render safe Markdown; raw HTML/media remain inert. Enter sends; Shift+Enter adds a newline. Paging/scroll behavior preserves the reader's position.
+Internal states retain thinking/tool/approval/idle/error/ended distinctions. Public status badges use Running, Waiting, Idle and Error; explicit ended/disconnected information remains lifecycle feedback rather than false activity. State inference declares its limits. Pending local bubbles reconcile once with recorded turns, preserving identical repeated prompts and per-session drafts. Replies render safe Markdown; raw HTML/media remain inert. Enter sends; Shift+Enter adds a newline. Paging/scroll behavior preserves the reader's position. Conversation identity is independent of agent process identity. Order linked histories by segment then native turn, retaining event IDs as paging cursors. The original opening message supplies the title across switches. Generated context and native commands are absent from normal chat; show only a brief model-change status. Raw Terminal remains an explicit separate view.
 
 ### 3.8 Pricing and models
 
@@ -119,7 +122,7 @@ Model availability uses visible official Codex CLI cache records with a valid re
 
 ### 3.9 Quotas
 
-Track provider/window/model pools independently. Codex recorded `rate_limits` supplies exact source observations where available; this is not a fresh quota API request. Other sources may only permit estimates or unknown. Preserve observation time and reset provenance; never manufacture limits. Context fill uses latest request context, not lifetime tokens, and can shrink after compaction.
+Track provider/window/model pools independently. Codex recorded `rate_limits` supplies exact source observations where available; this is not a fresh quota API request. Other sources may only permit estimates or unknown. Preserve observation time and reset provenance; never manufacture limits. Conversation headers on desktop and Remote show remaining percentages for the current provider, with named windows/pools, trust and observation time. The existing two-second foreground refresh reads newly ingested observations without querying subscription credentials. Mark readings older than two minutes as last seen; after a recorded reset passes, await a new reading rather than inventing replenished capacity. Unknown or unavailable readings remain unknown, and provider/model changes replace the displayed provider limits. Context fill uses latest request context, not lifetime tokens, and can shrink after compaction.
 
 ### 3.10 Guardrails and local automation
 
@@ -143,7 +146,15 @@ Resume Queue and routing are free local features. Policies include `ask_first`, 
 
 ### 3.14.1 Handoff
 
-Rust compiles redacted objectives, changed-file paths and recent activity, launches a compatible target session and submits a briefing. Non-Git workspaces provide an empty changed-files list; real Git failures remain errors. Requested models remain unconfirmed until observed from the agent. Preserve source session/history and carry drafts. “Zero-token” means no inference call to create a briefing; receiving models still tokenize and charge for it. This is not lossless provider-state transfer.
+Hosted Codex and Claude Code use `/model <model>` and Gemini CLI uses `/model set <model>` for named-model changes in place. Validate model tokens, deliver commands independently of chat prompts and require an idle agent. CLI versions must support the documented command; delivery acknowledgment is not activation confirmation. Provider-default selection or an agent without an automated selector may use a fresh backing session while retaining the conversation.
+
+Cross-provider changes attach a new official CLI to the same local conversation. Preserve original sessions and logs. Switching alone does not submit a task or trigger an agent response. On the next user message Rust includes up to 50 recent user/assistant events, bounded to 16,000 characters total and 4,000 per event, as quoted redacted context. Exclude tool output; escape context delimiters within the JSON history. Hide the reserved `<spawnt_context>` envelope from chat after storage redaction, preserving the actual user message. Keep per-conversation drafts and selection. Requested models remain pending until observed from the agent. This transfers bounded context, not lossless provider-internal state; receiving agents still consume input tokens.
+
+### 3.14.2 Reopen saved conversations
+
+Desktop Resume conversation, local `POST /api/v1/sessions/{id}/continue` and encrypted Remote `resume_session` reuse a live hosted agent or reopen the exact recorded native ID in its recorded workspace: `codex resume <id>`, `claude --resume <id>` or `gemini --resume <id>`. Strictly validate native IDs, preserve CLI permission/login controls and do not inject a task until the user sends a message. Desktop Send can also resume before delivery. Serialize resume, switch and prompt control to avoid duplicate hosts during concurrent local/Remote actions. Keep the conversation ID/history stable and replace only the dead host binding. A provider switch with no native history yet can restart its saved launch and retain pending context. Unsupported native resume remains read-only; do not silently replace a saved native session with an unrelated fresh one.
+
+The laptop must be awake, connected and running Spawnt for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy. No message queue or cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
 
 ### 3.15 Optional account sync and encrypted Remote
 
@@ -180,7 +191,7 @@ Follow [AGENTS](../AGENTS.md), installed engineering skills and relevant ADRs. R
 | M5 account sync / Teams | Opt-in owner snapshot; schema foundations | Privacy minimization and complete team product |
 | M6 launcher/terminal | Independent owner, official CLI launch and local xterm | Real provider and cross-platform lifecycle checks |
 | M7 chat/file/diff | Redacted local history, safe chat and inspection | Retention/deletion acceptance |
-| M8 routing/handoff | New-session briefing path and policy controls | Authenticated cross-model/provider outcome confirmation |
+| M8 routing/handoff | Continuous conversations, native named-model controls, hidden cross-provider context and saved-session resume | Authenticated cross-model/provider outcome confirmation |
 | M9 encrypted Remote | Relay, pairing, remembered trust and bounded commands | Physical phone, independent security and owner production approval |
 | Marketing/documentation | Outcome-first positioning, guide/legal routes and SEO in this phase | Production crawl checks and legal approval |
 
@@ -247,6 +258,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0019](./adr/0019-remote-e2ee-relay.md) | End-to-end encrypted remote access, zero-knowledge Cloudflare relay room, ephemeral SAS verification, and mobile companion | Accepted |
 | [0020](./adr/0020-account-pairing-discovery.md) | Owner-only discovery of temporary public Remote offers; two-device verification retained | Accepted |
 | [0021](./adr/0021-remembered-remote-device-trust.md) | Remembered Remote trust, challenge-bound reconnect and seven-day activity expiry | Accepted |
+| [0022](./adr/0022-continuous-conversations-and-native-resume.md) | Stable local conversation identity, native model controls, hidden context and exact native resume | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

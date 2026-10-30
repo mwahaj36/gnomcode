@@ -684,10 +684,10 @@ function cycleTheme() {
       const select = document.getElementById('chat-model-select');
       const session = ideSessions.find(session => session.id === activeChatSession);
       const hosted = hostedSessions.find(session => session.session_id === activeChatSession);
-      const model = session?.model || hosted?.model || '';
-      const observed = Boolean(session?.model || hosted?.model_observed);
+      const model = hosted?.model || session?.model || '';
+      const observed = hosted ? hosted.model_observed : Boolean(session?.model);
       const status = document.getElementById('chat-model-status');
-      const message = (observed ? '' : model ? `Requested model: ${model} · awaiting agent confirmation` : 'CLI default · waiting for the agent to report its model') + (select.disabled ? (observed ? 'Model switching unavailable' : ' · Model switching unavailable') : '');
+      const message = select.disabled ? 'Model selection unavailable' : observed ? '' : model ? 'Switching model...' : 'Agent default';
       if (status.textContent !== message) status.textContent = message;
       if (select.dataset.sessionId !== activeChatSession || select.dataset.currentModel !== model) {
         select.querySelectorAll('[data-current-only]').forEach(option => option.remove());
@@ -730,6 +730,14 @@ function cycleTheme() {
     }
 
     let modelHandoffBusy = false;
+    async function showChatLimits() {
+      const sessionId = activeChatSession;
+      const presentation = await import('/console-presentation.js');
+      if (sessionId !== activeChatSession) return;
+      const element = document.getElementById('chat-header-limits');
+      const markup = presentation.renderConversationLimits(ideSessions.find(session => session.id === sessionId)?.limits || []);
+      if (element.innerHTML !== markup) element.innerHTML = markup;
+    }
     async function switchChatModel() {
       const select = document.getElementById('chat-model-select');
       if (!activeChatSession || !select.value || modelHandoffBusy || select.value === select.dataset.currentModel) return;
@@ -749,7 +757,7 @@ function cycleTheme() {
           document.getElementById('chat-delivery-status').textContent = '';
           void renderCurrentChat();
         }
-      } catch (error) { if (activeChatSession === sourceSession) showNotice(`Model change failed. ${error.message} Your previous model and draft are unchanged.`); }
+      } catch { if (activeChatSession === sourceSession) showNotice('Model change could not be confirmed. Your draft is saved. Check the selected model and try again.'); }
       finally { modelHandoffBusy=false;pendingPrompts.delete(sourceSession);select.disabled=false;document.getElementById('chat-send-btn').disabled=pendingPrompts.has(activeChatSession);showCurrentChatModel(); }
     }
 
@@ -760,6 +768,22 @@ function cycleTheme() {
         document.getElementById('session-action-status').textContent = result.message;
         const copy = document.getElementById('session-action-copy'); copy.hidden = result.focused || !result.repo_path; copy.dataset.path = result.repo_path || '';
       } catch { document.getElementById('session-action-status').textContent = 'Window unavailable. Use the terminal stream for a hosted session.'; }
+    }
+
+    async function resumeChat() {
+      const source = activeChatSession;
+      const button = document.getElementById('chat-resume');
+      button.disabled = true;
+      document.getElementById('chat-delivery-status').textContent = 'Resuming conversation...';
+      try {
+        await apiJson(`/api/v1/sessions/${encodeURIComponent(source)}/continue`, {method:'POST',headers});
+        await loadSessions();
+        if (source === activeChatSession) {
+          await loadChat(source);
+          document.getElementById('chat-delivery-status').textContent = 'Ready to continue.';
+        }
+      } catch { document.getElementById('chat-delivery-status').textContent = 'Could not resume. Check that the agent is installed and signed in, then try again.'; }
+      finally { button.disabled = false; }
     }
 
     async function loadInstalledAgents() {
@@ -994,7 +1018,9 @@ function cycleTheme() {
       const session = ideSessions.find(session => session.id === sessionId);
       const hosted = hostedSessions.find(session => session.session_id === sessionId);
       document.getElementById('session-chat-heading').textContent = session?.title || hosted?.title || 'New conversation';
-      document.getElementById('chat-session-label').textContent = `${session?.agent || hosted?.agent || 'Agent'} · ${session?.state || 'hosted'}`;
+      document.getElementById('chat-session-label').textContent = hosted?.agent || session?.agent || 'Agent';
+      document.getElementById('chat-resume').hidden = Boolean(hosted) || !['codex','claude-code','gemini-cli'].includes(session?.agent);
+      void showChatLimits();
       renderIdeSessions();
       showCurrentChatModel();
       if (!silent) loadChatModels();
@@ -1094,6 +1120,8 @@ function cycleTheme() {
 
         const jsonStr = JSON.stringify(res);
         try { hostedSessions = (await apiJson('/api/v1/sessions/hosted', { headers })).sessions || []; } catch { hostedSessions = []; }
+        ideSessions = await apiJson(`/api/v1/conversations?agent=${agent}&project=${encodeURIComponent(project)}`, {headers});
+        void showChatLimits();
         if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
 
         summaryState.activeCount = res.ongoing_count ?? res.active_count ?? null; await refreshSummary();
@@ -1104,12 +1132,12 @@ function cycleTheme() {
 
         const presentation = await import('/console-presentation.js');
         presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
-        ideSessions = res.sessions || [];
         await renderIdeSessions();
         lastSessionsJson = jsonStr;
         return true;
       } catch (e) {
         console.error('Failed to load sessions', e);
+        document.getElementById('chat-header-limits').textContent = 'Limits unavailable · UNKNOWN';
         lastSessionsJson = '';
         showConnectionError(e);
         summaryState.activeCount = null; await refreshSummary();
@@ -1453,7 +1481,7 @@ function cycleTheme() {
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': showLauncher, 'new-session': showLauncher,
-      'switch-model': switchChatModel, 'focus-chat': focusChat,
+      'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat,
       'choose-workspace': chooseWorkspace,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,

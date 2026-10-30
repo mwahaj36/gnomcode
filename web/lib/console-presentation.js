@@ -250,3 +250,13 @@ export function updateChat(element, events) {
   });
   element.scrollTop = follow ? element.scrollHeight : previousTop;
 }
+
+export function renderConversationLimits(limits = []) {
+  if (!limits.length) return '<span>Limits unavailable <small>UNKNOWN</small></span>';
+  return limits.map(limit => {
+    const known = ['exact','estimated','api'].includes(limit.basis) && Number.isFinite(limit.remaining_pct);
+    const observed = limit.observed_at ? new Date(limit.observed_at).toLocaleString() : 'Unknown';
+    const basis = {exact:'EXACT',estimated:'EST',api:'API',unknown:'UNKNOWN'}[limit.basis] || 'UNKNOWN';
+    return `<span class="sp-conversation-limit" title="Last updated ${escape(observed)}; ${escape(trust(limit.basis))}"><span>${escape(limit.label)}</span> <strong>${known ? limit.remaining_pct.toFixed(0) + '% left' : 'Unknown'}</strong> <small>${basis}${limit.stale ? ' · Last seen' : ''}</small></span>`;
+  }).join('');
+}

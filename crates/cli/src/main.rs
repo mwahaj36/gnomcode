@@ -153,6 +153,8 @@ enum Commands {
         agent: String,
         repo: PathBuf,
         model: Option<String>,
+        #[arg(long)]
+        resume_session: Option<String>,
     },
 }
 
@@ -214,7 +216,17 @@ async fn main() -> Result<()> {
             agent,
             repo,
             model,
-        } => cmd_pty_host(&session_id, &agent, &repo, model.as_deref()).await,
+            resume_session,
+        } => {
+            cmd_pty_host(
+                &session_id,
+                &agent,
+                &repo,
+                model.as_deref(),
+                resume_session.as_deref(),
+            )
+            .await
+        }
     }
 }
 
@@ -1070,7 +1082,9 @@ async fn cmd_models() -> Result<()> {
 
 async fn cmd_switch(session_id: &str, model: &str, db_path: &Path) -> Result<()> {
     let db = spawnt_store::Database::open(db_path)?;
-    let record = spawnt_daemon::switch_session(&db, session_id, model, None).await?;
+    let record =
+        spawnt_daemon::switch_session(&tokio::sync::Mutex::new(db), session_id, model, None)
+            .await?;
     println!(
         "[RUN] Switched to {} in session {}",
         model, record.session_id
@@ -1135,8 +1149,9 @@ async fn cmd_pty_host(
     agent: &str,
     repo: &Path,
     model: Option<&str>,
+    resume_session: Option<&str>,
 ) -> Result<()> {
-    spawnt_pty::run_pty_host(session_id, agent, repo, model, None)
+    spawnt_pty::run_pty_host_resuming(session_id, agent, repo, model, None, resume_session)
         .await
         .map_err(|e| anyhow::anyhow!("Session host failed: {e}"))
 }

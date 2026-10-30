@@ -1,6 +1,6 @@
 # Spawnt
 
-Updated 2026-10-29. This product brief is for discussion. [SPEC](docs/SPEC.md) owns technical requirements and status; [LAUNCH_CHECKLIST](docs/LAUNCH_CHECKLIST.md) owns remaining release work.
+Updated 2026-10-30. This product brief is for discussion. [SPEC](docs/SPEC.md) owns technical requirements and status; [LAUNCH_CHECKLIST](docs/LAUNCH_CHECKLIST.md) owns remaining release work.
 
 ## What the product is
 
@@ -15,7 +15,7 @@ Developers running multiple agents across several projects. They already know Cl
 ## Three main workflows
 
 1. **Launch and work.** Select a folder and installed supported CLI. Spawnt opens a conversation backed by the official process. Use Terminal stream for login, trust and permission prompts. A separate same-workspace terminal handles local shell work. Discovered sessions remain readable without granting control of their processes.
-2. **Switch and continue.** Pick a supported target agent/model. Rust compiles redacted objectives, changed-file paths and recent activity into a handoff, launches a fresh target session and submits it. Original history remains available. This transfers a compact briefing, not provider-internal state. “Zero-token” means no model call generates the briefing; receiving agents still consume input tokens and can incur charges.
+2. **Switch and continue.** Supported named-model changes use the existing official CLI session. Changing providers keeps the same conversation, title and visible history; the next message carries bounded redacted context privately to the new agent. Reopen saved Codex, Claude Code and Gemini CLI conversations from desktop or paired mobile while the laptop and Spawnt are online. Native commands, session IDs and generated briefings stay out of ordinary chat. Provider-internal state is not transferred between providers; receiving agents still consume input tokens.
 3. **Step away and stay in control.** Start Remote in desktop Profile. Sign into the same Spawnt account on the phone, enter the desktop's eight-digit discovery code, then confirm the separate security code on both devices. The encrypted channel carries conversations, prompts, session discovery and bounded folder selection. Remembered trust reconnects after reload/backgrounding and expires after seven inactive days. Remote cannot execute arbitrary shell commands or bypass native permissions.
 
 ## Supporting capabilities
