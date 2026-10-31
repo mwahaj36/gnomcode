@@ -102,6 +102,8 @@ Windows setup is per-user and waits for an explicit Install action. Choose a ded
 
 ### 3.5 Ingestion
 
+Cursor JSON discovery is not proof of a conversation: require a supported messages/conversation array with a recorded user/assistant timestamp. Never substitute ingestion time for missing Cursor timestamps or infer a running process from an imported transcript; such exports are saved/ended history, and missing models remain unknown. Store-open maintenance removes only legacy idle Cursor placeholders without model/title/PID/parent, events, conversation bindings, resume/alert/relay references or children. Keep all evidence-bearing history and agent-owned files.
+
 Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
 
 ### 3.6 Storage and local conversation

@@ -46,6 +46,17 @@ impl SourceAdapter for CursorAdapter {
             }
         };
 
+        let Some(messages) = val
+            .get("messages")
+            .or_else(|| val.get("conversation"))
+            .and_then(Value::as_array)
+        else {
+            return batch;
+        };
+        let Some(started_at) = messages.iter().filter_map(message_timestamp).min() else {
+            return batch;
+        };
+
         let session_raw_id = val
             .get("sessionId")
             .or_else(|| val.get("conversationId"))
@@ -68,42 +79,21 @@ impl SourceAdapter for CursorAdapter {
             parent_session_id: None,
             model: ctx.fallback_model.clone(),
             title: None,
-            state: SessionState::Idle,
+            state: SessionState::Ended,
             pid: None,
-            started_at: Utc::now(),
-            last_event_at: Utc::now(),
+            started_at,
+            last_event_at: started_at,
         };
-
-        let empty_vec = Vec::new();
-        let messages = val
-            .get("messages")
-            .or_else(|| val.get("conversation"))
-            .and_then(Value::as_array)
-            .unwrap_or(&empty_vec);
 
         for (idx, msg_val) in messages.iter().enumerate() {
             let Some(msg) = msg_val.as_object() else {
                 continue;
             };
 
-            let ts = msg
-                .get("timestamp")
-                .or_else(|| msg.get("createdAt"))
-                .and_then(|v| {
-                    if let Some(s) = v.as_str() {
-                        DateTime::parse_from_rfc3339(s)
-                            .ok()
-                            .map(|dt| dt.with_timezone(&Utc))
-                    } else {
-                        v.as_i64().and_then(DateTime::from_timestamp_millis)
-                    }
-                })
-                .unwrap_or_else(Utc::now);
-
-            if idx == 0 {
-                session.started_at = ts;
-            }
-            session.last_event_at = ts;
+            let Some(ts) = message_timestamp(msg_val) else {
+                continue;
+            };
+            session.last_event_at = session.last_event_at.max(ts);
 
             let role = msg.get("role").and_then(Value::as_str).unwrap_or("");
             let chat_role = match role {
@@ -142,19 +132,7 @@ impl SourceAdapter for CursorAdapter {
                 session.model = Some(m.to_owned());
             }
 
-            if role == "user" {
-                session.state = SessionState::Thinking;
-            } else if role == "assistant" {
-                let has_tools = msg
-                    .get("tool_calls")
-                    .and_then(Value::as_array)
-                    .is_some_and(|a| !a.is_empty());
-                session.state = if has_tools {
-                    SessionState::Tool
-                } else {
-                    SessionState::Idle
-                };
-
+            if role == "assistant" {
                 if let Some(calls) = msg.get("tool_calls").and_then(Value::as_array) {
                     for call in calls {
                         let name = call.get("name").and_then(Value::as_str).unwrap_or("tool");
@@ -183,7 +161,7 @@ impl SourceAdapter for CursorAdapter {
                     .or_else(|| usage.get("output_tokens"))
                     .and_then(Value::as_u64)
                     .unwrap_or(0);
-                let model = session.model.as_deref().unwrap_or("gpt-4o");
+                let model = session.model.as_deref().unwrap_or("unknown");
 
                 if in_tok > 0 || out_tok > 0 {
                     let dedup_key = format!("{session_raw_id}:{idx}:{ts}");
@@ -231,4 +209,71 @@ fn extract_session_id_from_path(path_str: &str) -> String {
         .and_then(|s| s.to_str())
         .unwrap_or("cursor-session")
         .to_owned()
+}
+
+fn message_timestamp(message: &Value) -> Option<DateTime<Utc>> {
+    if !matches!(message.get("role")?.as_str()?, "user" | "assistant") {
+        return None;
+    }
+    let timestamp = message
+        .get("timestamp")
+        .or_else(|| message.get("createdAt"))?;
+    if let Some(text) = timestamp.as_str() {
+        DateTime::parse_from_rfc3339(text)
+            .ok()
+            .map(|date| date.with_timezone(&Utc))
+    } else {
+        timestamp.as_i64().and_then(DateTime::from_timestamp_millis)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cursor_settings_do_not_create_a_conversation() {
+        let batch = CursorAdapter::new().parse(
+            &FileCtx {
+                source_path: "argv.json".into(),
+                ..FileCtx::default()
+            },
+            include_bytes!("../../../fixtures/cursor/2026-11-01/settings.json"),
+        );
+        insta::assert_json_snapshot!(batch, @r#"
+        {
+          "projects": [],
+          "sessions": [],
+          "usage_records": [],
+          "activity_events": [],
+          "chat_events": [],
+          "quota_snapshots": [],
+          "parse_errors": 0
+        }
+        "#);
+    }
+
+    #[test]
+    fn untimed_cursor_messages_never_acquire_the_ingestion_time() {
+        let bytes = br#"{"sessionId":"saved","messages":[{"role":"user","content":"hello"}]}"#;
+        assert!(
+            CursorAdapter::new()
+                .parse(&FileCtx::default(), bytes)
+                .sessions
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn cursor_export_is_deterministic_and_does_not_claim_a_live_process() {
+        let bytes = br#"{"sessionId":"saved","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"hello"},{"role":"assistant","timestamp":"2026-10-26T12:00:05Z","content":"hi","usage":{"prompt_tokens":5,"completion_tokens":2}}]}"#;
+        let first = CursorAdapter::new().parse(&FileCtx::default(), bytes);
+        let second = CursorAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(first, second);
+        assert_eq!(first.sessions[0].state, SessionState::Ended);
+        assert_eq!(
+            first.sessions[0].last_event_at.to_rfc3339(),
+            "2026-10-26T12:00:05+00:00"
+        );
+    }
 }
