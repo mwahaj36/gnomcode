@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn cursor_chat_keeps_user_and_assistant_text_only() {
         use super::{FileCtx, SourceAdapter, cursor::CursorAdapter};
-        let bytes = br#"{"sessionId":"cursor-chat","messages":[{"role":"user","content":"Question"},{"role":"assistant","content":"Answer","tool_calls":[{"name":"Shell","output":"secret"}]},{"role":"tool","content":"secret output"}]}"#;
+        let bytes = br#"{"sessionId":"cursor-chat","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"},{"role":"assistant","timestamp":"2026-10-26T12:00:05Z","content":"Answer","tool_calls":[{"name":"Shell","output":"secret"}]},{"role":"tool","content":"secret output"}]}"#;
         let batch = CursorAdapter::new().parse(&FileCtx::default(), bytes);
         assert_eq!(batch.chat_events.len(), 2);
         assert_eq!(batch.chat_events[0].content, "Question");
@@ -529,7 +529,7 @@ mod tests {
         let c_batch = cursor.parse(&c_ctx, c_sample);
         assert_eq!(c_batch.parse_errors, 0);
         assert_eq!(c_batch.sessions.len(), 1);
-        assert_eq!(c_batch.sessions[0].state, spawnt_core::SessionState::Idle);
+        assert_eq!(c_batch.sessions[0].state, spawnt_core::SessionState::Ended);
         assert_eq!(c_batch.usage_records.len(), 1);
 
         let mut aider = AiderAdapter::new();
