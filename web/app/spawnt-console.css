@@ -330,6 +330,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-remote-chat .sp-chat-card.sp-chat-assistant{background:var(--sp-surface-2)}
 
 .sp-remote-page{width:100%;min-height:100dvh}
+.web-project-list{display:grid;gap:8px;margin-top:16px}.web-project-list .sp-console-action{width:100%;text-align:left;overflow-wrap:anywhere;white-space:normal;min-height:44px}
 .sp-remote:not(.is-paired){max-width:680px;margin:0 auto;padding:32px 20px}
 .sp-remote .remote-heading{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--sp-border);padding-bottom:16px;margin-bottom:24px}
 .sp-remote .remote-heading h1{font:600 18px/1.4 var(--sp-font-sans);margin:0}

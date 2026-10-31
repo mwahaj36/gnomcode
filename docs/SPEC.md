@@ -114,6 +114,8 @@ Chat rows remain local and are excluded from metadata sync. History supports pag
 
 ### 3.7 Session and conversation state
 
+Web Remote entry points share the console navigation shell, including the unpaired Connect your desktop screen. Cloud Project activity lists project labels already present in the latest session snapshot and opens filtered session history; missing snapshots offer connection/reload actions. This view does not fabricate detailed local-only project rollups or add project data to cloud sync, and its list is not a timeline-filtered usage report.
+
 Internal states retain thinking/tool/approval/idle/error/ended distinctions. Public status badges use Running, Waiting, Idle and Error; explicit ended/disconnected information remains lifecycle feedback rather than false activity. State inference declares its limits. Pending local bubbles reconcile once with recorded turns, preserving identical repeated prompts and per-session drafts. Replies render safe Markdown; raw HTML/media remain inert. Enter sends; Shift+Enter adds a newline. Paging/scroll behavior preserves the reader's position. Conversation identity is independent of agent process identity. Order linked histories by segment then native turn, retaining event IDs as paging cursors. The original opening message supplies the title across switches. Generated context and native commands are absent from normal chat; show only a brief model-change status. Raw Terminal remains an explicit separate view.
 
 ### 3.8 Pricing and models
