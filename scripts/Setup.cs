@@ -173,10 +173,7 @@ public class SetupForm : Form
     private void BeginInstall() {
         try {
             installDir = Path.GetFullPath(installPath.Text.Trim());
-            if (installDir.StartsWith(@"\\") || installDir == Path.GetPathRoot(installDir)) throw new IOException("Choose a dedicated folder on a local drive.");
-            if (Directory.Exists(installDir) && Directory.GetFileSystemEntries(installDir).Length > 0 &&
-                !(File.Exists(Path.Combine(installDir, "spawnt.exe")) && File.Exists(Path.Combine(installDir, "Spawnt-Uninstall.exe"))))
-                throw new IOException("Choose an empty folder or an existing spawnt installation.");
+            InstallerIntegration.ValidateInstallDirectory(installDir);
             exeDest = Path.Combine(installDir, "spawnt.exe");
             foreach (Control control in new Control[] { installPath, browseButton, desktopShortcut, startMenuShortcut, startAtLogin, explorerMenu, installButton, cancelButton }) control.Enabled = false;
             ControlBox = false;
@@ -383,6 +380,15 @@ public class SetupForm : Form
 
 public static class InstallerIntegration
 {
+    public static void ValidateInstallDirectory(string installDir) {
+        if (installDir.StartsWith(@"\\") || installDir == Path.GetPathRoot(installDir)) throw new IOException("Choose a dedicated folder on a local drive.");
+        if (!Directory.Exists(installDir) || Directory.GetFileSystemEntries(installDir).Length == 0) return;
+        bool native = File.Exists(Path.Combine(installDir, "spawnt.exe")) &&
+            (File.Exists(Path.Combine(installDir, "Spawnt-Uninstall.exe")) || File.Exists(Path.Combine(installDir, "open-console.vbs")));
+        bool desktop = File.Exists(Path.Combine(installDir, "spawnt-desktop.exe")) && File.Exists(Path.Combine(installDir, "Update.exe"));
+        if (!native && !desktop) throw new IOException("Choose an empty folder or an existing spawnt installation.");
+    }
+
     public static void RemovePayloadFiles(Assembly payload, string installDir) {
         foreach (string resource in payload.GetManifestResourceNames()) {
             string name = resource.StartsWith("payload.") ? resource.Substring(8) : resource;
