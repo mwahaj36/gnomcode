@@ -31,3 +31,10 @@ Reference notes collected from live inspection on 2026-10-26.
   - Fallback for sessions without a change event: `~/.gemini/antigravity/antigravity_state.pbtxt` (`last_selected_agent_model`).
   - Each model family maps to an independent `limit_id` pool (`claude`, `gemini`, `fable`, etc.).
 - **Dedup key:** `format!("{}:{}", conversation_id, step_index)`.
+
+## 4. Cursor transcript exports
+- **Roots:** existing platform discovery covers Cursor's User/globalStorage and .cursor directories; arbitrary discovered JSON is not conversation evidence.
+- **Format:** rewritten JSON with messages or conversation arrays. Only recorded user/assistant timestamps (RFC3339 or Unix milliseconds) are accepted; settings, missing arrays and untimed messages are skipped.
+- **Identity:** sessionId/conversationId, with filename fallback only for a supported transcript.
+- **Dedup:** native session ID, message index and recorded timestamp. Missing model is unknown; no subscription quota source is claimed.
+- **Presence:** exports are ended saved history, not live process detection.
