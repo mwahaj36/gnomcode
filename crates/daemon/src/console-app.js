@@ -679,6 +679,18 @@ function cycleTheme() {
       renderIdeSessions(); loadInstalledAgents();
     }
 
+    function openExplorerWorkspace() {
+      const url = new URL(window.location.href);
+      if (!url.hash.startsWith('#sessions?')) return;
+      const folder = new URLSearchParams(url.hash.slice('#sessions?'.length)).get('folder');
+      if (!folder) return;
+      url.hash = 'sessions';
+      history.replaceState(null, '', url.toString());
+      setView('sessions', false);
+      showLauncher();
+      document.getElementById('launch-repo-input').value = folder;
+    }
+
     function showCurrentChatModel() {
       if(modelHandoffBusy)return;
       const select = document.getElementById('chat-model-select');
@@ -1524,6 +1536,7 @@ function cycleTheme() {
     const initialView = window.location.hash.slice(1);
     if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(initialView)) setView(initialView, false);
     else setView('overview', false);
+    openExplorerWorkspace();
     pollLocalData();
     if (initialView === 'sessions') loadInstalledAgents();
     setInterval(() => {
