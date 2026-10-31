@@ -28,10 +28,24 @@ public static class CheckInstallerOptions {
         }
         Type integration = setup.GetType("InstallerIntegration");
         Assert(integration != null, "Missing Explorer integration");
+        MethodInfo validate = integration.GetMethod("ValidateInstallDirectory");
+        Assert(validate != null, "Folder validation must recognize previous desktop installer layouts");
         string files = Path.Combine(Path.GetTempPath(), "spawnt-installer-files-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(files);
         try {
+            validate.Invoke(null, new object[] { files });
+            File.WriteAllText(Path.Combine(files, "unrelated.txt"), "keep");
+            bool rejected = false;
+            try { validate.Invoke(null, new object[] { files }); } catch (TargetInvocationException) { rejected = true; }
+            Assert(rejected, "Unrelated nonempty folders must still be rejected");
+            File.WriteAllText(Path.Combine(files, "spawnt-desktop.exe"), "legacy launcher");
+            File.WriteAllText(Path.Combine(files, "Update.exe"), "legacy updater");
+            validate.Invoke(null, new object[] { files });
+            File.Delete(Path.Combine(files, "spawnt-desktop.exe"));
+            File.Delete(Path.Combine(files, "Update.exe"));
             File.WriteAllText(Path.Combine(files, "spawnt.exe"), "shipped payload");
+            File.WriteAllText(Path.Combine(files, "open-console.vbs"), "legacy native launcher");
+            validate.Invoke(null, new object[] { files });
             File.WriteAllText(Path.Combine(files, "user-notes.txt"), "keep");
             Directory.CreateDirectory(Path.Combine(files, "workspace"));
             File.WriteAllText(Path.Combine(files, "workspace", "code.txt"), "keep");

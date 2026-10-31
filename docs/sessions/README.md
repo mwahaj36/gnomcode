@@ -4,6 +4,7 @@ One file per recorded session or follow-up. Historical entries retain their orig
 
 For each new session, add a dated file with goals, outcomes, problems/root-cause fixes, decisions and verification, then link it here. Do not append session bodies to SESSION_LOG.md.
 
+- [2026-11-01 - Existing Windows desktop upgrade detection](2026-11-01-installer-upgrade-detection.md)
 - [2026-11-01 - Windows installer choices and Explorer launcher](2026-11-01-windows-installer-choices.md)
 - [2026-10-30 - Mobile reconnect recovery and controls](2026-10-30-mobile-reconnect-and-controls.md)
 - [2026-10-30 - Continuous conversations, native resume and header limits](2026-10-30-continuous-conversations-and-resume.md)
