@@ -7,6 +7,17 @@ const html=readFileSync(new URL('../crates/daemon/src/console.html',import.meta.
 const source=readFileSync(new URL('../crates/daemon/src/console-app.js',import.meta.url),'utf8');
 const file=ts.createSourceFile('console.js',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
 const fn=name=>file.statements.filter(ts.isFunctionDeclaration).find(node=>node.name?.text===name)?.getText(file)||'';
+assert.ok(fn('openExplorerWorkspace'), 'Explorer folder must open the launcher');
+const folderWindow={location:new URL('http://127.0.0.1:41738/?token=test#sessions?folder=C%3A%5Cwork%5Cspace%20%26%20quote%27')};
+const folderInput={value:''};
+let launched=0,folderView='';
+const openFolder=new Function('window','document','history','setView','showLauncher',`${fn('openExplorerWorkspace')}\nreturn openExplorerWorkspace;`)(folderWindow,{getElementById:()=>folderInput},{replaceState(_s,_t,url){folderWindow.location=new URL(url);}},view=>{folderView=view;},()=>{launched++;});
+openFolder();
+assert.equal(folderInput.value,"C:\\work\\space & quote'");
+assert.equal(folderView,'sessions');
+assert.equal(launched,1,'Explorer opens the chooser without launching an agent');
+assert.equal(folderWindow.location.hash,'#sessions','consume folder so reload does not reopen launcher');
+assert.equal(folderWindow.location.searchParams.get('token'),'test','preserve authorization');
 const window={location:new URL('http://127.0.0.1:41738/?token=unit-local-token#overview')};
 const document={body:{dataset:{}},getElementById:()=>({setAttribute(){}}),querySelectorAll:()=>[]};
 const history={pushState(_state,_title,url){window.location=new URL(url,window.location);}};

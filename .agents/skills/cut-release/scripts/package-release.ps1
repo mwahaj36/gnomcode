@@ -44,6 +44,7 @@ $CompilerArgs = @(
     "/resource:$RepoRoot/web/public/icons/spawnt-512.png,spawnt-mark.png",
     "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
     "/resource:$RepoRoot/scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:$RepoRoot/LICENSE,LICENSE",
+    "/resource:$RepoRoot/scripts/open-folder.ps1,open-folder.ps1",
     "/resource:$RepoRoot/web/public/downloads/THIRD_PARTY_NOTICES.html,THIRD_PARTY_NOTICES.html",
     "/out:$Out/Spawnt-Setup.exe", "$RepoRoot/scripts/Setup.cs"
 )
@@ -57,6 +58,15 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Installer verification helper compilation failed" }
     & $Checker "$Out/Spawnt-Setup.exe" $NativeExe "$Out/THIRD_PARTY_NOTICES.html" "$Version.0"
     if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
+} finally { Remove-Item $Checker -Force -ErrorAction SilentlyContinue }
+
+try {
+    & $Csc /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$Checker" (Resolve-Path "$RepoRoot/scripts/check-installer-options.cs").Path
+    if ($LASTEXITCODE -ne 0) { throw "Installer options checker compilation failed" }
+    & $Checker "$Out/Spawnt-Setup.exe"
+    if ($LASTEXITCODE -ne 0) { throw "Installer options verification failed" }
+    & powershell -NoProfile -File "$RepoRoot/scripts/check-open-folder.ps1"
+    if ($LASTEXITCODE -ne 0) { throw "Explorer launcher verification failed" }
 } finally { Remove-Item $Checker -Force -ErrorAction SilentlyContinue }
 
 & python scripts/package-artifacts.py --windows-exe $NativeExe --windows-setup "$Out/Spawnt-Setup.exe"

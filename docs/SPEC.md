@@ -2,7 +2,7 @@
 
 | Field | Current value |
 | :--- | :--- |
-| Updated | 2026-10-30 |
+| Updated | 2026-11-01 |
 | Status | Prelaunch; local orchestrator implemented, Remote production gates open |
 | Version | 0.9.0 development builds; earlier unpublished 1.x artifacts retired |
 | Owner | Wahaj (@mwahaj36) |
@@ -97,6 +97,8 @@ Official CLIs run in independent PTY owners, outside Electron. Windows uses ConP
 ### 3.4 Repository layout
 
 See [AGENTS](../AGENTS.md) for crate responsibilities and engineering rules. `apps/desktop` is Electron; `web` is Next.js marketing/account/companion; `npm` stages platform shims; `fixtures` contains anonymized agent logs; `docs/adr` records decisions; `docs/sessions` has one file per engineering session.
+
+Windows setup is per-user and waits for an explicit Install action. Choose a dedicated local installation folder, desktop shortcut, Start menu shortcut, launch at Windows sign-in (off by default), and Explorer folder/background integration. Explorer's Open with Spawnt opens the local session launcher with the folder prefilled; the user still chooses and launches an agent. Classic Explorer verbs appear under Show more options on Windows 11. Uninstall uses its own installation directory and removes shipped files rather than recursively deleting a selected folder; local history under SPAWNT_HOME remains separate. macOS/Linux packaging retains its existing platform launchers.
 
 ### 3.5 Ingestion
 
