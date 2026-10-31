@@ -7,7 +7,7 @@ import DesktopDevices from "../../components/DesktopDevices";
 import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, renderQuota, renderProjects, updateSummary, updateOngoing, updateQuota } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, renderQuota, updateSummary, updateOngoing, updateQuota } from "../../lib/console-presentation.js";
 
 function SummaryPanel({ activeCount, report, quotaCount }: { activeCount: number | null; report: unknown; quotaCount: number | null }) {
   const element = useRef<HTMLDivElement>(null);
@@ -156,7 +156,7 @@ function formatResetCountdown(resetsAtIso?: string | null, _windowKind?: string)
   }
 }
 
-export default function ConsolePage() {
+export default function ConsolePage({ initialView = "overview" }: { initialView?: string }) {
   const [user, setUser] = useState<any>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -189,7 +189,7 @@ export default function ConsolePage() {
   const refreshInFlight = useRef(false);
   const metricsGeneration = useRef(0);
   const manualRefreshInFlight = useRef(false);
-  const [activeView, setActiveView] = useState("overview");
+  const [activeView, setActiveView] = useState(initialView);
   const [navigationExpanded, setNavigationExpanded] = useState(false);
   const [viewError, setViewError] = useState("");
   const lastDesktopSnapshot = useRef<any>(null);
@@ -205,7 +205,7 @@ export default function ConsolePage() {
 
   useEffect(() => {
     const restore = () => {
-      const view = new URLSearchParams(window.location.search).get("view") || "overview";
+      const view = new URLSearchParams(window.location.search).get("view") || (window.location.pathname === '/remote' ? 'chat' : 'overview');
       if (["overview", "sessions", "chat", "usage", "limits", "projects", "automations", "settings"].includes(view)) setActiveView(view);
     };
     restore();
@@ -401,11 +401,13 @@ export default function ConsolePage() {
       <div className="sp-console-content">
       {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connect this account to your desktop to publish activity. Remote conversations use a separately confirmed encrypted connection.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button>{user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}</div></section><DesktopDevices /><SettingsPanel embedded /></>}
       {activeView === "chat" && <RemoteCompanion embedded />}
-      {activeView === "projects" && <div dangerouslySetInnerHTML={{ __html: renderProjects(undefined) }} />}
+      {activeView === "projects" && <section className="sp-activity"><h2>Project activity</h2>
+        {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
+      </section>}
       {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
 
       {/* Timeline Filter Bar */}
-      {["overview", "usage", "projects"].includes(activeView) && <div className="sp-console-timeline-filter">
+      {["overview", "usage"].includes(activeView) && <div className="sp-console-timeline-filter">
         <div className="text-xs text-muted">
           <span className="text-foreground">{report?.range_label || "Activity"}</span>
           {report?.earliest_at && report?.latest_at && (
