@@ -271,14 +271,6 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             });
         }
     }
-    let aider_home = home.join(".aider");
-    if aider_home.exists() {
-        roots.push(AgentRoot {
-            agent: AgentId::Aider,
-            exists: true,
-            path: aider_home,
-        });
-    }
 
     roots
 }

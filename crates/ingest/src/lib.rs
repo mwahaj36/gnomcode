@@ -54,7 +54,16 @@ pub fn scan_log_files(roots: &[AgentRoot]) -> Vec<DiscoveredFile> {
         if !root.exists {
             continue;
         }
-        collect_files_recursively(root.agent, &root.path, &mut files);
+        if root.path.is_file() {
+            if is_agent_log_file(root.agent, &root.path) {
+                files.push(DiscoveredFile {
+                    agent: root.agent,
+                    path: root.path.clone(),
+                });
+            }
+        } else {
+            collect_files_recursively(root.agent, &root.path, &mut files);
+        }
     }
     files
 }
@@ -376,11 +385,67 @@ mod tests {
         assert_eq!(chat[0].role, spawnt_core::ChatRole::User);
         assert_eq!(chat[1].role, spawnt_core::ChatRole::Assistant);
     }
+    #[test]
+    fn deleted_chat_stays_deleted_after_source_replay() {
+        use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
+        let mut db = spawnt_store::Database::open_in_memory().expect("database");
+        let checkpoint = spawnt_store::SourceCheckpoint {
+            file_path: "synthetic".into(),
+            last_read_offset: bytes.len() as u64,
+            file_size: bytes.len() as u64,
+            fingerprint: "synthetic".into(),
+            last_ingested_at: chrono::Utc::now(),
+        };
+        db.commit_batch_with_chat(
+            &batch.projects,
+            &batch.sessions,
+            &batch.usage_records,
+            &batch.activity_events,
+            &batch.quota_snapshots,
+            &checkpoint,
+            &batch.chat_events,
+        )
+        .expect("first import");
+        db.delete_session_chat("codex:id_0001").expect("delete");
+        db.commit_batch_with_chat(
+            &batch.projects,
+            &batch.sessions,
+            &batch.usage_records,
+            &batch.activity_events,
+            &batch.quota_snapshots,
+            &checkpoint,
+            &batch.chat_events,
+        )
+        .expect("source replay");
+        assert!(
+            db.get_session_chat("codex:id_0001", None)
+                .expect("chat")
+                .is_empty()
+        );
+    }
+
     use super::{complete_jsonl_prefix_len, scan_log_files};
     use spawnt_core::AgentId;
     use spawnt_platform::AgentRoot;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn scan_includes_an_explicit_aider_log_file() {
+        let dir = tempdir().expect("temp dir");
+        let path = dir.path().join("aider.jsonl");
+        fs::write(&path, b"{}\n").expect("fixture");
+        let roots = [AgentRoot {
+            agent: AgentId::Aider,
+            path: path.clone(),
+            exists: true,
+        }];
+        let files = scan_log_files(&roots);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, path);
+    }
 
     #[test]
     fn scan_log_files_filters_proper_extensions_and_names() {
