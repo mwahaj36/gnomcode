@@ -70,6 +70,8 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const connectionWatch=useRef<ReturnType<typeof setInterval>|null>(null);
   const desktopDialog=useRef<HTMLDialogElement|null>(null);
   const modelDialog=useRef<HTMLDialogElement|null>(null);
+  const sidebarToggle=useRef<HTMLButtonElement|null>(null);
+  const sidebarClose=useRef<HTMLButtonElement|null>(null);
 
   useEffect(() => {
     try {
@@ -118,6 +120,18 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   useEffect(()=>{if(desktopPanel)desktopDialog.current?.showModal();},[desktopPanel]);
   useEffect(()=>{if(modelPanel)modelDialog.current?.showModal();},[modelPanel]);
   useEffect(()=>{if(folderBrowser && !folderDialog.current?.open)folderDialog.current?.showModal();},[folderBrowser]);
+  useEffect(()=>{
+    if (!showSessions || !matchMedia('(max-width: 760px)').matches) return;
+    sidebarClose.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !document.querySelector('dialog[open]')) {
+        setShowSessions(false);
+        sidebarToggle.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  },[showSessions]);
 
   useEffect(() => {
     const element = chatContainer.current;
@@ -340,15 +354,16 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const connected=phase==='paired';
   const workspace=connected || (phase==='reconnecting' && sessions.length>0);
   const startNew=()=>{setNewSession(true);setShowSessions(true);};
+  const Heading = embedded ? 'h2' : 'h1';
   return <section ref={remoteRoot} className={`sp-remote ${embedded?'is-embedded':''} ${phase === 'paired' ? 'is-paired' : phase==='reconnecting'?'is-reconnecting':''}`} aria-label="Encrypted Remote conversation">
     <header className="remote-heading">
-      {workspace && <button className="remote-sidebar-toggle" type="button" aria-label="Toggle conversations" aria-controls="remote-session-sidebar" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>}
-      <div><h1>{workspace ? active?.title || 'Conversations' : 'Connect your desktop'}</h1>{connected && <div className="sp-conversation-limits" aria-label="Remaining limits" dangerouslySetInnerHTML={{__html:renderConversationLimits(active?.limits || [])}} />}</div>
+      {workspace && <button ref={sidebarToggle} className="remote-sidebar-toggle" type="button" aria-label={showSessions ? "Close conversations" : "Open conversations"} aria-controls="remote-session-sidebar" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>}
+      <div><Heading aria-live="polite">{workspace ? active?.title || 'Conversations' : 'Connect your desktop'}</Heading>{connected && <div className="sp-conversation-limits" aria-label="Remaining limits" dangerouslySetInnerHTML={{__html:renderConversationLimits(active?.limits || [])}} />}</div>
       {connected && <button type="button" className="remote-new" aria-label="New conversation" onClick={startNew}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>}
       <button type="button" className="remote-desktop-button" aria-label="Desktop connection" onClick={()=>setDesktopPanel(true)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button>
     </header>
-    {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" onClose={()=>setDesktopPanel(false)}><header><h2>Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Pair your phone with Spawnt on your laptop.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
-    {modelPanel && <dialog ref={modelDialog} className="remote-sheet" onClose={()=>setModelPanel(false)}><header><h2>Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><form onSubmit={event=>{event.preventDefault();void send({type:'switch',session_id:selected,model:targetModel}).then(()=>modelDialog.current?.close()).catch(()=>setError('Could not change model. Try again.'));}}><label htmlFor="remote-model">Model name</label><input id="remote-model" value={targetModel} onChange={event=>setTargetModel(event.target.value)} maxLength={128}/><button type="submit" disabled={!connected || !targetModel.trim()}>Switch model</button></form></dialog>}
+    {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Pair your phone with Spawnt on your laptop.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
+    {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><form onSubmit={event=>{event.preventDefault();void send({type:'switch',session_id:selected,model:targetModel}).then(()=>modelDialog.current?.close()).catch(()=>setError('Could not change model. Try again.'));}}><label htmlFor="remote-model">Model name</label><input id="remote-model" value={targetModel} onChange={event=>setTargetModel(event.target.value)} maxLength={128}/><button type="submit" disabled={!connected || !targetModel.trim()}>Switch model</button></form></dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
@@ -356,15 +371,15 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     {phase === 'connecting' && <p role="status">Connecting to your desktop...</p>}{phase === 'reconnecting' && <div className="remote-reconnect" role="status"><div><strong>Reconnecting to your desktop</strong><p>Your chat and draft are saved here. Mobile networks can interrupt the connection even when your laptop is on.</p></div><button type="button" onClick={()=>void connect(true)}>Try again</button><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a></div>}
     {phase === 'verify' && <section><h2>Verify this device</h2><p>Enter this code in desktop Profile, then confirm here. The desktop checks the encrypted connection before allowing access.</p><strong style={{ fontSize: 32, letterSpacing: 6 }}>{code}</strong><p><button type="button" onClick={confirm} disabled={confirmed}>Codes match</button></p>{confirmed && <p role="status">Waiting for desktop confirmation...</p>}<button type="button" onClick={disconnect}>Disconnect</button></section>}
     {workspace && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>
-      <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button type="button" aria-label="Close conversations" onClick={()=>setShowSessions(false)}>Close</button></div>
+      <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button ref={sidebarClose} type="button" aria-label="Close conversations" onClick={()=>{setShowSessions(false);sidebarToggle.current?.focus();}}>Close</button></div>
       <details open={newSession} onToggle={event=>setNewSession(event.currentTarget.open)}><summary>New conversation</summary>
       <form onSubmit={event => { event.preventDefault(); if(!connected)return; void send({ type:'launch', agent:launchAgent, repo_path:launchRepo.trim(), model:launchModel.trim() || undefined }).catch(() => setError('Agent could not be launched. Check the desktop connection.')); }}>
         <label htmlFor="remote-launch-agent">Agent</label><select id="remote-launch-agent" value={launchAgent} onChange={event => setLaunchAgent(event.target.value)}><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option></select>
         <label htmlFor="remote-launch-repo">Workspace directory on desktop</label><input id="remote-launch-repo" value={launchRepo} onChange={event => setLaunchRepo(event.target.value)} required />
         <button type="button" disabled={foldersLoading} onClick={() => void browseFolders()}>Browse desktop folders</button>
         {foldersLoading && <p role="status">Loading desktop folders...</p>}
-        {folderBrowser && <dialog ref={folderDialog} className="remote-folder-modal" onClose={()=>setFolderBrowser(null)}>
-          <header><h2>Choose desktop folder</h2><p>{folderBrowser.path}</p></header>
+        {folderBrowser && <dialog ref={folderDialog} className="remote-folder-modal" aria-labelledby="remote-folder-heading" onClose={()=>setFolderBrowser(null)}>
+          <header><h2 id="remote-folder-heading">Choose desktop folder</h2><p>{folderBrowser.path}</p></header>
           <div className="remote-folder-content">
             <div className="remote-folder-roots">{folderBrowser.roots.map(root => <button type="button" key={root} disabled={foldersLoading} onClick={() => void browseFolders(root)}>{root}</button>)}</div>
             {folderBrowser.parent && <button type="button" disabled={foldersLoading} onClick={() => void browseFolders(folderBrowser.parent!)}>Up one folder</button>}
@@ -378,8 +393,8 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
         <button type="submit" disabled={!connected || !launchRepo.trim()}>Launch Agent</button>
       </form></details>
         <label className="remote-history-search" htmlFor="remote-history-search">Search conversations<input id="remote-history-search" type="search" value={conversationSearch} onChange={event=>setConversationSearch(event.target.value)} placeholder="Find a conversation" /></label>
-        <div className="remote-session-list">{sessions.filter(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())).map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => selectSession(session.id)}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
-        {!sessions.length && <p>No conversations yet. Start an agent here or on your desktop.</p>}
+        <div className="remote-session-list">{sessions.filter(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())).map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => { selectSession(session.id); if (matchMedia('(max-width: 760px)').matches) sidebarToggle.current?.focus(); }}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
+        {!sessions.length ? <p>No conversations yet. Start an agent here or on your desktop.</p> : !sessions.some(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())) && <p role="status">No conversations match your search.</p>}
       </aside>
       <div className="remote-conversation">{selected ? <>
         {historyLoading && <p role="status">Loading messages...</p>}
