@@ -836,7 +836,7 @@ pub async fn switch_model(record: &SessionRecord, model: &str) -> Result<(), Err
         || model.len() > 128
         || !model
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/".contains(&byte))
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/[]".contains(&byte))
     {
         return Err(Error::InvalidModel(model.to_owned()));
     }
@@ -953,6 +953,16 @@ mod tests {
             b"/model gpt-5.6-luna"
         );
         assert_eq!(input_rx.try_recv().expect("model submit"), b"\r");
+        let mut claude = record.clone();
+        claude.agent = "claude-code".into();
+        switch_model(&claude, "opus[1m]")
+            .await
+            .expect("native extended-context alias");
+        assert_eq!(
+            input_rx.try_recv().expect("alias command"),
+            b"/model opus[1m]"
+        );
+        assert_eq!(input_rx.try_recv().expect("alias submit"), b"\r");
         for invalid_model in ["gpt-test\r/exit", "gpt-test --yolo", "", "--yolo"] {
             assert!(switch_model(&record, invalid_model).await.is_err());
             assert!(input_rx.try_recv().is_err());

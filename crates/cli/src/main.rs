@@ -122,7 +122,7 @@ enum Commands {
         /// Session ID to attach to.
         session_id: String,
     },
-    /// List supported models with live quota headroom and pricing.
+    /// List models reported by signed-in coding-agent CLI accounts.
     Models,
     /// Switch an ongoing session to another model using zero-token handoff.
     Switch {
@@ -1060,21 +1060,13 @@ async fn cmd_attach(session_id: &str) -> Result<()> {
 }
 
 async fn cmd_models() -> Result<()> {
-    let models = tokio::task::spawn_blocking(spawnt_daemon::api::available_models).await?;
-    if models.is_empty() {
+    for provider in spawnt_daemon::model_catalog::discover().await {
         println!(
-            "No fresh CLI model catalog is available. Open Codex CLI to refresh its catalog; use other agents' own model selectors."
+            "{} [{}]: {}",
+            provider.name, provider.status, provider.message
         );
-    } else {
-        println!(
-            "{:<12} {:<28} {:<20} OBSERVED (UTC)",
-            "AGENT", "MODEL", "SOURCE"
-        );
-        for model in models {
-            println!(
-                "{:<12} {:<28} {:<20} {}",
-                model.agent, model.model, model.availability_source, model.observed_at
-            );
+        for model in provider.models {
+            println!("  {:<28} {}", model.model, model.availability_source);
         }
     }
     Ok(())
