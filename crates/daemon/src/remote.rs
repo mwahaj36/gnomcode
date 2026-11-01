@@ -1,6 +1,6 @@
 //! Opt-in outbound encrypted Remote pairing and bounded chat commands.
 
-use crate::remote_trust::{DeviceTrust, IDLE_SECONDS};
+use crate::remote_trust::DeviceTrust;
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -26,12 +26,6 @@ pub enum RemoteError {
     /// No active pairing exists.
     #[error("no active remote pairing")]
     NotPaired,
-    /// The confirmation code does not match.
-    #[error("confirmation code does not match")]
-    WrongCode,
-    /// The pairing has expired.
-    #[error("remote pairing expired")]
-    Expired,
     /// Local device trust could not be saved securely.
     #[error("could not save device trust securely")]
     Persistence,
@@ -52,28 +46,10 @@ pub struct PairingStatus {
     pub room_id: Option<String>,
     /// Desktop ephemeral X25519 public key.
     pub public_key: Option<String>,
-    /// Six-digit code once a phone has joined.
-    pub verify_code: Option<String>,
     /// Relay endpoint used by both devices.
     pub relay_url: Option<String>,
     /// Pairing expiration before confirmation.
     pub expires_at: Option<String>,
-}
-
-impl PairingStatus {
-    /// Temporary owner-scoped locator; encrypted device confirmation still controls access.
-    pub(crate) fn pairing_code(&self) -> Option<String> {
-        if !self.enabled || self.paired || self.remembered {
-            return None;
-        }
-        let expires = chrono::DateTime::parse_from_rfc3339(self.expires_at.as_deref()?).ok()?;
-        if expires <= chrono::Utc::now() {
-            return None;
-        }
-        let room = self.room_id.as_deref()?;
-        let value = u32::from_str_radix(room.get(..8)?, 16).ok()? % 100_000_000;
-        Some(format!("{value:08}"))
-    }
 }
 
 /// One room at a time; replacing or revoking a room closes its connection.
@@ -83,6 +59,10 @@ pub struct RemoteManager {
     discovery_changed: Arc<tokio::sync::Notify>,
     generation: Arc<AtomicU64>,
     persistence: Arc<Mutex<()>>,
+    pub(crate) devices: Arc<crate::account_devices::AccountDevices>,
+    trust_path: Option<std::path::PathBuf>,
+    enrollment_key: Option<String>,
+    controller: std::sync::Weak<crate::account_devices::AccountDevices>,
 }
 
 struct Room {
@@ -103,25 +83,75 @@ struct Room {
     generation: Arc<AtomicU64>,
     expected_generation: u64,
     persistence: Arc<Mutex<()>>,
+    trust_path: std::path::PathBuf,
+    enrollment_key: Option<String>,
+    controller: std::sync::Weak<crate::account_devices::AccountDevices>,
 }
 
 impl RemoteManager {
+    pub(crate) fn for_device(
+        path: std::path::PathBuf,
+        public_key: String,
+        controller: std::sync::Weak<crate::account_devices::AccountDevices>,
+    ) -> Self {
+        Self {
+            trust_path: Some(path),
+            enrollment_key: Some(public_key),
+            controller,
+            ..Self::default()
+        }
+    }
+
+    fn trust_path(&self) -> std::path::PathBuf {
+        self.trust_path
+            .clone()
+            .unwrap_or_else(crate::remote_trust::path)
+    }
+
+    pub(crate) async fn start_device(
+        &self,
+        db: Arc<Mutex<Database>>,
+        room: String,
+    ) -> Result<PairingStatus, RemoteError> {
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let path = self.trust_path();
+        let saved = tokio::task::spawn_blocking(move || match std::fs::read(path) {
+            Ok(bytes) => serde_json::from_slice::<DeviceTrust>(&bytes)
+                .map(Some)
+                .map_err(|_| RemoteError::Persistence),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(RemoteError::Persistence),
+        })
+        .await
+        .map_err(|_| RemoteError::Persistence)??;
+        let trusted = saved.is_some();
+        let identity = if let Some(saved) = saved {
+            saved
+        } else {
+            let mut private = [0; 32];
+            let mut secret = [0; 32];
+            getrandom::fill(&mut private).map_err(|_| RemoteError::Relay)?;
+            getrandom::fill(&mut secret).map_err(|_| RemoteError::Relay)?;
+            DeviceTrust {
+                room,
+                relay: std::env::var("SPAWNT_REMOTE_RELAY_URL").unwrap_or_else(|_| {
+                    "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay".into()
+                }),
+                private,
+                secret,
+                last_activity: chrono::Utc::now().timestamp(),
+            }
+        };
+        self.start_record(db, identity, trusted, generation).await
+    }
+
     /// Creates an empty Remote manager.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Connects outbound to the configured relay and starts fresh pairing.
-    ///
-    /// # Errors
-    /// Returns [`RemoteError`] for missing configuration or failed relay connection.
-    pub async fn start(&self, db: Arc<Mutex<Database>>) -> Result<PairingStatus, RemoteError> {
-        let relay_url = std::env::var("SPAWNT_REMOTE_RELAY_URL")
-            .unwrap_or_else(|_| "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay".to_owned());
-        self.start_with_url(db, relay_url).await
-    }
-
+    #[cfg(test)]
     async fn start_with_url(
         &self,
         db: Arc<Mutex<Database>>,
@@ -149,7 +179,7 @@ impl RemoteManager {
         getrandom::fill(&mut secret).map_err(|_| RemoteError::Relay)?;
         {
             let _gate = self.persistence.lock().await;
-            clear_trust().await?;
+            clear_trust_at(self.trust_path()).await?;
         }
         self.start_record(
             db,
@@ -169,8 +199,9 @@ impl RemoteManager {
     /// Restores unexpired locally protected device trust after a daemon restart.
     pub async fn restore(&self, db: Arc<Mutex<Database>>) -> Result<(), RemoteError> {
         let generation = self.generation.load(Ordering::Acquire);
-        let record = tokio::task::spawn_blocking(|| {
-            std::fs::read(crate::remote_trust::path())
+        let path = self.trust_path();
+        let record = tokio::task::spawn_blocking(move || {
+            std::fs::read(path)
                 .ok()
                 .and_then(|bytes| serde_json::from_slice::<DeviceTrust>(&bytes).ok())
         })
@@ -243,6 +274,9 @@ impl RemoteManager {
             generation: self.generation.clone(),
             expected_generation: generation,
             persistence: self.persistence.clone(),
+            trust_path: self.trust_path(),
+            enrollment_key: self.enrollment_key.clone(),
+            controller: self.controller.clone(),
         });
         let mut current = self.current.lock().await;
         if generation != self.generation.load(Ordering::Acquire) {
@@ -270,48 +304,10 @@ impl RemoteManager {
                 paired: false,
                 room_id: None,
                 public_key: None,
-                verify_code: None,
                 relay_url: None,
                 expires_at: None,
             },
         }
-    }
-
-    /// Confirms the code displayed on the paired phone.
-    ///
-    /// # Errors
-    /// Returns [`RemoteError`] if no phone is present or the code differs.
-    pub async fn confirm(&self, code: &str) -> Result<PairingStatus, RemoteError> {
-        let room = self
-            .current
-            .lock()
-            .await
-            .clone()
-            .ok_or(RemoteError::NotPaired)?;
-        if !room.connected.load(Ordering::Acquire) {
-            return Err(RemoteError::NotPaired);
-        }
-        if chrono::Utc::now() > room.expires_at {
-            return Err(RemoteError::Expired);
-        }
-        let actual = room
-            .channel
-            .lock()
-            .await
-            .as_ref()
-            .map(|channel| channel.verify_code().to_owned())
-            .ok_or(RemoteError::NotPaired)?;
-        if code != actual {
-            return Err(RemoteError::WrongCode);
-        }
-        room.local_confirmed.store(true, Ordering::Release);
-        self.discovery_changed.notify_one();
-        room.outgoing
-            .send(json!({"type":"confirm"}))
-            .await
-            .map_err(|_| RemoteError::Relay)?;
-        room.establish_trust().await?;
-        Ok(room.status().await)
     }
 
     /// Wakes metadata publication when the public pairing offer changes.
@@ -328,7 +324,7 @@ impl RemoteManager {
             let _ = room.cancel.send(true);
         }
         let _gate = self.persistence.lock().await;
-        clear_trust().await?;
+        clear_trust_at(self.trust_path()).await?;
         Ok(previous.is_some())
     }
 }
@@ -347,11 +343,12 @@ impl Room {
             let mut trust = self.identity.clone();
             trust.last_activity = chrono::Utc::now().timestamp();
             let saved = trust.clone();
-            tokio::task::spawn_blocking(move || saved.save())
+            let path = self.trust_path.clone();
+            tokio::task::spawn_blocking(move || saved.save_at(&path))
                 .await
                 .map_err(|_| RemoteError::Persistence)??;
             *trusted = Some(trust.clone());
-            self.outgoing.send(json!({"type":"trusted","secret":crate::remote_trust::hex(&trust.secret),"expires_at":trust.last_activity+IDLE_SECONDS})).await.map_err(|_|RemoteError::Relay)?;
+            self.outgoing.send(json!({"type":"trusted","secret":crate::remote_trust::hex(&trust.secret),"expires_at":null})).await.map_err(|_|RemoteError::Relay)?;
         }
         Ok(())
     }
@@ -367,7 +364,8 @@ impl Room {
             if trust.valid(now) && now - trust.last_activity >= 60 {
                 trust.last_activity = now;
                 let saved = trust.clone();
-                let _ = tokio::task::spawn_blocking(move || saved.save()).await;
+                let path = self.trust_path.clone();
+                let _ = tokio::task::spawn_blocking(move || saved.save_at(&path)).await;
             }
         }
     }
@@ -378,18 +376,9 @@ impl Room {
             .filter(|trust| trust.valid(chrono::Utc::now().timestamp()));
         let remembered = trusted.is_some();
         let connected = self.connected.load(Ordering::Acquire);
-        let verify_code = if remembered {
-            None
-        } else {
-            self.channel
-                .lock()
-                .await
-                .as_ref()
-                .map(|channel| channel.verify_code().to_owned())
-        };
         PairingStatus {
             remembered,
-            trust_expires_at: trusted.map(|trust| trust.last_activity + IDLE_SECONDS),
+            trust_expires_at: None,
             enabled: connected || remembered,
             paired: connected
                 && remembered
@@ -397,7 +386,6 @@ impl Room {
                 && self.phone_confirmed.load(Ordering::Acquire),
             room_id: Some(self.id.clone()),
             public_key: Some(self.public_key.clone()),
-            verify_code,
             relay_url: Some(self.relay_url.clone()),
             expires_at: Some(self.expires_at.to_rfc3339()),
         }
@@ -475,8 +463,8 @@ fn valid_relay(value: &str) -> bool {
         && !value.contains(['?', '#', '&'])
 }
 
-async fn clear_trust() -> Result<(), RemoteError> {
-    tokio::task::spawn_blocking(|| match std::fs::remove_file(crate::remote_trust::path()) {
+async fn clear_trust_at(path: std::path::PathBuf) -> Result<(), RemoteError> {
+    tokio::task::spawn_blocking(move || match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(_) => Err(RemoteError::Persistence),
@@ -532,6 +520,7 @@ async fn run_connection(
                     if value.get("type").and_then(Value::as_str) != Some("hello") { break; }
                     let Some(public) = value.get("public_key").and_then(Value::as_str) else { break; };
                     let public_hex=public.to_owned();
+                    if room.trusted.lock().await.is_none() && room.enrollment_key.as_ref().is_some_and(|key|key!=&public_hex) {break;}
                     let Ok(public) = RemoteKeyPair::parse_public_hex(public) else { break; };
                     let mut nonce=[0;16];if getrandom::fill(&mut nonce).is_err(){break;}
                     let nonce=crate::remote_trust::hex(&nonce);
@@ -554,6 +543,13 @@ async fn run_connection(
                 };
                 let Ok(value) = serde_json::from_slice::<Value>(&plaintext) else { break; };
                 if room.generation.load(Ordering::Acquire)!=room.expected_generation {break;}
+                if value.get("type").and_then(Value::as_str)==Some("enroll") {
+                    if room.enrollment_key.is_none() || room.trusted.lock().await.is_some() {break;}
+                    room.local_confirmed.store(true,Ordering::Release);
+                    room.phone_confirmed.store(true,Ordering::Release);
+                    if room.establish_trust().await.is_err(){break;}
+                    continue;
+                }
                 if value.get("type").and_then(Value::as_str)==Some("resume") {
                     let trusted=room.trusted.lock().await;
                     if !trusted.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp()) && trust.verify(&resume_context,value.get("proof").and_then(Value::as_str).unwrap_or(""))) {drop(trusted);let _=room.outgoing.send(json!({"type":"resume_rejected"})).await;continue;}
@@ -561,20 +557,15 @@ async fn run_connection(
                     room.local_confirmed.store(true,Ordering::Release);room.phone_confirmed.store(true,Ordering::Release);room.discovery_changed.notify_one();
                     let _=room.outgoing.send(json!({"type":"resumed"})).await;continue;
                 }
-                if value.get("type").and_then(Value::as_str) == Some("confirm") {
-                    if room.trusted.lock().await.is_some(){break;}
-                    room.phone_confirmed.store(true, Ordering::Release);
-                    room.discovery_changed.notify_one();
-                    if room.establish_trust().await.is_err(){break;}
-                    continue;
-                }
                 if !(room.local_confirmed.load(Ordering::Acquire)
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
                 if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
-                let mut response = dispatch(db, value).await;
+                let mut response = if matches!(request_type.as_str(),Some("devices"|"approve_device"|"revoke_device")) {
+                    if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
+                } else {dispatch(db, value).await};
                 if response.get("type").and_then(Value::as_str) == Some("error") { response["request_type"] = request_type; }
                 if room.outgoing.send(response).await.is_err() { break; }
             }
@@ -1305,19 +1296,85 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pairing_confirms_both_peers_and_serves_encrypted_sessions() {
+    async fn an_unapproved_key_cannot_receive_an_enrollment_credential() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let address = listener.local_addr().expect("address");
+        let relay = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.expect("desktop");
+            let desktop = tokio_tungstenite::accept_async(tcp)
+                .await
+                .expect("desktop socket");
+            let (tcp, _) = listener.accept().await.expect("phone");
+            let phone = tokio_tungstenite::accept_async(tcp)
+                .await
+                .expect("phone socket");
+            let (mut desktop_out, mut desktop_in) = desktop.split();
+            let (mut phone_out, mut phone_in) = phone.split();
+            loop {
+                tokio::select! {
+                    message=desktop_in.next()=>{let Some(Ok(message))=message else{break;};if phone_out.send(message).await.is_err(){break;}}
+                    message=phone_in.next()=>{let Some(Ok(message))=message else{break;};if desktop_out.send(message).await.is_err(){break;}}
+                }
+            }
+        });
+        let home = tempfile::tempdir().expect("home");
+        let path = home.path().join("trust.json");
+        let approved = RemoteKeyPair::from_private([5; 32]);
+        let attacker = RemoteKeyPair::from_private([6; 32]);
+        let manager = RemoteManager::for_device(
+            path.clone(),
+            approved.public_key_hex(),
+            std::sync::Weak::new(),
+        );
+        let base = format!("ws://{address}/relay");
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
+        let status = manager
+            .start_with_url(db, base.clone())
+            .await
+            .expect("approved room");
+        let (mut phone, _) = tokio_tungstenite::connect_async(format!(
+            "{base}/{}?role=phone",
+            status.room_id.expect("room")
+        ))
+        .await
+        .expect("phone");
+        phone
+            .send(Message::Binary(
+                serde_json::to_vec(&json!({"type":"hello","public_key":attacker.public_key_hex()}))
+                    .expect("hello")
+                    .into(),
+            ))
+            .await
+            .expect("hello");
+        let response = tokio::time::timeout(std::time::Duration::from_secs(2), phone.next())
+            .await
+            .expect("rejected promptly");
+        assert!(
+            !matches!(response, Some(Ok(Message::Binary(_)))),
+            "an unapproved key must receive no handshake or credential"
+        );
+        assert!(!path.exists(), "unapproved peers must not create trust");
+        assert!(!manager.status().await.paired);
+        relay.abort();
+    }
+
+    #[tokio::test]
+    async fn approved_device_enrolls_without_codes_and_resumes_after_restart() {
         if std::env::var_os("SPAWNT_TEST_ISOLATED_PAIRING").is_none() {
             let home = tempfile::tempdir().expect("isolated pairing home");
-            let output =
-                std::process::Command::new(std::env::current_exe().expect("test executable"))
-                    .args([
-                        "--exact",
-                        "remote::tests::pairing_confirms_both_peers_and_serves_encrypted_sessions",
-                    ])
-                    .env("SPAWNT_HOME", home.path())
-                    .env("SPAWNT_TEST_ISOLATED_PAIRING", "1")
-                    .output()
-                    .expect("isolated pairing test");
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("test executable"),
+            )
+            .args([
+                "--exact",
+                "remote::tests::approved_device_enrolls_without_codes_and_resumes_after_restart",
+            ])
+            .env("SPAWNT_HOME", home.path())
+            .env("SPAWNT_TEST_ISOLATED_PAIRING", "1")
+            .output()
+            .expect("isolated pairing test");
             assert!(
                 output.status.success(),
                 "{} {}",
@@ -1356,7 +1413,12 @@ mod tests {
                 }
             }
         });
-        let mut manager = Arc::new(RemoteManager::new());
+        let phone_keys = RemoteKeyPair::from_private([23; 32]);
+        let mut manager = Arc::new(RemoteManager::for_device(
+            crate::remote_trust::path(),
+            phone_keys.public_key_hex(),
+            std::sync::Weak::new(),
+        ));
         let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
         // Network verification is explicit; normal test runs stay on loopback.
         let base = std::env::var("SPAWNT_TEST_REMOTE_RELAY_URL")
@@ -1372,8 +1434,6 @@ mod tests {
             tokio_tungstenite::connect_async(format!("{base}/{room}?role=phone"))
                 .await
                 .expect("phone connect");
-        let phone_keys = RemoteKeyPair::from_private([23; 32]);
-
         phone_socket
             .send(Message::Binary(
                 serde_json::to_vec(
@@ -1395,40 +1455,9 @@ mod tests {
         let mut phone_channel =
             RemoteChannel::new(&phone_keys, desktop_public, &context, PeerRole::Phone)
                 .expect("channel");
-        tokio::time::timeout(std::time::Duration::from_secs(2), async {
-            loop {
-                if manager.status().await.verify_code.is_some() {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("desktop derived code");
-        assert_eq!(
-            manager.status().await.verify_code.as_deref(),
-            Some(phone_channel.verify_code())
-        );
-        assert!(!manager.status().await.paired);
-        manager
-            .confirm(phone_channel.verify_code())
-            .await
-            .expect("desktop confirm");
-        let bytes = phone_socket
-            .next()
-            .await
-            .expect("desktop confirmation frame")
-            .expect("websocket frame")
-            .into_data();
-        let frame: EncryptedRemoteFrame = serde_json::from_slice(&bytes).expect("encrypted frame");
-        let chunk: Value =
-            serde_json::from_slice(&phone_channel.open(&frame).expect("decrypt")).expect("chunk");
-        let confirmed: Value =
-            serde_json::from_str(chunk["data"].as_str().expect("data")).expect("confirmation");
-        assert_eq!(confirmed["type"], "confirm");
         assert!(!manager.status().await.paired);
         let phone_confirm = phone_channel
-            .seal(br#"{"type":"confirm"}"#)
+            .seal(br#"{"type":"enroll"}"#)
             .expect("seal confirm");
         phone_socket
             .send(Message::Binary(

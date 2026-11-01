@@ -52,13 +52,13 @@ Adapter inventory originally inspected on 2026-10-26. This table describes sourc
 
 | Agent | Tier | Source | Tokens | Model | Quota | Live state |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Claude Code** (CLI + IDE) | A (M1) | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | exact (incl. 5m/1h cache-write split) | Yes | estimated or unknown; no subscription-token API | heuristic → exact with hooks |
+| **Claude Code** (CLI + IDE) | A (M1) | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | recorded when present (incl. cache-write split) | Sometimes | unknown; adapter emits no quota snapshots | heuristic → exact with hooks |
 | **Codex CLI + ChatGPT / Codex Desktop App** | A (M1) | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`; `session_meta.payload.originator` distinguishes `"Codex Desktop"` vs CLI vs VS Code) | exact (`last_token_usage`) | Yes (`provenance.model`) | **exact** (`rate_limits` 5h + weekly per `limit_id`) | heuristic |
-| **Antigravity** (app / IDE / CLI) | A (M1) | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | exact per `PLANNER_RESPONSE` | Yes extracted from `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps | per-model pool (`limit_id` per model family: Claude, Gemini, Fable, etc.) | heuristic |
-| **Gemini CLI** | A (M1) | `~/.gemini/tmp/<hash>/chats/` + `~/.gemini/` | exact | Yes | per-model pool | heuristic |
-| **Cline / Roo Code** | B (M4) | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | exact (`api_req_started`) | Yes | n/a (API) | heuristic |
-| **Cursor** | C (experimental, opt-in) | `Cursor/User/globalStorage` / compatible transcript exports | partial | partial | unknown | heuristic where recorded |
-| **Aider** | C (opt-in) | `--analytics-log <file>` | exact | Yes | n/a | No |
+| **Antigravity** (app / IDE / CLI) | A (M1) | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | recorded per `PLANNER_RESPONSE` when present | Sometimes, from settings/fallback | unknown; adapter emits no quota snapshots | heuristic |
+| **Gemini CLI** | A (M1) | `~/.gemini/tmp/<hash>/chats/` + `~/.gemini/` | recorded when present | Sometimes | unknown; adapter emits no quota snapshots | heuristic |
+| **Cline / Roo Code** | B (M4) | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | partial (`api_req_started`; missing fields can become zero) | Sometimes | unknown; adapter emits no quota snapshots | heuristic |
+| **Cursor** | C (experimental) | `Cursor/User/globalStorage` / compatible transcript exports | partial | partial | unknown | heuristic where recorded |
+| **Aider** | C (opt-in) | `AIDER_ANALYTICS_LOG` file/directory; configure Aider recording separately | partial; missing fields can become zero | Sometimes | unknown; adapter emits no quota snapshots | No |
 
 The A/B/C labels are historical adapter priorities, not release guarantees. Actual discovery and record coverage vary by installed version. No undocumented provider API is approved by this inventory.
 
@@ -104,7 +104,7 @@ Windows setup is per-user and waits for an explicit Install action. Choose a ded
 
 Cursor JSON discovery is not proof of a conversation: require a supported messages/conversation array with a recorded user/assistant timestamp. Never substitute ingestion time for missing Cursor timestamps or infer a running process from an imported transcript; such exports are saved/ended history, and missing models remain unknown. Store-open maintenance removes only legacy idle Cursor placeholders without model/title/PID/parent, events, conversation bindings, resume/alert/relay references or children. Keep all evidence-bearing history and agent-owned files.
 
-Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
+Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Discover Aider only when `AIDER_ANALYTICS_LOG` explicitly names an existing supported log file or directory. Aider command activity uses a generic tool name and redacts the command summary before persistence. Missing model identifiers remain unknown rather than being guessed. Cursor roots are automatically discovered when present. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
 
 ### 3.6 Storage and local conversation
 
@@ -112,7 +112,9 @@ Default SQLite: `~/.spawnt/state.db`, or `SPAWNT_HOME/state.db`; CLI `--db` may 
 
 Schema v9 adds local-only conversation membership, ordered native/host bindings, requested model and launch metadata, and pending-context delivery state. These mappings contain no credentials and are excluded from metadata sync. Retain them across restarts and chat deletion so routing does not resurrect deleted chat. Chat deletion removes rows for every linked native/host identity; retention applies to all chat rows under the existing timestamp policy. Agent-owned logs remain untouched.
 
-Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; retention primitives exist, but configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; directory browsing is bounded and not persisted.
+Schema v10 records SHA-256 digests of deleted event IDs as local tombstones, atomically with manual deletion and retention pruning. Both direct chat insertion and source ingestion reject tombstoned IDs while accepting new IDs. Tombstones remain until the local database is reset, are excluded from account sync, and contain no raw identifier or chat content. Digests are unsalted and may reveal predictable identifiers; apply the same local access controls as the database. They protect stable event identities, not changed IDs, older backups, agent-owned history or a database reset. Migration preserves existing data and cannot reconstruct tombstones for past deletions. Older Spawnt binaries ignore tombstones; restart all Spawnt processes on the updated version.
+
+Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; label metadata-only search and explain that deletion does not remove session titles, agent logs or backups and that changed source identifiers, restored backups or database resets can reimport deleted messages. Retention primitives compare timestamps as instants but are not automatically scheduled; configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; Git diff and status output each have a 1 MiB limit and a ten-second timeout, with failures surfaced rather than empty success. Untracked files appear in status, not diff content. Directory browsing is bounded and not persisted.
 
 ### 3.7 Session and conversation state
 
@@ -138,7 +140,7 @@ Track provider/window/model pools independently. Codex recorded `rate_limits` su
 
 ### 3.10 Guardrails and local automation
 
-Local rules, alerts and loop/budget controls are free. Hook actions must fail open and never bypass official permissions. Keep spend estimates distinct from billing. Native automation acceptance remains provider/version-specific.
+Local rules, alerts and loop/budget controls are free. Hard-stop rules attempt to block only Claude Code tool calls through its installed hook; other agents receive alerts only. Hooks fail open and never bypass official permissions. Expose these limits and distinguish estimated spend from billing. Native automation acceptance remains provider/version-specific.
 
 ### 3.11 Local API and shell security
 
@@ -146,7 +148,7 @@ Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electr
 
 ### 3.12 Platform scope
 
-Windows, macOS and Linux are required design targets. Current recorded local packaged acceptance is Windows. macOS/Linux and architecture-specific release acceptance remain open. Use platform-resolved paths/env overrides; all OS-specific Rust code belongs in platform. Document fallback instead of silently omitting support.
+Windows, macOS and Linux are required design targets. Current recorded local packaged acceptance is Windows. macOS/Linux and architecture-specific release acceptance remain open. Use platform-resolved paths/env overrides; canonicalize ordinary Git roots as well as worktree roots so path aliases identify the same project. All OS-specific Rust code belongs in platform. Document fallback instead of silently omitting support.
 
 ### 3.13 Focus and desktop chrome
 
@@ -154,7 +156,7 @@ Use native focus integration where available and document Wayland/unsupported fa
 
 ### 3.14 Resume and routing
 
-Resume Queue and routing are free local features. Policies include `ask_first`, `automatic` and `deny_cross_provider`; legacy Context Relay has its own configuration. Respect eligibility, native approval and unique host binding. Do not promise replay of arbitrary original prompt text: the legacy privacy transition stopped storing custom queue prompts. Verify real quota-reset/native resume behavior before claiming universal automatic continuation.
+Resume Queue and routing are free local features. Policies include `ask_first`, `automatic` and `deny_cross_provider`; legacy Context Relay has its own configuration. Require a known quota observation recorded at or after the eligibility time, with a valid percentage, before resuming; reject future observations. Respect native approval and unique host binding. Do not promise replay of arbitrary original prompt text: the legacy privacy transition stopped storing custom queue prompts. Verify real quota-reset/native resume behavior before claiming universal automatic continuation.
 
 ### 3.14.1 Handoff
 
@@ -170,11 +172,13 @@ The laptop must be awake, connected and running Spawnt for mobile interaction. R
 
 ### 3.15 Optional account sync and encrypted Remote
 
-These are separate data channels. Existing opt-in Supabase snapshot sync is owner-scoped and not end-to-end encrypted. Current `build_remote_snapshot` includes reports/timelines, profile, session records, quota and automation/relay metadata. Project names/stored labels and relay workspace metadata can be present. HMAC project-key helpers do not make this live payload hash-only. Chat events and derived opening-prompt titles must not enter metadata sync. A field-level allowlist/consent review and two-account RLS acceptance block launch.
+These are separate data channels. Existing opt-in Supabase snapshot sync is owner-scoped and not end-to-end encrypted. Current `build_remote_snapshot` includes reports/timelines, explicitly selected session fields and quota. Project names, session IDs and model/activity metadata can be sensitive. Session titles, profile, relay records and chat events are excluded. HMAC project-key helpers do not make this live payload hash-only. Publish the true session total while the account list is limited to 200; the web view must identify that limit and filter only those published records. Disclose the snapshot contents and lack of end-to-end encryption before account connection. Verify historical cloud copies, consent and two-account RLS before launch.
 
-Remote uses the public Cloudflare Durable Object relay at `wss://spawnt-remote-relay.mwahaj25.workers.dev/relay`, overridable by `SPAWNT_REMOTE_RELAY_URL`. Outbound TLS carries E2EE frames; the daemon still listens only on loopback. Pairing uses an owner-only five-minute offer, eight-digit discovery code and separate six-digit matching-code confirmation. Phone enters the discovery code while signed into the same account; desktop verifies the phone security code and both confirm.
+Remote uses the public Cloudflare Durable Object relay at `wss://spawnt-remote-relay.mwahaj25.workers.dev/relay`, overridable by `SPAWNT_REMOTE_RELAY_URL`. Outbound TLS carries E2EE frames; the daemon still listens only on loopback. Account-linked desktops register independently in the owner-only device directory. Browsers request access with a nonexportable X25519 key. An authenticated desktop or an already approved browser approves the selected request with one action. No discovery code, matching-code exchange or phone confirmation is required. Only locally approved, pinned keys authorize enrollment; cloud approval labels alone grant no control. Each browser/desktop connection has its own room and credential. See ADR 0025 for the deliberate first-enrollment trust in account discovery.
 
-Remembered trust (ADR 0021) uses owner-only desktop storage and a browser nonexportable IndexedDB HMAC proof key. Seven inactive days expire trust; polling does not renew it. Fresh phone keys and a desktop challenge bind directional encryption on reconnect. Serialized revocation and generation checks prevent stale writes restoring trust. Reload/background reconnect preserves the selected conversation, visible in-memory history and draft. The browser probes on foreground/network return and retries a socket with no authenticated desktop replies for 15 seconds; an open relay socket alone is not evidence of desktop reachability. Recovery retains a disabled composer and visible navigation with Try again, Dashboard and Profile. No automatic replay of an unacknowledged prompt.
+Device trust lasts until revocation, account disconnect or removal of browser credentials; updates and inactivity do not expire it. Owner-only desktop records live under `SPAWNT_HOME/remote-devices/<owner>/`, outside installation folders. A nonexportable browser HMAC key proves reconnect authorization. Fresh phone keys and a desktop challenge bind directional encryption on reconnect. Serialized revocation and generation checks prevent stale writes restoring trust. The browser rediscovers its account connection, checks authenticated desktop reachability after 15 seconds, and stops automatic retries after 30 seconds with an explicit unavailable state and Try again. Reload/background reconnect preserves the selected conversation, visible in-memory history and draft. No automatic replay of an unacknowledged prompt. Cloud revocation is applied on the next successful directory poll; local revocation closes the room immediately. Legacy saved credentials remain readable, but code-based enrollment endpoints are removed.
+
+Directory rows contain only owner/device IDs, generic device labels, public keys, relay locators, approval/revocation display state and timestamps. They never contain conversation content, prompts, proof credentials or filesystem paths. Session discovery stays on each online host over authenticated E2EE. Directory failure prevents new enrollment and is visible in Devices.
 
 Paired commands include history paging, live subsequent responses, supported CLI launch, initial/follow-up prompts and bounded directory browsing. Imported history is labeled read-only. Prompting requires unique live ownership and observed idle/approval restrictions, including the first prompt before native history exists. No remote shell, credential access or permission escalation. Chat travels only through E2EE, never metadata sync.
 
@@ -204,7 +208,7 @@ Follow [AGENTS](../AGENTS.md), installed engineering skills and relevant ADRs. R
 | M6 launcher/terminal | Independent owner, official CLI launch and local xterm | Real provider and cross-platform lifecycle checks |
 | M7 chat/file/diff | Redacted local history, safe chat and inspection | Retention/deletion acceptance |
 | M8 routing/handoff | Continuous conversations, native named-model controls, hidden cross-provider context and saved-session resume | Authenticated cross-model/provider outcome confirmation |
-| M9 encrypted Remote | Relay, pairing, remembered trust and bounded commands | Physical phone, independent security and owner production approval |
+| M9 encrypted Remote | Account desktop discovery, code-free approval, durable trust and bounded commands | Physical phone, independent security and owner production approval |
 | Marketing/documentation | Outcome-first positioning, guide/legal routes and SEO in this phase | Production crawl checks and legal approval |
 
 v1.0 criteria are not met. See [LAUNCH_CHECKLIST](LAUNCH_CHECKLIST.md) for blockers, causes, closure steps and evidence. Historical green checks are not new verification for this phase.
@@ -270,7 +274,9 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0019](./adr/0019-remote-e2ee-relay.md) | End-to-end encrypted remote access, zero-knowledge Cloudflare relay room, ephemeral SAS verification, and mobile companion | Accepted |
 | [0020](./adr/0020-account-pairing-discovery.md) | Owner-only discovery of temporary public Remote offers; two-device verification retained | Accepted |
 | [0021](./adr/0021-remembered-remote-device-trust.md) | Remembered Remote trust, challenge-bound reconnect and seven-day activity expiry | Accepted |
+| [0025](./adr/0025-account-device-approval.md) | Account desktop discovery, code-free device approval and durable per-device trust | Accepted |
 | [0022](./adr/0022-continuous-conversations-and-native-resume.md) | Stable local conversation identity, native model controls, hidden context and exact native resume | Accepted |
+| [0023](./adr/0023-deleted-chat-replay-markers.md) | Local hashed markers prevent stable-ID replay after chat deletion or retention | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

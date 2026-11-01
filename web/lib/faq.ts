@@ -63,7 +63,7 @@ export const faqGroups = [
     "questions": [
       {
         "question": "How do I pair my phone?",
-        "answer": "Use the desktop eight-digit discovery code while signed into the same account on the phone. Then enter the separate phone security code on desktop and confirm on both devices."
+        "answer": "Sign in to the same account, select your desktop in Devices and approve the access request on that desktop or an approved browser. No pairing codes are needed."
       },
       {
         "question": "Is Remote independently security approved?",
@@ -79,7 +79,7 @@ export const faqGroups = [
       },
       {
         "question": "Does pairing survive a reload?",
-        "answer": "Remembered trust reconnects after reload/backgrounding with fresh connection keys. It expires after seven inactive days; desktop revocation or browser forgetting/sign-out removes access."
+        "answer": "Approval survives updates, reloads and inactivity. Reconnect uses fresh encrypted keys. Revoke access or sign out to remove the browser credential."
       }
     ]
   },

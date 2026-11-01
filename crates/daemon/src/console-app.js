@@ -308,7 +308,7 @@ function cycleTheme() {
                 <td>${escapeHtml(r.agent || 'All Agents')}</td>
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) + ' EXACT' : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns + ' EXACT' : 'None'}</td>
-                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${escapeHtml(r.action)}</span></td>
+                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${r.action === 'HardStop' ? 'Claude hook stop; other agents alert' : escapeHtml(r.action)}</span></td>
                 <td><button class="btn-control" data-action="delete-rule" data-arg="${escapeHtml(r.id)}">Delete</button></td>
               </tr>
             `).join('');
@@ -326,7 +326,7 @@ function cycleTheme() {
               <tr>
                 <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(a.session_id)}</td>
                 <td style="font-weight: 600;">${escapeHtml(a.rule_id)}</td>
-                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${escapeHtml(a.action)}</span></td>
+                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${a.action === 'hard_stop' ? 'Stop requested (Claude hook only)' : escapeHtml(a.action)}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(a.created_at)}</td>
               </tr>
             `).join('');
@@ -1073,7 +1073,7 @@ function cycleTheme() {
     }
 
     async function deleteChat() {
-      if (!activeChatSession || !await confirmAction('Permanently delete local chat history for this session? This action cannot be undone.', 'Delete history')) return;
+      if (!activeChatSession || !await confirmAction('Delete Spawnt’s local chat history for this session? Session titles, agent-owned logs and backups are not deleted; SQLite files may retain remnants. Changed source IDs, restored backups or a database reset can reimport messages.', 'Delete history')) return;
       const sessionId = activeChatSession;
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });
@@ -1192,6 +1192,17 @@ function cycleTheme() {
     }
 
     let accountWriteBusy = false;
+    async function signInAccount(){
+      if(accountWriteBusy)return;
+      accountWriteBusy=true;
+      const button=document.getElementById('auth-signin-button'),password=document.getElementById('auth-password'),status=document.getElementById('auth-pair-status');
+      button.disabled=true;button.textContent='Signing in...';status.hidden=false;
+      try{
+        await apiJson('/api/v1/auth/signin',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('auth-email').value.trim(),password:password.value}),signal:AbortSignal.timeout(15000)});
+        password.value='';status.textContent='Signed in. Your desktop will appear in Devices.';await checkAuthSession();
+      }catch{status.textContent='Sign-in failed. Check your email, password and connection. Browser accounts can use the connection option below.';}
+      finally{accountWriteBusy=false;button.disabled=false;button.textContent='Sign in';}
+    }
     async function pairTokenDirectly() {
       if (accountWriteBusy) return;
       const input = document.getElementById('auth-token-input');
@@ -1434,57 +1445,34 @@ function cycleTheme() {
 
     let remoteWasPaired = null;
     let remoteNoticeTimer;
-    let remotePairingMarkup = '';
-    function showRemoteStatus(status) {
-      const badge = document.getElementById('remote-connection-state');
-      if (remoteWasPaired !== null && Boolean(status.paired) !== remoteWasPaired) {
-        remoteWasPaired = Boolean(status.paired);
-        document.getElementById('remote-connection-message').textContent = status.paired ? 'Phone connected' : 'Phone disconnected';
-        badge.hidden = false;
-        clearTimeout(remoteNoticeTimer);
-        remoteNoticeTimer = setTimeout(() => { badge.hidden = true; }, 5000);
-      }
-      remoteWasPaired = Boolean(status.paired);
-      document.getElementById('remote-confirmation').hidden = !status.verify_code || status.paired || status.remembered;
-      const output = document.getElementById('remote-status');
-      const link = document.getElementById('remote-link');
-      if (!output || !link) return;
-      output.textContent = status.remembered && !status.paired ? 'Device remembered. Waiting for the phone to reconnect.' : !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? 'Enter the six-digit security code shown on your phone.' : 'Waiting for the code to be entered on the web.';
-      if (!status.paired && !status.remembered && !status.verify_code && status.room_id && status.public_key && status.relay_url) {
-        const markup = `<div class="desktop-pairing-code"><label for="desktop-pairing-code">Enter this code in web Profile</label><input id="desktop-pairing-code" readonly value="${escapeHtml(status.pairing_code || '')}" aria-label="Desktop pairing code"><small>Expires in five minutes. Sign in to the same account on both devices.</small></div>`;
-        if (remotePairingMarkup !== markup) { link.innerHTML = markup; remotePairingMarkup = markup; }
-      } else if (remotePairingMarkup) { link.textContent = ''; remotePairingMarkup = ''; }
-
-    }
-
+    let remoteDevicesMarkup = '';
     async function loadRemoteStatus() {
-      try { showRemoteStatus(await apiJson('/api/v1/remote/status', { headers })); }
-      catch { document.getElementById('remote-status').textContent = 'Remote status unavailable.'; document.getElementById('remote-connection-state').hidden = true; }
-    }
-
-    async function startRemote() {
-      try { showRemoteStatus(await apiJson('/api/v1/remote/pairing', { headers })); }
-      catch { document.getElementById('remote-status').textContent = 'Could not start pairing. Check your Pro account and internet connection, then retry.'; }
-    }
-
-    async function confirmRemote() {
-      const code = document.getElementById('remote-code').value.trim();
-      if (!/^\d{6}$/.test(code)) { document.getElementById('remote-status').textContent = 'Enter the six-digit code shown on both devices.'; return; }
       try {
-        showRemoteStatus(await apiJson('/api/v1/remote/confirm', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }));
-        document.getElementById('remote-code').value = '';
-      } catch { document.getElementById('remote-status').textContent = 'Codes did not match or pairing expired.'; }
+        const result=await apiJson('/api/v1/remote/devices',{headers});
+        const connected=result.devices.some(device=>device.connected);
+        if(remoteWasPaired!==null && connected!==remoteWasPaired){
+          document.getElementById('remote-connection-message').textContent=connected?'Device connected':'Device disconnected';
+          const badge=document.getElementById('remote-connection-state');badge.hidden=false;
+          clearTimeout(remoteNoticeTimer);remoteNoticeTimer=setTimeout(()=>{badge.hidden=true;},5000);
+        }
+        remoteWasPaired=connected;
+        document.getElementById('remote-status').textContent=result.directory_error?'Device discovery is unavailable. Check your connection.':!result.desktop_id?'Sign in to your account to make this desktop available.':result.devices.length?'Manage devices approved to use this desktop.':'Your desktop appears on signed-in devices. Open it on your phone to request access.';
+        const markup=result.devices.map(device=>`<div class="sp-device-row"><div><strong>${escapeHtml(device.name)}</strong><p>${device.state==='pending'?'Approval requested':device.connected?'Connected':'Approved'}</p></div><button type="button" class="btn-control" data-action="remote-device" data-device-id="${escapeHtml(device.id)}" data-device-key="${escapeHtml(device.public_key)}" data-device-operation="${device.state==='pending'?'approve_device':'revoke_device'}">${device.state==='pending'?'Approve':'Revoke'}</button></div>`).join('');
+        if(markup!==remoteDevicesMarkup){document.getElementById('remote-link').innerHTML=markup;remoteDevicesMarkup=markup;}
+      }catch{document.getElementById('remote-status').textContent='Devices unavailable. Reload to try again.';}
     }
-
-    async function revokeRemote() {
-      try { await apiJson('/api/v1/remote/revoke', { method: 'POST', headers }); await loadRemoteStatus(); }
-      catch { document.getElementById('remote-status').textContent = 'Could not revoke remote connection.'; }
+    async function manageRemoteDevice(target){
+      target.disabled=true;
+      try{await apiJson('/api/v1/remote/devices',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({type:target.dataset.deviceOperation,id:target.dataset.deviceId,public_key:target.dataset.deviceKey})});await loadRemoteStatus();}
+      catch{document.getElementById('remote-status').textContent='Could not update device access. Refresh Devices and retry.';}
+      finally{target.disabled=false;}
     }
 
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-action]');
       if (!target) return;
       const action = target.dataset.action;
+      if(action==='remote-device'){void manageRemoteDevice(target);return;}
       if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); if (event.detail && matchMedia('(max-width:760px)').matches) document.querySelector('.view-content.active')?.focus({preventScroll:true}); return; }
       if (action.startsWith('export:')) { exportData(action.slice(7)); return; }
     async function handlePermissionAction(sessionId, action, toolCallId) {
@@ -1512,7 +1500,7 @@ function cycleTheme() {
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
-        'remote-start': startRemote, 'remote-confirm': confirmRemote, 'remote-revoke': revokeRemote };
+ };
       if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
@@ -1541,7 +1529,8 @@ function cycleTheme() {
       const form = event.target.closest('[data-submit]');
       if (!form) return;
       const submit = form.dataset.submit;
-      if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
+      if (submit === 'signin') { event.preventDefault(); signInAccount(); }
+      else if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
       else if (submit === 'launch-agent') { event.preventDefault(); launchNewAgent(event); }
       else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
     });

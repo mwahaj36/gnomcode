@@ -510,3 +510,8 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 @media(hover:hover) and (pointer:fine) and (max-width:760px){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
 .sp-activity-heading{flex-wrap:wrap}.sp-activity-heading>div{min-width:0;max-width:100%}.sp-activity-totals{min-width:0;max-width:100%}.sp-activity-bars{box-sizing:border-box;width:100%}
 .sp-remote .remote-folder-modal footer button.sp-primary-action{background:var(--sp-primary);color:var(--sp-on-primary);border-color:transparent}
+
+.sp-device-row {display:flex;align-items:center;justify-content:space-between;gap:var(--sp-space-4,16px);padding:16px 0;border-bottom:1px solid var(--sp-border);}
+.sp-device-row > div {min-width:0;overflow-wrap:anywhere;}
+.sp-device-row p {margin:4px 0 0;}
+.sp-device-row button {flex-shrink:0;min-height:44px;}

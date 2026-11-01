@@ -8,7 +8,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const {WebSocketServer} = createRequire(new URL('../web/package.json',import.meta.url))('next/dist/compiled/ws');
 const writes = [];
 const errors = [];
-let remotePaired = false;
+let remotePaired = false, remoteApproved=true;
 const session = { id:'codex:sample', title:'Review authentication', agent:'codex', model:'gpt-6.1-sol', state:'idle', last_event_at:new Date().toISOString() };
 const staticFiles = {
   '/':'crates/daemon/src/console.html', '/theme-init.js':'crates/daemon/src/theme-init.js', '/console-app.js':'crates/daemon/src/console-app.js',
@@ -34,7 +34,10 @@ const server = createServer(async (request, response) => {
     ...(writes.some(write => write.path.endsWith('/launch')) ? [{session_id:'codex-launched',agent:'codex',title:'Picked workspace',repo_path:'C:\\workspace\\picked',started_at:session.last_event_at}] : []),
   ] };
   else if (url.pathname === '/api/v1/projects') value = [];
-  else if (url.pathname === '/api/v1/remote/status') value = {enabled:true,paired:remotePaired};
+  else if(url.pathname==='/api/v1/remote/devices'){
+    if(request.method==='POST' && JSON.parse(body).type==='approve_device')remoteApproved=true;
+    value={desktop_id:'d'.repeat(32),devices:[{id:'a'.repeat(32),name:'Phone browser',public_key:'b'.repeat(64),state:remoteApproved?'approved':'pending',connected:remotePaired}]};
+  }
   else if (url.pathname.endsWith('/terminal')) value = {session_id:'terminal-test',repo_path:'C:\\workspace\\demo'};
   else if (url.pathname === '/api/v1/model-catalog') value = {providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{model:'@default',agent:'codex',display_name:'Codex default'},{model:'gpt-6.1-sol',agent:'codex',display_name:'GPT 6.1'},{model:'o3',agent:'codex',display_name:'OpenAI o3'}]}]};
   else if (url.pathname.endsWith('/chat')) value = [
@@ -62,13 +65,14 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
 try {
   const page = await browser.newPage({ viewport:{width:1440,height:1000} });
+  page.setDefaultTimeout(15000);
   await page.addInitScript(() => { window.spawntDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?token=test#sessions`);
   assert.equal(await page.getByRole('button',{name:'Pin navigation',exact:true}).count(),0,'navigation has a single predictable toggle');
   await page.getByRole('button', {name:/Review authentication/}).click();
   await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
-  await page.waitForFunction(() => document.getElementById('remote-status').textContent.includes('Waiting for the code'));
+  await page.waitForFunction(() => document.getElementById('remote-status').textContent.includes('Manage devices'));
   assert.equal(await page.locator('#remote-connection-state').isVisible(),false,'initial connection status must not create a toast');
   remotePaired = true;
   await page.locator('#remote-connection-state').waitFor({state:'visible'});
@@ -191,6 +195,12 @@ try {
   await page.keyboard.press('End');
   assert.equal(await page.locator('#tab-btn-settings').getAttribute('aria-selected'), 'true', 'keyboard navigation returns to Profile');
   await page.getByRole('button', {name:'Manage account'}).click();
+  await page.locator('#auth-email').fill('test@example.invalid');
+  await page.locator('#auth-password').fill('synthetic-password');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.waitForFunction(()=>document.getElementById('auth-password').value==='');
+  assert.deepEqual(writes.filter(write=>write.path==='/api/v1/auth/signin').at(-1).body,{email:'test@example.invalid',password:'synthetic-password'});
+  await page.getByText('Connect an existing browser account',{exact:true}).click();
   const tokenInput = page.locator('#auth-token-input');
   await tokenInput.fill('example-token');
   await page.getByRole('button', {name:'Show token'}).click();
@@ -202,8 +212,12 @@ try {
   await page.mouse.move(1000, 500);
   await page.waitForTimeout(250);
   await page.screenshot({path:new URL('../.tmp/ide-verification/profile-dark-1440.png', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-  await page.evaluate(() => {const status={enabled:true,paired:false,room_id:'a'.repeat(32),public_key:'b'.repeat(64),relay_url:'wss://relay.example/relay',pairing_code:'63311530'};showRemoteStatus(status);document.getElementById('desktop-pairing-code').focus();document.getElementById('desktop-pairing-code').select();window.pairingNode=document.getElementById('desktop-pairing-code');showRemoteStatus(status);});
-  assert.equal(await page.locator('#desktop-pairing-code').evaluate(node=>node===window.pairingNode && node.selectionEnd-node.selectionStart===8),true,'status polling preserves code selection for copying');
+  remoteApproved=false;
+  await page.getByRole('button',{name:'Approve',exact:true}).waitFor();
+  assert.equal(await page.locator('#remote-code,#desktop-pairing-code').count(),0,'native approval never asks for codes');
+  await page.getByRole('button',{name:'Approve',exact:true}).click();
+  await page.getByRole('button',{name:'Revoke',exact:true}).waitFor();
+  assert.deepEqual(writes.filter(write=>write.path==='/api/v1/remote/devices').at(-1).body,{type:'approve_device',id:'a'.repeat(32),public_key:'b'.repeat(64)});
   await page.route('**/api/v1/model-catalog', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{agent:'codex',model:'@default',display_name:'Codex default'}]}]})}));
   await page.locator('#tab-btn-sessions').click();
   await page.reload();

@@ -120,6 +120,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fonts/inter-variable.woff2", get(inter_font_handler))
         .route("/fonts/jetbrains-mono.woff2", get(mono_font_handler))
         .route("/auth/callback", get(auth_callback_handler))
+        .route("/api/v1/auth/signin", post(auth_signin_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/conversations", get(list_conversations_handler))
@@ -215,9 +216,11 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/routing/policy",
             get(routing_policy_get_handler).post(routing_policy_post_handler),
         )
-        .route("/api/v1/remote/pairing", get(remote_pairing_handler))
+        .route(
+            "/api/v1/remote/devices",
+            get(remote_devices_handler).post(remote_device_action_handler),
+        )
         .route("/api/v1/remote/status", get(remote_status_handler))
-        .route("/api/v1/remote/confirm", post(remote_confirm_handler))
         .route("/api/v1/remote/revoke", post(remote_revoke_handler))
         .with_state(state)
 }
@@ -1461,38 +1464,59 @@ async fn repo_diff_get_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    #[cfg(windows)]
-    use std::os::windows::process::CommandExt as _;
-
-    let mut diff_cmd = std::process::Command::new("git");
-    diff_cmd.args(["diff", "HEAD"]).current_dir(&canonical_repo);
-    #[cfg(windows)]
-    diff_cmd.creation_flags(0x0800_0000);
-    let diff_output = diff_cmd.output();
-
-    let mut status_cmd = std::process::Command::new("git");
-    status_cmd
-        .args(["status", "--porcelain"])
-        .current_dir(&canonical_repo);
-    #[cfg(windows)]
-    status_cmd.creation_flags(0x0800_0000);
-    let status_output = status_cmd.output();
-
-    let diff_str = diff_output
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-
-    let status_str = status_output
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
+    let diff_str = git_output(&canonical_repo, &["diff", "--no-ext-diff", "HEAD"]).await?;
+    let status_str = git_output(&canonical_repo, &["status", "--porcelain"]).await?;
 
     Ok(Json(json!({
         "repo": query.repo,
         "diff": diff_str,
         "status": status_str
     })))
+}
+
+async fn git_output(repo: &std::path::Path, args: &[&str]) -> Result<String, StatusCode> {
+    use tokio::io::AsyncReadExt as _;
+    const LIMIT: u64 = 1_048_576;
+    let mut command = tokio::process::Command::new("git");
+    command
+        .arg("--no-pager")
+        .args(args)
+        .current_dir(repo)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let mut child = command
+        .spawn()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let mut bytes = Vec::new();
+        stdout
+            .take(LIMIT + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if bytes.len() as u64 > LIMIT {
+            let _ = child.kill().await;
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+        let status = child
+            .wait()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if !status.success() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        String::from_utf8(bytes).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)
+    })
+    .await
+    .map_err(|_| StatusCode::GATEWAY_TIMEOUT)?
 }
 
 /// Request payload to switch a session to a target model with zero-token handoff.
@@ -1673,30 +1697,34 @@ async fn routing_policy_post_handler(
     Ok(Json(json!({ "ok": true, "policy": policy.as_str() })))
 }
 
-async fn remote_pairing_handler(
+async fn remote_devices_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_remote_access().await {
-        return Err(StatusCode::FORBIDDEN);
-    }
-    let status = state
-        .remote
-        .start(state.db.clone())
-        .await
-        .map_err(|error| match error {
-            crate::remote::RemoteError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
-            _ => StatusCode::BAD_GATEWAY,
-        })?;
-    Ok(Json(remote_pairing_view(&status)))
+    Ok(Json(state.remote.devices.view().await))
 }
 
-fn remote_pairing_view(status: &crate::remote::PairingStatus) -> serde_json::Value {
-    let mut body = json!(status);
-    body["pairing_code"] = json!(status.pairing_code());
-
-    body
+async fn remote_device_action_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !matches!(
+        payload["type"].as_str(),
+        Some("approve_device" | "revoke_device")
+    ) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if payload["type"] == "approve_device" && !crate::pro::has_remote_access().await {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let response = state.remote.devices.command(payload).await;
+    if response["type"] == "error" {
+        return Err(StatusCode::CONFLICT);
+    }
+    Ok(Json(response))
 }
 
 async fn remote_status_handler(
@@ -1704,32 +1732,7 @@ async fn remote_status_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(remote_pairing_view(&state.remote.status().await)))
-}
-
-/// Desktop-side confirmation of the shared six-digit code.
-#[derive(Debug, Deserialize)]
-pub struct RemoteConfirmRequest {
-    /// Code displayed on both devices.
-    pub code: String,
-}
-
-async fn remote_confirm_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Json(payload): Json<RemoteConfirmRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    validate_auth(&headers, &state.bearer_token)?;
-    let status = state
-        .remote
-        .confirm(&payload.code)
-        .await
-        .map_err(|error| match error {
-            crate::remote::RemoteError::WrongCode => StatusCode::BAD_REQUEST,
-            crate::remote::RemoteError::Expired => StatusCode::GONE,
-            _ => StatusCode::CONFLICT,
-        })?;
-    Ok(Json(json!(status)))
+    Ok(Json(json!(state.remote.status().await)))
 }
 
 async fn remote_revoke_handler(
@@ -1737,6 +1740,12 @@ async fn remote_revoke_handler(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    state
+        .remote
+        .devices
+        .disconnect()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let revoked = state
         .remote
         .revoke()
@@ -2385,12 +2394,75 @@ async fn auth_session_post_handler(
     Ok((cors_headers(), Json(json!({ "success": true }))))
 }
 
+async fn auth_signin_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let email = payload["email"]
+        .as_str()
+        .filter(|value| value.len() <= 320 && value.contains('@'))
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let password = payload["password"]
+        .as_str()
+        .filter(|value| !value.is_empty() && value.len() <= 1024)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let (base, key) = crate::sync::cloud_config();
+    let response = client
+        .post(format!("{base}/auth/v1/token?grant_type=password"))
+        .header("apikey", key)
+        .json(&json!({"email":email,"password":password}))
+        .send()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    if !response.status().is_success() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let session = response
+        .json::<Value>()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    crate::sync::save_cloud_session(&session_file_path(), &session)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({"success":true})))
+}
+
 async fn auth_session_delete_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
+    if let Ok(bytes) = tokio::fs::read(&path).await {
+        if let Ok(session) = serde_json::from_slice::<Value>(&bytes) {
+            if let Some(owner) = session.pointer("/user/id").and_then(Value::as_str) {
+                state
+                    .remote
+                    .devices
+                    .disconnect_owner(owner)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
+    }
+    state
+        .remote
+        .devices
+        .disconnect()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .remote
+        .revoke()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     crate::sync::remove_cloud_session(&path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -2619,6 +2691,116 @@ mod tests {
     use tower::ServiceExt as _;
 
     #[tokio::test]
+    async fn git_output_reports_changes_and_untracked_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        std::fs::write(dir.path().join("tracked"), "before\n").expect("file");
+        assert!(git(&["add", "tracked"]).status.success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .status
+            .success()
+        );
+        std::fs::write(dir.path().join("tracked"), "after\n").expect("file");
+        std::fs::write(dir.path().join("untracked"), "new\n").expect("file");
+        let diff = super::git_output(dir.path(), &["diff", "--no-ext-diff", "HEAD"])
+            .await
+            .expect("diff");
+        let status = super::git_output(dir.path(), &["status", "--porcelain"])
+            .await
+            .expect("status");
+        assert!(diff.contains("+after"));
+        assert!(status.contains("?? untracked"));
+    }
+
+    #[tokio::test]
+    async fn repository_diff_rejects_oversized_output() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        std::fs::write(dir.path().join("file"), "original\n").expect("file");
+        assert!(git(&["add", "file"]).status.success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .status
+            .success()
+        );
+        std::fs::write(dir.path().join("file"), "a".repeat(1_100_000)).expect("file");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let mut uri = reqwest::Url::parse("http://127.0.0.1:41738/api/v1/repos/diff").expect("url");
+        uri.query_pairs_mut()
+            .append_pair("repo", &dir.path().to_string_lossy());
+        let request = Request::builder()
+            .uri(uri.as_str())
+            .header("Host", "127.0.0.1:41738")
+            .header("Authorization", "Bearer local-test-token")
+            .body(Body::empty())
+            .expect("request");
+        assert_eq!(
+            app.oneshot(request).await.expect("response").status(),
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+    }
+
+    #[tokio::test]
+    async fn repository_diff_rejects_a_directory_that_is_not_a_git_repository() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let mut uri = reqwest::Url::parse("http://127.0.0.1:41738/api/v1/repos/diff").expect("url");
+        uri.query_pairs_mut()
+            .append_pair("repo", &dir.path().to_string_lossy());
+        let request = Request::builder()
+            .uri(uri.as_str())
+            .header("Host", "127.0.0.1:41738")
+            .header("Authorization", "Bearer local-test-token")
+            .body(Body::empty())
+            .expect("request");
+        assert_ne!(
+            app.oneshot(request).await.expect("response").status(),
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
     async fn local_automation_and_export_are_available_without_a_license() {
         let app = build_router(AppState {
             db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
@@ -2790,22 +2972,28 @@ mod tests {
             orchestrator: None,
             remote: Arc::new(crate::remote::RemoteManager::new()),
         });
-        for method in ["GET", "POST", "DELETE"] {
-            let request = Request::builder()
-                .method(method)
-                .uri("/api/v1/auth/pair")
-                .header("Host", "127.0.0.1:41738")
-                .header("Authorization", "Bearer local-test-token")
-                .body(Body::empty())
-                .expect("request");
-            assert_eq!(
-                app.clone()
-                    .oneshot(request)
-                    .await
-                    .expect("response")
-                    .status(),
-                StatusCode::NOT_FOUND
-            );
+        for path in [
+            "/api/v1/auth/pair",
+            "/api/v1/remote/pairing",
+            "/api/v1/remote/confirm",
+        ] {
+            for method in ["GET", "POST", "DELETE"] {
+                let request = Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .header("Host", "127.0.0.1:41738")
+                    .header("Authorization", "Bearer local-test-token")
+                    .body(Body::empty())
+                    .expect("request");
+                assert_eq!(
+                    app.clone()
+                        .oneshot(request)
+                        .await
+                        .expect("response")
+                        .status(),
+                    StatusCode::NOT_FOUND
+                );
+            }
         }
     }
 
@@ -2875,27 +3063,6 @@ mod tests {
             StatusCode::UNAUTHORIZED,
             "model discovery must not launch CLI probes before authentication"
         );
-    }
-
-    #[test]
-    fn pairing_view_has_code_only_before_confirmation() {
-        let mut status = crate::remote::PairingStatus {
-            remembered: false,
-            trust_expires_at: None,
-            enabled: true,
-            paired: false,
-            room_id: Some("a".repeat(32)),
-            public_key: Some("b".repeat(64)),
-            verify_code: None,
-            relay_url: Some("wss://relay.example/relay".to_owned()),
-            expires_at: Some((chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339()),
-        };
-        let view = super::remote_pairing_view(&status);
-        assert_eq!(view["pairing_code"].as_str().map(str::len), Some(8));
-        status.paired = true;
-        let view = super::remote_pairing_view(&status);
-        assert!(view["pairing_code"].is_null());
-        assert!(view.get("pairing_url").is_none());
     }
 
     #[test]
@@ -2973,6 +3140,7 @@ mod tests {
             "/api/v1/auth/session",
             "/api/v1/supabase-config",
             "/api/v1/sync/status",
+            "/api/v1/remote/devices",
             "/api/v1/reconcile",
         ] {
             let mut builder = Request::builder();

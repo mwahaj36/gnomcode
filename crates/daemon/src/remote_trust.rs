@@ -2,7 +2,8 @@ use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-pub(crate) const IDLE_SECONDS: i64 = 7 * 24 * 60 * 60;
+#[cfg(test)]
+const IDLE_SECONDS: i64 = 7 * 24 * 60 * 60;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct DeviceTrust {
@@ -15,7 +16,7 @@ pub(crate) struct DeviceTrust {
 
 impl DeviceTrust {
     pub(crate) fn valid(&self, now: i64) -> bool {
-        self.last_activity <= now + 300 && now < self.last_activity.saturating_add(IDLE_SECONDS)
+        self.last_activity <= now.saturating_add(300)
     }
 
     pub(crate) fn verify(&self, context: &str, proof: &str) -> bool {
@@ -29,10 +30,10 @@ impl DeviceTrust {
         mac.verify_slice(&bytes).is_ok()
     }
 
-    pub(crate) fn save(&self) -> Result<(), crate::remote::RemoteError> {
+    pub(crate) fn save_at(&self, path: &std::path::Path) -> Result<(), crate::remote::RemoteError> {
         let bytes =
             serde_json::to_vec(self).map_err(|_| crate::remote::RemoteError::Persistence)?;
-        spawnt_platform::write_private_file(&path(), &bytes)
+        spawnt_platform::write_private_file(path, &bytes)
             .map_err(|_| crate::remote::RemoteError::Persistence)
     }
 }
@@ -64,7 +65,7 @@ fn decode(value: &str) -> Result<Vec<u8>, ()> {
 mod tests {
     use super::*;
     #[test]
-    fn trust_expires_after_a_week_of_inactivity_and_proof_binds_challenge() {
+    fn trust_survives_inactivity_and_proof_binds_challenge() {
         let mut trust = DeviceTrust {
             room: "room".into(),
             relay: "relay".into(),
@@ -73,7 +74,8 @@ mod tests {
             last_activity: 100,
         };
         assert!(trust.valid(100 + IDLE_SECONDS - 1));
-        assert!(!trust.valid(100 + IDLE_SECONDS));
+        assert!(trust.valid(100 + IDLE_SECONDS));
+        assert!(trust.valid(100 + 365 * 24 * 60 * 60));
         trust.last_activity += 60;
         assert!(trust.valid(100 + IDLE_SECONDS));
         let mut mac = Hmac::<Sha256>::new_from_slice(&trust.secret).expect("mac");

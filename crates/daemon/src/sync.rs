@@ -98,42 +98,35 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
     let month = db.generate_usage_report_timeline("30d", None, None)?;
     let calendar_month = db.generate_usage_report_timeline("month", None, None)?;
     let all = db.generate_usage_report_timeline("all", None, None)?;
-    let (sessions, _) = db.list_sessions_paginated(None, None, 0, 200)?;
+    let (sessions, count) = db.list_sessions_paginated(None, None, 0, 200)?;
+    let sessions: Vec<_> = sessions
+        .into_iter()
+        .map(|s| {
+            json!({
+                "id": s.id, "agent": s.agent, "surface": s.surface,
+                "project_name": s.project_name, "model": s.model, "state": s.state,
+                "is_active": s.is_active, "is_ongoing": s.is_ongoing, "presence": s.presence,
+                "started_at": s.started_at, "last_event_at": s.last_event_at,
+                "input_tokens": s.input_tokens, "output_tokens": s.output_tokens,
+                "cache_read_tokens": s.cache_read_tokens, "context_tokens": s.context_tokens,
+                "context_window": s.context_window, "total_tokens": s.total_tokens,
+                "context_fill_pct": s.context_fill_pct, "total_cost_usd": s.total_cost_usd,
+                "priced_turns": s.priced_turns, "unpriced_turns": s.unpriced_turns,
+                "usage_available": s.usage_available, "cost_basis": s.cost_basis,
+            })
+        })
+        .collect();
     let (_, ongoing_count) = db.list_sessions_paginated(None, Some("ongoing"), 0, 1)?;
     let (_, active_count) = db.list_sessions_paginated(None, Some("active"), 0, 1)?;
-    let count = sessions.len();
     Ok(json!({
         "generated_at": Utc::now().to_rfc3339(),
         "timeline": today,
         "timelines": { "today": today, "7d": week, "30d": month, "month": calendar_month, "all": all },
-        "user_profile": db.get_user_profile()?,
         "sessions": sessions,
         "quota": crate::api::quota_views(db.get_latest_quota_snapshots()?),
         "active_count": active_count,
         "ongoing_count": ongoing_count,
         "total_count": count,
-        "total_pages": 1,
-        "context_relays": db.list_context_relays().unwrap_or_default(),
-        "relay_config": db.get_context_relay_config().unwrap_or_default(),
-    }))
-}
-
-fn discovery_offer(status: &crate::remote::PairingStatus, now: DateTime<Utc>) -> Option<Value> {
-    if !status.enabled || status.paired {
-        return None;
-    }
-    let expires_at = status.expires_at.as_deref()?;
-    if DateTime::parse_from_rfc3339(expires_at).ok()? <= now {
-        return None;
-    }
-    Some(json!({
-        "room": status.room_id.as_deref()?,
-        "key": status.public_key.as_deref()?,
-        "relay": status.relay_url.as_deref()?,
-        "expires_at": expires_at,
-        "name": "My desktop",
-        "pairing_code": status.pairing_code()?,
-        "protocol_version": 2,
     }))
 }
 
@@ -152,10 +145,19 @@ pub fn spawn_cloud_sync(
             return;
         };
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
+        let mut devices_ticker = tokio::time::interval(Duration::from_secs(5));
         loop {
             tokio::select! {
                 _ = ticker.tick() => {},
                 () = remote.discovery_changed() => {},
+                _ = devices_ticker.tick() => {
+                    if let Err(error)=poll_devices(&client,&db,&remote).await {tracing::warn!("Device directory unavailable: {error}");}
+                    continue;
+                },
+                () = remote.devices.changed() => {
+                    if let Err(error)=poll_devices(&client,&db,&remote).await {tracing::warn!("Device directory unavailable: {error}");}
+                    continue;
+                },
             }
             {
                 let mut status = SYNC_STATUS.lock().await;
@@ -163,7 +165,7 @@ pub fn spawn_cloud_sync(
                 status.last_attempt_at = Some(Utc::now().to_rfc3339());
                 status.message = "Publishing the latest metadata snapshot.";
             }
-            let result = push_snapshot(&client, &db, &remote).await;
+            let result = push_snapshot(&client, &db).await;
             let mut status = SYNC_STATUS.lock().await;
             match result {
                 Ok(true) => {
@@ -185,10 +187,23 @@ pub fn spawn_cloud_sync(
     })
 }
 
-async fn push_snapshot(
+async fn poll_devices(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
     remote: &crate::remote::RemoteManager,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let path = spawnt_platform::spawnt_home().join("session.json");
+    if let Some(auth) = read_cloud_auth(client, &path).await? {
+        remote.devices.poll(client, &auth, db.clone()).await?;
+    } else {
+        remote.devices.disconnect().await?;
+    }
+    Ok(())
+}
+
+async fn push_snapshot(
+    client: &reqwest::Client,
+    db: &Arc<Mutex<Database>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let session_path = spawnt_platform::spawnt_home().join("session.json");
     let Some(CloudAuth {
@@ -207,8 +222,7 @@ async fn push_snapshot(
         build_remote_snapshot(&guard)
     })
     .await??;
-    snapshot["remote_offer"] =
-        discovery_offer(&remote.status().await, Utc::now()).unwrap_or(Value::Null);
+    snapshot["remote_offer"] = Value::Null;
     client
         .post(format!(
             "{base_url}/rest/v1/spawnt_sync_state?on_conflict=user_id"
@@ -434,32 +448,44 @@ mod tests {
     }
 
     #[test]
-    fn discovery_offer_is_public_expiring_and_never_contains_the_confirmation_code() {
-        let now = chrono::Utc::now();
-        let mut status = crate::remote::PairingStatus {
-            remembered: false,
-            trust_expires_at: None,
-            enabled: true,
-            paired: false,
-            room_id: Some("a".repeat(32)),
-            public_key: Some("public-key".into()),
-            verify_code: Some("123456".into()),
-            relay_url: Some("wss://relay.example/relay".into()),
-            expires_at: Some((now + chrono::Duration::minutes(5)).to_rfc3339()),
+    fn remote_snapshot_reports_total_beyond_the_session_limit() {
+        use chrono::Utc;
+        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
+        use spawnt_store::{Database, SourceCheckpoint};
+
+        let mut db = Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, "/test/project", None);
+        let sessions: Vec<_> = (0..201)
+            .map(|i| Session {
+                id: format!("codex:{i}"),
+                agent: AgentId::Codex,
+                surface: Surface::Cli,
+                project_id: project.id.clone(),
+                parent_session_id: None,
+                model: None,
+                title: None,
+                state: SessionState::Idle,
+                pid: None,
+                started_at: Utc::now(),
+                last_event_at: Utc::now(),
+            })
+            .collect();
+        let checkpoint = SourceCheckpoint {
+            file_path: "/test/source".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "test".to_owned(),
+            last_ingested_at: Utc::now(),
         };
-        let offer = super::discovery_offer(&status, now).expect("offer");
-        assert_eq!(offer.as_object().expect("object").len(), 7);
-        assert_eq!(offer["pairing_code"], "63311530");
-        assert!(!offer.to_string().contains("123456"));
-        assert!(offer.get("verify_code").is_none());
-        status.paired = true;
-        assert!(super::discovery_offer(&status, now).is_none());
-        status.paired = false;
-        status.enabled = false;
-        assert!(super::discovery_offer(&status, now).is_none());
-        status.enabled = true;
-        status.expires_at = Some((now - chrono::Duration::seconds(1)).to_rfc3339());
-        assert!(super::discovery_offer(&status, now).is_none());
+        db.commit_batch(&[project], &sessions, &[], &[], &[], &checkpoint)
+            .expect("commit");
+        let snapshot = super::build_remote_snapshot(&db).expect("snapshot");
+        assert_eq!(
+            snapshot["sessions"].as_array().expect("sessions").len(),
+            200
+        );
+        assert_eq!(snapshot["total_count"], 201);
+        assert!(snapshot.get("total_pages").is_none());
     }
 
     #[test]
@@ -477,7 +503,7 @@ mod tests {
             project_id: project.id.clone(),
             parent_session_id: None,
             model: Some("gpt-6.1-sol".to_owned()),
-            title: None,
+            title: Some("private prompt title".to_owned()),
             state: SessionState::Thinking,
             pid: None,
             started_at: Utc::now(),
@@ -490,12 +516,101 @@ mod tests {
             fingerprint: "test".to_owned(),
             last_ingested_at: Utc::now(),
         };
-        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+        let quota = spawnt_core::QuotaSnapshot {
+            provider: "codex".into(),
+            limit_id: "pool".into(),
+            window: spawnt_core::QuotaWindow::FiveHour,
+            used_pct: 10.0,
+            resets_at: None,
+            plan: None,
+            basis: spawnt_core::TrustLevel::Exact,
+            observed_at: Utc::now(),
+        };
+        db.commit_batch(&[project], &[session], &[], &[], &[quota], &checkpoint)
             .expect("commit");
         let snapshot = super::build_remote_snapshot(&db).expect("snapshot");
         let encoded = snapshot.to_string();
+        let mut keys: Vec<_> = snapshot
+            .as_object()
+            .expect("snapshot object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "active_count",
+                "generated_at",
+                "ongoing_count",
+                "quota",
+                "sessions",
+                "timeline",
+                "timelines",
+                "total_count"
+            ]
+        );
+        let mut session_keys: Vec<_> = snapshot["sessions"][0]
+            .as_object()
+            .expect("session object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        session_keys.sort_unstable();
+        assert_eq!(
+            session_keys,
+            [
+                "agent",
+                "cache_read_tokens",
+                "context_fill_pct",
+                "context_tokens",
+                "context_window",
+                "cost_basis",
+                "id",
+                "input_tokens",
+                "is_active",
+                "is_ongoing",
+                "last_event_at",
+                "model",
+                "output_tokens",
+                "presence",
+                "priced_turns",
+                "project_name",
+                "started_at",
+                "state",
+                "surface",
+                "total_cost_usd",
+                "total_tokens",
+                "unpriced_turns",
+                "usage_available"
+            ]
+        );
+        let mut quota_keys: Vec<_> = snapshot["quota"][0]
+            .as_object()
+            .expect("quota object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        quota_keys.sort_unstable();
+        assert_eq!(
+            quota_keys,
+            [
+                "basis",
+                "limit_id",
+                "observed_at",
+                "plan",
+                "provider",
+                "remaining_pct",
+                "resets_at",
+                "used_pct",
+                "window"
+            ]
+        );
         assert!(!encoded.contains("/private/client"));
         assert!(!encoded.contains("rollout.jsonl"));
+        assert!(!encoded.contains("private prompt title"));
+        assert!(snapshot.get("context_relays").is_none());
+        assert!(snapshot.get("user_profile").is_none());
         assert!(!encoded.contains("paired_session"));
         assert!(!encoded.contains("relay_commands"));
         assert_eq!(snapshot["active_count"], 1);
