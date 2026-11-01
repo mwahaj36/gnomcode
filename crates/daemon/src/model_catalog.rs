@@ -42,7 +42,7 @@ impl ProviderCatalog {
             agent: agent.into(),
             name: name.into(),
             status: "unavailable".into(),
-            message: "CLI not found on the desktop process PATH. Restart Spawnt after installing it or changing PATH.".into(),
+            message: "CLI not found on this desktop. Install it, then refresh. An installed editor or desktop app may require a separate CLI installation.".into(),
             models: Vec::new(),
         }
     }
@@ -124,6 +124,21 @@ async fn command_output(
     }
     let success = child.wait().await.ok()?.success();
     Some((success, bytes))
+}
+
+fn antigravity_models(bytes: &[u8]) -> Vec<ModelChoice> {
+    let listing: Vec<Value> = String::from_utf8_lossy(bytes)
+        .lines()
+        .filter_map(|line| {
+            let (id, label) = line.split_once('\t')?;
+            Some(serde_json::json!({"id":id.trim(),"displayName":label.trim()}))
+        })
+        .collect();
+    choices(
+        "antigravity",
+        "antigravity_cli_models",
+        &Value::Array(listing),
+    )
 }
 
 async fn claude_models(cwd: &std::path::Path) -> Option<Vec<ModelChoice>> {
@@ -304,7 +319,16 @@ async fn discover_provider(agent: &str, name: &str) -> ProviderCatalog {
                 result.message="Account configured in Gemini CLI. Its native model list is shown; current access is checked by Gemini when used.".into();
             }
             _ => {
-                result.message="Antigravity is installed. Spawnt has no supported read-only catalog source for this CLI yet; use its native model selector.".into();
+                let (success, bytes) = command_output("agy", &["models"], cwd.path()).await?;
+                if !success {
+                    return None;
+                }
+                result.models = antigravity_models(&bytes);
+                if result.models.is_empty() {
+                    return None;
+                }
+                result.status = "configured".into();
+                result.message="Models reported by Antigravity CLI. Current access is checked by Antigravity when used.".into();
             }
         }
         Some(())
@@ -341,6 +365,14 @@ pub async fn discover() -> Vec<ProviderCatalog> {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn antigravity_catalog_uses_only_valid_tab_separated_native_models() {
+        let models = antigravity_models(b"Fetching available models...\nmodel-one\tModel One\nmodel-one\tDuplicate\n--yolo\tUnsafe\nnot a model\tInvalid\n");
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].agent, "antigravity");
+        assert_eq!(models[0].model, "model-one");
+        assert_eq!(models[0].display_name, "Model One");
+    }
     #[test]
     fn native_choices_are_safe_deduplicated_and_never_include_account_fields() {
         let models = choices(

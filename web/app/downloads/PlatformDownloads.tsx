@@ -1,7 +1,5 @@
 "use client";
 
-import branding from "../../branding.json";
-
 import { useEffect, useRef, useState } from "react";
 import { CopyCommand } from "../components/CopyCommand";
 import packageInfo from "../../package.json";
@@ -11,18 +9,21 @@ type DownloadAction = { label: string; href: string; detail: string };
 
 const platforms = [
   {
-    id: "windows", name: "Windows", availability: "DESKTOP + CLI", detail: "Windows 10 / 11 · x64",
+    id: "windows", name: "Windows", availability: "DEVELOPMENT BUILD", detail: "Windows 10 / 11 · x64",
     body: "Launch official coding agents, continue conversations and keep a separate workspace terminal close at hand.",
-    actions: [] as DownloadAction[], command: null,
-    note: "Read the installation guide for current release channels and verification steps.",
+    actions: [
+      {label: "Download Windows installer", href: "/downloads/Spawnt-Setup.exe", detail: "Windows x64"},
+      {label: "Download ZIP", href: `/downloads/Spawnt-v${version}-windows-x64.zip`, detail: "Portable archive"},
+    ] as DownloadAction[], command: null,
+    note: "Unsigned development build. Check the SHA-256 manifest before installing.",
   },
   {
-    id: "macos", name: "macOS", availability: "APPLE SILICON + INTEL", detail: "Apple Silicon / Intel",
+    id: "macos", name: "macOS", availability: "NOT AVAILABLE YET", detail: "Apple Silicon / Intel",
     body: "Bring your agent conversations, recorded usage and model-switch workflow into one local workspace.",
     actions: [] as DownloadAction[], command: null, note: "Read the installation guide for platform requirements and release channels.",
   },
   {
-    id: "linux", name: "Linux", availability: "CLI + DESKTOP", detail: "x86_64 / ARM64 · glibc 2.35+",
+    id: "linux", name: "Linux", availability: "NOT AVAILABLE YET", detail: "x86_64 / ARM64 · glibc 2.35+",
     body: "Use the standalone CLI and local console to orchestrate agents and inspect usage on your own machine.",
     actions: [] as DownloadAction[], command: null,
     note: "Read the installation guide for current release channels and verification steps.",

@@ -290,6 +290,27 @@ mod tests {
     }
 
     #[test]
+    fn antigravity_cli_1_4_transcript_reuses_the_existing_adapter() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let bytes = include_bytes!("../../../fixtures/antigravity/cli-1.4.12/sample.jsonl");
+        let context = FileCtx {
+            source_path:
+                "/fixture/antigravity-cli/brain/cli-test/.system_generated/logs/transcript.jsonl"
+                    .into(),
+            fallback_cwd: Some("/workspace".into()),
+            ..FileCtx::default()
+        };
+        let batch = AntigravityAdapter::new().parse(&context, bytes);
+        assert_eq!(batch.parse_errors, 0);
+        assert_eq!(batch.sessions[0].surface, spawnt_core::Surface::Cli);
+        assert_eq!(batch.chat_events.len(), 1);
+        assert_eq!(batch.chat_events[0].content, "[REDACTED]");
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {
+            insta::assert_debug_snapshot!("antigravity_cli_1_4", (batch.sessions, batch.usage_records, batch.chat_events));
+        });
+    }
+
+    #[test]
     fn cursor_chat_keeps_user_and_assistant_text_only() {
         use super::{FileCtx, SourceAdapter, cursor::CursorAdapter};
         let bytes = br#"{"sessionId":"cursor-chat","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"},{"role":"assistant","timestamp":"2026-10-26T12:00:05Z","content":"Answer","tool_calls":[{"name":"Shell","output":"secret"}]},{"role":"tool","content":"secret output"}]}"#;
