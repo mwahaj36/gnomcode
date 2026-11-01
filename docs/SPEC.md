@@ -112,7 +112,7 @@ Default SQLite: `~/.spawnt/state.db`, or `SPAWNT_HOME/state.db`; CLI `--db` may 
 
 Schema v9 adds local-only conversation membership, ordered native/host bindings, requested model and launch metadata, and pending-context delivery state. These mappings contain no credentials and are excluded from metadata sync. Retain them across restarts and chat deletion so routing does not resurrect deleted chat. Chat deletion removes rows for every linked native/host identity; retention applies to all chat rows under the existing timestamp policy. Agent-owned logs remain untouched.
 
-Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; retention primitives exist, but configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; directory browsing is bounded and not persisted.
+Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; label metadata-only search and explain that deletion does not remove agent logs or backups. retention primitives exist, but configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; directory browsing is bounded and not persisted.
 
 ### 3.7 Session and conversation state
 
@@ -134,7 +134,7 @@ Track provider/window/model pools independently. Codex recorded `rate_limits` su
 
 ### 3.10 Guardrails and local automation
 
-Local rules, alerts and loop/budget controls are free. Hook actions must fail open and never bypass official permissions. Keep spend estimates distinct from billing. Native automation acceptance remains provider/version-specific.
+Local rules, alerts and loop/budget controls are free. Hard-stop rules attempt to block only Claude Code tool calls through its installed hook; other agents receive alerts only. Hooks fail open and never bypass official permissions. Expose these limits and distinguish estimated spend from billing. Native automation acceptance remains provider/version-specific.
 
 ### 3.11 Local API and shell security
 
@@ -166,7 +166,7 @@ The laptop must be awake, connected and running Spawnt for mobile interaction. R
 
 ### 3.15 Optional account sync and encrypted Remote
 
-These are separate data channels. Existing opt-in Supabase snapshot sync is owner-scoped and not end-to-end encrypted. Current `build_remote_snapshot` includes reports/timelines, profile, session records, quota and automation/relay metadata. Project names/stored labels and relay workspace metadata can be present. HMAC project-key helpers do not make this live payload hash-only. Chat events and derived opening-prompt titles must not enter metadata sync. A field-level allowlist/consent review and two-account RLS acceptance block launch.
+These are separate data channels. Existing opt-in Supabase snapshot sync is owner-scoped and not end-to-end encrypted. Current `build_remote_snapshot` includes reports/timelines, explicitly selected session fields and quota. Project names, session IDs and model/activity metadata can be sensitive. Session titles, profile, relay records and chat events are excluded. HMAC project-key helpers do not make this live payload hash-only. Publish the true session total while the account list is limited to 200; the web view must identify that limit and filter only those published records. Disclose the snapshot contents and lack of end-to-end encryption before account connection. Verify historical cloud copies, consent and two-account RLS before launch.
 
 Remote uses the public Cloudflare Durable Object relay at `wss://spawnt-remote-relay.mwahaj25.workers.dev/relay`, overridable by `SPAWNT_REMOTE_RELAY_URL`. Outbound TLS carries E2EE frames; the daemon still listens only on loopback. Pairing uses an owner-only five-minute offer, eight-digit discovery code and separate six-digit matching-code confirmation. Phone enters the discovery code while signed into the same account; desktop verifies the phone security code and both confirm.
 
