@@ -1,11 +1,11 @@
 //! Local Pro license checks, guardrails execution, and Resume Queue.
 
+use gnomcode_core::AgentId;
+use gnomcode_core::license::{GNOMCODE_LICENSE_PUBKEY_HEX, LicenseFile, Tier, verify_license};
+use gnomcode_core::rules::{RuleAction, evaluate_guardrails, is_resume_eligible};
+use gnomcode_platform::gnomcode_home;
+use gnomcode_store::Database;
 use serde::{Deserialize, Serialize};
-use spawnt_core::AgentId;
-use spawnt_core::license::{LicenseFile, SPAWNT_LICENSE_PUBKEY_HEX, Tier, verify_license};
-use spawnt_core::rules::{RuleAction, evaluate_guardrails, is_resume_eligible};
-use spawnt_platform::spawnt_home;
-use spawnt_store::Database;
 use std::fs;
 use std::process::Command;
 use std::time::{Duration, SystemTime};
@@ -30,14 +30,14 @@ pub struct LicenseStatus {
 #[inline(always)]
 pub fn has_pro_license() -> bool {
     // Offline signed license keys remain usable without network access.
-    let Ok(bytes) = fs::read(spawnt_home().join("license.key")) else {
+    let Ok(bytes) = fs::read(gnomcode_home().join("license.key")) else {
         return false;
     };
     let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) else {
         return false;
     };
     matches!(
-        verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX),
+        verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX),
         Ok(Tier::Pro | Tier::Team)
     )
 }
@@ -54,7 +54,7 @@ pub async fn has_remote_access() -> bool {
     else {
         return false;
     };
-    let path = spawnt_home().join("session.json");
+    let path = gnomcode_home().join("session.json");
     let Ok(Some(auth)) = crate::sync::read_cloud_auth(&client, &path).await else {
         return false;
     };
@@ -92,9 +92,9 @@ fn cloud_user_is_pro(user: &serde_json::Value) -> bool {
 #[must_use]
 pub fn get_license_status() -> LicenseStatus {
     // 1. First check offline signed license key
-    if let Ok(bytes) = fs::read(spawnt_home().join("license.key")) {
+    if let Ok(bytes) = fs::read(gnomcode_home().join("license.key")) {
         if let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) {
-            if let Ok(tier) = verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX) {
+            if let Ok(tier) = verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX) {
                 let (tier_str, is_lic) = match tier {
                     Tier::Pro => ("pro", true),
                     Tier::Team => ("team", true),
@@ -129,7 +129,7 @@ pub async fn get_verified_license_status() -> LicenseStatus {
     if status.licensed || !has_remote_access().await {
         return status;
     }
-    let account = fs::read(spawnt_home().join("session.json"))
+    let account = fs::read(gnomcode_home().join("session.json"))
         .ok()
         .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok());
     let email = account
@@ -152,15 +152,16 @@ pub fn activate_license(raw_input: &str) -> Result<LicenseStatus, String> {
     let license: LicenseFile =
         serde_json::from_str(trimmed).map_err(|e| format!("Invalid license JSON format: {e}"))?;
 
-    let tier = verify_license(&license, SPAWNT_LICENSE_PUBKEY_HEX)
+    let tier = verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX)
         .map_err(|e| format!("License verification failed: {e}"))?;
 
     if tier == Tier::Free {
         return Err("License payload specifies Free tier; Pro or Team required.".to_owned());
     }
 
-    let key_path = spawnt_home().join("license.key");
-    fs::create_dir_all(spawnt_home()).map_err(|e| format!("Failed to create spawnt home: {e}"))?;
+    let key_path = gnomcode_home().join("license.key");
+    fs::create_dir_all(gnomcode_home())
+        .map_err(|e| format!("Failed to create gnomcode home: {e}"))?;
     fs::write(
         &key_path,
         serde_json::to_vec_pretty(&license).map_err(|e| e.to_string())?,
@@ -172,7 +173,7 @@ pub fn activate_license(raw_input: &str) -> Result<LicenseStatus, String> {
 
 /// Deletes the local license key, reverting to Free tier.
 pub fn remove_license() -> Result<(), std::io::Error> {
-    let key_path = spawnt_home().join("license.key");
+    let key_path = gnomcode_home().join("license.key");
     if key_path.exists() {
         fs::remove_file(key_path)?;
     }
@@ -182,7 +183,7 @@ pub fn remove_license() -> Result<(), std::io::Error> {
 /// Evaluates persisted rules after ingestion and records alerts.
 /// Claude hard stops are read by the fail-open PreToolUse hook.
 pub fn run_guardrails(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let block_path = spawnt_home().join("blocked-sessions.json");
+    let block_path = gnomcode_home().join("blocked-sessions.json");
     let rules = db.list_rules()?;
     let sessions = db.list_active_sessions(500)?;
     let mut blocked = Vec::new();
@@ -339,7 +340,7 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
                         .unwrap_or_else(|_| ".".to_owned())
                 });
 
-            let entry = spawnt_store::ContextRelayEntry {
+            let entry = gnomcode_store::ContextRelayEntry {
                 id: relay_id,
                 session_id: s.id.clone(),
                 source_agent: s.agent.clone(),
@@ -360,7 +361,7 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
                 "Session in {} reached {}% context. Relay checkpoint prepared for {}.",
                 s.project_name, fill_pct, target_agent
             );
-            let _ = spawnt_platform::send_desktop_notification(&title, &body);
+            let _ = gnomcode_platform::send_desktop_notification(&title, &body);
 
             if config.policy == "auto" {
                 match execute_relay_handoff(&entry) {
@@ -375,25 +376,25 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
 }
 
 /// Executes a Context Relay handoff:
-/// 1. Writes zero-knowledge .spawnt/HANDOFF.md checkpoint in project directory.
+/// 1. Writes zero-knowledge .gnomcode/HANDOFF.md checkpoint in project directory.
 /// 2. Spawns fresh agent session in an interactive terminal window without permission escalation.
 pub fn execute_relay_handoff(
-    entry: &spawnt_store::ContextRelayEntry,
+    entry: &gnomcode_store::ContextRelayEntry,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let repo_dir = std::path::Path::new(&entry.cwd);
-    let spawnt_dir = repo_dir.join(".spawnt");
-    let _ = std::fs::create_dir_all(&spawnt_dir);
+    let gnomcode_dir = repo_dir.join(".gnomcode");
+    let _ = std::fs::create_dir_all(&gnomcode_dir);
 
-    let handoff_path = spawnt_dir.join("HANDOFF.md");
+    let handoff_path = gnomcode_dir.join("HANDOFF.md");
     let content = format!(
-        "# Spawnt Context Relay Checkpoint\n\n\
+        "# Gnomcode Context Relay Checkpoint\n\n\
         - **Source Agent:** {}\n\
         - **Target Agent:** {}\n\
         - **Project:** {}\n\
         - **Saturation:** {}% context consumed (Safety reserve active)\n\
         - **Timestamp:** {}\n\n\
         ## Continuity Instructions for Fresh Session\n\
-        This workspace was handed off by Spawnt Context Relay because the previous session reached the context saturation limit.\n\
+        This workspace was handed off by Gnomcode Context Relay because the previous session reached the context saturation limit.\n\
         1. Inspect modified workspace files and recent git status (`git status`).\n\
         2. Verify existing test suites (`cargo test` / `npm test`).\n\
         3. Continue the task from this clean context window without repeating saturated tokens.\n",
@@ -406,16 +407,16 @@ pub fn execute_relay_handoff(
     std::fs::write(&handoff_path, content)?;
 
     // Spawn the fresh target agent session in an interactive terminal or focus editor
-    if !spawnt_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd) {
+    if !gnomcode_platform::spawn_agent_in_terminal(&entry.target_agent, &entry.cwd) {
         return Err("agent session could not launch".into());
     }
 
     let title = format!("[RELAY] Handoff Complete: {}", entry.target_agent);
     let body = format!(
-        "Checkpoint created in .spawnt/HANDOFF.md for {}. Clean session initialized.",
+        "Checkpoint created in .gnomcode/HANDOFF.md for {}. Clean session initialized.",
         entry.project_name
     );
-    let _ = spawnt_platform::send_desktop_notification(&title, &body);
+    let _ = gnomcode_platform::send_desktop_notification(&title, &body);
 
     Ok(())
 }
@@ -423,7 +424,7 @@ pub fn execute_relay_handoff(
 /// Checks whether a session is currently blocked by a guardrail rule.
 /// Used for 50ms loopback IPC query.
 pub fn is_session_blocked(session_id: &str) -> bool {
-    let block_path = spawnt_home().join("blocked-sessions.json");
+    let block_path = gnomcode_home().join("blocked-sessions.json");
     let Ok(meta) = fs::metadata(&block_path) else {
         return false;
     };
@@ -451,7 +452,7 @@ mod remote_entitlement_tests {
     #[test]
     fn relay_handoff_does_not_claim_success_when_agent_cannot_launch() {
         let repo = tempfile::tempdir().expect("repo");
-        let entry = spawnt_store::ContextRelayEntry {
+        let entry = gnomcode_store::ContextRelayEntry {
             id: "relay-test".to_owned(),
             session_id: "codex:test".to_owned(),
             source_agent: "codex".to_owned(),

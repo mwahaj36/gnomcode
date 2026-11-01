@@ -21,8 +21,8 @@ function cycleTheme() {
       if (next === 'system') delete document.documentElement.dataset.theme;
       else document.documentElement.dataset.theme = next;
       try {
-        if (next === 'system') localStorage.removeItem('spawnt-theme');
-        else localStorage.setItem('spawnt-theme', next);
+        if (next === 'system') localStorage.removeItem('gnomcode-theme');
+        else localStorage.setItem('gnomcode-theme', next);
       } catch (_) {}
       const button = document.getElementById('theme-control');
       button.textContent = `Theme / ${next}`;
@@ -200,7 +200,7 @@ function cycleTheme() {
 
     async function apiJson(url, options = { headers }) {
       const response = await fetch(url, options);
-      if (!response.ok) {const error=await response.json().catch(()=>null);throw new Error(response.status === 401 ? 'Local authorization is missing or expired. Close this window and reopen spawnt from its tray icon or shortcut.' : typeof error?.message === 'string' ? error.message : `spawnt request failed (${response.status}). Retry Reload view or restart spawnt if this persists.`);}
+      if (!response.ok) {const error=await response.json().catch(()=>null);throw new Error(response.status === 401 ? 'Local authorization is missing or expired. Close this window and reopen gnomcode from its tray icon or shortcut.' : typeof error?.message === 'string' ? error.message : `gnomcode request failed (${response.status}). Retry Reload view or restart gnomcode if this persists.`);}
       return response.json();
     }
     function escapeHtml(value) {
@@ -241,7 +241,7 @@ function cycleTheme() {
         const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = downloadUrl;
-        a.download = `spawnt-report-${currentTimeline}.${fmt}`;
+        a.download = `gnomcode-report-${currentTimeline}.${fmt}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -406,7 +406,7 @@ function cycleTheme() {
     }
 
     async function executeRelay(id) {
-      if (!await confirmAction('Rotate session now? spawnt will create .spawnt/HANDOFF.md and spawn a clean session.', 'Rotate session')) return;
+      if (!await confirmAction('Rotate session now? gnomcode will create .gnomcode/HANDOFF.md and spawn a clean session.', 'Rotate session')) return;
       try {
         const res = await fetch('/api/v1/pro/relay/execute', {
           method: 'POST',
@@ -872,10 +872,10 @@ function cycleTheme() {
       }
     }
 
-    document.getElementById('launch-workspace-browse').hidden = !window.spawntDesktop?.chooseWorkspace;
+    document.getElementById('launch-workspace-browse').hidden = !window.gnomcodeDesktop?.chooseWorkspace;
     async function chooseWorkspace() {
       try {
-        const folder = await window.spawntDesktop?.chooseWorkspace();
+        const folder = await window.gnomcodeDesktop?.chooseWorkspace();
         if (folder) document.getElementById('launch-repo-input').value = folder;
       } catch { document.getElementById('launch-status').textContent = 'Folder picker unavailable. Enter the workspace path and retry.'; }
     }
@@ -1012,7 +1012,7 @@ function cycleTheme() {
           terminal.textContent = (terminal.textContent + text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')).slice(-200000);
           terminal.scrollTop = terminal.scrollHeight;
         };
-        chatWs.onerror = () => { terminal.textContent += '\n[Terminal stream disconnected or not hosted by Spawnt]'; };
+        chatWs.onerror = () => { terminal.textContent += '\n[Terminal stream disconnected or not hosted by Gnomcode]'; };
         chatWs.onclose = () => { chatWs = null; };
       } catch (e) {
         terminal.textContent += '\n[Terminal stream unavailable. Reopen the session and try again.]';
@@ -1073,7 +1073,7 @@ function cycleTheme() {
     }
 
     async function deleteChat() {
-      if (!activeChatSession || !await confirmAction('Delete Spawnt’s local chat history for this session? Session titles, agent-owned logs and backups are not deleted; SQLite files may retain remnants. Changed source IDs, restored backups or a database reset can reimport messages.', 'Delete history')) return;
+      if (!activeChatSession || !await confirmAction('Delete Gnomcode’s local chat history for this session? Session titles, agent-owned logs and backups are not deleted; SQLite files may retain remnants. Changed source IDs, restored backups or a database reset can reimport messages.', 'Delete history')) return;
       const sessionId = activeChatSession;
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });
@@ -1191,7 +1191,7 @@ function cycleTheme() {
       }
     }
 
-    const accountAccessDisclosure='Linking this native app makes its available conversations and supported session controls accessible from any device signed in to your account, anywhere. This includes devices already signed in and devices you sign in to later. No phone pairing or per-desktop approval will be required. This desktop must stay awake with Spawnt running. Protect your account: anyone with access to it can use these controls. You can disable account access in Devices or disconnect this desktop.';
+    const accountAccessDisclosure='Linking this native app makes its available conversations and supported session controls accessible from any device signed in to your account, anywhere. This includes devices already signed in and devices you sign in to later. No phone pairing or per-desktop approval will be required. This desktop must stay awake with Gnomcode running. Protect your account: anyone with access to it can use these controls. You can disable account access in Devices or disconnect this desktop.';
     function confirmAccountAccess(){return confirmAction(accountAccessDisclosure,'Link and allow account access');}
     let accountWriteBusy = false;
     async function signInAccount(){

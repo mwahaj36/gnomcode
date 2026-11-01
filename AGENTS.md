@@ -1,10 +1,10 @@
-# AGENTS.md — Spawnt
+# AGENTS.md — Gnomcode
 
 Rules for any AI agent (or human) working in this repo. Read this first, every session.
 
 ## 1. What this project is
 
-Spawnt is a local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. Observation adapters cover Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor and opt-in Aider; control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
+Gnomcode is a local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. Observation adapters cover Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor and opt-in Aider; control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
 
 **Single source of truth: [`docs/SPEC.md`](docs/SPEC.md).** Before working on a feature, read the relevant SPEC section. If your change alters scope, architecture, the roadmap or deliverables, update SPEC.md **in the same change**. Never let code and SPEC drift apart.
 
@@ -12,9 +12,9 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 
 ## 2. Non-negotiable product invariants
 
-1. **Protect conversation history.** Spawnt-owned chat history is permitted locally for session continuity and model switches. Preserve agent-owned history. Do not add chat content to the existing unencrypted cloud sync. Do not persist unrelated file contents or tool output; activity summaries go through `core::redact` *before* persistence. Design retention, deletion and access controls in SPEC before implementing chat storage.
-2. **Read-only by default.** Only `spawnt integrate <agent>` may modify agent config, and it must back up first and support `--remove`.
-3. **Fail open.** Hooks and integrations must never block an agent when Spawnt is down, slow or erroring (hook IPC timeout: 50 ms).
+1. **Protect conversation history.** Gnomcode-owned chat history is permitted locally for session continuity and model switches. Preserve agent-owned history. Do not add chat content to the existing unencrypted cloud sync. Do not persist unrelated file contents or tool output; activity summaries go through `core::redact` *before* persistence. Design retention, deletion and access controls in SPEC before implementing chat storage.
+2. **Read-only by default.** Only `gnomcode integrate <agent>` may modify agent config, and it must back up first and support `--remove`.
+3. **Fail open.** Hooks and integrations must never block an agent when Gnomcode is down, slow or erroring (hook IPC timeout: 50 ms).
 4. **No telemetry.** No analytics, no phone-home. The only network traffic allowed is the opt-out update-manifest GET, the opt-in pricing refresh, opt-in vendor APIs, and the existing opt-in metadata cloud sync.
 5. **Loopback only.** Servers bind to `127.0.0.1` and require the bearer token plus Host/Origin validation.
 6. **Every number declares its trust level** (`exact | estimated | api | unknown`). Never present an estimate as exact.
@@ -32,7 +32,7 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 | `crates/store` | SQLite schema, migrations, queries, rollups. |
 | `crates/platform` | OS-specific code: paths, process scan, focus, autostart. All `cfg(target_os)` code lives here. |
 | `crates/daemon` | axum HTTP/WS API, IPC server, orchestration. |
-| `crates/cli` | The `spawnt` binary. Thin: parse args, call into the other crates. |
+| `crates/cli` | The `gnomcode` binary. Thin: parse args, call into the other crates. |
 | `apps/desktop` | Electron shell and tray. |
 | `web/` | React dashboard (M2). |
 | `npm/` | npm shim and per-platform binary packages. |
@@ -48,7 +48,7 @@ cargo fmt --all                                            # format
 cargo clippy --workspace --all-targets -- -D warnings      # lint (CI gate)
 cargo test --workspace                                     # tests (CI gate)
 cargo deny check                                           # licenses/advisories (CI gate)
-cargo run -p spawnt -- <subcommand>                      # run the CLI
+cargo run -p gnomcode -- <subcommand>                      # run the CLI
 ```
 
 To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/rust-quality-gate/`).
@@ -63,7 +63,7 @@ To run the full local gate, use the `rust-quality-gate` skill (`.agents/skills/r
 - **Logging:** `tracing`. Never log content fields or tokens. Levels: `error` = needs user action, `warn` = degraded, `info` = lifecycle, `debug`/`trace` = dev.
 - **Dependencies:** prefer well-maintained crates with permissive licenses (allow-list in `deny.toml`). Add them to `[workspace.dependencies]` first, then reference with `{ workspace = true }`. Justify each new dependency in the PR description.
 - **Public API:** every `pub` item in library crates gets a doc comment. Keep things `pub(crate)` unless another crate needs them.
-- **Paths:** never hardcode `/` or `\`. Use `Path`/`PathBuf` and resolve home and app dirs through `platform::paths`. Respect env overrides (`SPAWNT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`).
+- **Paths:** never hardcode `/` or `\`. Use `Path`/`PathBuf` and resolve home and app dirs through `platform::paths`. Respect env overrides (`GNOMCODE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`).
 - **Time:** store UTC (`time` or `chrono`, one only, chosen in M1). Convert to local time only in the UI.
 
 ## 6. Testing standards
@@ -97,6 +97,6 @@ When Wahaj authorizes a product phase, keep working until that phase is complete
   - `ponytail` (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`): minimalist filter ladder — write the smallest code that works, reuse stdlib/existing crates, avoid speculative abstractions.
   - `test-driven-development`, `systematic-debugging`, `verification-before-completion` (`obra/superpowers`): strict red-green-refactor TDD, root-cause debugging, and evidence-backed completion checks.
   - `rust-best-practices`, `supabase-postgres-best-practices`: domain guides for idiomatic Rust and Supabase RLS/schema design.
-  - `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`: Spawnt-specific runbooks.
+  - `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`: Gnomcode-specific runbooks.
 - Don't add features that aren't in SPEC. Propose them in SPEC (and an ADR if architectural) first.
 - Don't rewrite or delete existing comments and docs that are unrelated to your change.

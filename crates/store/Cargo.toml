@@ -1,5 +1,5 @@
 [package]
-name = "spawnt-store"
+name = "gnomcode-store"
 description = "SQLite schema, migrations, queries and rollups."
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-spawnt-core = { workspace = true }
+gnomcode-core = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }

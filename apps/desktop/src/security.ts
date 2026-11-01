@@ -23,10 +23,10 @@ export function daemonEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 export function trayTooltip(value: unknown): string {
-  if (typeof value !== 'object' || value === null) return 'Spawnt: daemon unavailable';
+  if (typeof value !== 'object' || value === null) return 'Gnomcode: daemon unavailable';
   const rec = value as Record<string, unknown>;
   const count = rec.ongoing_count;
-  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return 'Spawnt: daemon unavailable';
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return 'Gnomcode: daemon unavailable';
   const awaiting = rec.awaiting_approval_count;
   if (typeof awaiting === 'number' && Number.isSafeInteger(awaiting) && awaiting > 0) {
     return `${count} ongoing session${count === 1 ? '' : 's'} · ${awaiting} awaiting approval (estimated)`;
@@ -36,8 +36,8 @@ export function trayTooltip(value: unknown): string {
 
 export function trayBadgeName(value: unknown): string {
   const count = value && typeof value === 'object' ? (value as Record<string, unknown>).ongoing_count : null;
-  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) return 'spawnt-tray.ico';
-  return `spawnt-tray-${count > 9 ? '9plus' : count}.png`;
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) return 'gnomcode-tray.ico';
+  return `gnomcode-tray-${count > 9 ? '9plus' : count}.png`;
 }
 
 export function isAllowedResource(input: string, port: number): boolean {

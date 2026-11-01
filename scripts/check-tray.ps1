@@ -13,7 +13,7 @@ $fn=[regex]::Match($source,'(?s)function Update-TrayIconBadge\(.*?\n}\r?\n').Val
 if (!$fn) { throw 'Badge function absent' }
 Invoke-Expression ($fn.Replace('catch {}','catch { throw }'))
 $notifyIcon=New-Object System.Windows.Forms.NotifyIcon
-$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/spawnt.ico'),32,32)
+$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/gnomcode.ico'),32,32)
 $baseBitmap=$baseIcon.ToBitmap()
 $corner=$baseBitmap.GetPixel(0,0)
 if ($corner.R -ne 7 -or $corner.G -ne 7 -or $corner.B -ne 8 -or $corner.A -ne 255) { throw 'Windows icon must have an opaque brand-black canvas' }
@@ -23,7 +23,7 @@ $boundsY=$redPixels | Measure-Object Y -Minimum -Maximum
 if ($redPixels.Count -eq 0 -or $boundsX.Minimum -lt 8 -or $boundsY.Minimum -lt 8 -or ($boundsX.Maximum-$boundsX.Minimum+1) -gt 17 -or ($boundsY.Maximum-$boundsY.Minimum+1) -gt 17) { throw 'Windows mark must use the centered 0.65x asset scale' }
 $baseBitmap.Dispose()
 $baseIcon.Dispose()
-$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/spawnt-tray.ico'),32,32)
+$baseIcon=New-Object System.Drawing.Icon((Join-Path $PSScriptRoot '../scripts/gnomcode-tray.ico'),32,32)
 $trayBitmap=$baseIcon.ToBitmap()
 $trayPixel=$trayBitmap.GetPixel(6,6)
 if ($trayPixel.R -lt 180 -or $trayPixel.G -gt 80) { throw 'Tray mark must retain its full original scale' }

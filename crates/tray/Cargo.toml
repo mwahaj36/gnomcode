@@ -1,6 +1,6 @@
 [package]
-name = "spawnt-tray"
-description = "Spawnt desktop notification and focus helpers."
+name = "gnomcode-tray"
+description = "Gnomcode desktop notification and focus helpers."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,10 +9,10 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-spawnt-core = { workspace = true }
-spawnt-daemon = { workspace = true }
-spawnt-store = { workspace = true }
-spawnt-platform = { workspace = true }
+gnomcode-core = { workspace = true }
+gnomcode-daemon = { workspace = true }
+gnomcode-store = { workspace = true }
+gnomcode-platform = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

@@ -237,7 +237,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     try {
     if (user) {
       try {
-        const desktop = await supabase.from("spawnt_sync_state").select("*").eq("user_id", user.id).maybeSingle();
+        const desktop = await supabase.from("gnomcode_sync_state").select("*").eq("user_id", user.id).maybeSingle();
         if (generation !== metricsGeneration.current) return false;
         if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
         const snap = lastDesktopSnapshot.current;
@@ -359,7 +359,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
   if (!authChecked) {
     return (
       <div className="flex h-96 items-center justify-center font-mono text-xs text-muted">
-        Connecting to spawnt Mission Control...
+        Connecting to gnomcode Mission Control...
       </div>
     );
   }
@@ -382,7 +382,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
-        <Link href="/console" className="web-rail-brand" aria-label="Spawnt dashboard"><span className="sp-brand-mark" /></Link>
+        <Link href="/console" className="web-rail-brand" aria-label="Gnomcode dashboard"><span className="sp-brand-mark" /></Link>
         <button type="button" aria-label={navigationExpanded ? "Collapse navigation" : "Expand navigation"} aria-expanded={navigationExpanded} onClick={() => setNavigationExpanded(!navigationExpanded)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7" /></svg><span>{navigationExpanded ? "Collapse navigation" : "Expand navigation"}</span></button>
         {["overview", "chat", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view, index) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={[
           "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z", "M4 4h16v12H9l-5 4V4Z", "M4 4h16v16H4z M8 9h8 M8 14h8", "M4 20V10m8 10V4m8 16v-7", "M4 12a8 8 0 0 1 16 0 M12 12l5-5 M4 20h16", "M3 6h7l2 3h9v11H3V6Z", "m13 2-9 12h7l-1 8 10-13h-8l1-7Z", "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3"

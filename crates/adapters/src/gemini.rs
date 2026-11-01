@@ -6,13 +6,13 @@ use crate::{
     claude::{classify_tool_kind, extract_tool_detail, fallback_id_from_path},
 };
 use chrono::{DateTime, Utc};
-use serde_json::Value;
-use spawnt_core::{
+use gnomcode_core::{
     ActivityEvent, AgentId, ChatEvent, ChatRole, Project, Session, SessionState, Surface,
     UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::{redact_chat_content, redact_summary},
 };
+use serde_json::Value;
 use std::collections::HashSet;
 
 /// Stateful parser for a Gemini CLI rewritten `.json` session log.

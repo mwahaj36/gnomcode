@@ -85,7 +85,7 @@ fn choices(agent: &str, source: &str, models: &Value) -> Vec<ModelChoice> {
                 } else {
                     id.into()
                 },
-                display_name: spawnt_core::redact::redact_chat_content(label)
+                display_name: gnomcode_core::redact::redact_chat_content(label)
                     .chars()
                     .take(256)
                     .collect(),
@@ -101,7 +101,7 @@ async fn command_output(
     cwd: &std::path::Path,
 ) -> Option<(bool, Vec<u8>)> {
     let mut command = tokio::process::Command::from(
-        spawnt_platform::executables::background_agent_command(agent),
+        gnomcode_platform::executables::background_agent_command(agent),
     );
     command
         .args(args)
@@ -143,7 +143,7 @@ fn antigravity_models(bytes: &[u8]) -> Vec<ModelChoice> {
 
 async fn claude_models(cwd: &std::path::Path) -> Option<Vec<ModelChoice>> {
     let mut command = tokio::process::Command::from(
-        spawnt_platform::executables::background_agent_command("claude"),
+        gnomcode_platform::executables::background_agent_command("claude"),
     );
     command
         .args([
@@ -169,13 +169,13 @@ async fn claude_models(cwd: &std::path::Path) -> Option<Vec<ModelChoice>> {
         .kill_on_drop(true);
     let mut child = command.spawn().ok()?;
     let mut input = child.stdin.take()?;
-    input.write_all(b"{\"type\":\"control_request\",\"request_id\":\"spawnt-models\",\"request\":{\"subtype\":\"initialize\",\"hooks\":{},\"agents\":{},\"skills\":[]}}\n").await.ok()?;
+    input.write_all(b"{\"type\":\"control_request\",\"request_id\":\"gnomcode-models\",\"request\":{\"subtype\":\"initialize\",\"hooks\":{},\"agents\":{},\"skills\":[]}}\n").await.ok()?;
     let mut output = BufReader::new(child.stdout.take()?.take(LIMIT));
     let mut line = String::new();
     while output.read_line(&mut line).await.ok()? > 0 {
         if let Ok(value) = serde_json::from_str::<Value>(&line) {
             let response = &value["response"];
-            if value["type"] == "control_response" && response["request_id"] == "spawnt-models" {
+            if value["type"] == "control_response" && response["request_id"] == "gnomcode-models" {
                 if response["subtype"] != "success" || !response["response"]["models"].is_array() {
                     return None;
                 }
@@ -218,7 +218,7 @@ fn gemini_account_configured(
 
 fn read_metadata(path: &std::path::Path) -> Value {
     use std::io::Read as _;
-    let Ok(file) = spawnt_platform::open_shared_read(path) else {
+    let Ok(file) = gnomcode_platform::open_shared_read(path) else {
         return Value::Null;
     };
     let mut bytes = Vec::new();
@@ -231,7 +231,7 @@ fn read_metadata(path: &std::path::Path) -> Value {
 async fn discover_provider(agent: &str, name: &str) -> ProviderCatalog {
     let mut result = ProviderCatalog::new(agent, name);
     let executable = if agent == "antigravity" { "agy" } else { agent };
-    if !spawnt_platform::executables::executable_available(executable) {
+    if !gnomcode_platform::executables::executable_available(executable) {
         return result;
     }
     result.status = "unknown".into();
@@ -283,7 +283,7 @@ async fn discover_provider(agent: &str, name: &str) -> ProviderCatalog {
                     .filter(|path| !path.is_empty())
                     .map(std::path::PathBuf::from)
                     .unwrap_or_else(|| {
-                        spawnt_platform::user_home_dir().join(obfstr::obfstr!(".gemini"))
+                        gnomcode_platform::user_home_dir().join(obfstr::obfstr!(".gemini"))
                     });
                 let api_key = std::env::var_os("GEMINI_API_KEY").is_some();
                 let vertex = std::env::var_os("GOOGLE_CLOUD_PROJECT").is_some();

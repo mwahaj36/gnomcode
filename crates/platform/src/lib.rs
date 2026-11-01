@@ -4,7 +4,7 @@
 pub mod executables;
 pub mod workspaces;
 
-use spawnt_core::AgentId;
+use gnomcode_core::AgentId;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom};
@@ -30,20 +30,29 @@ pub struct AgentRoot {
     pub exists: bool,
 }
 
-/// Resolves the data directory using `SPAWNT_HOME` or the user's home.
+/// Resolves the data directory, preserving access to legacy local history.
 #[must_use]
-pub fn spawnt_home() -> PathBuf {
-    env::var("SPAWNT_HOME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
+pub fn gnomcode_home() -> PathBuf {
+    ["GNOMCODE_HOME", "SPAWNT_HOME"]
+        .iter()
+        .filter_map(|key| env::var(key).ok())
+        .find(|value| !value.trim().is_empty())
         .map(|value| PathBuf::from(value.trim()))
-        .unwrap_or_else(|| user_home_dir().join(".spawnt"))
+        .unwrap_or_else(|| {
+            let home = user_home_dir();
+            let legacy = home.join(".spawnt");
+            if legacy.is_dir() {
+                legacy
+            } else {
+                home.join(".gnomcode")
+            }
+        })
 }
 
-/// Resolves the default SQLite database path (`~/.spawnt/state.db`).
+/// Resolves the default SQLite database path (`~/.gnomcode/state.db`).
 #[must_use]
 pub fn default_db_path() -> PathBuf {
-    spawnt_home().join("state.db")
+    gnomcode_home().join("state.db")
 }
 
 /// Lists modified and untracked repository paths for a handoff.
@@ -108,7 +117,7 @@ pub fn process_is_alive(pid: u32) -> bool {
     system.process(sysinfo::Pid::from_u32(pid)).is_some()
 }
 
-/// Stops a process that was explicitly launched and owned by Spawnt.
+/// Stops a process that was explicitly launched and owned by Gnomcode.
 ///
 /// # Errors
 /// Returns an error if the process cannot be stopped.
@@ -434,7 +443,7 @@ pub fn read_antigravity_fallback_model() -> Option<String> {
     None
 }
 
-/// Opens a file with shared read/write/delete permissions on Windows so Spawnt
+/// Opens a file with shared read/write/delete permissions on Windows so Gnomcode
 /// never blocks an active agent from appending or rotating its log (`SPEC §3.12`).
 ///
 /// # Errors
@@ -506,7 +515,7 @@ pub fn attach_parent_console() {}
 
 #[cfg(target_os = "windows")]
 fn windows_focus_prelude() -> &'static str {
-    r#"$ErrorActionPreference='Stop'; Add-Type 'using System; using System.Runtime.InteropServices; public class SpawntFocus { [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h,int command); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); }'; $shell=New-Object -ComObject WScript.Shell; $focus={ param([int]$targetId) $window=Get-Process -Id $targetId -ErrorAction SilentlyContinue; if(!$window -or $window.MainWindowHandle -eq 0){return $false}; if([SpawntFocus]::IsIconic($window.MainWindowHandle)){[SpawntFocus]::ShowWindowAsync($window.MainWindowHandle,9)|Out-Null}; $null=$shell.AppActivate($targetId); [SpawntFocus]::SetForegroundWindow($window.MainWindowHandle)|Out-Null; return ([SpawntFocus]::GetForegroundWindow() -eq $window.MainWindowHandle) }; "#
+    r#"$ErrorActionPreference='Stop'; Add-Type 'using System; using System.Runtime.InteropServices; public class GnomcodeFocus { [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h,int command); [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); }'; $shell=New-Object -ComObject WScript.Shell; $focus={ param([int]$targetId) $window=Get-Process -Id $targetId -ErrorAction SilentlyContinue; if(!$window -or $window.MainWindowHandle -eq 0){return $false}; if([GnomcodeFocus]::IsIconic($window.MainWindowHandle)){[GnomcodeFocus]::ShowWindowAsync($window.MainWindowHandle,9)|Out-Null}; $null=$shell.AppActivate($targetId); [GnomcodeFocus]::SetForegroundWindow($window.MainWindowHandle)|Out-Null; return ([GnomcodeFocus]::GetForegroundWindow() -eq $window.MainWindowHandle) }; "#
 }
 
 /// Dispatches a window focus request for a process ID across OS platforms (`SPEC §3.13`).
@@ -731,7 +740,7 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
 mod tests {
     #[test]
     fn antigravity_cli_and_ide_roots_respect_gemini_home() {
-        const CHILD: &str = "SPAWNT_TEST_AGY_ROOTS";
+        const CHILD: &str = "GNOMCODE_TEST_AGY_ROOTS";
         if let Some(root) = std::env::var_os(CHILD) {
             let root = std::path::PathBuf::from(root);
             let roots = super::discover_agent_roots();
@@ -739,7 +748,7 @@ mod tests {
                 assert!(
                     roots
                         .iter()
-                        .any(|entry| entry.agent == spawnt_core::AgentId::Antigravity
+                        .any(|entry| entry.agent == gnomcode_core::AgentId::Antigravity
                             && entry.path == root.join(product).join("brain"))
                 );
             }
@@ -939,7 +948,7 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         .ok_or_else(|| io::Error::other("Missing parent directory"))?;
     fs::create_dir_all(parent)?;
     let pending = parent.join(format!(
-        ".spawnt-private-{}-{}.tmp",
+        ".gnomcode-private-{}-{}.tmp",
         std::process::id(),
         NEXT_FILE.fetch_add(1, Ordering::Relaxed)
     ));
@@ -956,8 +965,8 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         {
             use std::os::windows::process::CommandExt as _;
             let output = std::process::Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:SPAWNT_PRIVATE_FILE,$acl)"])
-                .env("SPAWNT_PRIVATE_FILE", &pending)
+                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:GNOMCODE_PRIVATE_FILE,$acl)"])
+                .env("GNOMCODE_PRIVATE_FILE", &pending)
                 .creation_flags(0x0800_0000).output()?;
             if !output.status.success() {
                 return Err(io::Error::other("Cannot restrict credential file access"));
@@ -1010,7 +1019,7 @@ mod file_lock {
 mod subscription_privacy_tests {
     #[test]
     fn claude_credentials_do_not_set_subscription_plan() {
-        if std::env::var_os("SPAWNT_TEST_CREDENTIAL_CHILD").is_some() {
+        if std::env::var_os("GNOMCODE_TEST_CREDENTIAL_CHILD").is_some() {
             assert!(super::detect_local_subscriptions().anthropic.is_none());
             return;
         }
@@ -1025,7 +1034,7 @@ mod subscription_privacy_tests {
                 "subscription_privacy_tests::claude_credentials_do_not_set_subscription_plan",
                 "--exact",
             ])
-            .env("SPAWNT_TEST_CREDENTIAL_CHILD", "1")
+            .env("GNOMCODE_TEST_CREDENTIAL_CHILD", "1")
             .env("CLAUDE_CONFIG_DIR", dir.path())
             .env("GEMINI_HOME", dir.path())
             .output()
@@ -1049,7 +1058,7 @@ mod private_file_tests {
         assert_eq!(std::fs::read_dir(dir.path()).expect("files").count(), 1);
         #[cfg(target_os = "windows")]
         {
-            let output = std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command", "$acl=[IO.File]::GetAccessControl($env:SPAWNT_PRIVATE_FILE,[Security.AccessControl.AccessControlSections]::Access); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $sid.Value){exit 1}; exit 0"]).env("SPAWNT_PRIVATE_FILE",&path).output().expect("inspect private ACL");
+            let output = std::process::Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command", "$acl=[IO.File]::GetAccessControl($env:GNOMCODE_PRIVATE_FILE,[Security.AccessControl.AccessControlSections]::Access); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $sid.Value){exit 1}; exit 0"]).env("GNOMCODE_PRIVATE_FILE",&path).output().expect("inspect private ACL");
             assert!(
                 output.status.success(),
                 "credentials must retain one owner-only protected access rule"
@@ -1084,34 +1093,53 @@ mod daemon_lock_tests {
 }
 
 #[cfg(test)]
-mod spawnt_home_tests {
+mod gnomcode_home_tests {
     #[test]
-    fn honors_override_and_uses_spawnt_default() {
-        if let Ok(expected) = std::env::var("SPAWNT_TEST_EXPECTED_HOME") {
-            assert_eq!(super::spawnt_home(), std::path::PathBuf::from(expected));
+    fn honors_override_and_uses_gnomcode_default() {
+        if let Ok(expected) = std::env::var("GNOMCODE_TEST_EXPECTED_HOME") {
+            assert_eq!(super::gnomcode_home(), std::path::PathBuf::from(expected));
             return;
         }
         let root = tempfile::tempdir().expect("home");
-        for custom in [false, true] {
+        for (custom, legacy, legacy_override) in [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+            (true, true, true),
+        ] {
+            let legacy_home = root.path().join(".spawnt");
+            if legacy {
+                std::fs::create_dir_all(&legacy_home).expect("legacy history");
+            }
             let expected = if custom {
                 root.path().join("custom")
+            } else if legacy {
+                legacy_home.clone()
+            } else if legacy_override {
+                root.path().join("legacy-custom")
             } else {
-                root.path().join(".spawnt")
+                root.path().join(".gnomcode")
             };
             let mut child =
                 std::process::Command::new(std::env::current_exe().expect("test executable"));
             child
                 .args([
-                    "spawnt_home_tests::honors_override_and_uses_spawnt_default",
+                    "gnomcode_home_tests::honors_override_and_uses_gnomcode_default",
                     "--exact",
                 ])
-                .env("SPAWNT_TEST_EXPECTED_HOME", &expected)
+                .env("GNOMCODE_TEST_EXPECTED_HOME", &expected)
                 .env("HOME", root.path())
-                .env("USERPROFILE", root.path());
+                .env("USERPROFILE", root.path())
+                .env_remove("GNOMCODE_HOME")
+                .env_remove("SPAWNT_HOME");
+            if legacy_override {
+                child.env("SPAWNT_HOME", root.path().join("legacy-custom"));
+            }
             if custom {
-                child.env("SPAWNT_HOME", &expected);
+                child.env("GNOMCODE_HOME", &expected);
             } else {
-                child.env_remove("SPAWNT_HOME");
+                child.env_remove("GNOMCODE_HOME");
             }
             let output = child.output().expect("child test");
             assert!(
@@ -1119,6 +1147,9 @@ mod spawnt_home_tests {
                 "{}",
                 String::from_utf8_lossy(&output.stdout)
             );
+            if legacy {
+                std::fs::remove_dir(&legacy_home).expect("remove empty fixture");
+            }
         }
     }
 }

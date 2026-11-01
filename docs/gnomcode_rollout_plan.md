@@ -1,6 +1,6 @@
-# spawnt redesign plan
+# gnomcode redesign plan
 
-Status: proposed implementation sequence, updated 2026-10-28 for the current repository and the reviewed landing preview. The user-supplied [original redesign plan](spawnt_redesign_plan.md) is preserved verbatim alongside this update. Use this rollout plan for implementation order, [DESIGN.md](../DESIGN.md) for current visual tokens, and [SPEC.md](SPEC.md) for product scope, security, and behavior. A phase that changes architecture or deliverables must update SPEC and, when architectural, add an ADR in the same PR.
+Status: proposed implementation sequence, updated 2026-10-28 for the current repository and the reviewed landing preview. The user-supplied [original redesign plan](gnomcode_redesign_plan.md) is preserved verbatim alongside this update. Use this rollout plan for implementation order, [DESIGN.md](../DESIGN.md) for current visual tokens, and [SPEC.md](SPEC.md) for product scope, security, and behavior. A phase that changes architecture or deliverables must update SPEC and, when architectural, add an ADR in the same PR.
 
 ## Current rollout state
 
@@ -15,11 +15,11 @@ Use one focused branch and PR per phase. Add a dated record under `docs/sessions
 | Phase | Work | Acceptance |
 | :--- | :--- | :--- |
 | 0. Inventory and architecture | Map every current route, daemon endpoint, auth state, action, and tray entry. Write an ADR for shared console UI and delivery; update SPEC where it differs from code. | No existing console capability or security boundary is lost in the proposed map. |
-| 1. Shared design foundation | Move the approved palette from DESIGN into shared tokens; self-host type and mark; define buttons, badges, tables, inputs, tabs, charts, panels, empty/error states, and themes. | Landing, component showcase, and both themes use the same tokens; contrast and reduced-motion checks pass. (Started on `feat/spawnt-foundation`.) |
+| 1. Shared design foundation | Move the approved palette from DESIGN into shared tokens; self-host type and mark; define buttons, badges, tables, inputs, tabs, charts, panels, empty/error states, and themes. | Landing, component showcase, and both themes use the same tokens; contrast and reduced-motion checks pass. (Started on `feat/gnomcode-foundation`.) |
 | 2. Data contracts | Identify missing page data and add only necessary Rust store/daemon queries and endpoints. Reconcile SPEC's endpoint list with the actual `/api/v1` routes. | API tests cover filters, pagination, malformed input, trust levels, and token/Host/Origin protection. |
 | 3. Local console | Build the new shell and pages against the daemon API; package its assets in the daemon binary. Replace `console.html` only after feature parity. (In progress: matching destinations and truthful local refresh states.) | Offline local console works with no remote font, script, or analytics requests and no prompt/code/tool-output persistence. |
 | 4. Signed-in web console | Reuse the same visual components and page layouts, with a cloud/Supabase data adapter and account states. (In progress: seven destinations and dedicated Usage/Limits.) | Signed-in pages match the local console visually and only show data actually available in the cloud. |
-| 5. Marketing and account pages | Migrate Pricing, Downloads, Docs, Auth, Settings, shared nav/footer, metadata, and responsive layouts. Replace illustrative product shots with captures from the real console. | Every public route follows DESIGN; old Spawnt copy is removed from user-facing surfaces only when its replacement works. |
+| 5. Marketing and account pages | Migrate Pricing, Downloads, Docs, Auth, Settings, shared nav/footer, metadata, and responsive layouts. Replace illustrative product shots with captures from the real console. | Every public route follows DESIGN; old Gnomcode copy is removed from user-facing surfaces only when its replacement works. |
 | 6. Native and distribution | Make the native tray/open-console experience use the same local console UI; update installer and app branding after parity. | Windows, macOS, and Linux fallbacks in SPEC still work; upgrades keep user data. |
 | 7. Internal rename | Rename binary, package, env vars, and data dir separately with aliases and migration tests. | Existing installs, integrations, and scripts keep working through the documented transition. |
 

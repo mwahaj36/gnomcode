@@ -11,7 +11,7 @@ import time
 if not os.path.isdir('/proc/self'):
     raise SystemExit('Linux /proc is required')
 
-binary = str(Path(__file__).resolve().parents[1] / 'target/debug/spawnt')
+binary = str(Path(__file__).resolve().parents[1] / 'target/debug/gnomcode')
 
 
 def sample(pids, seconds=4):
@@ -40,10 +40,10 @@ def sample(pids, seconds=4):
     ]
 
 
-with tempfile.TemporaryDirectory(prefix='spawnt-bench-') as directory:
+with tempfile.TemporaryDirectory(prefix='gnomcode-bench-') as directory:
     root = Path(directory)
     env = {
-        'SPAWNT_HOME': str(root / 'state'), 'HOME': directory, 'USERPROFILE': directory,
+        'GNOMCODE_HOME': str(root / 'state'), 'HOME': directory, 'USERPROFILE': directory,
         'APPDATA': directory, 'CLAUDE_CONFIG_DIR': str(root / 'claude'),
         'CODEX_HOME': str(root / 'codex'), 'GEMINI_HOME': str(root / 'gemini'),
         'PATH': f'{root / "bin"}:/usr/bin:/bin',

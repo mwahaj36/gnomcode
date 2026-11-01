@@ -4,7 +4,7 @@ const path = require('node:path');
 function inspectReleaseInputs(staging, appVersion, workspaceVersion, platform) {
   const errors = [];
   if (appVersion !== workspaceVersion) errors.push('Desktop version does not match the Rust workspace.');
-  const binary = platform === 'win32' ? 'spawnt.exe' : 'spawnt';
+  const binary = platform === 'win32' ? 'gnomcode.exe' : 'gnomcode';
   for (const name of ['EULA.txt', 'THIRD_PARTY_NOTICES.html', 'DESKTOP_THIRD_PARTY_NOTICES.html', 'ELECTRON_LICENSE.txt', 'CHROMIUM_LICENSES.html', path.join('bin', binary)]) {
     try {
       const stat = fs.statSync(path.join(staging, name));

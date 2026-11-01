@@ -1,25 +1,27 @@
-//! Spawnt CLI entry point (`SPEC §3.6`, `§4.6`).
+//! Gnomcode CLI entry point (`SPEC §3.6`, `§4.6`).
 //!
 //! Provides read-only CLI commands:
-//! - `spawnt status`: live & recent agent sessions, state, model, surface.
-//! - `spawnt report`: usage & cost breakdown by project/agent/model + quota pools + Plan Value ROI.
-//! - `spawnt doctor`: environment diagnostics, detected agent roots, and network requirements.
+//! - `gnomcode status`: live & recent agent sessions, state, model, surface.
+//! - `gnomcode report`: usage & cost breakdown by project/agent/model + quota pools + Plan Value ROI.
+//! - `gnomcode doctor`: environment diagnostics, detected agent roots, and network requirements.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use spawnt_core::pricing::calculate_plan_roi;
-use spawnt_ingest::ingest_all;
-use spawnt_platform::{attach_parent_console, default_db_path, discover_agent_roots, spawnt_home};
-use spawnt_store::Database;
+use gnomcode_core::pricing::calculate_plan_roi;
+use gnomcode_ingest::ingest_all;
+use gnomcode_platform::{
+    attach_parent_console, default_db_path, discover_agent_roots, gnomcode_home,
+};
+use gnomcode_store::Database;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "spawnt",
+    name = "gnomcode",
     version,
     about = "Live mission control for AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI)"
 )]
@@ -55,7 +57,7 @@ enum Commands {
         #[arg(long)]
         network: bool,
     },
-    /// Start the spawnt background daemon and local web console.
+    /// Start the gnomcode background daemon and local web console.
     Daemon {
         /// Port to bind the local HTTP server to.
         #[arg(long, default_value_t = 41738)]
@@ -76,24 +78,24 @@ enum Commands {
         #[arg(long, default_value_t = 41738)]
         port: u16,
     },
-    /// Backwards compatible alias for `spawnt console`.
+    /// Backwards compatible alias for `gnomcode console`.
     #[command(hide = true)]
     Dashboard {
         /// Port to bind the local HTTP server to.
         #[arg(long, default_value_t = 41738)]
         port: u16,
     },
-    /// Install spawnt to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
+    /// Install gnomcode to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
     Install,
     /// Add or remove the optional Claude Code guardrail hook.
     Integrate {
         /// Agent to integrate (currently `claude`).
         agent: String,
-        /// Remove spawnt's hook without changing other hooks.
+        /// Remove gnomcode's hook without changing other hooks.
         #[arg(long)]
         remove: bool,
     },
-    /// Manage spawnt offline Pro / Team license.
+    /// Manage gnomcode offline Pro / Team license.
     License {
         #[command(subcommand)]
         action: LicenseCommands,
@@ -233,7 +235,7 @@ async fn main() -> Result<()> {
 fn cmd_license(action: LicenseCommands) -> Result<()> {
     match action {
         LicenseCommands::Status => {
-            let key_path = spawnt_home().join("license.key");
+            let key_path = gnomcode_home().join("license.key");
             if !key_path.exists() {
                 println!("Tier: Free (freeware, forever)");
                 println!(
@@ -243,18 +245,18 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
                 return Ok(());
             }
             let bytes = std::fs::read(&key_path)?;
-            let license: spawnt_core::license::LicenseFile = serde_json::from_slice(&bytes)?;
-            match spawnt_core::license::verify_license(
+            let license: gnomcode_core::license::LicenseFile = serde_json::from_slice(&bytes)?;
+            match gnomcode_core::license::verify_license(
                 &license,
-                spawnt_core::license::SPAWNT_LICENSE_PUBKEY_HEX,
+                gnomcode_core::license::GNOMCODE_LICENSE_PUBKEY_HEX,
             ) {
                 Ok(tier) => {
                     println!(
                         "Tier: {}",
                         match tier {
-                            spawnt_core::license::Tier::Pro => "Pro ($19 perpetual)",
-                            spawnt_core::license::Tier::Team => "Team",
-                            spawnt_core::license::Tier::Free => "Free",
+                            gnomcode_core::license::Tier::Pro => "Pro ($19 perpetual)",
+                            gnomcode_core::license::Tier::Team => "Team",
+                            gnomcode_core::license::Tier::Free => "Free",
                         }
                     );
                     println!("Licensee: {}", license.payload.licensee);
@@ -277,23 +279,23 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
             } else {
                 key
             };
-            let license: spawnt_core::license::LicenseFile =
+            let license: gnomcode_core::license::LicenseFile =
                 serde_json::from_str(content.trim()).context("invalid license JSON format")?;
-            let tier = spawnt_core::license::verify_license(
+            let tier = gnomcode_core::license::verify_license(
                 &license,
-                spawnt_core::license::SPAWNT_LICENSE_PUBKEY_HEX,
+                gnomcode_core::license::GNOMCODE_LICENSE_PUBKEY_HEX,
             )
             .context("license cryptographic verification failed")?;
             anyhow::ensure!(
                 matches!(
                     tier,
-                    spawnt_core::license::Tier::Pro | spawnt_core::license::Tier::Team
+                    gnomcode_core::license::Tier::Pro | gnomcode_core::license::Tier::Team
                 ),
                 "License is for Free tier; Pro or Team required."
             );
-            std::fs::create_dir_all(spawnt_home())?;
+            std::fs::create_dir_all(gnomcode_home())?;
             std::fs::write(
-                spawnt_home().join("license.key"),
+                gnomcode_home().join("license.key"),
                 serde_json::to_vec_pretty(&license)?,
             )?;
             println!(
@@ -303,7 +305,7 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
             Ok(())
         }
         LicenseCommands::Remove => {
-            let key_path = spawnt_home().join("license.key");
+            let key_path = gnomcode_home().join("license.key");
             if key_path.exists() {
                 std::fs::remove_file(key_path)?;
             }
@@ -338,7 +340,7 @@ fn cmd_hook() -> Result<()> {
     let session_key = format!("claude-code:{id}");
 
     // Invariant 3: Fail open. Check whether daemon is alive and blocked-sessions.json is fresh (< 30s)
-    let block_file = spawnt_home().join("blocked-sessions.json");
+    let block_file = gnomcode_home().join("blocked-sessions.json");
     let is_stale = match std::fs::metadata(&block_file) {
         Ok(meta) => match meta.modified() {
             Ok(mtime) => match std::time::SystemTime::now().duration_since(mtime) {
@@ -363,7 +365,7 @@ fn cmd_hook() -> Result<()> {
     };
     if blocked.iter().any(|session| session == &session_key) {
         eprintln!(
-            "spawnt guardrail: session threshold reached. Remove or raise the rule to continue."
+            "gnomcode guardrail: session threshold reached. Remove or raise the rule to continue."
         );
         std::process::exit(2);
     }
@@ -376,7 +378,7 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
         .ok()
         .filter(|s| !s.trim().is_empty())
         .map_or_else(
-            || spawnt_platform::user_home_dir().join(".claude"),
+            || gnomcode_platform::user_home_dir().join(".claude"),
             PathBuf::from,
         );
     std::fs::create_dir_all(&config_dir)?;
@@ -407,12 +409,13 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
                             .get("command")
                             .and_then(|v| v.as_str())
                             .unwrap_or("");
-                        let is_spawnt_hook = cmd == exe
+                        let is_gnomcode_hook = cmd == exe
                             || std::path::Path::new(cmd)
                                 .file_name()
                                 .and_then(|name| name.to_str())
-                                .is_some_and(|name| ["spawnt", "spawnt.exe"].contains(&name));
-                        is_spawnt_hook && handler.get("args") == Some(&serde_json::json!(["hook"]))
+                                .is_some_and(|name| ["gnomcode", "gnomcode.exe"].contains(&name));
+                        is_gnomcode_hook
+                            && handler.get("args") == Some(&serde_json::json!(["hook"]))
                     })
                 })
         });
@@ -431,7 +434,7 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
             .push(entry);
     }
     if path.exists() {
-        std::fs::copy(&path, config_dir.join("settings.json.spawnt.bak"))?;
+        std::fs::copy(&path, config_dir.join("settings.json.gnomcode.bak"))?;
     }
     std::fs::write(&path, serde_json::to_vec_pretty(&settings)?)?;
     println!(
@@ -449,7 +452,7 @@ fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
         .list_sessions_paginated(None, Some("ongoing"), 0, limit)
         .context("failed to query active sessions")?;
 
-    println!("=== SPAWNT ACTIVE SESSIONS ===");
+    println!("=== GNOMCODE ACTIVE SESSIONS ===");
     if sessions.is_empty() {
         println!("No active or recent agent sessions found.");
         println!("Run an agent (Claude Code, Codex, Antigravity, Gemini CLI) to populate.");
@@ -489,7 +492,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
             .context("failed to generate timeline report")?;
 
         println!(
-            "=== SPAWNT USAGE & COST REPORT ({}) ===",
+            "=== GNOMCODE USAGE & COST REPORT ({}) ===",
             tl.range_label.to_uppercase()
         );
         if tl.providers.is_empty() {
@@ -548,9 +551,9 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
             println!("{}", "-".repeat(78));
             for q in quota {
                 let win_str = match q.window {
-                    spawnt_core::QuotaWindow::FiveHour => "5-hour",
-                    spawnt_core::QuotaWindow::Weekly => "weekly",
-                    spawnt_core::QuotaWindow::Monthly => "monthly",
+                    gnomcode_core::QuotaWindow::FiveHour => "5-hour",
+                    gnomcode_core::QuotaWindow::Weekly => "weekly",
+                    gnomcode_core::QuotaWindow::Monthly => "monthly",
                 };
                 let reset_str = q.resets_at.map_or_else(
                     || "N/A".to_owned(),
@@ -570,7 +573,7 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
         .generate_usage_report()
         .context("failed to generate usage report")?;
 
-    println!("=== SPAWNT USAGE & COST REPORT ===");
+    println!("=== GNOMCODE USAGE & COST REPORT ===");
     if report_rows.is_empty() {
         println!("No usage data recorded yet.");
         return Ok(());
@@ -626,9 +629,9 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
         println!("{}", "-".repeat(78));
         for q in quota {
             let win_str = match q.window {
-                spawnt_core::QuotaWindow::FiveHour => "5-hour",
-                spawnt_core::QuotaWindow::Weekly => "weekly",
-                spawnt_core::QuotaWindow::Monthly => "monthly",
+                gnomcode_core::QuotaWindow::FiveHour => "5-hour",
+                gnomcode_core::QuotaWindow::Weekly => "weekly",
+                gnomcode_core::QuotaWindow::Monthly => "monthly",
             };
             let reset_str = q.resets_at.map_or_else(
                 || "N/A".to_owned(),
@@ -645,8 +648,8 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
 }
 
 fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
-    println!("=== SPAWNT DOCTOR DIAGNOSTICS ===");
-    println!("Home Directory: {}", spawnt_home().display());
+    println!("=== GNOMCODE DOCTOR DIAGNOSTICS ===");
+    println!("Home Directory: {}", gnomcode_home().display());
     println!("Database Path:  {}", db_path.display());
 
     let db_status = if db_path.exists() {
@@ -711,17 +714,17 @@ fn truncate_str(s: &str, max_len: usize) -> String {
 }
 
 async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<()> {
-    let (lock, info) = match spawnt_daemon::DaemonLock::acquire(port) {
+    let (lock, info) = match gnomcode_daemon::DaemonLock::acquire(port) {
         Ok(res) => res,
-        Err(spawnt_daemon::Error::AlreadyRunning) => {
-            if let Some(existing) = spawnt_daemon::read_daemon_info() {
+        Err(gnomcode_daemon::Error::AlreadyRunning) => {
+            if let Some(existing) = gnomcode_daemon::read_daemon_info() {
                 let local_url = format!(
                     "http://127.0.0.1:{}/?token={}",
                     existing.port, existing.token
                 );
                 let console_url =
-                    std::env::var("SPAWNT_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
-                println!("spawnt is already active (PID {}).", existing.pid);
+                    std::env::var("GNOMCODE_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
+                println!("gnomcode is already active (PID {}).", existing.pid);
                 if open {
                     open_browser(&console_url);
                     println!("Opened the local console.");
@@ -736,10 +739,10 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
     };
 
     let orchestrator =
-        spawnt_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
+        gnomcode_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
-    let remote = Arc::new(spawnt_daemon::remote::RemoteManager::new());
+    let remote = Arc::new(gnomcode_daemon::remote::RemoteManager::new());
     let restore_remote = remote.clone();
     let restore_db = orchestrator.db();
     tokio::spawn(async move {
@@ -748,24 +751,24 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         }
     });
     let _cloud_sync_handle =
-        spawnt_daemon::sync::spawn_cloud_sync(orchestrator.db(), remote.clone());
+        gnomcode_daemon::sync::spawn_cloud_sync(orchestrator.db(), remote.clone());
 
-    let state = spawnt_daemon::api::AppState {
+    let state = gnomcode_daemon::api::AppState {
         db: orchestrator.db(),
         bearer_token: info.token.clone(),
         orchestrator: Some(Arc::new(orchestrator)),
         remote,
     };
 
-    let router = spawnt_daemon::api::build_router(state);
+    let router = gnomcode_daemon::api::build_router(state);
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context(format!("failed to bind loopback TCP listener on {addr}"))?;
 
     let local_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
-    let console_url = std::env::var("SPAWNT_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
-    println!("=== SPAWNT DAEMON STARTED ===");
+    let console_url = std::env::var("GNOMCODE_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
+    println!("=== GNOMCODE DAEMON STARTED ===");
     println!("Status: Running");
     println!("Loopback Port: {port}");
     println!("PID: {}", info.pid);
@@ -790,7 +793,7 @@ fn open_browser(url: &str) {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_owned());
-        let install_dir = std::path::PathBuf::from(&local_app_data).join("Spawnt");
+        let install_dir = std::path::PathBuf::from(&local_app_data).join("Gnomcode");
 
         // Ensure tray background service is running
         let run_tray = install_dir.join("run-tray.vbs");
@@ -802,7 +805,7 @@ fn open_browser(url: &str) {
         }
 
         let app_arg = format!("--app={url}");
-        let profile_arg = format!("--user-data-dir={local_app_data}\\Spawnt\\AppProfile");
+        let profile_arg = format!("--user-data-dir={local_app_data}\\Gnomcode\\AppProfile");
         let candidate_paths = [
             r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
@@ -817,7 +820,7 @@ fn open_browser(url: &str) {
                 .args([
                     &app_arg,
                     &profile_arg,
-                    "--window-name=Spawnt",
+                    "--window-name=Gnomcode",
                     "--window-size=1280,850",
                     "--no-first-run",
                     "--no-default-browser-check",
@@ -842,7 +845,7 @@ fn open_browser(url: &str) {
 }
 
 #[cfg(target_os = "windows")]
-const SPAWNT_ICO: &[u8] = include_bytes!("../../../scripts/spawnt.ico");
+const GNOMCODE_ICO: &[u8] = include_bytes!("../../../scripts/gnomcode.ico");
 #[cfg(target_os = "windows")]
 const TRAY_PS1: &str = include_str!("../../../scripts/tray.ps1");
 #[cfg(target_os = "windows")]
@@ -853,7 +856,7 @@ const OPEN_CONSOLE_VBS: &str = include_str!("../../../scripts/open-console.vbs")
 const OPEN_DASH_VBS: &str = include_str!("../../../scripts/open-dashboard.vbs");
 
 fn cmd_install(db_path: &std::path::Path) -> Result<()> {
-    println!("=== SPAWNT NATIVE INSTALLER ===");
+    println!("=== GNOMCODE NATIVE INSTALLER ===");
     if let Ok(mut db) = Database::open(db_path) {
         let _ = ingest_all(&mut db);
     }
@@ -866,7 +869,7 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
-            spawnt_home()
+            gnomcode_home()
                 .parent()
                 .unwrap_or_else(|| std::path::Path::new("."))
                 .join("AppData")
@@ -874,14 +877,14 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
                 .to_string_lossy()
                 .into_owned()
         });
-        let install_dir = PathBuf::from(local_app_data).join("spawnt");
+        let install_dir = PathBuf::from(local_app_data).join("gnomcode");
         std::fs::create_dir_all(&install_dir).context("failed to create installation directory")?;
 
-        let dest_exe = install_dir.join("spawnt.exe");
+        let dest_exe = install_dir.join("gnomcode.exe");
         if current_exe != dest_exe {
             let my_pid = std::process::id();
             let kill_cmd = format!(
-                "Get-Process -Name spawnt -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force -ErrorAction SilentlyContinue"
+                "Get-Process -Name gnomcode -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force -ErrorAction SilentlyContinue"
             );
             let _ = std::process::Command::new("powershell")
                 .args(["-NoProfile", "-Command", &kill_cmd])
@@ -889,10 +892,10 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
                 .status();
             std::thread::sleep(std::time::Duration::from_millis(300));
             std::fs::copy(&current_exe, &dest_exe)
-                .context("failed to copy spawnt.exe to install directory")?;
+                .context("failed to copy gnomcode.exe to install directory")?;
         }
 
-        std::fs::write(install_dir.join("spawnt.ico"), SPAWNT_ICO)?;
+        std::fs::write(install_dir.join("gnomcode.ico"), GNOMCODE_ICO)?;
         std::fs::write(install_dir.join("tray.ps1"), TRAY_PS1)?;
         std::fs::write(install_dir.join("run-tray.vbs"), RUN_TRAY_VBS)?;
         std::fs::write(install_dir.join("open-console.vbs"), OPEN_CONSOLE_VBS)?;
@@ -902,29 +905,29 @@ fn cmd_install(db_path: &std::path::Path) -> Result<()> {
         let ps_setup = format!(
             r#"
 $InstallDir = '{dir_str}'
-$ExeDest = "$InstallDir\spawnt.exe"
-$IcoDest = "$InstallDir\spawnt.ico"
+$ExeDest = "$InstallDir\gnomcode.exe"
+$IcoDest = "$InstallDir\gnomcode.ico"
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {{
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
 }}
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-Set-ItemProperty -Path $RunKey -Name "Spawnt" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
+Set-ItemProperty -Path $RunKey -Name "Gnomcode" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
 $WshShell = New-Object -ComObject WScript.Shell
 $DesktopDir = [Environment]::GetFolderPath("Desktop")
-foreach ($lnkPath in @("$DesktopDir\Spawnt Console.lnk", "$DesktopDir\Spawnt.lnk", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Spawnt Console.lnk")) {{
+foreach ($lnkPath in @("$DesktopDir\Gnomcode Console.lnk", "$DesktopDir\Gnomcode.lnk", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Gnomcode Console.lnk")) {{
     $Shortcut = $WshShell.CreateShortcut($lnkPath)
     $Shortcut.TargetPath = "wscript.exe"
     $Shortcut.Arguments = "`"$InstallDir\open-console.vbs`""
     $Shortcut.WorkingDirectory = $InstallDir
     $Shortcut.IconLocation = "$IcoDest,0"
-    $Shortcut.Description = "spawnt console"
+    $Shortcut.Description = "gnomcode console"
     $Shortcut.Save()
 }}
 Start-Process -FilePath "wscript.exe" -ArgumentList "//B `"$InstallDir\run-tray.vbs`"" -WindowStyle Hidden
 Start-Process -FilePath "wscript.exe" -ArgumentList "//B `"$InstallDir\open-console.vbs`"" -WindowStyle Hidden
 Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.MessageBox]::Show("spawnt has been installed to $InstallDir.`n`n- Desktop & Start Menu shortcuts created for spawnt Console`n- Configured to start automatically on login`n- Mission Control is now running in your system tray.", "spawnt Setup Complete", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+[System.Windows.Forms.MessageBox]::Show("gnomcode has been installed to $InstallDir.`n`n- Desktop & Start Menu shortcuts created for gnomcode Console`n- Configured to start automatically on login`n- Mission Control is now running in your system tray.", "gnomcode Setup Complete", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 "#
         );
 
@@ -939,7 +942,7 @@ Add-Type -AssemblyName System.Windows.Forms
             .creation_flags(CREATE_NO_WINDOW)
             .status();
 
-        println!("Installed spawnt to {}", install_dir.display());
+        println!("Installed gnomcode to {}", install_dir.display());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -947,11 +950,11 @@ Add-Type -AssemblyName System.Windows.Forms
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_owned());
         let bin_dir = PathBuf::from(home).join(".local").join("bin");
         std::fs::create_dir_all(&bin_dir)?;
-        let dest = bin_dir.join("spawnt");
+        let dest = bin_dir.join("gnomcode");
         if current_exe != dest {
             std::fs::copy(&current_exe, &dest)?;
         }
-        println!("Installed spawnt to {}", dest.display());
+        println!("Installed gnomcode to {}", dest.display());
     }
 
     Ok(())
@@ -979,7 +982,7 @@ async fn cmd_launch(agent: &str, repo: Option<PathBuf>, model: Option<String>) -
     );
 
     let record =
-        spawnt_pty::launch_session(&session_id, agent, &repo_path, model.as_deref()).await?;
+        gnomcode_pty::launch_session(&session_id, agent, &repo_path, model.as_deref()).await?;
 
     println!("[RUN] Session launched successfully");
     println!("Session ID: {}", record.session_id);
@@ -992,16 +995,16 @@ async fn cmd_launch(agent: &str, repo: Option<PathBuf>, model: Option<String>) -
     println!("Stream:     ws://127.0.0.1:{}/stream", record.port);
     println!();
     println!("To attach to the terminal:");
-    println!("  spawnt attach {}", record.session_id);
+    println!("  gnomcode attach {}", record.session_id);
     println!("To stop the session:");
-    println!("  spawnt stop {}", record.session_id);
+    println!("  gnomcode stop {}", record.session_id);
 
     Ok(())
 }
 
 async fn cmd_stop(session_id: &str) -> Result<()> {
     println!("[WAIT] Stopping session {}...", session_id);
-    spawnt_pty::stop_session(session_id).await?;
+    gnomcode_pty::stop_session(session_id).await?;
     println!("[IDLE] Session {} stopped", session_id);
     Ok(())
 }
@@ -1011,7 +1014,7 @@ async fn cmd_attach(session_id: &str) -> Result<()> {
     use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::Message;
 
-    let record = spawnt_pty::load_session_record(session_id)?;
+    let record = gnomcode_pty::load_session_record(session_id)?;
     let url = format!(
         "ws://127.0.0.1:{}/stream?token={}",
         record.port, record.token
@@ -1072,7 +1075,7 @@ async fn cmd_attach(session_id: &str) -> Result<()> {
 }
 
 async fn cmd_models() -> Result<()> {
-    for provider in spawnt_daemon::model_catalog::discover().await {
+    for provider in gnomcode_daemon::model_catalog::discover().await {
         println!(
             "{} [{}]: {}",
             provider.name, provider.status, provider.message
@@ -1085,15 +1088,15 @@ async fn cmd_models() -> Result<()> {
 }
 
 async fn cmd_switch(session_id: &str, model: &str, db_path: &Path) -> Result<()> {
-    let db = spawnt_store::Database::open(db_path)?;
+    let db = gnomcode_store::Database::open(db_path)?;
     let record =
-        spawnt_daemon::switch_session(&tokio::sync::Mutex::new(db), session_id, model, None)
+        gnomcode_daemon::switch_session(&tokio::sync::Mutex::new(db), session_id, model, None)
             .await?;
     println!(
         "[RUN] Switched to {} in session {}",
         model, record.session_id
     );
-    println!("Attach with: spawnt attach {}", record.session_id);
+    println!("Attach with: gnomcode attach {}", record.session_id);
     Ok(())
 }
 
@@ -1103,17 +1106,17 @@ async fn cmd_resume(session_id: &str, prompt: Option<String>, db_path: &Path) ->
         "Only the default resume prompt is supported"
     );
     println!("[WAIT] Arming resume queue for session {}...", session_id);
-    let db = spawnt_store::Database::open(db_path)?;
+    let db = gnomcode_store::Database::open(db_path)?;
     let target = db
         .get_session_focus_target(session_id)?
         .context("Session not found")?;
     let agent = match target.agent.as_str() {
-        "claude-code" => spawnt_core::AgentId::ClaudeCode,
-        "codex" => spawnt_core::AgentId::Codex,
+        "claude-code" => gnomcode_core::AgentId::ClaudeCode,
+        "codex" => gnomcode_core::AgentId::Codex,
         _ => anyhow::bail!("Agent does not support resume"),
     };
     let cwd = target.repo_root.context("Session has no repository path")?;
-    let entry = spawnt_core::rules::ResumeQueueEntry {
+    let entry = gnomcode_core::rules::ResumeQueueEntry {
         session_id: session_id.to_owned(),
         agent,
         cwd,
@@ -1129,9 +1132,9 @@ async fn cmd_resume(session_id: &str, prompt: Option<String>, db_path: &Path) ->
 }
 
 async fn cmd_policy(set: Option<String>, db_path: &Path) -> Result<()> {
-    let db = spawnt_store::Database::open(db_path)?;
+    let db = gnomcode_store::Database::open(db_path)?;
     if let Some(new_policy) = set {
-        let policy = spawnt_core::RoutingPolicy::parse_policy(&new_policy).ok_or_else(|| {
+        let policy = gnomcode_core::RoutingPolicy::parse_policy(&new_policy).ok_or_else(|| {
             anyhow::anyhow!(
                 "Invalid policy: {new_policy}. Valid options: ask_first, automatic, deny_cross_provider"
             )
@@ -1141,7 +1144,7 @@ async fn cmd_policy(set: Option<String>, db_path: &Path) -> Result<()> {
     } else {
         let policy = db
             .get_routing_policy()
-            .unwrap_or(spawnt_core::RoutingPolicy::AskFirst);
+            .unwrap_or(gnomcode_core::RoutingPolicy::AskFirst);
         println!("Current routing policy: {}", policy.as_str());
         println!("Available policies:     ask_first, automatic, deny_cross_provider");
     }
@@ -1155,7 +1158,7 @@ async fn cmd_pty_host(
     model: Option<&str>,
     resume_session: Option<&str>,
 ) -> Result<()> {
-    spawnt_pty::run_pty_host_resuming(session_id, agent, repo, model, None, resume_session)
+    gnomcode_pty::run_pty_host_resuming(session_id, agent, repo, model, None, resume_session)
         .await
         .map_err(|e| anyhow::anyhow!("Session host failed: {e}"))
 }
