@@ -12,7 +12,7 @@ let remotePaired = false, remoteAccessEnabled=true;
 const session = { id:'codex:sample', title:'Review authentication', agent:'codex', model:'gpt-6.1-sol', state:'idle', last_event_at:new Date().toISOString() };
 const staticFiles = {
   '/':'crates/daemon/src/console.html', '/theme-init.js':'crates/daemon/src/theme-init.js', '/console-app.js':'crates/daemon/src/console-app.js',
-  '/console-presentation.js':'web/lib/console-presentation.js', '/spawnt-console.css':'web/app/spawnt-console.css',
+  '/console-presentation.js':'web/lib/console-presentation.js', '/markdown-it.mjs':'web/lib/markdown-it.mjs', '/spawnt-console.css':'web/app/spawnt-console.css',
   '/vendor/xterm-addon-fit.js':'web/public/vendor/xterm-addon-fit.js', '/vendor/xterm.js':'web/public/vendor/xterm.js', '/vendor/xterm.css':'web/public/vendor/xterm.css', '/spawnt-tokens.css':'web/app/spawnt-tokens.css', '/spawnt-mark.svg':'web/public/spawnt-mark.svg',
 };
 const server = createServer(async (request, response) => {
@@ -42,7 +42,7 @@ const server = createServer(async (request, response) => {
   else if (url.pathname === '/api/v1/model-catalog') value = {providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{model:'@default',agent:'codex',display_name:'Codex default'},{model:'gpt-6.1-sol',agent:'codex',display_name:'GPT 6.1'},{model:'o3',agent:'codex',display_name:'OpenAI o3'}]}]};
   else if (url.pathname.endsWith('/chat')) value = [
     { event_id:'1', turn_index:1, role:'user', content:'Review authentication', created_at:session.last_event_at },
-    { event_id:'2', turn_index:2, role:'assistant', content:'I will review the login flow.\n\n## Findings\n\n**Validated** with `cargo test`.\n\n- Session stays in chat\n- Terminal stays available\n\n```rust\nlet safe = "<script>";\n```\n\n| Check | Status |\n| --- | --- |\n| Tests | Pass |', created_at:session.last_event_at },
+    { event_id:'2', turn_index:2, role:'assistant', content:'I will review the login flow.\n\n## Findings\n\n**Validated** with `cargo test`.\n\n- Session stays in chat\n- Terminal stays available\n\n```rust\nlet safe = "<script>";\n```\n\n| Check | Status |\n| --- | --- |\n| Tests | Pass |\n\n__Strong__ and _emphasis_ with ~~removed~~ text.\n\n> ## Quoted section\n>\n> A quoted paragraph.\n\n- [x] Complete\n- [ ] Pending', created_at:session.last_event_at },
     { event_id:'3', turn_index:3, role:'tool', content:'Command output: do not display', created_at:session.last_event_at },
   ];
   else if (url.pathname.endsWith('/switch')) value = { session_id:'codex-switched' };
@@ -53,7 +53,7 @@ const server = createServer(async (request, response) => {
   else if (url.pathname.includes('quota') || url.pathname.endsWith('/active')) value = [];
   if (staticFiles[url.pathname] || url.pathname.startsWith('/fonts/')) {
     const path = staticFiles[url.pathname] || `web/public${url.pathname}`;
-    const type = path.endsWith('.html') ? 'text/html' : path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : 'font/woff2';
+    const type = path.endsWith('.html') ? 'text/html' : /\.m?js$/.test(path) ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.svg') ? 'image/svg+xml' : 'font/woff2';
     response.writeHead(200, {'Content-Type':type}); response.end(await readFile(new URL(`../${path}`, import.meta.url))); return;
   }
   response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify(value));
@@ -89,7 +89,12 @@ try {
   assert.equal(await page.locator('#chat-model-select').inputValue(), 'codex:gpt-6.1-sol', 'model picker shows the running model');
   assert.equal(await page.locator('#chat-model-status').textContent(), '', 'confirmed model is not repeated beside its selector');
   await page.locator('#chat-stream h2').getByText('Findings').waitFor();
-  assert.equal(await page.locator('#chat-stream pre code').textContent(), 'let safe = "<script>";');
+  await page.locator('#chat-stream blockquote h2').getByText('Quoted section').waitFor();
+  assert.equal(await page.locator('#chat-stream input[type="checkbox"]').count(),2);
+  assert.equal(await page.locator('#chat-stream input[type="checkbox"]').first().isDisabled(),true);
+  assert.equal(await page.locator('#chat-stream input[type="checkbox"]').first().isChecked(),true);
+  assert.ok(await page.locator('#chat-stream input[type="checkbox"]').first().evaluate(input=>input.getBoundingClientRect().height<=16),'task checkboxes retain their intended size');
+  assert.equal(await page.locator('#chat-stream pre code').textContent(), 'let safe = "<script>";\n');
   const userBox = await page.locator('.sp-chat-user').boundingBox();
   const agentBox = await page.locator('.sp-chat-assistant').boundingBox();
   assert.ok(userBox.x > agentBox.x, 'user bubbles align right of agent replies');

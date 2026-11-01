@@ -69,6 +69,7 @@ try {
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(singular?value:value?[value]:[])});
   });
   await page.route('**/rest/v1/spawnt_desktops**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:desktopId,name:'Test desktop',remote_enabled:true,last_seen_at:new Date().toISOString()},{id:'e'.repeat(32),name:'Second desktop',remote_enabled:true,last_seen_at:new Date().toISOString()}])}));
+  await page.route('**/rest/v1/spawnt_sync_state**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({live_snapshot:{sessions:[]}})}));
   await page.route('**/auth/v1/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'})}));
   await page.addInitScript(({project,owner})=>{
     localStorage.setItem(`sb-${project}-auth-token`,JSON.stringify({access_token:'test-access',refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'}}));
@@ -83,6 +84,28 @@ try {
 
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'no code confirmation exists');
   await page.getByText('The login flow is ready for review.').waitFor();
+  await page.evaluate(owner=>new Promise((resolve,reject)=>{
+    const request=indexedDB.open('spawnt-remote-device',1);
+    request.onsuccess=()=>{const db=request.result;const tx=db.transaction('devices','readwrite'),store=tx.objectStore('devices');const get=store.getAll();get.onsuccess=()=>{const saved=get.result.find(value=>value.offer.owner_id===owner);const old='0'.repeat(32);store.put({...saved,offer:{...saved.offer,desktop_id:old,room:old,request_id:old}},`${owner}:${old}`);};tx.oncomplete=()=>{db.close();resolve();};tx.onerror=reject;};request.onerror=reject;
+  }),owner);
+  await page.evaluate(()=>sessionStorage.removeItem('spawnt-pairing-offer'));
+  await page.getByRole('button',{name:'Desktop connection',exact:true}).click();
+  await page.getByRole('link',{name:'Dashboard',exact:true}).click();
+  for(let attempt=0;attempt<3;attempt++){
+    await page.getByRole('button',{name:'Sessions',exact:true}).click();
+    await page.getByRole('button',{name:'Workspace',exact:true}).click();
+    await page.locator('.sp-remote.is-paired').waitFor();
+    await page.getByText('The login flow is ready for review.').waitFor();
+    await page.goBack();
+    await page.locator('.sp-remote').waitFor({state:'detached'});
+    await page.goForward();
+    await page.locator('.sp-remote.is-paired').waitFor();
+    await page.getByText('The login flow is ready for review.').waitFor();
+    await page.getByRole('button',{name:'Desktop connection',exact:true}).click();
+    await page.getByRole('link',{name:'Dashboard',exact:true}).click();
+  }
+  await page.getByRole('button',{name:'Workspace',exact:true}).click();
+  await page.locator('.sp-remote.is-paired').waitFor();
   await page.goto(`${site}/downloads`);
   failDiscoveryOnce=true;
   await page.goto(`${site}/remote`);

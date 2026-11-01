@@ -63,8 +63,7 @@ assert.equal(submitted.remote_access_confirmed,true,'confirmed account scope mus
 finishPair({ok:true});await pendingPair;assert.equal(accountNodes.get('auth-token-input').value,'');assert.equal(accountNodes.get('auth-pair-button').disabled,false);
 console.log('PASS: account connected/disconnected/error states and duplicate pairing prevention without reload');
 
-const presentationSource=readFileSync(new URL('../web/lib/console-presentation.js',import.meta.url),'utf8');
-const {reconcileChat}=await import(`data:text/javascript;base64,${Buffer.from(presentationSource).toString('base64')}`);
+const {reconcileChat}=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 for (const deleted of [false,true]) {
  const input={value:'Hi',focus(){}},button={disabled:false},status={textContent:''};
  const promptDocument={getElementById:id=>id==='chat-prompt-text'?input:id==='chat-send-btn'?button:status};

@@ -1,0 +1,2 @@
+{"type":"session_meta","timestamp":"2026-11-02T00:00:00Z","payload":{"id":"id_0001","cwd":"/workspace/sample-project"}}
+{"type":"response_item","timestamp":"2026-11-02T00:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# Files mentioned by the user:\n## image.png: C:/example/image.png\nImage attachment: true\n## My request:\nExplain this screenshot.\n<image name=[Image #1] path=\"C:/example/image.png\"> </image>"}]}}

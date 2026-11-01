@@ -902,18 +902,59 @@ mod tests {
 
     #[tokio::test]
     async fn orchestrator_runs_ingest_periodically() {
-        let dir = tempdir().expect("temp dir");
-        let db_path = dir.path().join("state.db");
-        let orch = DaemonOrchestrator::new(&db_path, Duration::from_millis(50))
-            .expect("create orchestrator");
-
+        const CHILD: &str = "SPAWNT_TEST_PERIODIC_INGEST";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempdir().expect("root");
+            let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args(["--exact", "tests::orchestrator_runs_ingest_periodically"])
+                .env(CHILD, root.path())
+                .env("SPAWNT_HOME", root.path())
+                .env("HOME", root.path())
+                .env("USERPROFILE", root.path())
+                .env("APPDATA", root.path())
+                .env("LOCALAPPDATA", root.path())
+                .env("XDG_CONFIG_HOME", root.path())
+                .env("XDG_DATA_HOME", root.path())
+                .env("CODEX_HOME", root.path().join("codex"))
+                .env("CLAUDE_CONFIG_DIR", root.path().join("claude"))
+                .env("GEMINI_HOME", root.path().join("gemini"))
+                .env_remove("AIDER_ANALYTICS_LOG")
+                .status()
+                .expect("isolated ingest test");
+            assert!(status.success());
+            return;
+        }
+        let root = std::path::PathBuf::from(std::env::var_os(CHILD).expect("root"));
+        let source = root.join("codex").join("sessions");
+        std::fs::create_dir_all(&source).expect("source");
+        std::fs::write(
+            source.join("rollout-fixture.jsonl"),
+            include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl"),
+        )
+        .expect("fixture");
+        let orch = DaemonOrchestrator::new(&root.join("state.db"), Duration::from_millis(50))
+            .expect("orchestrator");
         let handle = orch.spawn_reconciler();
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        let mut found = false;
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            if orch
+                .db()
+                .lock()
+                .await
+                .list_active_sessions(10)
+                .expect("sessions")
+                .iter()
+                .any(|session| session.id == "codex:id_0001")
+            {
+                found = true;
+                break;
+            }
+        }
         handle.abort();
-
-        let db = orch.db();
-        let guard = db.lock().await;
-        let sessions = guard.list_active_sessions(10).expect("list sessions");
-        assert!(sessions.is_empty() || !sessions.is_empty());
+        assert!(
+            found,
+            "scheduled reconciliation must ingest the isolated native fixture"
+        );
     }
 }
