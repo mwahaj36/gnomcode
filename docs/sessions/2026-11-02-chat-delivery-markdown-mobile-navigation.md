@@ -20,3 +20,17 @@ The browser could restore the first cached device credential instead of the sele
 Full Rust quality gate passed: formatting, workspace clippy/tests, dependency policies and core purity. Focused attachment fixture, legacy repair and startup-trust tests passed. Web tests (20), production build, pinned vendor check and production dependency audit (zero findings) passed. Native chat browser checks verified Markdown at desktop and phone widths. Public-relay phone-viewport automation passed repeated Spawnt navigation and browser Back/Forward with stale cached credentials, two desktops, trust reload and bounded reconnect recovery.
 
 Physical-phone acceptance remains open. No further paid model calls or injections into the user's active conversation were made. This phase does not change production deployment or URL configuration. The review installer is a separate development preview; the existing desktop installer remains untouched.
+
+## Review artifact
+
+PR: https://github.com/mwahaj36/spawnt/pull/118 (left open and unmerged).
+
+Packaged runtime source: `a9d1c46`. Isolated packaging passed the native release build, installer resource/version checks, setup/Explorer regression checks, manifests and production web build. Generated third-party notices include the Markdown renderer dependencies.
+
+Desktop preview: `C:/Users/Wahaj/Desktop/Spawnt-Setup-preview.exe`.
+
+- Setup SHA-256: `e8ab9eb7a1d4da24c920aefea0e7380444b6e38d3f27c1c3212145c64dec9b9c`.
+- Embedded CLI SHA-256: `d4f1d0dc05ea604faeb39d1cd612d8681d70b1d3ec50af8ae1b225a1f7eb5583`.
+- Existing stable desktop setup remains `0e376b53d192a467e42cafd3e11185bbf22ea43bb52576582d017203dcec069f`.
+
+No preview installer was launched against the user's real home. GitHub security and Vercel preview checks passed; no production promotion was performed.
