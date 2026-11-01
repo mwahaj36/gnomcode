@@ -377,7 +377,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
         <label htmlFor="remote-launch-model">Model (optional)</label><input id="remote-launch-model" value={launchModel} onChange={event => setLaunchModel(event.target.value)} maxLength={128} />
         <button type="submit" disabled={!connected || !launchRepo.trim()}>Launch Agent</button>
       </form></details>
-        <label className="remote-history-search" htmlFor="remote-history-search">Search conversations<input id="remote-history-search" type="search" value={conversationSearch} onChange={event=>setConversationSearch(event.target.value)} placeholder="Find a conversation" /></label>
+        <label className="remote-history-search" htmlFor="remote-history-search">Search titles and agents<input id="remote-history-search" type="search" value={conversationSearch} onChange={event=>setConversationSearch(event.target.value)} placeholder="Search conversation metadata" /></label>
         <div className="remote-session-list">{sessions.filter(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())).map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => selectSession(session.id)}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
         {!sessions.length && <p>No conversations yet. Start an agent here or on your desktop.</p>}
       </aside>

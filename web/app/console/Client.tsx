@@ -120,16 +120,6 @@ interface PlanRoiInfo {
   period_label?: string;
 }
 
-interface UserProfile {
-  id: string;
-  username: string;
-  display_name: string;
-  openai_plan_usd: number;
-  claude_plan_usd: number;
-  google_plan_usd: number;
-  other_plan_usd: number;
-  updated_at: string;
-}
 
 function formatResetCountdown(resetsAtIso?: string | null, _windowKind?: string) {
   if (!resetsAtIso) return "Rolling";
@@ -177,10 +167,10 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
   const [roiByProvider, setRoiByProvider] = useState<PlanRoiInfo[]>([]);
   const [combinedRoi, setCombinedRoi] = useState<PlanRoiInfo | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [snapshotTotal, setSnapshotTotal] = useState<number | null>(null);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [connectedSource, setConnectedSource] = useState<string>("Scanning...");
   const [refreshing, setRefreshing] = useState(false);
@@ -198,7 +188,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     lastDesktopSnapshot.current = null;
     setProjectNames([]); setProjectFilter('all');
     setOngoing(null); setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
-    setCombinedRoi(null); setUserProfile(null); setSnapshotGeneratedAt(null);
+    setCombinedRoi(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
     setRefreshMessage(""); setConnectedSource(user?.id ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
   }, [user?.id]);
@@ -267,9 +257,9 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         setSnapshotGeneratedAt(snap?.generated_at || null);
         setRoiByProvider(snap?.roi_by_provider || []);
         setCombinedRoi(snap?.combined_roi || null);
-        setUserProfile(snap?.user_profile || null);
         setSnapshotLoaded(Boolean(snap));
         setActiveCount(snap?.ongoing_count ?? snap?.active_count ?? null);
+        setSnapshotTotal(typeof snap?.total_count === "number" ? snap.total_count : null);
         setTotalCount(filtered.length);
         setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
         if (snap) {
@@ -284,13 +274,14 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     } else {
       setConnectedSource("Sign in to monitor your desktop remotely");
       setSnapshotLoaded(false);
+      setSnapshotTotal(null);
       setActiveCount(null);
       setSessions([]);
       setQuota([]);
       setReport(null);
       setRoiByProvider([]);
       setCombinedRoi(null);
-      setUserProfile(null);
+
       setSnapshotGeneratedAt(null);
     }
     } finally {
@@ -399,7 +390,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         <Link className="web-download-link" href="/downloads" aria-label="Download desktop app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Download app</span></Link>
       </nav>
       <div className="sp-console-content">
-      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connect this account to your desktop to publish activity. Remote conversations use a separately confirmed encrypted connection.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button>{user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}</div></section><DesktopDevices /><SettingsPanel embedded /></>}
+      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Remote conversations use a separately confirmed encrypted connection.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button>{user && <button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy desktop pairing token</button>}</div></section><DesktopDevices /><SettingsPanel embedded /></>}
       {activeView === "chat" && <RemoteCompanion embedded />}
       {activeView === "projects" && <section className="sp-activity"><h2>Project activity</h2>
         {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
@@ -483,6 +474,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
       <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
       {activeView === "sessions" && <OngoingPanel sessions={ongoing} />}
+      {activeView === "sessions" && snapshotTotal !== null && snapshotTotal > 200 && <p role="status">Account view contains up to 200 recent or active sessions out of {snapshotTotal} recorded sessions. Filters and counts below cover only the published sessions. Open the local console for full history.</p>}
       {/* Session history */}
       {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">

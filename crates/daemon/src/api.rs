@@ -1467,15 +1467,15 @@ async fn repo_diff_get_handler(
     status_cmd.creation_flags(0x0800_0000);
     let status_output = status_cmd.output();
 
-    let diff_str = diff_output
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-
-    let status_str = status_output
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
+    let diff_output = diff_output.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let status_output = status_output.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !diff_output.status.success() || !status_output.status.success() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let diff_str =
+        String::from_utf8(diff_output.stdout).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
+    let status_str =
+        String::from_utf8(status_output.stdout).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
 
     Ok(Json(json!({
         "repo": query.repo,
@@ -2606,6 +2606,30 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn repository_diff_rejects_a_directory_that_is_not_a_git_repository() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let mut uri = reqwest::Url::parse("http://127.0.0.1:41738/api/v1/repos/diff").expect("url");
+        uri.query_pairs_mut()
+            .append_pair("repo", &dir.path().to_string_lossy());
+        let request = Request::builder()
+            .uri(uri.as_str())
+            .header("Host", "127.0.0.1:41738")
+            .header("Authorization", "Bearer local-test-token")
+            .body(Body::empty())
+            .expect("request");
+        assert_ne!(
+            app.oneshot(request).await.expect("response").status(),
+            StatusCode::OK
+        );
+    }
 
     #[tokio::test]
     async fn local_automation_and_export_are_available_without_a_license() {

@@ -307,7 +307,7 @@ function cycleTheme() {
                 <td>${escapeHtml(r.agent || 'All Agents')}</td>
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) + ' EXACT' : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns + ' EXACT' : 'None'}</td>
-                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${escapeHtml(r.action)}</span></td>
+                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${r.action === 'HardStop' ? 'Claude hook stop; other agents alert' : escapeHtml(r.action)}</span></td>
                 <td><button class="btn-control" data-action="delete-rule" data-arg="${escapeHtml(r.id)}">Delete</button></td>
               </tr>
             `).join('');
@@ -325,7 +325,7 @@ function cycleTheme() {
               <tr>
                 <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(a.session_id)}</td>
                 <td style="font-weight: 600;">${escapeHtml(a.rule_id)}</td>
-                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${escapeHtml(a.action)}</span></td>
+                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${a.action === 'hard_stop' ? 'Stop requested (Claude hook only)' : escapeHtml(a.action)}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(a.created_at)}</td>
               </tr>
             `).join('');
@@ -1068,7 +1068,7 @@ function cycleTheme() {
     }
 
     async function deleteChat() {
-      if (!activeChatSession || !await confirmAction('Permanently delete local chat history for this session? This action cannot be undone.', 'Delete history')) return;
+      if (!activeChatSession || !await confirmAction('Delete Spawnt’s local chat history for this session? Agent-owned logs and backups are not deleted, and SQLite files may retain remnants. This cannot be undone.', 'Delete history')) return;
       const sessionId = activeChatSession;
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });

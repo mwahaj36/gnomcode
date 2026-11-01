@@ -98,23 +98,36 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
     let month = db.generate_usage_report_timeline("30d", None, None)?;
     let calendar_month = db.generate_usage_report_timeline("month", None, None)?;
     let all = db.generate_usage_report_timeline("all", None, None)?;
-    let (sessions, _) = db.list_sessions_paginated(None, None, 0, 200)?;
+    let (sessions, count) = db.list_sessions_paginated(None, None, 0, 200)?;
+    let sessions: Vec<_> = sessions
+        .into_iter()
+        .map(|s| {
+            json!({
+                "id": s.id, "agent": s.agent, "surface": s.surface,
+                "project_name": s.project_name, "model": s.model, "state": s.state,
+                "is_active": s.is_active, "is_ongoing": s.is_ongoing, "presence": s.presence,
+                "started_at": s.started_at, "last_event_at": s.last_event_at,
+                "input_tokens": s.input_tokens, "output_tokens": s.output_tokens,
+                "cache_read_tokens": s.cache_read_tokens, "context_tokens": s.context_tokens,
+                "context_window": s.context_window, "total_tokens": s.total_tokens,
+                "context_fill_pct": s.context_fill_pct, "total_cost_usd": s.total_cost_usd,
+                "priced_turns": s.priced_turns, "unpriced_turns": s.unpriced_turns,
+                "usage_available": s.usage_available, "cost_basis": s.cost_basis,
+            })
+        })
+        .collect();
     let (_, ongoing_count) = db.list_sessions_paginated(None, Some("ongoing"), 0, 1)?;
     let (_, active_count) = db.list_sessions_paginated(None, Some("active"), 0, 1)?;
-    let count = sessions.len();
     Ok(json!({
         "generated_at": Utc::now().to_rfc3339(),
         "timeline": today,
         "timelines": { "today": today, "7d": week, "30d": month, "month": calendar_month, "all": all },
-        "user_profile": db.get_user_profile()?,
         "sessions": sessions,
         "quota": crate::api::quota_views(db.get_latest_quota_snapshots()?),
         "active_count": active_count,
         "ongoing_count": ongoing_count,
         "total_count": count,
-        "total_pages": 1,
-        "context_relays": db.list_context_relays().unwrap_or_default(),
-        "relay_config": db.get_context_relay_config().unwrap_or_default(),
+        "total_pages": count.div_ceil(200).max(1),
     }))
 }
 
@@ -463,6 +476,47 @@ mod tests {
     }
 
     #[test]
+    fn remote_snapshot_reports_total_beyond_the_session_limit() {
+        use chrono::Utc;
+        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
+        use spawnt_store::{Database, SourceCheckpoint};
+
+        let mut db = Database::open_in_memory().expect("database");
+        let project = Project::from_origin(None, "/test/project", None);
+        let sessions: Vec<_> = (0..201)
+            .map(|i| Session {
+                id: format!("codex:{i}"),
+                agent: AgentId::Codex,
+                surface: Surface::Cli,
+                project_id: project.id.clone(),
+                parent_session_id: None,
+                model: None,
+                title: None,
+                state: SessionState::Idle,
+                pid: None,
+                started_at: Utc::now(),
+                last_event_at: Utc::now(),
+            })
+            .collect();
+        let checkpoint = SourceCheckpoint {
+            file_path: "/test/source".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "test".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch(&[project], &sessions, &[], &[], &[], &checkpoint)
+            .expect("commit");
+        let snapshot = super::build_remote_snapshot(&db).expect("snapshot");
+        assert_eq!(
+            snapshot["sessions"].as_array().expect("sessions").len(),
+            200
+        );
+        assert_eq!(snapshot["total_count"], 201);
+        assert_eq!(snapshot["total_pages"], 2);
+    }
+
+    #[test]
     fn remote_snapshot_contains_no_local_project_path_or_pairing_token() {
         use chrono::Utc;
         use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
@@ -477,7 +531,7 @@ mod tests {
             project_id: project.id.clone(),
             parent_session_id: None,
             model: Some("gpt-6.1-sol".to_owned()),
-            title: None,
+            title: Some("private prompt title".to_owned()),
             state: SessionState::Thinking,
             pid: None,
             started_at: Utc::now(),
@@ -496,6 +550,9 @@ mod tests {
         let encoded = snapshot.to_string();
         assert!(!encoded.contains("/private/client"));
         assert!(!encoded.contains("rollout.jsonl"));
+        assert!(!encoded.contains("private prompt title"));
+        assert!(snapshot.get("context_relays").is_none());
+        assert!(snapshot.get("user_profile").is_none());
         assert!(!encoded.contains("paired_session"));
         assert!(!encoded.contains("relay_commands"));
         assert_eq!(snapshot["active_count"], 1);
