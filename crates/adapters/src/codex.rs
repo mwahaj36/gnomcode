@@ -353,6 +353,7 @@ impl SourceAdapter for CodexAdapter {
         if let Some(sess) = current_session {
             batch.sessions.push(sess);
         }
+        crate::titles::apply_native_titles(&mut batch, AgentId::Codex, chunk);
         batch
     }
 }

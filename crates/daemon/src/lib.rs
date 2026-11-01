@@ -429,6 +429,19 @@ pub(crate) fn conversation_title(db: &Database, session_id: &str) -> Option<Stri
         .into_iter()
         .find_map(|text| {
             let clean = spawnt_core::redact::clean_user_text(&text);
+            let clean = if clean
+                .trim_start()
+                .starts_with("# Files pasted by the user:")
+                || clean
+                    .trim_start()
+                    .starts_with("# Files mentioned by the user:")
+            {
+                clean
+                    .split_once("## My request:")
+                    .map_or("", |(_, request)| request)
+            } else {
+                clean
+            };
             clean
                 .lines()
                 .find(|line| !line.trim().is_empty())
@@ -635,6 +648,79 @@ impl DaemonOrchestrator {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn conversation_title_prefers_saved_native_label_over_pasted_prompt() {
+        use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let bytes = b"{\"type\":\"session_meta\",\"timestamp\":\"2026-10-26T12:00:00Z\",\"payload\":{\"id\":\"named\",\"cwd\":\"/workspace\",\"title\":\"Native app title\"}}\n{\"type\":\"event_msg\",\"timestamp\":\"2026-10-26T12:00:01Z\",\"payload\":{\"type\":\"user_message\",\"message\":\"# Files pasted by the user:\\nattachment metadata\\n## My request:\\nFix reconnect\"}}\n";
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
+        let mut db = spawnt_store::Database::open_in_memory().expect("database");
+        db.commit_batch_with_chat(
+            &batch.projects,
+            &batch.sessions,
+            &[],
+            &[],
+            &[],
+            &spawnt_store::SourceCheckpoint {
+                file_path: "fixture".into(),
+                last_read_offset: 0,
+                file_size: 0,
+                fingerprint: "fixture".into(),
+                last_ingested_at: chrono::Utc::now(),
+            },
+            &batch.chat_events,
+        )
+        .expect("fixture");
+        let prompt =
+            "# Files pasted by the user:\nattachment metadata\n## My request:\nFix reconnect";
+        let chat = |id: &str| spawnt_core::ChatEvent {
+            event_id: format!("{id}:opening"),
+            session_id: id.into(),
+            turn_index: 0,
+            role: spawnt_core::ChatRole::User,
+            content: prompt.into(),
+            tool_name: None,
+            status: None,
+            created_at: chrono::Utc::now(),
+        };
+        db.insert_chat_event(&chat("codex:named"))
+            .expect("opening message");
+        assert_eq!(
+            super::conversation_title(&db, "codex:named").as_deref(),
+            Some("Native app title")
+        );
+        db.bind_conversation_host("original-host", "codex:named")
+            .expect("bind");
+        db.continue_conversation("original-host", "next-host")
+            .expect("switch");
+        assert_eq!(
+            super::conversation_title(&db, "next-host").as_deref(),
+            Some("Native app title")
+        );
+        let mut fallback = batch.sessions[0].clone();
+        fallback.id = "codex:untitled".into();
+        fallback.title = None;
+        db.commit_batch(
+            &[],
+            &[fallback],
+            &[],
+            &[],
+            &[],
+            &spawnt_store::SourceCheckpoint {
+                file_path: "fallback".into(),
+                last_read_offset: 0,
+                file_size: 0,
+                fingerprint: "fallback".into(),
+                last_ingested_at: chrono::Utc::now(),
+            },
+        )
+        .expect("fallback session");
+        db.insert_chat_event(&chat("codex:untitled"))
+            .expect("fallback opening");
+        assert_eq!(
+            super::conversation_title(&db, "codex:untitled").as_deref(),
+            Some("Fix reconnect")
+        );
+    }
     #[test]
     fn handoff_preparation_includes_repository_and_redacted_chat() {
         use spawnt_core::{AgentId, ChatEvent, ChatRole, Project, Session, SessionState, Surface};

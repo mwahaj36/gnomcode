@@ -199,6 +199,7 @@ impl SourceAdapter for CursorAdapter {
         }
 
         batch.sessions.push(session);
+        crate::titles::apply_native_titles(&mut batch, AgentId::Cursor, chunk);
         batch
     }
 }

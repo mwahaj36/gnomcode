@@ -201,6 +201,7 @@ impl SourceAdapter for GeminiAdapter {
         }
 
         batch.sessions.push(session);
+        crate::titles::apply_native_titles(&mut batch, AgentId::GeminiCli, chunk);
         batch
     }
 }
