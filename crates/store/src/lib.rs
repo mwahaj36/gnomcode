@@ -680,8 +680,8 @@ impl Database {
         if !has_v6 {
             self.conn.execute_batch(
                 r#"
-                UPDATE usage_record SET model = 'Gemini 3.8 Flash (Default)' WHERE model LIKE '%PLACEHOLDER%';
-                UPDATE session SET model = 'Gemini 3.8 Flash (Default)' WHERE model LIKE '%PLACEHOLDER%';
+                UPDATE usage_record SET model = 'unknown' WHERE model LIKE '%PLACEHOLDER%';
+                UPDATE session SET model = NULL WHERE model LIKE '%PLACEHOLDER%';
                 DELETE FROM quota_snapshot WHERE limit_id LIKE '%placeholder%';
                 INSERT INTO schema_migrations (version, applied_at) VALUES (6, datetime('now'));
                 "#,
@@ -1715,9 +1715,7 @@ impl Database {
             let state = raw_state;
             let raw_model: Option<String> = row.get(5)?;
             let model = match raw_model {
-                Some(ref model) if model.contains("MODEL_PLACEHOLDER") => {
-                    Some("Gemini 3.8 Flash (Default)".to_owned())
-                }
+                Some(ref model) if model.contains("MODEL_PLACEHOLDER") => None,
                 other => other,
             };
 
@@ -2390,9 +2388,7 @@ impl Database {
                 };
 
                 let model = match raw_model {
-                    Some(ref m) if m.contains("MODEL_PLACEHOLDER") => {
-                        "Gemini 3.8 Flash (Default)".to_owned()
-                    }
+                    Some(ref m) if m.contains("MODEL_PLACEHOLDER") => "Unspecified".to_owned(),
                     Some(m) if !m.trim().is_empty() => m,
                     _ => "Unspecified".to_owned(),
                 };
@@ -2627,7 +2623,7 @@ impl Database {
             let latest: Option<String> = row.get(10)?;
 
             let model = if raw_m.contains("MODEL_PLACEHOLDER") {
-                "Gemini 3.8 Flash (Default)".to_owned()
+                "unknown".to_owned()
             } else {
                 raw_m
             };

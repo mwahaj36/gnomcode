@@ -29,6 +29,22 @@ The current snapshot contains generation time, total/active/ongoing counts, up t
 
 The repository contains versioned fixtures for Claude Code, Codex, Gemini and Antigravity, plus Cursor settings and Codex title/context cases. A new table-driven regression verifies that all seven adapters count truncated input and do not store chat from it. Existing parser tests exercise sample transcripts; Cline/Roo and Aider coverage includes synthetic inputs rather than a complete current real-log version matrix. Several adapters still fall back to `Utc::now()` when source timestamps are missing, including Cline, Aider, Gemini, Antigravity, Codex and Claude. Replaying such input can fabricate changing activity times and violates the intended deterministic-parser contract. The domain currently requires timestamps, so deciding how to represent missing times without silently discarding historical messages needs a separate design and fixtures. Do not infer equal chat, quota or control support from an adapter. Collect new anonymized current-version fixtures before claiming coverage.
 
+The following matrix describes paths observed in source and fixtures, not verified current provider compatibility. Recorded fields can be absent; missing token components can be represented as zero in some adapters. Only Codex emits quota snapshots in the reviewed adapters, and only where source records provide them.
+
+| Agent | Observed local records | Hosted control | Coverage limit |
+| --- | --- | --- | --- |
+| Claude Code | Chat and recorded usage | Official CLI | Versioned fixture; not every current format |
+| Codex | Chat, usage and recorded rate limits | Official CLI | Versioned fixtures; limits depend on source data |
+| Gemini CLI | Chat and recorded usage | Official CLI | Versioned fixture; no adapter quota snapshots |
+| Antigravity | Transcript and recorded usage | Official `agy` CLI | Live authenticated acceptance pending; no adapter quota snapshots |
+| Cline / Roo | Editor chat and recorded usage | No hosted editor control | Synthetic coverage; current editor variants need real fixtures |
+| Cursor | Compatible transcript history and partial usage | No hosted editor control | Discovery is automatic when roots exist; compatibility remains experimental |
+| Aider | Explicitly configured analytics records and partial usage, no chat | No hosted launcher | Synthetic coverage; `AIDER_ANALYTICS_LOG` must point to an existing supported file or directory |
+
+The explicit Aider file path is now scanned, and discovery no longer silently includes the default Aider directory. New Aider command activity uses a generic tool name and a redacted summary. Earlier versions could persist a raw command in both the tool name and summary; existing databases, WAL files and backups may therefore contain secrets. This change does not erase old records. Review and choose a historical-data remediation and backup policy before release.
+
+Missing model identifiers now remain unknown for new records instead of being assigned a guessed provider model; placeholder display and future v6 migrations also avoid the fabricated Gemini default. Older records already converted or priced using guessed models cannot be reliably identified or reversed from the stored label alone. Treat historical attribution and estimates as suspect and decide how to communicate or remediate them.
+
 Resume eligibility now rejects unknown quota, invalid percentages, future observations and readings older than the entry's eligibility time. This is a conservative local guard, not proof a provider has restored capacity. The queue still picks one matching provider snapshot; multiple windows, native busy/approval state and version behavior need acceptance. There is a crash/concurrency window between spawning a resume process and persisting the run count; a durable claim and recovery design is still needed before promising no duplicate resume. Native permissions must never be bypassed.
 
 ## Website checks
