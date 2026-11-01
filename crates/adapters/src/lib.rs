@@ -508,6 +508,81 @@ mod tests {
     }
 
     #[test]
+    fn missing_model_never_invents_a_priced_provider_model() {
+        let cases: Vec<(Box<dyn SourceAdapter>, &[u8])> = vec![
+            (
+                Box::new(ClaudeAdapter::new()),
+                include_bytes!("../../../fixtures/claude-code/synthetic/missing-model.jsonl"),
+            ),
+            (
+                Box::new(CodexAdapter::new()),
+                include_bytes!("../../../fixtures/codex/synthetic/missing-model.jsonl"),
+            ),
+            (
+                Box::new(super::gemini::GeminiAdapter::new()),
+                include_bytes!("../../../fixtures/gemini-cli/synthetic/missing-model.json"),
+            ),
+            (
+                Box::new(super::antigravity::AntigravityAdapter::new()),
+                include_bytes!("../../../fixtures/antigravity/synthetic/missing-model.jsonl"),
+            ),
+            (
+                Box::new(super::aider::AiderAdapter::new()),
+                include_bytes!("../../../fixtures/aider/synthetic/missing-model.jsonl"),
+            ),
+            (
+                Box::new(super::cline::ClineAdapter::new()),
+                include_bytes!("../../../fixtures/cline/synthetic/missing-model.json"),
+            ),
+        ];
+        for (mut adapter, bytes) in cases {
+            let batch = adapter.parse(&FileCtx::default(), bytes);
+            assert_eq!(
+                batch.usage_records.len(),
+                1,
+                "{}",
+                adapter.agent_id().as_str()
+            );
+            let usage = &batch.usage_records[0];
+            assert_eq!(usage.model, "unknown", "{}", adapter.agent_id().as_str());
+            assert_eq!(
+                usage.cost_basis,
+                TrustLevel::Unknown,
+                "{}",
+                adapter.agent_id().as_str()
+            );
+            assert!(
+                batch.sessions[0].model.is_none(),
+                "{}",
+                adapter.agent_id().as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn aider_command_is_not_persisted_as_a_tool_name() {
+        let batch = super::aider::AiderAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/aider/synthetic/missing-model.jsonl"),
+        );
+        assert_eq!(
+            batch.activity_events[0].tool_name.as_deref(),
+            Some("command")
+        );
+        let synthetic =
+            br#"{"timestamp":"2026-10-26T10:00:00Z","command":"echo API_KEY=synthetic-secret"}
+"#;
+        let batch = super::aider::AiderAdapter::new().parse(&FileCtx::default(), synthetic);
+        assert!(
+            !batch.activity_events[0]
+                .summary_redacted
+                .as_deref()
+                .unwrap_or_default()
+                .contains("synthetic-secret")
+        );
+    }
+
+    #[test]
     fn all_adapters_reject_truncated_input_without_storing_chat() {
         let adapters: Vec<Box<dyn SourceAdapter>> = vec![
             Box::new(ClaudeAdapter::new()),

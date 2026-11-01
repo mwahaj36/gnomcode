@@ -104,8 +104,10 @@ impl SourceAdapter for AiderAdapter {
             let model = obj
                 .get("model")
                 .and_then(Value::as_str)
-                .unwrap_or("claude-3-5-sonnet");
-            sess.model = Some(model.to_owned());
+                .filter(|model| !model.trim().is_empty())
+                .or(ctx.fallback_model.as_deref())
+                .unwrap_or("unknown");
+            sess.model = (model != "unknown").then(|| model.to_owned());
 
             let event = obj.get("event").and_then(Value::as_str).unwrap_or("chat");
             let is_turn_end = event == "chat" || event == "response" || event == "turn_complete";
@@ -121,12 +123,12 @@ impl SourceAdapter for AiderAdapter {
                 .or_else(|| obj.get("tool"))
                 .and_then(Value::as_str)
             {
-                let summary = redact_summary(cmd, "");
+                let summary = redact_summary("command", cmd);
                 batch.activity_events.push(ActivityEvent {
                     session_id: session_id.clone(),
                     timestamp: ts,
                     kind: ActivityKind::ToolStart,
-                    tool_name: Some(cmd.to_owned()),
+                    tool_name: Some("command".to_owned()),
                     summary_redacted: Some(summary),
                     duration_ms: None,
                 });

@@ -54,7 +54,16 @@ pub fn scan_log_files(roots: &[AgentRoot]) -> Vec<DiscoveredFile> {
         if !root.exists {
             continue;
         }
-        collect_files_recursively(root.agent, &root.path, &mut files);
+        if root.path.is_file() {
+            if is_agent_log_file(root.agent, &root.path) {
+                files.push(DiscoveredFile {
+                    agent: root.agent,
+                    path: root.path.clone(),
+                });
+            }
+        } else {
+            collect_files_recursively(root.agent, &root.path, &mut files);
+        }
     }
     files
 }
@@ -422,6 +431,21 @@ mod tests {
     use spawnt_platform::AgentRoot;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn scan_includes_an_explicit_aider_log_file() {
+        let dir = tempdir().expect("temp dir");
+        let path = dir.path().join("aider.jsonl");
+        fs::write(&path, b"{}\n").expect("fixture");
+        let roots = [AgentRoot {
+            agent: AgentId::Aider,
+            path: path.clone(),
+            exists: true,
+        }];
+        let files = scan_log_files(&roots);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, path);
+    }
 
     #[test]
     fn scan_log_files_filters_proper_extensions_and_names() {

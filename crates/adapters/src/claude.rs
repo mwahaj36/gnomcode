@@ -196,7 +196,7 @@ impl SourceAdapter for ClaudeAdapter {
                                     dedup_key,
                                     session_id,
                                     ts,
-                                    sess.model.as_deref().unwrap_or("claude-sonnet"),
+                                    sess.model.as_deref().unwrap_or("unknown"),
                                     usage_obj,
                                 );
                                 batch.usage_records.push(record);
