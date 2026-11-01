@@ -1,6 +1,12 @@
 # Left to do before launch
 
-Updated 2026-10-29. Owner: Wahaj. Keep release caveats here and in technical docs, separately from optimistic marketing. Record reviewer, date and evidence when closing a gate. Historical checks remain in [sessions](sessions/README.md).
+Updated 2026-11-01 after PR #113. Owner: Wahaj. Keep release caveats here and in technical docs, separately from optimistic marketing. Record reviewer, date and evidence when closing a gate. Historical checks remain in [sessions](sessions/README.md).
+
+## Completed since the previous update
+
+- [PR #113](https://github.com/mwahaj36/spawnt/pull/113) corrected snapshot totals, limited published session fields and removed titles, profile and relay records from new desktop snapshots. It clarified account-sync, guardrail, search and deletion limits and bounded Git inspection output and runtime. Older snapshots and backups still need a retention/deletion decision.
+- [CI run 41285486249](https://github.com/mwahaj36/spawnt/actions/runs/41285486249) passed Rust clippy and workspace tests on Windows, macOS and Linux, plus the Rust MSRV and dependency audit, web checks, npm shim tests and a sandboxed Electron test. Native release archives were not built in that run. This is automated test evidence, not packaged-app or physical-device acceptance.
+- The shared model picker now uses supported native CLI metadata for Codex and Claude, and Gemini configuration and model-list metadata where available. Antigravity has no verified read-only catalog. Real authenticated provider coverage remains open.
 
 ## Blocking gates
 
@@ -9,8 +15,8 @@ Updated 2026-10-29. Owner: Wahaj. Keep release caveats here and in technical doc
 | Remote security approval | Independent review and production approval remain open | Review ADRs 0019–0021 and threat models independently. Exercise interception, cross-account discovery, replay, reconnect key reuse, expiry, concurrent revocation and authorization. Fix findings and obtain owner approval. | Review report, resolved findings, adversarial tests, dated approval |
 | Physical-phone acceptance | Emulation does not test real keyboards, mobile suspension or storage | Test current desktop/site on real iOS Safari and Android Chrome: pair, launch, first/follow-up prompt, page history, folder selection, rotation, keyboard, reload/background, reconnect, revoke and re-pair. | Device/browser versions, sanitized captures and results |
 | Real model/provider handoff | Synthetic processes do not establish CLI compatibility or entitlement | Use authenticated installed supported CLIs. Launch, approve native trust, send a task, switch to an available model/provider, verify reported target model/reply, preserve drafts/history and test non-Git folders. Exercise quota/resume with eligible observed windows. | CLI versions, observed model IDs, sanitized outcomes |
-| Metadata privacy contract | `sync::build_remote_snapshot` serializes sessions, profiles, reports and relay records, not only hashed rollups | Inventory actual fields, including project names, stored titles, device labels and relay `cwd`. Decide per-field minimization/consent with owner; implement a Rust allowlist and serialized-payload tests. Test RLS with two accounts. Do not silently delete existing features. | Field inventory, approved disclosure, payload regression and two-account access results |
-| Cross-platform release | Latest local acceptance is Windows-only | Run gates on macOS Intel/Apple Silicon and Linux plus Windows. Test PTY crash survival/reattach, env/path overrides, focus fallbacks, tray, autostart, shell and packaged startup. Document Wayland/WSL limits. | CI artifacts and actual OS matrix; narrow launch scope if needed |
+| Metadata privacy contract | New snapshots still share project names, session identifiers, usage reports and quotas without end-to-end encryption; historical snapshots/backups may contain titles and relay metadata | Inventory remaining fields and destinations, including separate account settings. Approve field-level minimization and separate consent; verify existing snapshot replacement, backup retention/deletion and two-account RLS. Extend payload tests for the agreed contract. | Approved field inventory and disclosure, retention decision, payload regression and two-account access results |
+| Cross-platform release | Automated three-OS CI passed, but packaged-app and real-agent acceptance across platforms and architectures remain open | Test approved builds on Windows, macOS Intel/Apple Silicon and Linux as advertised: PTY crash survival/reattach, env/path overrides, focus fallbacks, tray, autostart, shell and packaged startup. Document Wayland/WSL limits. | CI artifacts plus actual OS/architecture and packaged-build acceptance matrix; narrow launch scope if needed |
 | Distribution | 0.9.0 artifacts are development/draft builds | Follow `cut-release`, approve legal inputs, build selected targets, verify hashes/notices and clean install/uninstall. Smoke-test npm optional dependencies/offline CLI. Publish approved assets and update manifest only after approval. | Verified hashes, install logs, published URLs, rollback test |
 | Signing and OS trust | Windows setup unsigned; macOS signing/notarization unverified | Obtain approved signing credentials securely. Sign/test Windows and macOS as advertised, or explicitly accept and document unsigned distribution. | Signature checks, clean-machine behavior and owner decision |
 | Legal and payments | Jurisdiction, commercial terms, prices/refunds and payout eligibility unresolved | Confirm legal identity/contact and jurisdiction with owner/legal reviewer; timezone is not legal jurisdiction. Reconcile EULA, privacy, terms and refund policy. Configure payments/tax/payouts and appropriate hosting plan before selling. | Approved texts, jurisdiction, prices and checkout/refund tests |
@@ -20,12 +26,16 @@ Updated 2026-10-29. Owner: Wahaj. Keep release caveats here and in technical doc
 | Item | Remaining work | Completion evidence |
 | :--- | :--- | :--- |
 | Teams | Define roles, rollups, budgets, invitations and consent in SPEC/ADR. Existing schema/snapshot is not a complete Teams service. | Approved scope, authorization tests, team acceptance |
-| Model catalogs | Codex fresh local cache exists; Claude/Gemini discovery needs reliable official local sources. Retain native selectors. | Source contracts and fresh/stale/hidden-entry tests |
+| Model catalogs | Validate supported Codex, Claude and Gemini native metadata against real CLI versions and accounts; Gemini configured status is not proof of authentication or entitlement. Antigravity lacks a verified read-only catalog; retain its native selector. | CLI versions, source contracts, real-account outcomes and fresh/stale/hidden-entry tests |
 | Resume/automation | Verify native busy/approval handling, reset timing, restart and duplicate prevention. Do not promise restoration of arbitrary original prompt text. | Real agent acceptance and no-escalation regression results |
 | Retention/deletion | Confirm actual retention configuration and scheduling; explain SQLite WAL and backups. Row deletion is not guaranteed forensic erasure. | Deletion/retention tests and backup policy |
 | Adapters | Validate current anonymized real logs, especially Antigravity/Aider/editor variants; publish capability differences. | Golden fixtures and capability matrix |
 | Performance | Measure all daemon/desktop/PTY processes at idle and under concurrent sessions per launch OS. | Reproducible measurements and accepted budgets |
 | Network disclosure | Reconcile `doctor --network` with update, pricing, account auth/sync, relay, license and optional provider operations. | Endpoint audit, offline run and accurate privacy page |
+
+## Product discovery, not committed launch scope
+
+The [product audit](APP_AUDIT_2026-11-01.md) identifies managed worktrees, integrated diff/PR review, checkpoints and coordinated agents as possible gaps. Validate demand and tradeoffs before selecting work. Record approved scope in SPEC and any architectural decision in an ADR; do not treat competitor parity as a completed or required launch feature.
 
 ## Website and operations
 
