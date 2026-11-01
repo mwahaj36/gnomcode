@@ -1,12 +1,12 @@
 use super::*;
 
 #[tokio::test]
-async fn cloud_requests_need_explicit_key_bound_approval_and_survive_restart() {
+async fn native_consent_grants_all_account_devices_across_desktops_and_survives_restart() {
     // Run in a child so no test can redirect another test's real SPAWNT_HOME.
     if std::env::var_os("SPAWNT_ACCOUNT_DEVICE_TEST").is_none() {
         let home = tempfile::tempdir().expect("home");
         let result=std::process::Command::new(std::env::current_exe().expect("test executable"))
-            .args(["account_devices::tests::cloud_requests_need_explicit_key_bound_approval_and_survive_restart","--exact","--nocapture"])
+            .args(["account_devices::tests::native_consent_grants_all_account_devices_across_desktops_and_survives_restart","--exact","--nocapture"])
             .env("SPAWNT_HOME",home.path()).env("SPAWNT_ACCOUNT_DEVICE_TEST","1").output().expect("child");
         assert!(
             result.status.success(),
@@ -26,51 +26,140 @@ async fn cloud_requests_need_explicit_key_bound_approval_and_survive_restart() {
         offer: None,
         state: String::new(),
     };
-    {
-        let mut state = devices.state.lock().await;
-        *state = load_state(owner).await.expect("initialize");
-        state.pending.insert(request.id.clone(), request.clone());
-    }
-    assert_eq!(devices.view().await["devices"][0]["state"], "pending");
+    let mut first = load_state(owner).await.expect("first desktop");
+    first.remote_enabled = true;
     assert!(
-        devices.approve(&request.id, &"c".repeat(64)).await.is_err(),
-        "approval cannot silently pin a substituted key"
+        !first.admit(&request),
+        "existing links must not silently gain account-wide access"
     );
-    assert!(devices.state.lock().await.approved.is_empty());
     devices
-        .approve(&request.id, &request.public_key)
+        .enable_account_access(owner)
         .await
-        .expect("one action approval");
-    let restored = load_state(owner).await.expect("upgrade/restart");
-    assert_eq!(
-        restored.approved[&request.id].public_key,
-        request.public_key
+        .expect("confirm native account access once");
+    first = load_state(owner).await.expect("consent survives restart");
+    first.remote_enabled = true;
+    assert!(
+        first.admit(&request),
+        "signed-in phone connects without per-desktop approval"
+    );
+    save_state(&first).await.expect("save connection");
+    let mut second = State {
+        owner: owner.into(),
+        desktop: "2".repeat(32),
+        account_access: true,
+        remote_enabled: true,
+        ..State::default()
+    };
+    assert!(
+        second.admit(&request),
+        "the same signed-in phone also connects to another consented native app"
+    );
+    let second_phone = Request {
+        id: "c".repeat(32),
+        public_key: "d".repeat(64),
+        ..request.clone()
+    };
+    assert!(
+        first.admit(&second_phone),
+        "another signed-in device needs no separate approval either"
+    );
+    first.remote_enabled = false;
+    assert!(
+        !first.admit(&second_phone),
+        "account-side revocation blocks all clients"
     );
     let other = load_state("20000000-0000-0000-0000-000000000002")
         .await
         .expect("other account");
+    assert!(!other.account_access);
     assert!(other.approved.is_empty());
-    assert_ne!(other.desktop, restored.desktop);
+    // Execute the real publication path after a restart against a revoked directory row.
+    let writes = Arc::new(Mutex::new(Vec::<(String, String, Value)>::new()));
+    let capture = writes.clone();
+    let app = axum::Router::new().fallback(axum::routing::any(
+        move |request: axum::extract::Request| {
+            let capture = capture.clone();
+            async move {
+                let method = request.method().to_string();
+                let prefer = request
+                    .headers()
+                    .get("prefer")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_owned();
+                let bytes = axum::body::to_bytes(request.into_body(), 4096)
+                    .await
+                    .expect("body");
+                let value = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
+                capture.lock().await.push((method.clone(), prefer, value));
+                axum::Json(if method == "GET" {
+                    json!([{"remote_enabled":false}])
+                } else {
+                    json!({})
+                })
+            }
+        },
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("cloud fixture");
+    let address = listener.local_addr().expect("address");
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve");
+    });
+    let restored = Arc::new(AccountDevices::default());
+    let auth = CloudAuth {
+        user_id: owner.into(),
+        access_token: "synthetic".into(),
+        public_key: "synthetic".into(),
+        base_url: format!("http://{address}"),
+    };
+    let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
+    for _ in 0..2 {
+        restored
+            .poll(&reqwest::Client::new(), &auth, db.clone())
+            .await
+            .expect("poll revoked host");
+    }
+    assert_eq!(restored.view().await["remote_enabled"], false);
+    for (method, prefer, payload) in writes.lock().await.iter() {
+        if method == "POST" {
+            assert!(
+                prefer.contains("ignore-duplicates"),
+                "registration must not overwrite a revoked native app"
+            );
+        }
+        if method == "PATCH" {
+            assert!(
+                payload.get("remote_enabled").is_none(),
+                "heartbeat must not re-enable account access after restart"
+            );
+        }
+    }
+    restored
+        .set_account_access(&reqwest::Client::new(), &auth, true)
+        .await
+        .expect("explicit native confirmation may enable again");
+    assert_eq!(restored.view().await["remote_enabled"], true);
+    assert!(
+        writes
+            .lock()
+            .await
+            .iter()
+            .any(|(method, _, payload)| method == "PATCH" && payload["remote_enabled"] == true),
+        "only the explicit consent operation writes an enable"
+    );
+    server.abort();
     let cold = AccountDevices::default();
     cold.disconnect_owner(owner)
         .await
         .expect("sign out before the first directory poll");
     assert!(
-        load_state(owner)
+        !load_state(owner)
             .await
-            .expect("restart after cold sign-out")
-            .approved
-            .is_empty()
+            .expect("restart after sign-out")
+            .account_access
     );
-    devices.revoke(&request.id).await.expect("revoke");
-    assert!(
-        load_state(owner)
-            .await
-            .expect("restart after revoke")
-            .approved
-            .is_empty()
-    );
-    assert!(root(owner).join(format!("{}.revoked", request.id)).exists());
 }
 
 #[test]

@@ -547,7 +547,7 @@
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
     <section class="profile-devices" aria-labelledby="remote-heading">
       <h2 id="remote-heading">Devices</h2>
-      <p>Signed-in devices can request access to this desktop. Approve only requests you initiated.</p>
+      <p>When account access is enabled, this desktop is available from every device signed in to your account. No separate phone pairing is needed.</p>
       <div id="remote-status" role="status">Checking devices...</div>
       <div id="remote-link"></div>
     </section>
@@ -636,7 +636,7 @@
       <div class="sp-account-columns">
         <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. This snapshot is not end-to-end encrypted. New snapshots exclude conversation text and titles; older copies may still contain titles. Project names and other metadata can still be sensitive. Remote conversations use a separate encrypted connection.</p><p>Snapshots update about once a minute while spawnt is running. Local monitoring works without an account.</p></div>
         <div>
-          <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This device is paired. Disconnecting keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" data-action="unpair">Disconnect desktop</button></div>
+          <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This desktop is linked to your account. Account access lets any signed-in device open its available sessions. Disconnecting stops Remote and keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" data-action="unpair">Disconnect desktop</button></div>
           <div id="auth-unpaired-card" hidden><h3>Sign in on this desktop</h3><form data-submit="signin"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" required><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" required><button id="auth-signin-button" type="submit" class="btn-primary">Sign in</button></form><p>Use the same account on your phone. Your desktop appears automatically.</p><details><summary>Connect an existing browser account</summary><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy account connection</strong>.</li><li>Paste the token below and connect.</li></ol><form data-submit="pair"><label for="auth-token-input">Account connection</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your account connection" required><button type="button" class="btn-control" data-action="toggle-pair-token" aria-controls="auth-token-input" aria-pressed="false">Show token</button><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local spawnt app.</p></form></details></div>
           <p id="auth-pair-status" role="status" hidden></p>
         </div>

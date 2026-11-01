@@ -1711,20 +1711,30 @@ async fn remote_device_action_handler(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !matches!(
-        payload["type"].as_str(),
-        Some("approve_device" | "revoke_device")
-    ) {
-        return Err(StatusCode::BAD_REQUEST);
+    let enabled = match payload["type"].as_str() {
+        Some("enable_account_access") => true,
+        Some("disable_account_access") => false,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    if enabled && payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
     }
-    if payload["type"] == "approve_device" && !crate::pro::has_remote_access().await {
-        return Err(StatusCode::FORBIDDEN);
-    }
-    let response = state.remote.devices.command(payload).await;
-    if response["type"] == "error" {
-        return Err(StatusCode::CONFLICT);
-    }
-    Ok(Json(response))
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let auth = crate::sync::read_cloud_auth(&client, &session_file_path())
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    state
+        .remote
+        .devices
+        .set_account_access(&client, &auth, enabled)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    Ok(Json(state.remote.devices.view().await))
 }
 
 async fn remote_status_handler(
@@ -2378,6 +2388,9 @@ async fn auth_session_post_handler(
     Json(payload): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    if payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
+    }
     let client = reqwest::Client::builder()
         .https_only(true)
         .timeout(std::time::Duration::from_secs(10))
@@ -2390,6 +2403,25 @@ async fn auth_session_post_handler(
     crate::sync::save_cloud_session(&session_file_path(), &payload)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let owner = payload
+        .pointer("/user/id")
+        .and_then(Value::as_str)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let auth = crate::sync::CloudAuth {
+        user_id: owner.to_owned(),
+        access_token: payload["access_token"]
+            .as_str()
+            .ok_or(StatusCode::BAD_REQUEST)?
+            .to_owned(),
+        base_url: base,
+        public_key: key,
+    };
+    state
+        .remote
+        .devices
+        .set_account_access(&client, &auth, true)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
     Ok((cors_headers(), Json(json!({ "success": true }))))
 }
@@ -2400,6 +2432,9 @@ async fn auth_signin_handler(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    if payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
+    }
     let email = payload["email"]
         .as_str()
         .filter(|value| value.len() <= 320 && value.contains('@'))
@@ -2416,7 +2451,7 @@ async fn auth_signin_handler(
     let (base, key) = crate::sync::cloud_config();
     let response = client
         .post(format!("{base}/auth/v1/token?grant_type=password"))
-        .header("apikey", key)
+        .header("apikey", &key)
         .json(&json!({"email":email,"password":password}))
         .send()
         .await
@@ -2431,6 +2466,25 @@ async fn auth_signin_handler(
     crate::sync::save_cloud_session(&session_file_path(), &session)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let owner = session
+        .pointer("/user/id")
+        .and_then(Value::as_str)
+        .ok_or(StatusCode::BAD_GATEWAY)?;
+    let auth = crate::sync::CloudAuth {
+        user_id: owner.to_owned(),
+        access_token: session["access_token"]
+            .as_str()
+            .ok_or(StatusCode::BAD_REQUEST)?
+            .to_owned(),
+        base_url: base,
+        public_key: key,
+    };
+    state
+        .remote
+        .devices
+        .set_account_access(&client, &auth, true)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
     Ok(Json(json!({"success":true})))
 }
 
@@ -2959,6 +3013,43 @@ mod tests {
             assert!(
                 !html.contains(wrapper),
                 "unexpected status wrapper: {wrapper}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn native_link_requires_account_wide_consent_before_auth_or_persistence() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "consent-test".into(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        for path in [
+            "/api/v1/auth/signin",
+            "/api/v1/auth/session",
+            "/api/v1/remote/devices",
+        ] {
+            let request = Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("Host", "127.0.0.1")
+                .header("Authorization", "Bearer consent-test")
+                .header("Content-Type", "application/json")
+                .body(Body::from(if path.ends_with("devices") {
+                    r#"{"type":"enable_account_access"}"#
+                } else {
+                    "{}"
+                }))
+                .expect("request");
+            assert_eq!(
+                app.clone()
+                    .oneshot(request)
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::PRECONDITION_REQUIRED,
+                "linking must require explicit account-wide access consent before any network/write: {path}"
             );
         }
     }

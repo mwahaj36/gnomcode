@@ -62,7 +62,6 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const accountOwner=useRef('');
   const connectedDesktop=useRef('');
   const retryStart=useRef(0);
-  const [devices,setDevices]=useState<{id:string;name:string;public_key:string;state:string;connected:boolean}[]>([]);
   const reconnectTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const manualDisconnect=useRef(false);
   const restoredSession=useRef('');
@@ -80,6 +79,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   useEffect(() => {
     let active=true;
+    manualDisconnect.current=false;
     void supabase.auth.getSession().then(async({data:{session}})=>{
       if(!active || !session)return;
       accountOwner.current=session.user.id;
@@ -233,7 +233,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   async function handle(reply: Reply, epoch:number) {
     if(epoch!==connectionEpoch.current)return;
-    if(reply.type==='devices'){setDevices((reply as Reply & {devices?:typeof devices}).devices||[]);} else if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
+    if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
       setFoldersLoading(false); setFolderBrowser({path:reply.path,parent:reply.parent || null,roots:reply.roots,folders:reply.folders,truncated:Boolean(reply.truncated)});
     } else if (reply.type === 'sessions') {
       setSessions(reply.sessions || []);
@@ -255,7 +255,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       }
     } else if(reply.type==='trusted' && reply.secret){const key=await rememberDevice(link,reply.secret,()=>epoch===connectionEpoch.current && !manualDisconnect.current);if(epoch!==connectionEpoch.current)return;proofKey.current=key;await beginPaired();}
     else if(reply.type==='resumed'){await beginPaired();}
-    else if(reply.type==='resume_rejected'){manualDisconnect.current=true;proofKey.current=null;await forgetDevice(accountOwner.current,connectedDesktop.current);socket.current?.close();setPhase('ready');setError('Access was revoked or this browser credential is no longer recognized. Open Devices to request approval.');}
+    else if(reply.type==='resume_rejected'){manualDisconnect.current=true;proofKey.current=null;await forgetDevice(accountOwner.current,connectedDesktop.current);socket.current?.close();setPhase('ready');setError('Access was revoked or this browser credential is no longer recognized. Open Devices to reconnect through your account.');}
     else if (reply.type === 'launch_ack') { setNotice('Agent started. Send its first message below.');setNewSession(false); await send({ type: 'sessions' }); if (reply.session_id) selectSession(reply.session_id); }
     else if (reply.type === 'prompt_ack') {
       const pending = pendingPrompt.current;
@@ -286,7 +286,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if(connectionWatch.current)clearInterval(connectionWatch.current);
       if(poll.current)clearInterval(poll.current);
       const previous=socket.current;socket.current=null;previous?.close();
-      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Spawnt is running. Your approval is still saved.');return;
+      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Spawnt is running. Your account connection is still saved.');return;
     }
     if(reconnectTimer.current)clearTimeout(reconnectTimer.current);
     if(connectionWatch.current)clearInterval(connectionWatch.current);
@@ -304,7 +304,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     try {
       setOptimistic({});
       if(selectedRef.current)drafts.current.set(selectedRef.current,promptRef.current);
-      if(connectedDesktop.current && connectedDesktop.current!==link.desktop_id){proofKey.current=null;setDevices([]);}
+      if(connectedDesktop.current && connectedDesktop.current!==link.desktop_id){proofKey.current=null;}
       if(!proofKey.current){selectedRef.current = ''; setSelected(''); setSessions([]); setEvents([]);}
       pendingPrompt.current = null; setSending(false); loadingHistory.current = false; setHistoryLoading(false);
       setFolderBrowser(null); setFoldersLoading(false); if(!proofKey.current){changePrompt('');drafts.current.clear();}
@@ -316,16 +316,16 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       accountOwner.current=session.user.id;connectedDesktop.current=link.desktop_id||'';
       const saved=await savedDevice(session.user.id,link.desktop_id);
       if(epoch!==connectionEpoch.current)return;
-      if(!saved)throw new Error('This browser credential is missing. Request approval in Devices.');
+      if(!saved)throw new Error('This browser credential is missing. Open Devices to reconnect automatically through your account.');
       proofKey.current=saved.proofKey||null;
       const {data:request,error:directoryError}=await supabase.from('spawnt_device_requests').select('offer,revoked,state').eq('user_id',session.user.id).eq('desktop_id',link.desktop_id!).eq('id',link.request_id!).abortSignal(AbortSignal.timeout(10000)).maybeSingle();
       if(epoch!==connectionEpoch.current)return;
       if(directoryError)throw new Error('Device discovery is unavailable. Check your connection and try again.');
-      if(!request || request.revoked)throw new Error('Access was revoked. Open Devices to request approval again.');
-      if(request.state!=='approved' || !request.offer)throw new Error('Waiting for device approval. Open Devices on your desktop.');
+      if(!request || request.revoked)throw new Error('Access was revoked. Open Devices to reconnect through your account.');
+      if(request.state!=='approved' || !request.offer)throw new Error('Your desktop is not ready. Keep it awake with Spawnt running.');
       if(request.offer.key!==link.key || request.offer.room!==link.room || request.offer.relay!==link.relay)throw new Error('The desktop identity changed. Open Devices to review its connection.');
       const keys=proofKey.current?await generateKeyPair():saved.enrollment;
-      if(!keys || link.protocol_version!==3)throw new Error('Update your desktop and request access in Devices.');
+      if(!keys || link.protocol_version!==3)throw new Error('Update your desktop and open Devices to reconnect.');
       if(epoch!==connectionEpoch.current)return;
       setPhase(proofKey.current?'reconnecting':'connecting');
       const ws = new WebSocket(`${link.relay.replace(/\/$/, '')}/${link.room}?role=phone`);
@@ -407,12 +407,12 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       {connected && <button type="button" className="remote-new" aria-label="New conversation" onClick={startNew}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>}
       <button type="button" className="remote-desktop-button" aria-label="Desktop connection" onClick={()=>setDesktopPanel(true)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button>
     </header>
-    {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Select your desktop in Devices to request access.'}</p><button type="button" disabled={!connected} onClick={()=>void send({type:'devices'})}>Manage devices</button>{devices.map(device=><div className="sp-device-row" key={device.id}><span>{device.name} · {device.state}</span><button type="button" disabled={!connected} onClick={()=>void send(device.state==='pending'?{type:'approve_device',id:device.id,public_key:device.public_key}:{type:'revoke_device',id:device.id})}>{device.state==='pending'?'Approve':'Revoke'}</button></div>)}<nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
+    {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Open any linked desktop through your signed-in account.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
     {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><ModelChoices providers={modelProviders} loading={modelsLoading} error={modelsError} disabled={!connected} onRefresh={()=>void loadModels()} onSelect={selectModel}/></dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
-    {(phase==='ready'||(phase==='unavailable'&&!workspace)) && <DesktopDevices onPair={offer => {autoConnect.current = true;setLink(offer);setError('');}} />}
+    {(phase==='ready'||(phase==='unavailable'&&!workspace)) && <DesktopDevices autoOpen={phase==='ready'&&!manualDisconnect.current&&!link.room} onPair={offer => {autoConnect.current = true;setLink(offer);setError('');}} />}
     {phase === 'connecting' && <p role="status">Connecting to your desktop...</p>}{(phase==='reconnecting'||phase==='unavailable') && <div className="remote-reconnect" role="status"><div><strong>{phase==='unavailable'?'Desktop unavailable':'Reconnecting to your desktop'}</strong><p>Your chat and draft are saved here. Mobile networks can interrupt the connection even when your laptop is on.</p></div><button type="button" onClick={()=>void connect(true)}>Try again</button><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a></div>}
     {workspace && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>
       <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button ref={sidebarClose} type="button" aria-label="Close conversations" onClick={()=>{setShowSessions(false);sidebarToggle.current?.focus();}}>Close</button></div>

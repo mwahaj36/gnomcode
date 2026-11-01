@@ -1191,6 +1191,8 @@ function cycleTheme() {
       }
     }
 
+    const accountAccessDisclosure='Linking this native app makes its available conversations and supported session controls accessible from any device signed in to your account, anywhere. This includes devices already signed in and devices you sign in to later. No phone pairing or per-desktop approval will be required. This desktop must stay awake with Spawnt running. Protect your account: anyone with access to it can use these controls. You can disable account access in Devices or disconnect this desktop.';
+    function confirmAccountAccess(){return confirmAction(accountAccessDisclosure,'Link and allow account access');}
     let accountWriteBusy = false;
     async function signInAccount(){
       if(accountWriteBusy)return;
@@ -1198,7 +1200,8 @@ function cycleTheme() {
       const button=document.getElementById('auth-signin-button'),password=document.getElementById('auth-password'),status=document.getElementById('auth-pair-status');
       button.disabled=true;button.textContent='Signing in...';status.hidden=false;
       try{
-        await apiJson('/api/v1/auth/signin',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('auth-email').value.trim(),password:password.value}),signal:AbortSignal.timeout(15000)});
+        if(!await confirmAccountAccess())return;
+        await apiJson('/api/v1/auth/signin',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('auth-email').value.trim(),password:password.value,remote_access_confirmed:true}),signal:AbortSignal.timeout(15000)});
         password.value='';status.textContent='Signed in. Your desktop will appear in Devices.';await checkAuthSession();
       }catch{status.textContent='Sign-in failed. Check your email, password and connection. Browser accounts can use the connection option below.';}
       finally{accountWriteBusy=false;button.disabled=false;button.textContent='Sign in';}
@@ -1229,6 +1232,8 @@ function cycleTheme() {
           }
         }
 
+        if(!await confirmAccountAccess())return;
+        sessionData.remote_access_confirmed=true;
         const res = await fetch('/api/v1/auth/session', {
           method: 'POST', signal: AbortSignal.timeout(30000),
           headers: { ...headers, 'Content-Type': 'application/json' },
@@ -1456,15 +1461,21 @@ function cycleTheme() {
           clearTimeout(remoteNoticeTimer);remoteNoticeTimer=setTimeout(()=>{badge.hidden=true;},5000);
         }
         remoteWasPaired=connected;
-        document.getElementById('remote-status').textContent=result.directory_error?'Device discovery is unavailable. Check your connection.':!result.desktop_id?'Sign in to your account to make this desktop available.':result.devices.length?'Manage devices approved to use this desktop.':'Your desktop appears on signed-in devices. Open it on your phone to request access.';
-        const markup=result.devices.map(device=>`<div class="sp-device-row"><div><strong>${escapeHtml(device.name)}</strong><p>${device.state==='pending'?'Approval requested':device.connected?'Connected':'Approved'}</p></div><button type="button" class="btn-control" data-action="remote-device" data-device-id="${escapeHtml(device.id)}" data-device-key="${escapeHtml(device.public_key)}" data-device-operation="${device.state==='pending'?'approve_device':'revoke_device'}">${device.state==='pending'?'Approve':'Revoke'}</button></div>`).join('');
+        document.getElementById('remote-status').textContent=result.directory_error?'Device discovery is unavailable. Check your connection.':!result.desktop_id?'Sign in to your account to make this desktop available.':!result.account_access?'Confirm account access to make this desktop available to signed-in devices.':!result.remote_enabled?'Account access is disabled for this desktop.':'This desktop is accessible from any device signed in to your account.';
+        const accountAction=result.desktop_id?`<p><button type="button" class="btn-control" data-action="remote-device" data-device-operation="${result.account_access&&result.remote_enabled?'disable_account_access':'enable_account_access'}">${result.account_access&&result.remote_enabled?'Disable account access':'Enable account access'}</button></p>`:'';
+        const markup=accountAction+result.devices.map(device=>`<div class="sp-device-row"><div><strong>${escapeHtml(device.name)}</strong><p>${device.connected?'Connected':'Saved connection'}</p></div></div>`).join('');
         if(markup!==remoteDevicesMarkup){document.getElementById('remote-link').innerHTML=markup;remoteDevicesMarkup=markup;}
       }catch{document.getElementById('remote-status').textContent='Devices unavailable. Reload to try again.';}
     }
     async function manageRemoteDevice(target){
       target.disabled=true;
-      try{await apiJson('/api/v1/remote/devices',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({type:target.dataset.deviceOperation,id:target.dataset.deviceId,public_key:target.dataset.deviceKey})});await loadRemoteStatus();}
-      catch{document.getElementById('remote-status').textContent='Could not update device access. Refresh Devices and retry.';}
+      try{
+        const enable=target.dataset.deviceOperation==='enable_account_access';
+        if(enable && !await confirmAccountAccess())return;
+        if(!enable && !await confirmAction('Disable access to this desktop for every device signed in to your account?','Disable account access'))return;
+        await apiJson('/api/v1/remote/devices',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({type:target.dataset.deviceOperation,remote_access_confirmed:enable})});
+        await loadRemoteStatus();
+      }catch{document.getElementById('remote-status').textContent='Could not update account access. Refresh Devices and retry.';}
       finally{target.disabled=false;}
     }
 

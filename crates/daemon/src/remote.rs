@@ -327,6 +327,15 @@ impl RemoteManager {
         clear_trust_at(self.trust_path()).await?;
         Ok(previous.is_some())
     }
+
+    pub(crate) async fn suspend(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        if let Some(room) = self.current.lock().await.take() {
+            let _ = room.cancel.send(true);
+        }
+        // Wait for any earlier write before a replacement manager reads this credential.
+        let _gate = self.persistence.lock().await;
+    }
 }
 
 impl Room {
@@ -563,7 +572,7 @@ async fn run_connection(
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
                 if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
-                let mut response = if matches!(request_type.as_str(),Some("devices"|"approve_device"|"revoke_device")) {
+                let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
                 } else {dispatch(db, value).await};
                 if response.get("type").and_then(Value::as_str) == Some("error") { response["request_type"] = request_type; }

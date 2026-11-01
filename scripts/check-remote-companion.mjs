@@ -56,10 +56,10 @@ try {
   const env=await readFile(new URL('../web/.env.local',import.meta.url),'utf8');
   const project=env.match(/NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?https:\/\/([^.]+)/)?.[1];
   let deviceRequest=null,approved=false;
-  const offer=()=>({room,key:keys.publicHex,relay,protocol_version:3,owner_id:owner,desktop_id:desktopId,request_id:room});
+  const offer=()=>({room,key:keys.publicHex,relay,protocol_version:3,owner_id:owner,desktop_id:deviceRequest?.desktop_id||desktopId,request_id:room});
   await page.route('**/rest/v1/spawnt_device_requests**',async route=>{
     if(route.request().method()==='POST'){
-      deviceRequest=route.request().postDataJSON();room=deviceRequest.id;
+      deviceRequest=route.request().postDataJSON();room=deviceRequest.id;approved=true;
       const previous=desktop;desktop=new WebSocket(`${relay}/${room}?role=desktop`);desktop.binaryType='arraybuffer';bindDesktop();previous.close();
       return route.fulfill({status:201,contentType:'application/json',body:''});
     }
@@ -67,21 +67,14 @@ try {
     const value=deviceRequest?{...deviceRequest,offer:approved?offer():null,state:approved?'approved':'pending',revoked:false}:null;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(singular?value:value?[value]:[])});
   });
-  await page.route('**/rest/v1/spawnt_desktops**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:desktopId,name:'Test desktop',last_seen_at:new Date().toISOString()},{id:'e'.repeat(32),name:'Second desktop',last_seen_at:new Date().toISOString()}])}));
+  await page.route('**/rest/v1/spawnt_desktops**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:desktopId,name:'Test desktop',remote_enabled:true,last_seen_at:new Date().toISOString()},{id:'e'.repeat(32),name:'Second desktop',remote_enabled:true,last_seen_at:new Date().toISOString()}])}));
   await page.route('**/auth/v1/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'})}));
   await page.addInitScript(({project,owner})=>{
     localStorage.setItem(`sb-${project}-auth-token`,JSON.stringify({access_token:'test-access',refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'}}));
     const Native=window.WebSocket;window.testSockets=[];window.WebSocket=class extends Native{constructor(...args){super(...args);window.testSockets.push(this);this.addEventListener('message',event=>{if(window.dropRemoteFrames)event.stopImmediatePropagation();});}};
   },{project,owner});
   await page.goto(`${site}/remote`);
-  await page.getByRole('heading',{name:'Devices',exact:true}).waitFor();
-  await page.getByRole('button',{name:'Open desktop',exact:true}).first().waitFor();
-  assert.equal(await page.getByRole('button',{name:'Open desktop',exact:true}).count(),2,'account discovery lists independent desktops');
-  await page.getByRole('button',{name:'Open desktop',exact:true}).first().click();
-  await page.getByRole('status').filter({hasText:'Access requested.'}).waitFor();
-  assert.ok(deviceRequest?.public_key,'new browser publishes its enrollment public key');
-  assert.equal(deviceRequest.user_id,owner);
-  approved=true;
+  // A signed-in phone connects without requesting human approval on either desktop.
   await page.locator('.sp-remote.is-paired').waitFor();
   assert.equal(await page.locator('footer').count(),0,'Remote must use the app shell, without the marketing footer');
   const remoteBox = await page.locator('.remote-heading').boundingBox();
@@ -250,8 +243,14 @@ try {
   await page.getByRole('heading',{name:'Devices',exact:true}).waitFor();
   await page.waitForTimeout(100);
   assert.deepEqual(await page.locator('.sp-remote [role="alert"]').allTextContents(),[],'intentional disconnect must not show a connection failure');
+  await page.getByRole('button',{name:'Open desktop',exact:true}).last().waitFor();
+  assert.equal(await page.getByRole('button',{name:'Open desktop',exact:true}).count(),2,'all linked native apps remain discoverable');
+  await page.getByRole('button',{name:'Open desktop',exact:true}).last().click();
+  await page.locator('.sp-remote.is-paired').waitFor();
+  assert.equal(deviceRequest.desktop_id,'e'.repeat(32),'the same signed-in phone opens another native app without another approval');
+  assert.equal(await page.getByRole('button',{name:'Approve',exact:true}).count(),0,'there is no per-desktop approval step');
   assert.deepEqual(failures,[]);
-  console.log('PASS: encrypted code-free device enrollment, touch sheets, searchable history, visible composer, resume/model switch, trust reload, stalled-open-socket recovery with preserved draft and usable navigation');
+  console.log('PASS: account-wide automatic access across two native apps, encrypted device enrollment, touch sheets, searchable history, visible composer, resume/model switch, trust reload, stalled-open-socket recovery with preserved draft and usable navigation');
   }else{assert.deepEqual(failures,[]);console.log('PASS: encrypted provider-grouped model choices, explicit cross-provider switch, catalog failure/retry and preserved draft');}
 } catch(error){console.error('Browser failures:',failures);for(const page of browser.contexts().flatMap(context=>context.pages())){console.error((await page.locator('body').innerText()).slice(-3000));await page.screenshot({path:'.tmp/remote-failure.png',fullPage:true});}throw error;} finally {finished=true;clearTimeout(reconnectTimer);await browser.close(); desktop.close();}
 process.exit(0);

@@ -63,7 +63,7 @@ export const faqGroups = [
     "questions": [
       {
         "question": "How do I pair my phone?",
-        "answer": "Sign in to the same account, select your desktop in Devices and approve the access request on that desktop or an approved browser. No pairing codes are needed."
+        "answer": "Confirm account access when linking the native app. Every device signed in to that account can then open its available sessions automatically. No phone pairing or per-desktop approval is required."
       },
       {
         "question": "Is Remote independently security approved?",
@@ -79,7 +79,7 @@ export const faqGroups = [
       },
       {
         "question": "Does pairing survive a reload?",
-        "answer": "Approval survives updates, reloads and inactivity. Reconnect uses fresh encrypted keys. Revoke access or sign out to remove the browser credential."
+        "answer": "Native consent survives updates, reloads and inactivity. Devices can disable a native app for all signed-in devices. Native sign-out clears its consent; browser sign-out clears local connection credentials."
       }
     ]
   },

@@ -1,4 +1,4 @@
-//! Account-scoped discovery; only locally pinned device keys authorize Remote.
+//! Explicit native consent grants Remote to authenticated devices on the same account.
 
 use crate::remote::{RemoteError, RemoteManager};
 use crate::sync::CloudAuth;
@@ -42,9 +42,20 @@ struct State {
     owner: String,
     desktop: String,
     approved: BTreeMap<String, Request>,
-    pending: BTreeMap<String, Request>,
+    account_access: bool,
+    remote_enabled: bool,
     rooms: BTreeMap<String, Arc<RemoteManager>>,
     directory_error: bool,
+}
+
+impl State {
+    fn admit(&mut self, request: &Request) -> bool {
+        if !self.account_access || !self.remote_enabled || request.revoked || !request.valid() {
+            return false;
+        }
+        self.approved.insert(request.id.clone(), request.clone());
+        true
+    }
 }
 
 #[derive(Default)]
@@ -101,6 +112,7 @@ async fn load_state(owner: &str) -> Result<State, RemoteError> {
         owner: owner.to_owned(),
         desktop,
         approved,
+        account_access: value["account_access"].as_bool().unwrap_or(false),
         ..State::default()
     };
     save_state(&state).await?;
@@ -110,27 +122,42 @@ async fn load_state(owner: &str) -> Result<State, RemoteError> {
 async fn save_state(state: &State) -> Result<(), RemoteError> {
     write_json(
         root(&state.owner).join("devices.json"),
-        json!({"desktop":state.desktop,"approved":state.approved}),
+        json!({"desktop":state.desktop,"approved":state.approved,"account_access":state.account_access}),
     )
     .await
 }
 
 impl AccountDevices {
+    pub(crate) async fn enable_account_access(&self, owner: &str) -> Result<(), RemoteError> {
+        if !uuid_owner(owner) {
+            return Err(RemoteError::NotPaired);
+        }
+        let mut state = self.state.lock().await;
+        if state.owner != owner {
+            for room in state.rooms.values() {
+                room.suspend().await;
+            }
+            *state = load_state(owner).await?;
+        }
+        state.account_access = true;
+        save_state(&state).await?;
+        self.changed.notify_one();
+        Ok(())
+    }
+
     pub(crate) async fn disconnect_owner(&self, owner: &str) -> Result<(), RemoteError> {
         if !uuid_owner(owner) {
             return Err(RemoteError::NotPaired);
         }
         let mut state = self.state.lock().await;
         for room in state.rooms.values() {
-            room.revoke().await?;
+            room.suspend().await;
         }
         let mut saved = load_state(owner).await?;
-        for id in saved.approved.keys() {
-            write_json(root(owner).join(format!("{id}.revoked")), json!(true)).await?;
-        }
-        saved.approved.clear();
+        saved.account_access = false;
         save_state(&saved).await?;
-        *state = State::default();
+        *state = saved;
+        self.changed.notify_one();
         Ok(())
     }
 
@@ -141,35 +168,17 @@ impl AccountDevices {
     pub(crate) async fn disconnect(&self) -> Result<(), RemoteError> {
         let mut state = self.state.lock().await;
         for room in state.rooms.values() {
-            room.revoke().await?;
-        }
-        if !state.owner.is_empty() {
-            state.approved.clear();
-            save_state(&state).await?;
+            room.suspend().await;
         }
         *state = State::default();
         Ok(())
     }
 
     pub(crate) async fn command(&self, value: Value) -> Value {
-        let result = match value["type"].as_str() {
-            Some("devices") => Ok(()),
-            Some("approve_device") => {
-                self.approve(
-                    value["id"].as_str().unwrap_or_default(),
-                    value["public_key"].as_str().unwrap_or_default(),
-                )
-                .await
-            }
-            Some("revoke_device") => self.revoke(value["id"].as_str().unwrap_or_default()).await,
-            _ => Err(RemoteError::NotPaired),
-        };
-        match result {
-            Ok(()) => self.view().await,
-            Err(_) => {
-                json!({"type":"error","message":"Device request changed or could not be saved. Refresh Devices and retry."})
-            }
+        if value["type"] == "devices" {
+            return self.view().await;
         }
+        json!({"type":"error","message":"Manage account access in Profile > Devices."})
     }
 
     pub(crate) async fn view(&self) -> Value {
@@ -181,47 +190,48 @@ impl AccountDevices {
             } else {
                 false
             };
-            devices.push(json!({"id":request.id,"name":request.name,"public_key":request.public_key,"state":"approved","connected":connected}));
+            devices.push(json!({"id":request.id,"name":request.name,"state":"account","connected":connected}));
         }
-        for request in state.pending.values() {
-            devices.push(json!({"id":request.id,"name":request.name,"public_key":request.public_key,"state":"pending","connected":false}));
-        }
-        json!({"type":"devices","desktop_id":state.desktop,"devices":devices,"directory_error":state.directory_error})
+        json!({"type":"devices","desktop_id":state.desktop,"account_access":state.account_access,"remote_enabled":state.remote_enabled,"devices":devices,"directory_error":state.directory_error})
     }
 
-    async fn approve(&self, id: &str, key: &str) -> Result<(), RemoteError> {
+    pub(crate) async fn set_account_access(
+        &self,
+        client: &reqwest::Client,
+        auth: &CloudAuth,
+        enabled: bool,
+    ) -> Result<(), RemoteError> {
+        if enabled {
+            self.enable_account_access(&auth.user_id).await?;
+        } else {
+            self.disconnect_owner(&auth.user_id).await?;
+        }
+        let state = self.state.lock().await;
+        let desktop = state.desktop.clone();
+        drop(state);
+        client.post(format!("{}/rest/v1/spawnt_desktops?on_conflict=user_id,id",auth.base_url))
+            .header("apikey",&auth.public_key).bearer_auth(&auth.access_token)
+            .header("Prefer","resolution=ignore-duplicates,return=minimal")
+            .json(&json!({"user_id":auth.user_id,"id":desktop,"name":format!("Desktop {}",&desktop[28..]),"remote_enabled":false}))
+            .send().await.map_err(|_|RemoteError::Relay)?.error_for_status().map_err(|_|RemoteError::Relay)?;
+        client
+            .patch(format!(
+                "{}/rest/v1/spawnt_desktops?user_id=eq.{}&id=eq.{desktop}",
+                auth.base_url, auth.user_id
+            ))
+            .header("apikey", &auth.public_key)
+            .bearer_auth(&auth.access_token)
+            .json(&json!({"remote_enabled":enabled}))
+            .send()
+            .await
+            .map_err(|_| RemoteError::Relay)?
+            .error_for_status()
+            .map_err(|_| RemoteError::Relay)?;
         let mut state = self.state.lock().await;
-        let request = state
-            .pending
-            .get(id)
-            .filter(|request| request.public_key == key && !request.revoked)
-            .cloned()
-            .ok_or(RemoteError::NotPaired)?;
-        state.approved.insert(id.to_owned(), request);
-        if let Err(error) = save_state(&state).await {
-            state.approved.remove(id);
-            return Err(error);
+        if state.owner == auth.user_id && state.desktop == desktop {
+            state.remote_enabled = enabled;
+            save_state(&state).await?;
         }
-        state.pending.remove(id);
-        self.changed.notify_one();
-        Ok(())
-    }
-
-    async fn revoke(&self, id: &str) -> Result<(), RemoteError> {
-        let mut state = self.state.lock().await;
-        if let Some(room) = state.rooms.remove(id) {
-            room.revoke().await?;
-        }
-        state.approved.remove(id);
-        state.pending.remove(id);
-        // A tombstone prevents a cloud row left behind by a failed DELETE from re-enrolling.
-        let path = root(&state.owner).join(format!("{id}.revoked"));
-        if !is_hex(id, 32) {
-            return Err(RemoteError::NotPaired);
-        }
-        write_json(path, json!(true)).await?;
-        save_state(&state).await?;
-        self.changed.notify_one();
         Ok(())
     }
 
@@ -253,14 +263,51 @@ impl AccountDevices {
             *state = load_state(&auth.user_id).await?;
         }
         let desktop = state.desktop.clone();
-        let response=client.post(format!("{}/rest/v1/spawnt_desktops?on_conflict=user_id,id",auth.base_url))
+        // Register only once: heartbeat writes must never undo account-side revocation.
+        client.post(format!("{}/rest/v1/spawnt_desktops?on_conflict=user_id,id",auth.base_url))
             .header("apikey",&auth.public_key).bearer_auth(&auth.access_token)
-            .header("Prefer","resolution=merge-duplicates,return=minimal")
-            .json(&json!({"user_id":auth.user_id,"id":desktop,"name":format!("Desktop {}",&desktop[28..]),"last_seen_at":chrono::Utc::now().to_rfc3339()}))
-            .send().await.map_err(|_|RemoteError::Relay)?;
-        if !response.status().is_success() {
-            state.directory_error = true;
-            return Err(RemoteError::Relay);
+            .header("Prefer","resolution=ignore-duplicates,return=minimal")
+            .json(&json!({"user_id":auth.user_id,"id":desktop,"name":format!("Desktop {}",&desktop[28..]),"remote_enabled":false}))
+            .send().await.map_err(|_|RemoteError::Relay)?.error_for_status().map_err(|_|RemoteError::Relay)?;
+        let mut heartbeat = json!({"last_seen_at":chrono::Utc::now().to_rfc3339()});
+        if !state.account_access {
+            heartbeat["remote_enabled"] = json!(false);
+        }
+        client
+            .patch(format!(
+                "{}/rest/v1/spawnt_desktops?user_id=eq.{}&id=eq.{desktop}",
+                auth.base_url, auth.user_id
+            ))
+            .header("apikey", &auth.public_key)
+            .bearer_auth(&auth.access_token)
+            .json(&heartbeat)
+            .send()
+            .await
+            .map_err(|_| RemoteError::Relay)?
+            .error_for_status()
+            .map_err(|_| RemoteError::Relay)?;
+        let hosts = client
+            .get(format!(
+                "{}/rest/v1/spawnt_desktops?user_id=eq.{}&id=eq.{desktop}&select=remote_enabled",
+                auth.base_url, auth.user_id
+            ))
+            .header("apikey", &auth.public_key)
+            .bearer_auth(&auth.access_token)
+            .send()
+            .await
+            .map_err(|_| RemoteError::Relay)?
+            .error_for_status()
+            .map_err(|_| RemoteError::Relay)?
+            .json::<Vec<Value>>()
+            .await
+            .map_err(|_| RemoteError::Relay)?;
+        state.remote_enabled = hosts.len() == 1 && hosts[0]["remote_enabled"] == true;
+        if !state.account_access || !state.remote_enabled {
+            for room in state.rooms.values() {
+                room.suspend().await;
+            }
+            state.rooms.clear();
+            return Ok(());
         }
         let response=client.get(format!("{}/rest/v1/spawnt_device_requests?user_id=eq.{}&desktop_id=eq.{desktop}&select=id,public_key,name,revoked,offer,state&limit=65",auth.base_url,auth.user_id))
             .header("apikey",&auth.public_key).bearer_auth(&auth.access_token)
@@ -274,7 +321,7 @@ impl AccountDevices {
             .into_iter()
             .map(|request| (request.id.clone(), request))
             .collect();
-        // Missing/revoked/changed rows revoke access; a new cloud row never grants it.
+        // The owner-scoped directory is the authorization source after native consent.
         let revoked: Vec<_> = state
             .approved
             .iter()
@@ -291,28 +338,14 @@ impl AccountDevices {
             }
             state.approved.remove(&id);
             save_state(&state).await?;
-            write_json(
-                root(&state.owner).join(format!("{id}.revoked")),
-                json!(true),
-            )
-            .await?;
         }
-        state.pending.clear();
+        let mut connections_changed = false;
         for request in requests.values() {
             if request.revoked {
                 continue;
             }
-            if root(&state.owner)
-                .join(format!("{}.revoked", request.id))
-                .exists()
-            {
-                client.patch(format!("{}/rest/v1/spawnt_device_requests?user_id=eq.{}&desktop_id=eq.{desktop}&id=eq.{}",auth.base_url,auth.user_id,request.id))
-                    .header("apikey",&auth.public_key).bearer_auth(&auth.access_token)
-                    .json(&json!({"revoked":true,"offer":null})).send().await.map_err(|_|RemoteError::Relay)?.error_for_status().map_err(|_|RemoteError::Relay)?;
-                continue;
-            }
-            if !state.approved.contains_key(&request.id) {
-                state.pending.insert(request.id.clone(), request.clone());
+            connections_changed |= !state.approved.contains_key(&request.id);
+            if !state.admit(request) {
                 continue;
             }
             let manager = state
@@ -327,6 +360,9 @@ impl AccountDevices {
                 })
                 .clone();
             if !manager.status().await.enabled {
+                if !crate::pro::has_remote_access().await {
+                    continue;
+                }
                 let _ = manager.start_device(db.clone(), request.id.clone()).await;
             }
             let status = manager.status().await;
@@ -343,6 +379,9 @@ impl AccountDevices {
                     .error_for_status()
                     .map_err(|_| RemoteError::Relay)?;
             }
+        }
+        if connections_changed {
+            save_state(&state).await?;
         }
         state.directory_error = false;
         Ok(())
