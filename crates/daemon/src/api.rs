@@ -1461,38 +1461,59 @@ async fn repo_diff_get_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    #[cfg(windows)]
-    use std::os::windows::process::CommandExt as _;
-
-    let mut diff_cmd = std::process::Command::new("git");
-    diff_cmd.args(["diff", "HEAD"]).current_dir(&canonical_repo);
-    #[cfg(windows)]
-    diff_cmd.creation_flags(0x0800_0000);
-    let diff_output = diff_cmd.output();
-
-    let mut status_cmd = std::process::Command::new("git");
-    status_cmd
-        .args(["status", "--porcelain"])
-        .current_dir(&canonical_repo);
-    #[cfg(windows)]
-    status_cmd.creation_flags(0x0800_0000);
-    let status_output = status_cmd.output();
-
-    let diff_output = diff_output.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let status_output = status_output.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if !diff_output.status.success() || !status_output.status.success() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    let diff_str =
-        String::from_utf8(diff_output.stdout).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
-    let status_str =
-        String::from_utf8(status_output.stdout).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
+    let diff_str = git_output(&canonical_repo, &["diff", "--no-ext-diff", "HEAD"]).await?;
+    let status_str = git_output(&canonical_repo, &["status", "--porcelain"]).await?;
 
     Ok(Json(json!({
         "repo": query.repo,
         "diff": diff_str,
         "status": status_str
     })))
+}
+
+async fn git_output(repo: &std::path::Path, args: &[&str]) -> Result<String, StatusCode> {
+    use tokio::io::AsyncReadExt as _;
+    const LIMIT: u64 = 1_048_576;
+    let mut command = tokio::process::Command::new("git");
+    command
+        .arg("--no-pager")
+        .args(args)
+        .current_dir(repo)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let mut child = command
+        .spawn()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let mut bytes = Vec::new();
+        stdout
+            .take(LIMIT + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if bytes.len() as u64 > LIMIT {
+            let _ = child.kill().await;
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+        let status = child
+            .wait()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if !status.success() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        String::from_utf8(bytes).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)
+    })
+    .await
+    .map_err(|_| StatusCode::GATEWAY_TIMEOUT)?
 }
 
 /// Request payload to switch a session to a target model with zero-token handoff.
@@ -2617,6 +2638,92 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn git_output_reports_changes_and_untracked_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        std::fs::write(dir.path().join("tracked"), "before\n").expect("file");
+        assert!(git(&["add", "tracked"]).status.success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .status
+            .success()
+        );
+        std::fs::write(dir.path().join("tracked"), "after\n").expect("file");
+        std::fs::write(dir.path().join("untracked"), "new\n").expect("file");
+        let diff = super::git_output(dir.path(), &["diff", "--no-ext-diff", "HEAD"])
+            .await
+            .expect("diff");
+        let status = super::git_output(dir.path(), &["status", "--porcelain"])
+            .await
+            .expect("status");
+        assert!(diff.contains("+after"));
+        assert!(status.contains("?? untracked"));
+    }
+
+    #[tokio::test]
+    async fn repository_diff_rejects_oversized_output() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        std::fs::write(dir.path().join("file"), "original\n").expect("file");
+        assert!(git(&["add", "file"]).status.success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .status
+            .success()
+        );
+        std::fs::write(dir.path().join("file"), "a".repeat(1_100_000)).expect("file");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let mut uri = reqwest::Url::parse("http://127.0.0.1:41738/api/v1/repos/diff").expect("url");
+        uri.query_pairs_mut()
+            .append_pair("repo", &dir.path().to_string_lossy());
+        let request = Request::builder()
+            .uri(uri.as_str())
+            .header("Host", "127.0.0.1:41738")
+            .header("Authorization", "Bearer local-test-token")
+            .body(Body::empty())
+            .expect("request");
+        assert_eq!(
+            app.oneshot(request).await.expect("response").status(),
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+    }
 
     #[tokio::test]
     async fn repository_diff_rejects_a_directory_that_is_not_a_git_repository() {

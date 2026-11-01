@@ -120,7 +120,6 @@ interface PlanRoiInfo {
   period_label?: string;
 }
 
-
 function formatResetCountdown(resetsAtIso?: string | null, _windowKind?: string) {
   if (!resetsAtIso) return "Rolling";
   const target = new Date(resetsAtIso);
@@ -191,6 +190,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     setCombinedRoi(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
     setRefreshMessage(""); setConnectedSource(user?.id ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
+    setSnapshotTotal(null);
   }, [user?.id]);
 
   useEffect(() => {
@@ -281,7 +281,6 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       setReport(null);
       setRoiByProvider([]);
       setCombinedRoi(null);
-
       setSnapshotGeneratedAt(null);
     }
     } finally {
@@ -474,7 +473,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
       <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
       {activeView === "sessions" && <OngoingPanel sessions={ongoing} />}
-      {activeView === "sessions" && snapshotTotal !== null && snapshotTotal > 200 && <p role="status">Account view contains up to 200 recent or active sessions out of {snapshotTotal} recorded sessions. Filters and counts below cover only the published sessions. Open the local console for full history.</p>}
+      {activeView === "sessions" && snapshotTotal !== null && snapshotTotal >= 200 && <p role="status">The account view contains up to 200 recent or active sessions. The desktop reports {snapshotTotal} recorded sessions; older desktop versions may undercount. Filters and counts below cover only the published sessions. Open the local console for full history.</p>}
       {/* Session history */}
       {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
