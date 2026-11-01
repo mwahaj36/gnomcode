@@ -1073,7 +1073,7 @@ function cycleTheme() {
     }
 
     async function deleteChat() {
-      if (!activeChatSession || !await confirmAction('Delete Spawnt’s local chat history for this session? Agent-owned logs and backups are not deleted, and SQLite files may retain remnants. This cannot be undone.', 'Delete history')) return;
+      if (!activeChatSession || !await confirmAction('Delete Spawnt’s local chat history for this session? Session titles, agent-owned logs and backups are not deleted; SQLite files may retain remnants. Changed source IDs, restored backups or a database reset can reimport messages.', 'Delete history')) return;
       const sessionId = activeChatSession;
       try {
         await apiJson(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat`, { method: 'DELETE', headers });

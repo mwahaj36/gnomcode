@@ -42,3 +42,24 @@ fn spawnt_cli_runs_offline_with_custom_home() {
         assert!(String::from_utf8_lossy(&output.stdout).contains("Diagnostics complete."));
     }
 }
+
+#[test]
+fn doctor_network_discloses_opt_in_remote_and_pricing_without_connecting() {
+    let root = tempfile::tempdir().expect("root");
+    let output = Command::new(env!("CARGO_BIN_EXE_spawnt"))
+        .args(["doctor", "--network"])
+        .env("SPAWNT_HOME", root.path())
+        .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .env("APPDATA", root.path())
+        .env("CLAUDE_CONFIG_DIR", root.path())
+        .env("CODEX_HOME", root.path())
+        .env("GEMINI_HOME", root.path())
+        .output()
+        .expect("doctor");
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("Remote relay"));
+    assert!(text.contains("pricing"));
+    assert!(text.contains("agent CLI"));
+}

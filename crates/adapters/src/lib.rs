@@ -508,6 +508,28 @@ mod tests {
     }
 
     #[test]
+    fn all_adapters_reject_truncated_input_without_storing_chat() {
+        let adapters: Vec<Box<dyn SourceAdapter>> = vec![
+            Box::new(ClaudeAdapter::new()),
+            Box::new(CodexAdapter::new()),
+            Box::new(super::antigravity::AntigravityAdapter::new()),
+            Box::new(super::gemini::GeminiAdapter::new()),
+            Box::new(super::cline::ClineAdapter::new()),
+            Box::new(super::cursor::CursorAdapter::new()),
+            Box::new(super::aider::AiderAdapter::new()),
+        ];
+        for mut adapter in adapters {
+            let batch = adapter.parse(&FileCtx::default(), b"{\"truncated\":\r\n");
+            assert!(batch.parse_errors > 0, "{}", adapter.agent_id().as_str());
+            assert!(
+                batch.chat_events.is_empty(),
+                "{}",
+                adapter.agent_id().as_str()
+            );
+        }
+    }
+
+    #[test]
     fn cline_adapter_parses_ui_messages_and_approval() {
         use super::cline::ClineAdapter;
         let mut adapter = ClineAdapter::new();
