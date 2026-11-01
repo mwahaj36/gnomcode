@@ -120,7 +120,16 @@ impl SourceAdapter for AntigravityAdapter {
             let sess = current_session.get_or_insert_with(|| Session {
                 id: session_id.clone(),
                 agent: AgentId::Antigravity,
-                surface: Surface::Ide,
+                surface: if ctx
+                    .source_path
+                    .replace('\\', "/")
+                    .split('/')
+                    .any(|part| part == "antigravity-cli")
+                {
+                    Surface::Cli
+                } else {
+                    Surface::Ide
+                },
                 project_id: project.id.clone(),
                 parent_session_id: None,
                 model: self.active_model.clone(),

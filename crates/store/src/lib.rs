@@ -2007,7 +2007,7 @@ impl Database {
     }
 
     /// Queries the workspace path for a specific Antigravity conversation from
-    /// `~/.gemini/antigravity/conversation_summaries.db`.
+    /// the IDE and CLI summary databases under `GEMINI_HOME` (default `~/.gemini`).
     #[must_use]
     pub fn find_antigravity_workspace(&self, conv_id: &str) -> Option<String> {
         let home = std::env::var("USERPROFILE")
@@ -2015,31 +2015,9 @@ impl Database {
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-        let agy_db = home
-            .join(".gemini")
-            .join("antigravity")
-            .join("conversation_summaries.db");
-        if !agy_db.exists() {
-            return None;
-        }
-        let conn = rusqlite::Connection::open_with_flags(
-            &agy_db,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-        )
-        .ok()?;
-
-        let mut stmt = conn
-            .prepare("SELECT workspace_uris FROM conversation_summaries WHERE conversation_id = ?1")
-            .ok()?;
-        let uris: String = stmt.query_row(params![conv_id], |r| r.get(0)).ok()?;
-        let val: serde_json::Value = serde_json::from_str(&uris).ok()?;
-        let first = val.as_array()?.first()?.as_str()?;
-        let unquoted = first.replace("%3A", ":").replace("%3a", ":");
-        let clean = unquoted
-            .strip_prefix("file:///")
-            .or_else(|| unquoted.strip_prefix("file://"))
-            .unwrap_or(&unquoted);
-        Some(clean.to_owned())
+        let root = std::env::var_os("GEMINI_HOME")
+            .map_or_else(|| home.join(".gemini"), std::path::PathBuf::from);
+        antigravity_workspace(&root, conv_id)
     }
 
     /// Queries the local user profile and preferences.
@@ -2904,8 +2882,73 @@ impl Database {
     }
 }
 
+fn antigravity_workspace(root: &std::path::Path, conv_id: &str) -> Option<String> {
+    [
+        obfstr::obfstr!("antigravity-cli"),
+        obfstr::obfstr!("antigravity"),
+    ]
+    .iter()
+    .find_map(|product| {
+        let path = root
+            .join(product)
+            .join(obfstr::obfstr!("conversation_summaries.db"));
+        let conn =
+            rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .ok()?;
+        let uris: String = conn
+            .query_row(
+                obfstr::obfstr!(
+                    "SELECT workspace_uris FROM conversation_summaries WHERE conversation_id = ?1"
+                ),
+                params![conv_id],
+                |row| row.get(0),
+            )
+            .ok()?;
+        let value: serde_json::Value = serde_json::from_str(&uris).ok()?;
+        let uri = value
+            .as_array()?
+            .first()?
+            .as_str()?
+            .replace("%3A", ":")
+            .replace("%3a", ":");
+        let path = uri.strip_prefix("file://").unwrap_or(&uri);
+        let path = if path.as_bytes().get(2) == Some(&b':') {
+            path.strip_prefix('/').unwrap_or(path)
+        } else {
+            path
+        };
+        Some(path.to_owned())
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn antigravity_workspace_lookup_includes_cli_and_preserves_ide() {
+        let root = tempfile::tempdir().expect("gemini home");
+        for (product, id) in [("antigravity", "ide-test"), ("antigravity-cli", "cli-test")] {
+            let directory = root.path().join(product);
+            std::fs::create_dir_all(&directory).expect("directory");
+            let db = rusqlite::Connection::open(directory.join("conversation_summaries.db"))
+                .expect("summary db");
+            db.execute_batch(
+                "CREATE TABLE conversation_summaries(conversation_id TEXT, workspace_uris TEXT);",
+            )
+            .expect("schema");
+            db.execute(
+                "INSERT INTO conversation_summaries VALUES (?1, ?2)",
+                rusqlite::params![id, r#"["file:///C:/test-workspace"]"#],
+            )
+            .expect("summary");
+        }
+        for id in ["ide-test", "cli-test"] {
+            assert_eq!(
+                super::antigravity_workspace(root.path(), id).as_deref(),
+                Some("C:/test-workspace")
+            );
+        }
+        assert_eq!(super::antigravity_workspace(root.path(), "missing"), None);
+    }
     use super::{ContextRelayEntry, Database, SourceCheckpoint};
     use chrono::Utc;
     use spawnt_core::rules::{GuardrailRule, RuleAction};

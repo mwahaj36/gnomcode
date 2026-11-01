@@ -11,6 +11,8 @@ fn models_command_reports_missing_catalog_without_inventing_models() {
         .arg("models")
         .env("SPAWNT_HOME", root.path())
         .env("CODEX_HOME", root.path())
+        .env("HOME", root.path())
+        .env("LOCALAPPDATA", root.path())
         .env("PATH", root.path())
         .output()
         .expect("models command");
