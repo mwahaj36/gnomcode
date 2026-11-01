@@ -32,11 +32,13 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
 
   // Password update
   const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [passwordUpdating, setPasswordUpdating] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState("");
 
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const loadBusy = useRef(false);
   const loadGeneration = useRef(0);
   const accountId = useRef<string | null>(null);
@@ -49,20 +51,27 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
       return;
     }
     setPasswordUpdating(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    setPasswordUpdating(false);
-    if (error) {
-      setPasswordMessage(`Error: ${error.message}`);
-    } else {
-      setPasswordMessage("Password updated successfully!");
-      setNewPassword("");
-    }
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) setPasswordMessage(`Could not update password: ${error.message}`);
+      else { setPasswordMessage("Password updated."); setNewPassword(""); setShowPassword(false); }
+    } catch {
+      setPasswordMessage("Could not update password. Check your connection and try again.");
+    } finally { setPasswordUpdating(false); }
   };
 
   const handleSignOut = async () => {
-    loadGeneration.current++;
-    await supabase.auth.signOut();
-    setUser(null); setCustomPricing([]); setLastLoaded(null);
+    setSigningOut(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      loadGeneration.current++;
+      setUser(null); setCustomPricing([]); setLastLoaded(null);
+      setNewPassword(""); setShowPassword(false); setPasswordMessage("");
+      setStatusMessage("Signed out.");
+    } catch {
+      setStatusMessage("Could not sign out all sessions. Check your connection and account status, then try again.");
+    } finally { setSigningOut(false); }
   };
 
   const loadSettings = useCallback(async (currentUser: any) => {
@@ -91,7 +100,9 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
       if (!mounted || accountId.current === (session?.user?.id ?? null)) return;
       accountId.current = session?.user?.id ?? null;
       loadGeneration.current++; loadBusy.current = false;
-      setUser(session?.user ?? null); setCustomPricing([]); setLastLoaded(null); setStatusMessage("");
+      setUser(session?.user ?? null); setCustomPricing([]); setLastLoaded(null);
+      if (session?.user) setStatusMessage("");
+      else { setNewPassword(""); setShowPassword(false); setPasswordMessage(""); }
       setDisplayName("Developer"); setOpenaiPlan(20); setClaudePlan(20); setGooglePlan(20);
       if (session?.user) void loadSettings(session.user);
     };
@@ -168,9 +179,10 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
           {user ? (
             <button
               onClick={handleSignOut}
-              className="text-xs text-red hover:underline"
+              disabled={signingOut}
+              className="sp-settings-delete"
             >
-              Sign Out
+              {signingOut ? "Signing out…" : "Sign out"}
             </button>
           ) : (
             <Link
@@ -205,15 +217,16 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
               </div>
             )}
             <form onSubmit={handleUpdatePassword} className="sp-settings-form-row">
-              <input
-                type="password"
+              <label className="sp-settings-password-label" htmlFor="settings-password">New password (at least 6 characters)</label>
+              <div className="sp-password-field"><input
+                id="settings-password"
+                type={showPassword ? "text" : "password"}
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                aria-label="New account password"
+                onChange={(e) => { setNewPassword(e.target.value); setPasswordMessage(""); }}
                 autoComplete="new-password"
-                placeholder="New password (min 6 chars)"
                 className="sp-settings-input"
               />
+              <button type="button" className="sp-password-toggle" aria-controls="settings-password" aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Hide password" : "Show password"}</button></div>
               <button
                 type="submit"
                 disabled={passwordUpdating}
@@ -303,37 +316,46 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
         </div>
 
         <div className="sp-settings-pricing-form">
+          <div className="sp-settings-pattern"><label htmlFor="pricing-pattern">Model pattern</label>
           <input
+            id="pricing-pattern"
             type="text"
-            aria-label="Model pattern" placeholder="Pattern (e.g. gpt-4o)"
+            placeholder="e.g. gpt-4o"
             value={newPattern}
             onChange={(e) => setNewPattern(e.target.value)}
-            className="sp-settings-input sp-settings-pattern"
+            className="sp-settings-input"
           />
+          </div>
+          <div><label htmlFor="pricing-input">Input $/M</label>
           <input
+            id="pricing-input"
             type="number"
-            step="0.01"
-            aria-label="Input dollars per million tokens" placeholder="Input $/M"
+            min="0" step="0.01"
             value={newInput}
             onChange={(e) => setNewInput(e.target.value)}
             className="sp-settings-input"
           />
+          </div>
+          <div><label htmlFor="pricing-output">Output $/M</label>
           <input
+            id="pricing-output"
             type="number"
-            step="0.01"
-            aria-label="Output dollars per million tokens" placeholder="Output $/M"
+            min="0" step="0.01"
             value={newOutput}
             onChange={(e) => setNewOutput(e.target.value)}
             className="sp-settings-input"
           />
+          </div>
+          <div><label htmlFor="pricing-cache">Cache read $/M</label>
           <input
+            id="pricing-cache"
             type="number"
-            step="0.01"
-            aria-label="Cache dollars per million tokens" placeholder="Cache $/M"
+            min="0" step="0.01"
             value={newCache}
             onChange={(e) => setNewCache(e.target.value)}
             className="sp-settings-input"
           />
+          </div>
         </div>
         <button
           disabled={saving || !user}

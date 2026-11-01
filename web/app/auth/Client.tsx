@@ -11,6 +11,7 @@ export default function AuthPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<AuthMode>("signin");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -80,6 +81,8 @@ export default function AuthPage() {
         if (error) setError(error.message);
         else setMessage("Password reset instructions have been sent to your email address.");
       }
+    } catch {
+      setError("Could not complete your request. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -89,7 +92,7 @@ export default function AuthPage() {
     <main className="sp-auth-page">
       <section className="sp-auth-panel">
         <header className="sp-auth-heading">
-          <h1>spawnt / account</h1>
+          <h1>{mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Reset password"}</h1>
           <p>
           {mode === "signin" && "Sign in to access your synced account and cloud console."}
           {mode === "signup" && "Create a spawnt account to sync your account settings across devices."}
@@ -100,21 +103,21 @@ export default function AuthPage() {
         <div className="sp-auth-tabs" role="group" aria-label="Account action">
           <button
             type="button" aria-pressed={mode === "signin"}
-            onClick={() => { setMode("signin"); setError(""); setMessage(""); }}
+            onClick={() => { setMode("signin"); setShowPassword(false); setError(""); setMessage(""); }}
             className={mode === "signin" ? "selected" : ""}
           >
             Sign in
           </button>
           <button
             type="button" aria-pressed={mode === "signup"}
-            onClick={() => { setMode("signup"); setError(""); setMessage(""); }}
+            onClick={() => { setMode("signup"); setShowPassword(false); setError(""); setMessage(""); }}
             className={mode === "signup" ? "selected" : ""}
           >
             Create account
           </button>
           <button
             type="button" aria-pressed={mode === "forgot"}
-            onClick={() => { setMode("forgot"); setError(""); setMessage(""); }}
+            onClick={() => { setMode("forgot"); setShowPassword(false); setError(""); setMessage(""); }}
             className={mode === "forgot" ? "selected" : ""}
           >
             Reset password
@@ -156,6 +159,7 @@ export default function AuthPage() {
             <input
               id="auth-email"
               type="email"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -171,22 +175,23 @@ export default function AuthPage() {
                 {mode === "signin" && (
                   <button
                     type="button"
-                    onClick={() => setMode("forgot")}
+                    onClick={() => { setMode("forgot"); setShowPassword(false); setError(""); setMessage(""); }}
                     className="sp-auth-forgot"
                   >
                     Forgot password?
                   </button>
                 )}
               </div>
-              <input
+              <div className="sp-password-field"><input
                 id="auth-password"
-                type="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="sp-auth-input"
-                placeholder="********"
               />
+              <button type="button" className="sp-password-toggle" aria-controls="auth-password" aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Hide password" : "Show password"}</button></div>
             </div>
           )}
 
