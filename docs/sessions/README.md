@@ -4,6 +4,8 @@ One file per recorded session or follow-up. Historical entries retain their orig
 
 For each new session, add a dated file with goals, outcomes, problems/root-cause fixes, decisions and verification, then link it here. Do not append session bodies to SESSION_LOG.md.
 
+- [2026-11-01 - Account-wide Remote post-migration native build](2026-11-01-account-wide-native-build.md)
+
 - [2026-11-01 - Complete account-wide Remote access](2026-11-01-account-wide-access-completion.md)
 
 - [2026-11-01 - Account device approval and reconnect recovery](2026-11-01-account-device-approval.md)
