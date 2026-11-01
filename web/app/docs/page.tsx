@@ -247,7 +247,7 @@ export default function DocsPage() {
             <div className="space-y-3 font-mono text-xs">
               <div className="bg-card border border-border rounded-lg p-3.5">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 rounded bg-green/20 text-green font-semibold text-[10px]">GET</span>
+                  <span className="px-1.5 py-0.5 rounded bg-card text-foreground border border-border font-semibold text-[10px]">GET</span>
                   <span className="text-foreground font-semibold">/api/v1/live</span>
                 </div>
                 <div className="text-muted text-[11px]">
@@ -257,7 +257,7 @@ export default function DocsPage() {
 
               <div className="bg-card border border-border rounded-lg p-3.5">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 rounded bg-green/20 text-green font-semibold text-[10px]">GET</span>
+                  <span className="px-1.5 py-0.5 rounded bg-card text-foreground border border-border font-semibold text-[10px]">GET</span>
                   <span className="text-foreground font-semibold">/api/v1/report?range=all|today|7d|30d</span>
                 </div>
                 <div className="text-muted text-[11px]">
@@ -267,7 +267,7 @@ export default function DocsPage() {
 
               <div className="bg-card border border-border rounded-lg p-3.5">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 rounded bg-green/20 text-green font-semibold text-[10px]">GET</span>
+                  <span className="px-1.5 py-0.5 rounded bg-card text-foreground border border-border font-semibold text-[10px]">GET</span>
                   <span className="text-foreground font-semibold">/api/v1/quota</span>
                 </div>
                 <div className="text-muted text-[11px]">
@@ -287,7 +287,7 @@ export default function DocsPage() {
 
               <div className="bg-card border border-border rounded-lg p-3.5">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 rounded bg-green/20 text-green font-semibold text-[10px]">GET</span>
+                  <span className="px-1.5 py-0.5 rounded bg-card text-foreground border border-border font-semibold text-[10px]">GET</span>
                   <span className="text-foreground font-semibold">/api/v1/pricing/models</span>
                 </div>
                 <div className="text-muted text-[11px]">
