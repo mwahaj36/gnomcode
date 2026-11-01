@@ -39,7 +39,7 @@ function cycleTheme() {
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
     function jsArg(value) { return escapeHtml(JSON.stringify(String(value ?? ''))); }
     const consoleNavigation = document.querySelector('.sp-console-nav');
-    const updateNavOrientation = () => consoleNavigation.setAttribute('aria-orientation', 'vertical');
+    const updateNavOrientation = () => consoleNavigation.querySelector('[role=tablist]').setAttribute('aria-orientation', 'vertical');
     updateNavOrientation(); window.addEventListener('resize', updateNavOrientation);
     let currentTimeline = 'all';
     let currentPage = 1;
@@ -76,7 +76,7 @@ function cycleTheme() {
         const selected = button.dataset.view === view;
         button.classList.toggle('active', selected);
         button.setAttribute('aria-selected', String(selected));
-        button.tabIndex = selected ? 0 : -1;
+        button.tabIndex = selected || (view === 'auth' && button.dataset.view === 'settings') ? 0 : -1;
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
       document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
@@ -87,6 +87,7 @@ function cycleTheme() {
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
       const tabs = [...document.querySelectorAll('.nav-tabs [role="tab"]')];
       const current = tabs.indexOf(document.activeElement);
+      if (current < 0) return;
       let next = current;
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
       else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
@@ -697,20 +698,24 @@ function cycleTheme() {
       const session = ideSessions.find(session => session.id === activeChatSession);
       const hosted = hostedSessions.find(session => session.session_id === activeChatSession);
       const model = hosted?.model || session?.model || '';
+      const agent = hosted?.agent || session?.agent || '';
+      const cliAgent = {'claude-code':'claude','gemini-cli':'gemini'}[agent] || agent;
       const observed = hosted ? hosted.model_observed : Boolean(session?.model);
       const status = document.getElementById('chat-model-status');
       const message = select.disabled ? 'Model selection unavailable' : observed ? '' : model ? 'Switching model...' : 'Agent default';
       if (status.textContent !== message) status.textContent = message;
       if (select.dataset.sessionId !== activeChatSession || select.dataset.currentModel !== model) {
         select.querySelectorAll('[data-current-only]').forEach(option => option.remove());
-        if (model && ![...select.options].some(option => option.value === model)) {
+        const choice = [...select.options].find(option => option.dataset.model === model && option.dataset.agent === cliAgent);
+        if (model && !choice) {
           const option = document.createElement('option'); option.value = model; option.textContent = `${model} (current)`; option.disabled = true; option.dataset.currentOnly = ''; select.append(option);
         }
-        select.value = model;
+        select.value = choice?.value || model;
+        select.dataset.currentSelection = select.value;
         select.dataset.sessionId = activeChatSession;
         select.dataset.currentModel = model;
       }
-      document.getElementById('chat-switch-btn').disabled = select.disabled || !select.value || select.selectedOptions[0]?.disabled || select.value === select.dataset.currentModel;
+      document.getElementById('chat-switch-btn').disabled = select.disabled || !select.value || select.selectedOptions[0]?.disabled || select.value === select.dataset.currentSelection;
     }
 
     async function loadChatModels() {
@@ -718,19 +723,19 @@ function cycleTheme() {
       const button = document.getElementById('chat-switch-btn');
       const sessionId = activeChatSession;
       try {
-        const [models, installed] = await Promise.all([apiJson('/api/v1/models', { headers }),apiJson('/api/v1/agents/installed', { headers })]);
+        const catalog = await apiJson('/api/v1/model-catalog', { headers });
         if (sessionId !== activeChatSession) return;
         select.innerHTML = '<option value="">Agent default</option>';
-        const available = models.models || models;
-        for (const agent of (installed.agents || []).filter(agent => agent.installed && agent.id !== 'terminal')) {
-          const group = document.createElement('optgroup'); group.label = agent.name;
-          const option = document.createElement('option'); option.value = `default:${agent.id}`; option.dataset.agent = agent.id; option.dataset.model = '@default'; option.textContent = `${agent.name} · default model`; group.append(option); select.append(group);
+        for (const provider of catalog.providers || []) {
+          const group = document.createElement('optgroup'); group.label = provider.name;
+          for (const model of provider.models || []) {
+            const option = document.createElement('option'); option.value = `${model.agent}:${model.model}`;
+            option.dataset.agent = model.agent; option.dataset.model = model.model; option.textContent = model.display_name || model.model; group.append(option);
+          }
+          if (!group.children.length) { const option=document.createElement('option');option.disabled=true;option.textContent=provider.message;group.append(option); }
+          select.append(group);
         }
-        for (const model of available) {
-          const option = document.createElement('option'); option.value = model.model;
-          option.dataset.agent = model.agent; option.textContent = model.display_name || model.model; select.append(option);
-        }
-        select.disabled = select.options.length <= 1; button.disabled = select.disabled;
+        select.disabled = ![...select.options].some(option=>!option.disabled && option.dataset.model); button.disabled = select.disabled;
         delete select.dataset.sessionId;
         showCurrentChatModel();
       } catch {
@@ -752,7 +757,7 @@ function cycleTheme() {
     }
     async function switchChatModel() {
       const select = document.getElementById('chat-model-select');
-      if (!activeChatSession || !select.value || modelHandoffBusy || select.value === select.dataset.currentModel) return;
+      if (!activeChatSession || !select.value || modelHandoffBusy || select.value === select.dataset.currentSelection) return;
       const sourceSession = activeChatSession;
       const previousModel = select.dataset.currentModel || 'CLI default';
       const targetModel = select.selectedOptions[0].dataset.model || select.value;
@@ -1085,7 +1090,10 @@ function cycleTheme() {
     }
     function toggleNavigation() {
       const expanded = document.body.classList.toggle('navigation-expanded');
-      document.getElementById('navigation-toggle').setAttribute('aria-expanded', String(expanded));
+      const toggle = document.getElementById('navigation-toggle');
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', expanded ? 'Collapse navigation' : 'Expand navigation');
+      toggle.querySelector('.rail-label').textContent = expanded ? 'Collapse navigation' : 'Expand navigation';
     }
     function toggleChatList() {
       const collapsed = document.body.classList.toggle('chat-list-collapsed');
@@ -1220,6 +1228,10 @@ function cycleTheme() {
           status.style.color = 'var(--green)';
           status.textContent = 'Desktop connected. Waiting for its next metadata update.';
           input.value = '';
+          input.type = 'password';
+          const visibility = document.querySelector('[data-action="toggle-pair-token"]');
+          visibility.setAttribute('aria-pressed', 'false');
+          visibility.textContent = 'Show token';
           if (await checkAuthSession()) document.getElementById('auth-cloud-status').focus({ preventScroll: true });
         } else {
           status.style.color = 'var(--red)';
@@ -1501,6 +1513,7 @@ function cycleTheme() {
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
         'remote-start': startRemote, 'remote-confirm': confirmRemote, 'remote-revoke': revokeRemote };
+      if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });

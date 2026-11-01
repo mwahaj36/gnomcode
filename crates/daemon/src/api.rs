@@ -135,6 +135,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
         .route("/api/v1/agents/installed", get(installed_agents_handler))
         .route("/api/v1/models", get(models_handler))
+        .route("/api/v1/model-catalog", get(model_catalog_handler))
         .route("/api/v1/report", get(report_handler))
         .route("/api/v1/projects", get(projects_handler))
         .route("/api/v1/quota", get(quota_handler))
@@ -1243,6 +1244,16 @@ async fn models_handler(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(models))
+}
+
+async fn model_catalog_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(
+        json!({"providers":crate::model_catalog::discover().await}),
+    ))
 }
 
 /// Query parameters for retrieving chat events.
@@ -2873,6 +2884,21 @@ mod tests {
                 "{path}"
             );
         }
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/model-catalog")
+                    .header("Host", "127.0.0.1:41738")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "model discovery must not launch CLI probes before authentication"
+        );
     }
 
     #[test]
