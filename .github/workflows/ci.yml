@@ -145,6 +145,7 @@ jobs:
       - run: npm run typecheck
       - name: Configure Electron sandbox helper
         run: |
+          node -e "require('electron')"
           sudo chown root:root node_modules/electron/dist/chrome-sandbox
           sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       - run: xvfb-run -a npm test
