@@ -301,6 +301,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       || !(/^wss:\/\//.test(link.relay) || /^ws:\/\/(127\.0\.0\.1|localhost):/.test(link.relay))) {
       setPhase('ready');setError('Open Devices to select your desktop.');return;
     }
+    let discoveryPending=false;
     try {
       setOptimistic({});
       if(selectedRef.current)drafts.current.set(selectedRef.current,promptRef.current);
@@ -318,9 +319,11 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if(epoch!==connectionEpoch.current)return;
       if(!saved)throw new Error('This browser credential is missing. Open Devices to reconnect automatically through your account.');
       proofKey.current=saved.proofKey||null;
+      discoveryPending=true;
       const {data:request,error:directoryError}=await supabase.from('spawnt_device_requests').select('offer,revoked,state').eq('user_id',session.user.id).eq('desktop_id',link.desktop_id!).eq('id',link.request_id!).abortSignal(AbortSignal.timeout(10000)).maybeSingle();
       if(epoch!==connectionEpoch.current)return;
       if(directoryError)throw new Error('Device discovery is unavailable. Check your connection and try again.');
+      discoveryPending=false;
       if(!request || request.revoked)throw new Error('Access was revoked. Open Devices to reconnect through your account.');
       if(request.state!=='approved' || !request.offer)throw new Error('Your desktop is not ready. Keep it awake with Spawnt running.');
       if(request.offer.key!==link.key || request.offer.room!==link.room || request.offer.relay!==link.relay)throw new Error('The desktop identity changed. Open Devices to review its connection.');
@@ -370,7 +373,11 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
         }).catch(() => {if(epoch!==connectionEpoch.current)return;setError('Could not verify or save this device connection. Open Devices to retry.'); ws.close(); });
       };
       ws.onclose = () => {clearInterval(helloTimer);if(socket.current===ws && connectionWatch.current)clearInterval(connectionWatch.current);if (socket.current !== ws || manualDisconnect.current) return;authenticated.current=false;setError(''); if (poll.current) clearInterval(poll.current); loadingHistory.current=false;setHistoryLoading(false);pendingPrompt.current = null; setSending(false);setPhase('reconnecting');reconnectTimer.current=setTimeout(()=>void connect(),1500);};
-    } catch(error) {if(epoch!==connectionEpoch.current)return;setPhase('unavailable');setError(error instanceof Error?error.message:'Could not connect to your desktop. Try again.');}
+    } catch(error) {
+      if(epoch!==connectionEpoch.current)return;
+      if(discoveryPending){setPhase('reconnecting');setError('');reconnectTimer.current=setTimeout(()=>void connect(),1500);return;}
+      setPhase('unavailable');setError(error instanceof Error?error.message:'Could not connect to your desktop. Try again.');
+    }
   }
   reconnect.current=()=>void connect();
 

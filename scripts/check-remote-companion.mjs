@@ -55,7 +55,7 @@ try {
   const owner='10000000-0000-0000-0000-000000000001',desktopId='d'.repeat(32);
   const env=await readFile(new URL('../web/.env.local',import.meta.url),'utf8');
   const project=env.match(/NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?https:\/\/([^.]+)/)?.[1];
-  let deviceRequest=null,approved=false;
+  let deviceRequest=null,approved=false,failDiscoveryOnce=false;
   const offer=()=>({room,key:keys.publicHex,relay,protocol_version:3,owner_id:owner,desktop_id:deviceRequest?.desktop_id||desktopId,request_id:room});
   await page.route('**/rest/v1/spawnt_device_requests**',async route=>{
     if(route.request().method()==='POST'){
@@ -64,6 +64,7 @@ try {
       return route.fulfill({status:201,contentType:'application/json',body:''});
     }
     const singular=new URL(route.request().url()).searchParams.get('select')==='offer,revoked,state';
+    if(singular && failDiscoveryOnce){failDiscoveryOnce=false;await new Promise(resolve=>setTimeout(resolve,11000));return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Temporary directory outage'})}).catch(()=>{});}
     const value=deviceRequest?{...deviceRequest,offer:approved?offer():null,state:approved?'approved':'pending',revoked:false}:null;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(singular?value:value?[value]:[])});
   });
@@ -82,6 +83,12 @@ try {
 
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'no code confirmation exists');
   await page.getByText('The login flow is ready for review.').waitFor();
+  await page.goto(`${site}/downloads`);
+  failDiscoveryOnce=true;
+  await page.goto(`${site}/remote`);
+  await page.locator('.sp-remote.is-paired').waitFor();
+  await page.getByText('The login flow is ready for review.').waitFor();
+  assert.equal(failDiscoveryOnce,false,'reopening the chat exercises the temporary directory failure');
   assert.equal(await page.locator('.remote-session-list button[aria-current]').count(),1,'newest session is discovered and opened without manual selection');
   await page.locator('.sp-chat-body strong').getByText('ready').waitFor();
   await page.locator('.remote-heading').getByText('37% left',{exact:true}).waitFor();
@@ -151,6 +158,11 @@ try {
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.getByText('First phone prompt received.',{exact:true}).waitFor();
   assert.equal(requests.filter(request=>request.type==='prompt').at(-1).session_id,'codex:new');
+  await page.goto(`${site}/console?view=sessions`);
+  await page.goto(`${site}/remote`);
+  await page.locator('.sp-remote.is-paired').waitFor();
+  await page.getByText('First phone prompt received.',{exact:true}).waitFor();
+  assert.deepEqual(await page.locator('.sp-remote [role=alert]').allTextContents(),[],'leaving and reopening a conversation reconnects without pairing');
   await page.reload();
   await page.locator('.sp-remote.is-paired').waitFor();
   await page.getByText('First phone prompt received.',{exact:true}).waitFor();

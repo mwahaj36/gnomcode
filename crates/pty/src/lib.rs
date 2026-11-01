@@ -284,9 +284,14 @@ struct HostState {
     child_pid: u32,
     scrollback: Arc<Mutex<Scrollback>>,
     output_tx: broadcast::Sender<Vec<u8>>,
-    input_tx: std::sync::mpsc::Sender<Vec<u8>>,
+    input_tx: std::sync::mpsc::Sender<PtyInput>,
     stopping: Arc<AtomicBool>,
     resize: Arc<dyn Fn(u16, u16) + Send + Sync>,
+}
+
+struct PtyInput {
+    bytes: Vec<u8>,
+    written: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
 /// Runs the independent PTY session host server.
@@ -329,7 +334,7 @@ pub async fn run_pty_host_resuming(
 
     let scrollback = Arc::new(Mutex::new(Scrollback::new(256 * 1024)));
     let (output_tx, _) = broadcast::channel(128);
-    let (input_tx, input_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    let (input_tx, input_rx) = std::sync::mpsc::channel::<PtyInput>();
     let stopping = Arc::new(AtomicBool::new(false));
 
     #[cfg(windows)]
@@ -399,8 +404,12 @@ pub async fn run_pty_host_resuming(
 
     // Background thread: write received input to child PTY stdin
     std::thread::spawn(move || {
-        while let Ok(data) = input_rx.recv() {
-            if writer.write_all(&data).is_err() || writer.flush().is_err() {
+        while let Ok(input) = input_rx.recv() {
+            let written = writer.write_all(&input.bytes).is_ok() && writer.flush().is_ok();
+            if let Some(acknowledge) = input.written {
+                let _ = acknowledge.send(written);
+            }
+            if !written {
                 break;
             }
         }
@@ -593,10 +602,22 @@ async fn host_input_handler(
     if body.is_empty() {
         return StatusCode::BAD_REQUEST;
     }
-    if state.input_tx.send(body.to_vec()).is_err() {
+    let (written, acknowledged) = tokio::sync::oneshot::channel();
+    if state
+        .input_tx
+        .send(PtyInput {
+            bytes: body.to_vec(),
+            written: Some(written),
+        })
+        .is_err()
+    {
         return StatusCode::GONE;
     }
-    StatusCode::OK
+    match tokio::time::timeout(Duration::from_secs(2), acknowledged).await {
+        Ok(Ok(true)) => StatusCode::OK,
+        Ok(_) => StatusCode::GONE,
+        Err(_) => StatusCode::GATEWAY_TIMEOUT,
+    }
 }
 
 async fn host_stop_handler(
@@ -668,7 +689,7 @@ async fn host_stream_handler(
                 msg = socket.recv() => {
                     match msg {
                         Some(Ok(Message::Binary(b))) => {
-                            let _ = input_tx.send(b.to_vec());
+                            let _ = input_tx.send(PtyInput {bytes: b.to_vec(), written: None});
                         }
                         Some(Ok(Message::Text(t))) => {
                             if let Ok(value) = serde_json::from_str::<serde_json::Value>(&t) {
@@ -677,7 +698,7 @@ async fn host_stream_handler(
                                     continue;
                                 }
                             }
-                            let _ = input_tx.send(t.as_bytes().to_vec());
+                            let _ = input_tx.send(PtyInput {bytes: t.as_bytes().to_vec(), written: None});
                         }
                         Some(Ok(Message::Close(_))) | None => break,
                         _ => {}
@@ -822,6 +843,10 @@ pub async fn send_prompt(record: &SessionRecord, text: &str) -> Result<(), Error
     send_input(record, format!("\x1b[200~{text}\x1b[201~").as_bytes()).await?;
     // A separate Enter avoids the CLI's burst-paste detector swallowing submission.
     tokio::time::sleep(Duration::from_millis(150)).await;
+    if record.agent == "codex" {
+        // Codex flushes Windows paste bursts on non-text input; End preserves the pasted text.
+        send_input(record, b"\x1b[F").await?;
+    }
     send_input(record, b"\r").await
 }
 
@@ -933,10 +958,34 @@ mod tests {
             token: "input-test".into(),
             started_at: String::new(),
         };
-        send_input(&record, b"hello\r")
+        let pending_record = record.clone();
+        let pending = tokio::spawn(async move { send_input(&pending_record, b"hello\r").await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !pending.is_finished(),
+            "input acknowledgment must wait for the PTY write, not just queueing"
+        );
+        let input = input_rx.try_recv().expect("queued input");
+        assert_eq!(input.bytes, b"hello\r");
+        input
+            .written
+            .expect("acknowledgment")
+            .send(true)
+            .expect("written");
+        pending
             .await
+            .expect("request task")
             .expect("acknowledged input");
-        assert_eq!(input_rx.try_recv().expect("queued input"), b"hello\r");
+        let queued_rx = input_rx;
+        let (observed_tx, input_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            while let Ok(input) = queued_rx.recv() {
+                observed_tx.send(input.bytes).expect("observed input");
+                if let Some(written) = input.written {
+                    let _ = written.send(true);
+                }
+            }
+        });
         send_prompt(&record, "one line")
             .await
             .expect("agent prompt");
@@ -944,6 +993,7 @@ mod tests {
             input_rx.try_recv().expect("paste frame"),
             b"\x1b[200~one line\x1b[201~"
         );
+        assert_eq!(input_rx.try_recv().expect("end paste burst"), b"\x1b[F");
         assert_eq!(input_rx.try_recv().expect("submit frame"), b"\r");
         switch_model(&record, "gpt-5.6-luna")
             .await

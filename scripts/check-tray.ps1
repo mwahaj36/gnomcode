@@ -1,11 +1,14 @@
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon); }'
 $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../scripts/tray.ps1'))
 $parseErrors=$null; $parseTokens=$null
-[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$parseTokens,[ref]$parseErrors) | Out-Null
+$ast=[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$parseTokens,[ref]$parseErrors)
 if ($parseErrors.Count -gt 0) { throw 'Tray script contains a PowerShell syntax error' }
+$trayTypes=$ast.FindAll({param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Add-Type' -and $node.Extent.Text.Contains('public class Win32')},$true) | Select-Object -First 1
+if (-not $trayTypes) { throw 'Tray native type initialization absent' }
+Invoke-Expression $trayTypes.Extent.Text
+if (-not ('Win32' -as [type]) -or -not ('DarkMenuColorTable' -as [type])) { throw 'Actual tray native types did not load' }
 $fn=[regex]::Match($source,'(?s)function Update-TrayIconBadge\(.*?\n}\r?\n').Value
 if (!$fn) { throw 'Badge function absent' }
 Invoke-Expression ($fn.Replace('catch {}','catch { throw }'))

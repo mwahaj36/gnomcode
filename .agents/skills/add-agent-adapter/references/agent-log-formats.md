@@ -23,7 +23,7 @@ Reference notes collected from live inspection on 2026-10-26.
 - **Dedup key:** `format!("{}:{}", session_id, ordinal)`.
 
 ## 3. Google Antigravity (`antigravity`)
-- **Paths:** `~/.gemini/antigravity/brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl` (and `transcript_full.jsonl`).
+- **Paths:** `$GEMINI_HOME/{antigravity,antigravity-cli}/brain/<conversation-uuid>/.system_generated/logs/transcript.jsonl` (default base `~/.gemini`). IDE and CLI 1.4.12 use the same step format; discover only `transcript.jsonl` to avoid double counting its full copy. CLI sessions are labeled CLI. Read workspace metadata from the matching `conversation_summaries.db` without modifying it.
 - **Format:** Append-only JSONL with `step_index`.
 - **Usage fields:** Steps with `type == "PLANNER_RESPONSE"` carry `input_tokens`, `cache_read_tokens`, `output_tokens`, `created_at`, `status`.
 - **Model & quota pool extraction:**
