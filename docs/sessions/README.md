@@ -4,6 +4,7 @@ One file per recorded session or follow-up. Historical entries retain their orig
 
 For each new session, add a dated file with goals, outcomes, problems/root-cause fixes, decisions and verification, then link it here. Do not append session bodies to SESSION_LOG.md.
 
+- [2026-11-01 - Launch checklist refresh](2026-11-01-launch-checklist-refresh.md)
 - [2026-11-01 - PR #113 review](2026-11-01-pr113-review.md)
 - [2026-11-01 - Audit remediation](2026-11-01-audit-remediation.md)
 - [2026-11-01 - Independent product audit](2026-11-01-independent-product-audit.md)
