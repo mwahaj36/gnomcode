@@ -30,7 +30,7 @@ if (-not (Test-Path $IconPath)) {
     if (-not (Test-Path $IconPath)) { $IconPath = Join-Path $ScriptDir "spawnt.ico" }
 }
 
-Add-Type @"
+Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -ErrorAction Stop @"
 using System;
 using System.Drawing;
 using System.Windows.Forms;

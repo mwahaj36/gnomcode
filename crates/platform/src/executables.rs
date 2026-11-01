@@ -19,6 +19,11 @@ pub fn background_agent_command(name: &str) -> std::process::Command {
 /// Resolves official CLI executables, including Windows npm packages, without a shell.
 #[must_use]
 pub fn agent_command(name: &str) -> (String, Vec<String>) {
+    if name == "agy" && !on_path(name) {
+        if let Some(binary) = antigravity_cli() {
+            return (binary.to_string_lossy().into_owned(), Vec::new());
+        }
+    }
     #[cfg(windows)]
     if let Some(paths) = std::env::var_os("PATH") {
         let package = match name {
@@ -66,12 +71,31 @@ fn npm_entry_point(prefix: &Path, package: &str, name: &str) -> Option<std::path
     (resolved.is_file() && resolved.starts_with(package.canonicalize().ok()?)).then_some(entry)
 }
 
-/// Checks whether an executable exists on the current process PATH.
+/// Checks PATH and the official Antigravity CLI installation directory.
 #[must_use]
 pub fn executable_available(name: &str) -> bool {
+    on_path(name) || (name == "agy" && antigravity_cli().is_some())
+}
+
+fn on_path(name: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|paths| {
         std::env::split_paths(&paths).any(|directory| executable_in(&directory, name))
     })
+}
+
+fn antigravity_cli() -> Option<std::path::PathBuf> {
+    #[cfg(windows)]
+    let binary = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
+        .join("agy")
+        .join("bin")
+        .join("agy.exe");
+    #[cfg(not(windows))]
+    let binary = std::path::PathBuf::from(std::env::var_os("HOME")?)
+        .join(".local")
+        .join("bin")
+        .join("agy");
+    let directory = binary.parent()?;
+    (binary.is_file() && executable_in(directory, "agy")).then_some(binary)
 }
 
 fn executable_in(directory: &Path, name: &str) -> bool {
@@ -119,6 +143,53 @@ pub fn terminal_shell() -> (String, Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agy_standard_install_works_without_path_entry() {
+        const CHILD: &str = "SPAWNT_TEST_AGY_INSTALL";
+        if let Some(root) = std::env::var_os(CHILD) {
+            let root = std::path::PathBuf::from(root);
+            let expected = if cfg!(windows) {
+                root.join("agy").join("bin").join("agy.exe")
+            } else {
+                root.join(".local").join("bin").join("agy")
+            };
+            assert!(executable_available("agy"));
+            assert_eq!(
+                agent_command("agy"),
+                (expected.to_string_lossy().into_owned(), vec![])
+            );
+            assert!(!executable_available("missing-spawnt-test-executable"));
+            return;
+        }
+        let root = tempfile::tempdir().expect("install root");
+        let directory = if cfg!(windows) {
+            root.path().join("agy").join("bin")
+        } else {
+            root.path().join(".local").join("bin")
+        };
+        std::fs::create_dir_all(&directory).expect("bin directory");
+        let binary = directory.join(if cfg!(windows) { "agy.exe" } else { "agy" });
+        std::fs::write(&binary, "fixture").expect("binary");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))
+                .expect("executable");
+        }
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "executables::tests::agy_standard_install_works_without_path_entry",
+            ])
+            .env(CHILD, root.path())
+            .env("LOCALAPPDATA", root.path())
+            .env("HOME", root.path())
+            .env("PATH", root.path())
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
+    }
 
     #[test]
     fn path_discovery_requires_an_existing_executable() {

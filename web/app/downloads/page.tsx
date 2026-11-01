@@ -1,5 +1,4 @@
 import { pageMetadata } from "../../lib/seo";
-import branding from "../../branding.json";
 import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
@@ -18,14 +17,14 @@ export default function DownloadsPage() {
       </header>
 
       <PlatformDownloads />
-      <p className="sp-download-help">By downloading, you agree to the <Link href="/terms">Terms of Service</Link>. Read our <Link href="/privacy">Privacy notice</Link>.</p>
+      <p className="sp-download-terms">By downloading, you agree to the <Link href="/terms">Terms of Service</Link>. Read our <Link href="/privacy">Privacy notice</Link>.</p>
 
       <section className="sp-download-help" aria-label="Release verification">
         <div>
           <h2>Verify the release</h2>
           <p>Release archives include a SHA-256 manifest. The Windows updater and Linux install script verify downloads before replacing an existing install.</p>
         </div>
-        <Link href="/docs#quickstart">Read installation guide <span aria-hidden="true">→</span></Link>
+        <Link href="/docs/getting-started">Read installation guide <span aria-hidden="true">→</span></Link>
       </section>
     </div>
   );

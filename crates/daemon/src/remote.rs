@@ -1117,6 +1117,7 @@ pub(crate) fn session_bindings<'s, 'h>(
             let (root, remote) = spawnt_platform::resolve_git_repo_and_remote(path);
             let root = root.as_deref().unwrap_or(path);
             let project = Project::from_origin(remote.as_deref(), &root.to_string_lossy(), None);
+            let workspace_project = Project::from_origin(None, &record.repo_path, None);
             let started = chrono::DateTime::parse_from_rfc3339(&record.started_at).ok()?;
             let mut candidates = sessions.iter().filter(|candidate| {
                 !hosted.iter().any(|other| {
@@ -1124,7 +1125,8 @@ pub(crate) fn session_bindings<'s, 'h>(
                         && (Some(other.child_pid) == candidate.pid
                             || other.session_id == candidate.id)
                 }) && agent == candidate.agent.as_str()
-                    && project.id == candidate.project_id
+                    && (project.id == candidate.project_id
+                        || workspace_project.id == candidate.project_id)
                     && {
                         let delta = candidate.started_at.signed_duration_since(started);
                         delta >= chrono::Duration::seconds(-5)
@@ -1151,6 +1153,74 @@ pub(crate) fn session_bindings<'s, 'h>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosted_session_binds_to_exact_subdirectory_without_git_origin_in_log() {
+        let repo = tempfile::tempdir().expect("repo");
+        for args in [
+            vec!["init", "--quiet"],
+            vec![
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/fixture.git",
+            ],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(repo.path())
+                    .status()
+                    .expect("git")
+                    .success()
+            );
+        }
+        let workspace = repo.path().join("nested");
+        std::fs::create_dir(&workspace).expect("workspace");
+        let project = Project::from_origin(None, &workspace.to_string_lossy(), None);
+        let now = chrono::Utc::now();
+        let session = Session {
+            id: "codex:native".into(),
+            agent: spawnt_core::AgentId::Codex,
+            surface: spawnt_core::Surface::Cli,
+            project_id: project.id,
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: spawnt_core::SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let record = spawnt_pty::SessionRecord {
+            session_id: "host".into(),
+            agent: "codex".into(),
+            repo_path: workspace.to_string_lossy().into_owned(),
+            model: None,
+            host_pid: 1,
+            child_pid: 2,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        assert_eq!(
+            conversation_session_id(
+                "host",
+                std::slice::from_ref(&session),
+                std::slice::from_ref(&record)
+            ),
+            "codex:native"
+        );
+        let duplicate = Session {
+            id: "codex:ambiguous".into(),
+            ..session.clone()
+        };
+        assert_eq!(
+            conversation_session_id("host", &[session, duplicate], &[record]),
+            "host",
+            "ambiguous native sessions must remain unbound"
+        );
+    }
 
     #[tokio::test]
     async fn remote_launch_refuses_shells_before_workspace_access() {

@@ -114,6 +114,83 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
 #[cfg(test)]
 mod switch_tests {
     #[test]
+    fn provider_error_allows_handoff_but_active_generation_does_not() {
+        const CHILD: &str = "SPAWNT_TEST_ERROR_HANDOFF";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempfile::tempdir().expect("root");
+            let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "--exact",
+                    "switch_tests::provider_error_allows_handoff_but_active_generation_does_not",
+                ])
+                .env(CHILD, "1")
+                .env("SPAWNT_HOME", root.path())
+                .status()
+                .expect("isolated test");
+            assert!(status.success());
+            return;
+        }
+        let repo = tempfile::tempdir().expect("repo");
+        let project = spawnt_core::Project::from_origin(None, &repo.path().to_string_lossy(), None);
+        let now = chrono::Utc::now();
+        let pid = std::process::id();
+        let record = spawnt_pty::SessionRecord {
+            session_id: "test-host".into(),
+            agent: "codex".into(),
+            repo_path: repo.path().to_string_lossy().into_owned(),
+            model: None,
+            host_pid: pid,
+            child_pid: pid,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        spawnt_pty::save_session_record(&record).expect("host fixture");
+        let mut db = spawnt_store::Database::open_in_memory().expect("db");
+        let mut session = spawnt_core::Session {
+            id: "codex:fixture".into(),
+            agent: spawnt_core::AgentId::Codex,
+            surface: spawnt_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: spawnt_core::SessionState::Error,
+            pid: Some(pid),
+            started_at: now,
+            last_event_at: now,
+        };
+        let checkpoint = spawnt_store::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        for (state, allowed) in [
+            (spawnt_core::SessionState::Error, true),
+            (spawnt_core::SessionState::Thinking, false),
+            (spawnt_core::SessionState::Tool, false),
+            (spawnt_core::SessionState::AwaitingApproval, false),
+        ] {
+            session.state = state;
+            db.commit_batch(
+                std::slice::from_ref(&project),
+                std::slice::from_ref(&session),
+                &[],
+                &[],
+                &[],
+                &checkpoint,
+            )
+            .expect("session");
+            assert_eq!(
+                super::prepare_switch(&db, &session.id, "@default", Some("antigravity")).is_ok(),
+                allowed,
+                "handoff from {state:?}"
+            );
+        }
+    }
+    #[test]
     fn model_switch_rejects_wrong_agent_and_unknown_model() {
         assert_eq!(
             super::agent_for_model("catalog.custom-model", Some("codex")),
@@ -357,11 +434,15 @@ pub(crate) fn prepare_switch(
         .iter()
         .find(|session| session.id == native_id)
         .is_some_and(|session| {
-            session.state != spawnt_core::SessionState::Idle
-                && current.is_some_and(|record| {
-                    chrono::DateTime::parse_from_rfc3339(&record.started_at)
-                        .is_ok_and(|started| session.last_event_at >= started)
-                })
+            matches!(
+                session.state,
+                spawnt_core::SessionState::Thinking
+                    | spawnt_core::SessionState::Tool
+                    | spawnt_core::SessionState::AwaitingApproval
+            ) && current.is_some_and(|record| {
+                chrono::DateTime::parse_from_rfc3339(&record.started_at)
+                    .is_ok_and(|started| session.last_event_at >= started)
+            })
         })
     {
         return Err(HandoffError::Launch(

@@ -194,6 +194,9 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
         .map_or_else(|| home.join(".gemini"), PathBuf::from);
 
     let antigravity_root = gemini_base.join("antigravity").join("brain");
+    let antigravity_cli_root = gemini_base
+        .join(obfstr::obfstr!("antigravity-cli"))
+        .join("brain");
     let gemini_cli_root = gemini_base.join("tmp");
 
     let mut roots = vec![
@@ -211,6 +214,11 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             agent: AgentId::Antigravity,
             exists: antigravity_root.exists(),
             path: antigravity_root,
+        },
+        AgentRoot {
+            agent: AgentId::Antigravity,
+            exists: antigravity_cli_root.exists(),
+            path: antigravity_cli_root,
         },
         AgentRoot {
             agent: AgentId::GeminiCli,
@@ -721,6 +729,38 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn antigravity_cli_and_ide_roots_respect_gemini_home() {
+        const CHILD: &str = "SPAWNT_TEST_AGY_ROOTS";
+        if let Some(root) = std::env::var_os(CHILD) {
+            let root = std::path::PathBuf::from(root);
+            let roots = super::discover_agent_roots();
+            for product in ["antigravity", "antigravity-cli"] {
+                assert!(
+                    roots
+                        .iter()
+                        .any(|entry| entry.agent == spawnt_core::AgentId::Antigravity
+                            && entry.path == root.join(product).join("brain"))
+                );
+            }
+            return;
+        }
+        let root = tempfile::tempdir().expect("root");
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "tests::antigravity_cli_and_ide_roots_respect_gemini_home",
+            ])
+            .env(CHILD, root.path())
+            .env("GEMINI_HOME", root.path())
+            .env("HOME", root.path())
+            .env("USERPROFILE", root.path())
+            .env("APPDATA", root.path())
+            .env("LOCALAPPDATA", root.path())
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
+    }
     #[test]
     fn process_liveness_reports_current_process() {
         assert!(super::process_is_alive(std::process::id()));
