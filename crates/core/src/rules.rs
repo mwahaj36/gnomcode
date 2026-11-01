@@ -105,7 +105,12 @@ pub fn is_resume_eligible(
         return false;
     }
 
-    quota_snapshot.is_some_and(|q| q.used_pct.is_finite() && q.used_pct < 100.0)
+    quota_snapshot.is_some_and(|q| {
+        q.basis != crate::TrustLevel::Unknown
+            && q.observed_at >= entry.eligible_after
+            && q.observed_at <= now
+            && (0.0..100.0).contains(&q.used_pct)
+    })
 }
 
 #[cfg(test)]
@@ -146,6 +151,41 @@ mod tests {
             evaluate_guardrails(&s, 5.0, 15, &rules),
             Some(RuleAction::HardStop)
         );
+    }
+
+    #[test]
+    fn resume_requires_known_quota_observed_after_eligibility() {
+        let now = Utc::now();
+        let entry = ResumeQueueEntry {
+            session_id: "codex:s1".into(),
+            agent: AgentId::Codex,
+            cwd: "workspace".into(),
+            resume_prompt: "continue".into(),
+            max_runs: 1,
+            runs_completed: 0,
+            eligible_after: now - Duration::minutes(1),
+        };
+        let mut quota = QuotaSnapshot {
+            provider: "codex".into(),
+            limit_id: "pool".into(),
+            window: QuotaWindow::FiveHour,
+            used_pct: 5.0,
+            resets_at: None,
+            plan: None,
+            basis: TrustLevel::Unknown,
+            observed_at: now,
+        };
+        assert!(!is_resume_eligible(&entry, now, Some(&quota)));
+        quota.basis = TrustLevel::Exact;
+        quota.observed_at = entry.eligible_after - Duration::seconds(1);
+        assert!(!is_resume_eligible(&entry, now, Some(&quota)));
+        quota.observed_at = now + Duration::seconds(1);
+        assert!(!is_resume_eligible(&entry, now, Some(&quota)));
+        quota.observed_at = now;
+        quota.used_pct = -1.0;
+        assert!(!is_resume_eligible(&entry, now, Some(&quota)));
+        quota.used_pct = 5.0;
+        assert!(is_resume_eligible(&entry, now, Some(&quota)));
     }
 
     #[test]

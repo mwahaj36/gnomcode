@@ -543,10 +543,96 @@ mod tests {
             fingerprint: "test".to_owned(),
             last_ingested_at: Utc::now(),
         };
-        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+        let quota = spawnt_core::QuotaSnapshot {
+            provider: "codex".into(),
+            limit_id: "pool".into(),
+            window: spawnt_core::QuotaWindow::FiveHour,
+            used_pct: 10.0,
+            resets_at: None,
+            plan: None,
+            basis: spawnt_core::TrustLevel::Exact,
+            observed_at: Utc::now(),
+        };
+        db.commit_batch(&[project], &[session], &[], &[], &[quota], &checkpoint)
             .expect("commit");
         let snapshot = super::build_remote_snapshot(&db).expect("snapshot");
         let encoded = snapshot.to_string();
+        let mut keys: Vec<_> = snapshot
+            .as_object()
+            .expect("snapshot object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "active_count",
+                "generated_at",
+                "ongoing_count",
+                "quota",
+                "sessions",
+                "timeline",
+                "timelines",
+                "total_count"
+            ]
+        );
+        let mut session_keys: Vec<_> = snapshot["sessions"][0]
+            .as_object()
+            .expect("session object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        session_keys.sort_unstable();
+        assert_eq!(
+            session_keys,
+            [
+                "agent",
+                "cache_read_tokens",
+                "context_fill_pct",
+                "context_tokens",
+                "context_window",
+                "cost_basis",
+                "id",
+                "input_tokens",
+                "is_active",
+                "is_ongoing",
+                "last_event_at",
+                "model",
+                "output_tokens",
+                "presence",
+                "priced_turns",
+                "project_name",
+                "started_at",
+                "state",
+                "surface",
+                "total_cost_usd",
+                "total_tokens",
+                "unpriced_turns",
+                "usage_available"
+            ]
+        );
+        let mut quota_keys: Vec<_> = snapshot["quota"][0]
+            .as_object()
+            .expect("quota object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        quota_keys.sort_unstable();
+        assert_eq!(
+            quota_keys,
+            [
+                "basis",
+                "limit_id",
+                "observed_at",
+                "plan",
+                "provider",
+                "remaining_pct",
+                "resets_at",
+                "used_pct",
+                "window"
+            ]
+        );
         assert!(!encoded.contains("/private/client"));
         assert!(!encoded.contains("rollout.jsonl"));
         assert!(!encoded.contains("private prompt title"));
