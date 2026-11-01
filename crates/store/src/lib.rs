@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Datelike, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
+use sha2::{Digest, Sha256};
 use spawnt_core::rules::{GuardrailRule, ResumeQueueEntry};
 use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
@@ -25,6 +26,26 @@ pub enum Error {
     /// Invalid stored rule or queue payload.
     #[error("invalid stored JSON: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+fn event_marker(id: &str) -> Vec<u8> {
+    Sha256::digest(id.as_bytes()).to_vec()
+}
+
+fn mark_deleted<P: rusqlite::Params>(
+    tx: &rusqlite::Transaction<'_>,
+    query: &str,
+    params: P,
+) -> Result<(), Error> {
+    let mut statement = tx.prepare(query)?;
+    let ids = statement.query_map(params, |row| row.get::<_, String>(0))?;
+    let mut insert = tx.prepare_cached(obfstr::obfstr!(
+        "INSERT OR IGNORE INTO deleted_chat_event(event_id) VALUES (?1)"
+    ))?;
+    for id in ids {
+        insert.execute([event_marker(&id?)])?;
+    }
+    Ok(())
 }
 
 /// A guardrail breach recorded once per rule and session.
@@ -775,6 +796,10 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_conversation_member ON conversation_member(conversation_id, position);
             INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (9, datetime('now'));
         "#))?;
+        self.conn.execute_batch(obfstr::obfstr!(r#"
+            CREATE TABLE IF NOT EXISTS deleted_chat_event (event_id BLOB PRIMARY KEY);
+            INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (10, datetime('now'));
+        "#))?;
         // Older Cursor parsing treated settings JSON as empty, freshly active sessions.
         self.conn.execute_batch(obfstr::obfstr!(r#"
             DELETE FROM session
@@ -799,14 +824,15 @@ impl Database {
     pub fn insert_chat_event(&self, event: &ChatEvent) -> Result<(), Error> {
         let created_at = event.created_at.to_rfc3339();
         self.conn.execute(
-            r#"
+            obfstr::obfstr!(r#"
             INSERT INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+            WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)
             ON CONFLICT(event_id) DO UPDATE SET
                 content = excluded.content,
                 tool_name = excluded.tool_name,
                 status = excluded.status
-            "#,
+            "#),
             params![
                 event.event_id,
                 event.session_id,
@@ -816,6 +842,7 @@ impl Database {
                 event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content),
                 event.status.as_deref().map(spawnt_core::redact::redact_chat_content),
                 created_at,
+                event_marker(&event.event_id),
             ],
         )?;
         Ok(())
@@ -985,10 +1012,17 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] on SQLite deletion failure.
     pub fn delete_session_chat(&self, session_id: &str) -> Result<usize, Error> {
-        let deleted = self.conn.execute(
-            "DELETE FROM chat_event WHERE session_id = ?1",
-            params![session_id],
+        let tx = self.conn.unchecked_transaction()?;
+        mark_deleted(
+            &tx,
+            obfstr::obfstr!("SELECT event_id FROM chat_event WHERE session_id=?1"),
+            [session_id],
         )?;
+        let deleted = tx.execute(
+            obfstr::obfstr!("DELETE FROM chat_event WHERE session_id=?1"),
+            [session_id],
+        )?;
+        tx.commit()?;
         Ok(deleted)
     }
 
@@ -1004,10 +1038,21 @@ impl Database {
         if self.conversation_target(host_id)?.is_some() {
             return self.delete_conversation_chat(host_id);
         }
-        Ok(self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        let notice = format!("handoff:{host_id}:source");
+        mark_deleted(
+            &tx,
+            obfstr::obfstr!(
+                "SELECT event_id FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3"
+            ),
+            params![session_id, host_id, notice],
+        )?;
+        let deleted = tx.execute(
             obfstr::obfstr!("DELETE FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3"),
-            params![session_id, host_id, format!("handoff:{host_id}:source")],
-        )?)
+            params![session_id, host_id, notice],
+        )?;
+        tx.commit()?;
+        Ok(deleted)
     }
 
     /// Prunes chat events older than the specified retention window in days.
@@ -1015,10 +1060,22 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] on SQLite deletion failure.
     pub fn purge_chat_events_older_than(&self, days: u32) -> Result<usize, Error> {
-        let deleted = self.conn.execute(
-            "DELETE FROM chat_event WHERE created_at < datetime('now', '-' || ?1 || ' days')",
-            params![days],
+        let tx = self.conn.unchecked_transaction()?;
+        let cutoff: f64 = tx.query_row(
+            obfstr::obfstr!("SELECT julianday('now', '-' || ?1 || ' days')"),
+            [days],
+            |row| row.get(0),
         )?;
+        mark_deleted(
+            &tx,
+            obfstr::obfstr!("SELECT event_id FROM chat_event WHERE julianday(created_at) < ?1"),
+            [cutoff],
+        )?;
+        let deleted = tx.execute(
+            obfstr::obfstr!("DELETE FROM chat_event WHERE julianday(created_at) < ?1"),
+            [cutoff],
+        )?;
+        tx.commit()?;
         Ok(deleted)
     }
 
@@ -1539,7 +1596,7 @@ impl Database {
             } else {
                 spawnt_core::redact::redact_chat_content(&event.content)
             };
-            tx.execute("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content), event.status.as_deref().map(spawnt_core::redact::redact_chat_content), event.created_at.to_rfc3339()])?;
+            tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)"), params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content), event.status.as_deref().map(spawnt_core::redact::redact_chat_content), event.created_at.to_rfc3339(), event_marker(&event.event_id)])?;
         }
 
         // 6. Update source file checkpoint

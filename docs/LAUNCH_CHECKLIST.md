@@ -8,6 +8,8 @@ Updated 2026-11-01 after PR #113. Owner: Wahaj. Keep release caveats here and in
 - [CI run 41285486249](https://github.com/mwahaj36/spawnt/actions/runs/41285486249) passed Rust clippy and workspace tests on Windows, macOS and Linux, plus the Rust MSRV and dependency audit, web checks, npm shim tests and a sandboxed Electron test. Native release archives were not built in that run. This is automated test evidence, not packaged-app or physical-device acceptance.
 - The shared model picker now uses supported native CLI metadata for Codex and Claude, and Gemini configuration and model-list metadata where available. Antigravity has no verified read-only catalog. Real authenticated provider coverage remains open.
 
+- [Independent launch work](INDEPENDENT_WORK_2026-11-01.md) records the deletion/replay and retention fixes, conservative quota checks, endpoint inventory, adapter coverage, live-site checks and a synthetic Linux baseline. These checks do not close device, release, production RLS or independent security gates.
+
 ## Blocking gates
 
 | Gate | What blocks it | How to close it | Required evidence |
@@ -27,11 +29,11 @@ Updated 2026-11-01 after PR #113. Owner: Wahaj. Keep release caveats here and in
 | :--- | :--- | :--- |
 | Teams | Define roles, rollups, budgets, invitations and consent in SPEC/ADR. Existing schema/snapshot is not a complete Teams service. | Approved scope, authorization tests, team acceptance |
 | Model catalogs | Validate supported Codex, Claude and Gemini native metadata against real CLI versions and accounts; Gemini configured status is not proof of authentication or entitlement. Antigravity lacks a verified read-only catalog; retain its native selector. | CLI versions, source contracts, real-account outcomes and fresh/stale/hidden-entry tests |
-| Resume/automation | Verify native busy/approval handling, reset timing, restart and duplicate prevention. Do not promise restoration of arbitrary original prompt text. | Real agent acceptance and no-escalation regression results |
-| Retention/deletion | Confirm actual retention configuration and scheduling; explain SQLite WAL and backups. Row deletion is not guaranteed forensic erasure. | Deletion/retention tests and backup policy |
-| Adapters | Validate current anonymized real logs, especially Antigravity/Aider/editor variants; publish capability differences. | Golden fixtures and capability matrix |
-| Performance | Measure all daemon/desktop/PTY processes at idle and under concurrent sessions per launch OS. | Reproducible measurements and accepted budgets |
-| Network disclosure | Reconcile `doctor --network` with update, pricing, account auth/sync, relay, license and optional provider operations. | Endpoint audit, offline run and accurate privacy page |
+| Resume/automation | Validate native busy/approval handling and all quota windows. Design durable claims/recovery to prevent duplicate process launches across crashes and concurrent reconciliation. Do not promise restoration of arbitrary original prompt text. | Real agent acceptance and no-escalation regression results |
+| Retention/deletion | Deletion and pruning now retain local hashed event-ID markers against stable-ID source replay; verify changed IDs, old backups, reset behavior and all-process upgrades. Define retention scheduling and backup policy; row deletion is not forensic erasure. | Deletion/retention tests and backup policy |
+| Adapters | Replace missing-timestamp `Utc::now()` fallbacks with a designed, deterministic unknown-time policy that preserves history; validate current anonymized real logs, especially Antigravity/Aider/editor variants, and publish capability differences. | Golden fixtures and capability matrix |
+| Performance | Extend the synthetic Linux debug baseline to release builds, real output, desktop and PTY processes under concurrency on each launch OS. | Reproducible measurements and accepted budgets |
+| Network disclosure | Verify the recorded endpoint inventory against shipping builds and configured services, including whether the planned update check exists; repeat an offline audit. | Endpoint audit, offline run and accurate privacy page |
 
 ## Product discovery, not committed launch scope
 

@@ -669,9 +669,21 @@ fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
     }
 
     if network {
-        println!("\nNetwork Endpoints (All Loopback or Outbound Opt-in):");
-        println!("  127.0.0.1:41738           Local Webhook / IPC Loopback Server");
-        println!("  https://*.supabase.co     Opt-in Multi-Device Cloud Sync (M6)");
+        println!(
+            "\nNetwork connections (configuration and user actions determine actual traffic):"
+        );
+        println!("  127.0.0.1                Local daemon and PTY services; ports vary");
+        println!(
+            "  Account service          Account authentication, metadata sync and Remote entitlement; configurable"
+        );
+        println!(
+            "  Remote relay             Outbound encrypted Remote traffic after pairing; configurable"
+        );
+        println!("  raw.githubusercontent.com  Optional pricing refresh when requested");
+        println!(
+            "  Browser / agent CLI      Visited websites and installed agents use their own services"
+        );
+        println!("  No connections are tested by this report.");
     }
 
     println!("\nDiagnostics complete.");

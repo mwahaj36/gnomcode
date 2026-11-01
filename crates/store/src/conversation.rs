@@ -181,7 +181,17 @@ impl Database {
     /// Returns an error if deletion fails.
     pub fn delete_conversation_chat(&self, id: &str) -> Result<usize, Error> {
         let root = self.conversation_id(id)?;
-        Ok(self.conn.execute(obfstr::obfstr!("DELETE FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)"),[root])?)
+        let tx = self.conn.unchecked_transaction()?;
+        mark_deleted(
+            &tx,
+            obfstr::obfstr!(
+                "SELECT event_id FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)"
+            ),
+            [&root],
+        )?;
+        let deleted = tx.execute(obfstr::obfstr!("DELETE FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)"), [&root])?;
+        tx.commit()?;
+        Ok(deleted)
     }
 }
 
@@ -203,6 +213,120 @@ mod tests {
             status: None,
         })
         .expect("message");
+    }
+
+    #[test]
+    fn retention_compares_rfc3339_timestamps_by_instant() {
+        let db = Database::open_in_memory().expect("db");
+        insert_message(&db, "codex:first", "expired", 1);
+        insert_message(&db, "codex:first", "recent", 2);
+        let mut cutoff = Utc::now() - chrono::Duration::days(1);
+        let mut elapsed = cutoff.time().signed_duration_since(chrono::NaiveTime::MIN);
+        if elapsed < chrono::Duration::seconds(2) {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            cutoff = Utc::now() - chrono::Duration::days(1);
+            elapsed = cutoff.time().signed_duration_since(chrono::NaiveTime::MIN);
+        }
+        let expired = cutoff - elapsed / 2;
+        db.conn
+            .execute(
+                "UPDATE chat_event SET created_at=?1 WHERE event_id='expired'",
+                [expired.to_rfc3339()],
+            )
+            .expect("timestamp");
+        assert_eq!(db.purge_chat_events_older_than(1).expect("purge"), 1);
+        let remaining = db.get_session_chat("codex:first", None).expect("chat");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].event_id, "recent");
+        insert_message(&db, "codex:first", "expired", 1);
+        assert_eq!(
+            db.get_session_chat("codex:first", None)
+                .expect("chat")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn deleted_ids_survive_restart_without_blocking_new_events() {
+        let dir = tempfile::tempdir().expect("temp");
+        let path = dir.path().join("state.db");
+        {
+            let db = Database::open(&path).expect("db");
+            insert_message(&db, "codex:first", "deleted", 1);
+            db.bind_conversation_host("host", "codex:first")
+                .expect("bind");
+            assert_eq!(db.delete_conversation_chat("host").expect("delete"), 1);
+        }
+        let db = Database::open(&path).expect("reopen");
+        insert_message(&db, "codex:first", "deleted", 1);
+        insert_message(&db, "codex:first", "new", 2);
+        let events = db.get_session_chat("codex:first", None).expect("chat");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_id, "new");
+    }
+
+    #[test]
+    fn deletion_marker_does_not_store_the_raw_identifier() {
+        let db = Database::open_in_memory().expect("db");
+        insert_message(&db, "codex:first", "sensitive-identifier", 1);
+        db.delete_session_chat("codex:first").expect("delete");
+        let marker: Vec<u8> = db
+            .conn
+            .query_row(
+                "SELECT CAST(event_id AS BLOB) FROM deleted_chat_event",
+                [],
+                |row| row.get(0),
+            )
+            .expect("marker");
+        assert_ne!(marker, b"sensitive-identifier");
+    }
+
+    #[test]
+    fn failed_delete_rolls_back_deletion_markers() {
+        let db = Database::open_in_memory().expect("db");
+        insert_message(&db, "codex:first", "preserved", 1);
+        db.conn.execute_batch("CREATE TRIGGER reject_chat_delete BEFORE DELETE ON chat_event BEGIN SELECT RAISE(ABORT, 'injected failure'); END;").expect("trigger");
+        assert!(db.delete_session_chat("codex:first").is_err());
+        assert_eq!(
+            db.get_session_chat("codex:first", None)
+                .expect("chat")
+                .len(),
+            1
+        );
+        let markers: i64 = db
+            .conn
+            .query_row("SELECT count(*) FROM deleted_chat_event", [], |row| {
+                row.get(0)
+            })
+            .expect("markers");
+        assert_eq!(markers, 0);
+    }
+
+    #[test]
+    fn v9_upgrade_preserves_chat_and_creates_deletion_markers() {
+        let mut db = Database::open_in_memory().expect("db");
+        insert_message(&db, "codex:first", "preserved", 1);
+        db.conn
+            .execute_batch(
+                "DROP TABLE deleted_chat_event; DELETE FROM schema_migrations WHERE version=10;",
+            )
+            .expect("v9 state");
+        db.migrate().expect("upgrade");
+        db.migrate().expect("repeat");
+        assert_eq!(
+            db.get_session_chat("codex:first", None)
+                .expect("chat")
+                .len(),
+            1
+        );
+        db.delete_session_chat("codex:first").expect("delete");
+        insert_message(&db, "codex:first", "preserved", 1);
+        assert!(
+            db.get_session_chat("codex:first", None)
+                .expect("chat")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -306,7 +430,7 @@ mod tests {
         insert_message(&db, "codex:first", "preserved", 1);
         db.conn
             .execute_batch(
-                "DROP TABLE conversation_member; DELETE FROM schema_migrations WHERE version=9;",
+                "DROP TABLE conversation_member; DROP TABLE deleted_chat_event; DELETE FROM schema_migrations WHERE version IN (9, 10);",
             )
             .expect("v8 state");
         db.migrate().expect("upgrade");
