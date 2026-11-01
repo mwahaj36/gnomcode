@@ -817,6 +817,69 @@ impl Database {
         Ok(())
     }
 
+    /// Checks whether pre-format-fix chat needs a one-time source repair.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the maintenance marker cannot be read.
+    pub fn chat_format_needs_repair(&self) -> Result<bool, Error> {
+        Ok(self.conn.query_row(obfstr::obfstr!("SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=11) AND EXISTS(SELECT 1 FROM chat_event)"), [], |row| row.get(0))?)
+    }
+
+    /// Restores content for an existing event without inserting deleted history.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the existing row cannot be updated.
+    pub fn repair_chat_contents(&self, events: &[ChatEvent]) -> Result<(), Error> {
+        let transaction = self.conn.unchecked_transaction()?;
+        {
+            let mut previous = transaction.prepare(obfstr::obfstr!(
+                "SELECT content,role FROM chat_event WHERE event_id=?1 AND session_id=?2"
+            ))?;
+            let mut statement = transaction.prepare(obfstr::obfstr!(
+                "UPDATE chat_event SET content=?1 WHERE event_id=?2 AND session_id=?3"
+            ))?;
+            for event in events {
+                let stored: Option<(String, String)> = previous
+                    .query_row(params![event.event_id, event.session_id], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })
+                    .optional()?;
+                let Some((old, role)) = stored else {
+                    continue;
+                };
+                if role != event.role.as_str() {
+                    continue;
+                }
+                let content = if event.role == ChatRole::Tool {
+                    String::new()
+                } else {
+                    spawnt_core::redact::redact_chat_content(&event.content)
+                };
+                let old = if event.role == ChatRole::User {
+                    spawnt_core::redact::clean_user_message(&old)
+                } else {
+                    old
+                };
+                let old = spawnt_core::redact::redact_chat_content(&old);
+                if !old.split_whitespace().eq(content.split_whitespace()) {
+                    continue;
+                }
+                statement.execute(params![content, event.event_id, event.session_id])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Records completion of the idempotent local chat-format repair.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the maintenance marker cannot be saved.
+    pub fn finish_chat_format_repair(&self) -> Result<(), Error> {
+        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (11,datetime('now'))"), [])?;
+        Ok(())
+    }
+
     /// Inserts a local redacted structured chat event.
     ///
     /// # Errors
@@ -950,6 +1013,11 @@ impl Database {
             let created_at_str: String = row.get(7)?;
 
             let role = ChatRole::parse_role(&role_str).unwrap_or(ChatRole::System);
+            let content = if role == ChatRole::Tool {
+                String::new()
+            } else {
+                spawnt_core::redact::redact_chat_content(&content)
+            };
             let created_at = DateTime::parse_from_rfc3339(&created_at_str)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
@@ -2923,6 +2991,105 @@ fn antigravity_workspace(root: &std::path::Path, conv_id: &str) -> Option<String
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn format_repair_updates_existing_chat_without_resurrecting_deleted_rows() {
+        let mut db = super::Database::open_in_memory().expect("db");
+        let now = chrono::Utc::now();
+        let project = spawnt_core::Project::from_origin(None, "/fixture", None);
+        let session = spawnt_core::Session {
+            id: "codex:format".into(),
+            agent: spawnt_core::AgentId::Codex,
+            surface: spawnt_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: spawnt_core::SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let checkpoint = super::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 10,
+            file_size: 10,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+            .expect("metadata");
+        let mut event = spawnt_core::ChatEvent {
+            event_id: "format-event".into(),
+            session_id: "codex:format".into(),
+            turn_index: 1,
+            role: spawnt_core::ChatRole::Assistant,
+            content: "# Heading body".into(),
+            tool_name: None,
+            status: None,
+            created_at: now,
+        };
+        db.insert_chat_event(&event).expect("old chat");
+        let old_secret = "**sk-ant-api03-1234567890abcdefghijklmnopqrstuvwxyz**\n\nbody";
+        db.conn
+            .execute(
+                "UPDATE chat_event SET content=?1 WHERE event_id=?2",
+                rusqlite::params![old_secret, event.event_id],
+            )
+            .expect("legacy fixture");
+        assert_eq!(
+            db.get_session_chat("codex:format", None)
+                .expect("legacy read")[0]
+                .content,
+            "**<REDACTED>**\n\nbody"
+        );
+        assert_eq!(
+            db.conversation_chat("codex:format", None, None)
+                .expect("continuous legacy read")[0]
+                .content,
+            "**<REDACTED>**\n\nbody"
+        );
+        db.conn
+            .execute(
+                "UPDATE chat_event SET content=?1 WHERE event_id=?2",
+                rusqlite::params![event.content, event.event_id],
+            )
+            .expect("restore fixture");
+        assert!(db.chat_format_needs_repair().expect("repair status"));
+        let mut different = event.clone();
+        different.content = "Different text at a reused source offset".into();
+        db.repair_chat_contents(&[different])
+            .expect("ignore changed native content");
+        assert_eq!(
+            db.get_session_chat("codex:format", None)
+                .expect("original chat")[0]
+                .content,
+            event.content
+        );
+        event.content = "# Heading\n\nbody".into();
+        db.repair_chat_contents(std::slice::from_ref(&event))
+            .expect("repair");
+        assert_eq!(
+            db.get_session_chat("codex:format", None).expect("chat")[0].content,
+            event.content
+        );
+        db.delete_session_chat("codex:format").expect("delete");
+        db.repair_chat_contents(std::slice::from_ref(&event))
+            .expect("do not resurrect");
+        assert!(
+            db.get_session_chat("codex:format", None)
+                .expect("deleted chat")
+                .is_empty()
+        );
+        assert_eq!(
+            db.get_checkpoint("fixture")
+                .expect("checkpoint")
+                .expect("source")
+                .last_read_offset,
+            10
+        );
+        db.finish_chat_format_repair().expect("finish");
+        assert!(!db.chat_format_needs_repair().expect("finished"));
+    }
     #[test]
     fn antigravity_workspace_lookup_includes_cli_and_preserves_ide() {
         let root = tempfile::tempdir().expect("gemini home");

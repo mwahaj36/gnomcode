@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const source = await readFile(new URL('../web/lib/console-presentation.js', import.meta.url));
-const { renderActivity, renderProviders, renderQuota, renderSessions, renderProjects, renderSummary, updateSummary } = await import(`data:text/javascript;base64,${source.toString('base64')}`);
-const {renderConversationLimits}=await import(`data:text/javascript;base64,${source.toString('base64')}`);
+const { renderActivity, renderProviders, renderQuota, renderSessions, renderProjects, renderSummary, updateSummary } = await import(new URL('../web/lib/console-presentation.js',import.meta.url));
+const {renderConversationLimits}=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 assert.match(renderConversationLimits([{label:'5h',remaining_pct:75,basis:'exact',observed_at:new Date().toISOString(),stale:false}]),/75%/);
 assert.match(renderConversationLimits([{label:'Weekly',remaining_pct:12,basis:'estimated',stale:true}]),/EST/);
 assert.match(renderConversationLimits([{label:'Weekly',remaining_pct:12,basis:'estimated',stale:true}]),/Last seen/);
@@ -57,7 +56,7 @@ const hourly=renderActivity({...partial,range_label:'Today',total_tokens:100,dai
 assert.match(hourly,/Today, by hour/);assert.match(hourly,/Since local midnight/);assert.doesNotMatch(hourly,/>10-28</);
 assert.doesNotMatch(hourly.split('class="sp-activity-bars"')[0], /\$12\.00|Partial estimate/, 'activity header must not duplicate the spend summary');
 assert.match(hourly, /\$12\.00/, 'expanded interval details retain their own cost');
-const {renderOngoing}=await import(`data:text/javascript;base64,${source.toString('base64')}`);
+const {renderOngoing}=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 assert.match(renderOngoing([{id:'active-1',title:'Current session',agent:'codex',is_active:true,state:'thinking',last_event_at:'2026-10-28T00:00:00Z'},{id:'idle-1',title:'Old session',is_active:false}]),/Current session/);
 assert.doesNotMatch(renderOngoing([{id:'idle-1',title:'Old session',is_active:false}]),/Old session/);
 console.log('PASS: partial pricing, independent provider coverage, local hourly labels and ongoing session identity');

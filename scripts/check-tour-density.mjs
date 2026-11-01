@@ -4,7 +4,7 @@ import {createRequire} from 'node:module';
 import vm from 'node:vm';
 const require=createRequire(new URL('../web/package.json',import.meta.url));
 const ts=require('typescript');const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');
-const presenters=await import('data:text/javascript;base64,'+Buffer.from(readFileSync(new URL('../web/lib/console-presentation.js',import.meta.url))).toString('base64'));
+const presenters=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 const code=ts.transpileModule(readFileSync(new URL('../web/app/components/ConsoleTourView.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const exports={};vm.runInNewContext(code,{exports,require(name){return name.includes('console-presentation')?presenters:require(name);},Intl});
 const html=renderToStaticMarkup(React.createElement(exports.ConsoleTourView,{kind:'overview'}));

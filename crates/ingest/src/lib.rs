@@ -129,6 +129,7 @@ fn complete_jsonl_prefix_len(bytes: &[u8]) -> usize {
 pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     let roots = discover_agent_roots();
     let discovered = scan_log_files(&roots);
+    let repair_chat_format = db.chat_format_needs_repair()?;
     let mut total_records_ingested = 0;
 
     let agy_fallback_model = read_antigravity_fallback_model();
@@ -156,15 +157,21 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
         } else {
             None
         };
-        if file_fingerprint.as_ref().is_some_and(|fingerprint| {
-            checkpoint
-                .as_ref()
-                .is_some_and(|cp| &cp.fingerprint == fingerprint)
-        }) {
+        if !repair_chat_format
+            && file_fingerprint.as_ref().is_some_and(|fingerprint| {
+                checkpoint
+                    .as_ref()
+                    .is_some_and(|cp| &cp.fingerprint == fingerprint)
+            })
+        {
             continue;
         }
 
-        let read_offset = if is_rewritten { 0 } else { start_offset };
+        let read_offset = if is_rewritten || repair_chat_format {
+            0
+        } else {
+            start_offset
+        };
         let Ok(read_result) = read_from_offset(&file.path, read_offset) else {
             continue;
         };
@@ -220,6 +227,10 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             continue;
         }
         let batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
+        if repair_chat_format {
+            db.repair_chat_contents(&batch.chat_events)?;
+            continue;
+        }
         if is_rewritten
             && batch.parse_errors > 0
             && batch.usage_records.is_empty()
@@ -253,6 +264,10 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
         import_native_titles(db, file.agent, &read_result.bytes[..parsed_len])?;
     }
 
+    db.finish_chat_format_repair()?;
+    if repair_chat_format {
+        return ingest_all(db);
+    }
     refresh_native_titles(db, &roots)?;
 
     let detected_subs = detect_local_subscriptions();
@@ -302,6 +317,71 @@ fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_markdown_repairs_from_native_source_without_rewinding_checkpoint() {
+        const CHILD: &str = "SPAWNT_TEST_CHAT_REPAIR";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempfile::tempdir().expect("root");
+            let status=std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args(["--exact","tests::legacy_markdown_repairs_from_native_source_without_rewinding_checkpoint"])
+                .env(CHILD,root.path()).env("HOME",root.path()).env("USERPROFILE",root.path())
+                .env("APPDATA",root.path()).env("LOCALAPPDATA",root.path()).env("XDG_CONFIG_HOME",root.path()).env("XDG_DATA_HOME",root.path())
+                .env("CODEX_HOME",root.path().join("codex")).env("CLAUDE_CONFIG_DIR",root.path().join("claude")).env("GEMINI_HOME",root.path().join("gemini"))
+                .env_remove("AIDER_ANALYTICS_LOG").status().expect("isolated test");
+            assert!(status.success());
+            return;
+        }
+        use super::*;
+        let root = PathBuf::from(std::env::var_os(CHILD).expect("root"));
+        let directory = root.join("codex").join("sessions");
+        fs::create_dir_all(&directory).expect("sessions");
+        let path = directory.join("rollout-format.jsonl");
+        let markdown = "# Result\n\n- one\n- two\n\n```rust\nlet x = 1;\n```";
+        let bytes = format!(
+            "{}\n{}\n",
+            serde_json::json!({"type":"session_meta","timestamp":"2026-11-02T00:00:00Z","payload":{"id":"format","cwd":"/workspace"}}),
+            serde_json::json!({"type":"response_item","timestamp":"2026-11-02T00:00:01Z","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":markdown}]}})
+        );
+        fs::write(&path, &bytes).expect("native log");
+        let context = FileCtx {
+            source_path: path.to_string_lossy().into_owned(),
+            ..FileCtx::default()
+        };
+        let mut batch = CodexAdapter::new().parse(&context, bytes.as_bytes());
+        batch.chat_events[0].content = markdown.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut db = Database::open_in_memory().expect("db");
+        let checkpoint = SourceCheckpoint {
+            file_path: context.source_path.clone(),
+            last_read_offset: bytes.len() as u64,
+            file_size: bytes.len() as u64,
+            fingerprint: "original".into(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch_with_chat(
+            &batch.projects,
+            &batch.sessions,
+            &batch.usage_records,
+            &batch.activity_events,
+            &batch.quota_snapshots,
+            &checkpoint,
+            &batch.chat_events,
+        )
+        .expect("legacy chat");
+        let event_id = batch.chat_events[0].event_id.clone();
+        ingest_all(&mut db).expect("repair");
+        let chat = db.get_session_chat("codex:format", None).expect("chat");
+        assert_eq!(chat[0].content, markdown);
+        assert_eq!(chat[0].event_id, event_id);
+        assert_eq!(
+            db.get_checkpoint(&context.source_path)
+                .expect("checkpoint")
+                .expect("source")
+                .fingerprint,
+            "original"
+        );
+        assert!(!db.chat_format_needs_repair().expect("finished"));
+        assert_eq!(fs::read_to_string(path).expect("untouched source"), bytes);
+    }
     #[test]
     fn native_index_renames_refresh_without_reingesting_or_touching_activity() {
         use super::*;

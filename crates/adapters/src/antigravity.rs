@@ -427,7 +427,7 @@ pub fn extract_antigravity_user_prompt(content: &str) -> Option<String> {
         if let Some(end) = after.find("</USER_REQUEST>") {
             let prompt = after[..end].trim();
             if !prompt.is_empty() {
-                return Some(prompt.to_owned());
+                return Some(spawnt_core::redact::clean_user_message(prompt));
             }
         }
     }
@@ -443,6 +443,6 @@ pub fn extract_antigravity_user_prompt(content: &str) -> Option<String> {
     if trimmed.is_empty() {
         None
     } else {
-        Some(trimmed.to_owned())
+        Some(spawnt_core::redact::clean_user_message(trimmed))
     }
 }

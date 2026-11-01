@@ -73,6 +73,23 @@ pub trait SourceAdapter {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn codex_attachment_transport_is_not_displayed_as_chat_text() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let text = "# Files mentioned by the user:\n## image.png: C:/example/image.png\nImage attachment: true\n## My request:\nExplain this screenshot.\n<image name=[Image #1] path=\"C:/example/image.png\"> </image>";
+        let bytes = include_bytes!("../../../fixtures/codex/2026-11-02/image-wrapper.jsonl");
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(
+            batch.chat_events[0].content,
+            "Explain this screenshot.\n\n[Image attachment: preview unavailable in imported history]"
+        );
+        let mut legacy = batch.chat_events;
+        legacy[0].content = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert_eq!(
+            super::codex::clean_stored_conversation(legacy)[0].content,
+            "Explain this screenshot.\n\n[Image attachment: preview unavailable in imported history]"
+        );
+    }
+    #[test]
     fn native_titles_are_retained_by_supported_transcript_adapters() {
         use super::{FileCtx, SourceAdapter};
         let cases: Vec<(Box<dyn SourceAdapter>, &[u8])> = vec![

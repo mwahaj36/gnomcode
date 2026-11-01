@@ -8,7 +8,7 @@
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter, claude::fallback_id_from_path};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::Value;
-use spawnt_core::redact::clean_user_text;
+use spawnt_core::redact::clean_user_message;
 use spawnt_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
     SessionState, Surface, TrustLevel, UsageRecord,
@@ -201,9 +201,9 @@ impl SourceAdapter for CodexAdapter {
                             })
                             .map(|text| {
                                 if role == spawnt_core::ChatRole::User {
-                                    clean_user_text(text)
+                                    clean_user_message(text)
                                 } else {
-                                    text
+                                    text.to_owned()
                                 }
                             })
                             .filter(|text| !text.is_empty())
@@ -365,7 +365,7 @@ pub fn clean_stored_conversation(
 ) -> Vec<spawnt_core::ChatEvent> {
     for event in &mut events {
         if event.session_id.starts_with("codex:") && event.role == spawnt_core::ChatRole::User {
-            event.content = clean_user_text(&event.content).to_owned();
+            event.content = clean_user_message(&event.content);
         }
     }
     events
