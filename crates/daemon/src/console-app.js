@@ -1200,7 +1200,7 @@ function cycleTheme() {
       const button=document.getElementById('auth-signin-button'),password=document.getElementById('auth-password'),status=document.getElementById('auth-pair-status');
       button.disabled=true;button.textContent='Signing in...';status.hidden=false;
       try{
-        if(!await confirmAccountAccess())return;
+        if(!await confirmAccountAccess()){status.hidden=true;return;}
         await apiJson('/api/v1/auth/signin',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('auth-email').value.trim(),password:password.value,remote_access_confirmed:true}),signal:AbortSignal.timeout(15000)});
         password.value='';status.textContent='Signed in. Your desktop will appear in Devices.';await checkAuthSession();
       }catch{status.textContent='Sign-in failed. Check your email, password and connection. Browser accounts can use the connection option below.';}
@@ -1232,7 +1232,7 @@ function cycleTheme() {
           }
         }
 
-        if(!await confirmAccountAccess())return;
+        if(!await confirmAccountAccess()){status.hidden=true;return;}
         sessionData.remote_access_confirmed=true;
         const res = await fetch('/api/v1/auth/session', {
           method: 'POST', signal: AbortSignal.timeout(30000),
