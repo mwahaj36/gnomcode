@@ -1,0 +1,2 @@
+{"type":"session_meta","timestamp":"2026-10-26T10:00:00Z","payload":{"id":"id_0001","cwd":"/workspace/sample-project"}}
+{"type":"event_msg","timestamp":"2026-10-26T10:00:01Z","ordinal":1,"payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"output_tokens":20}}}}
