@@ -1,5 +1,5 @@
 {
-  "name": "spawnt-desktop",
+  "name": "gnomcode-desktop",
   "private": true,
   "version": "0.9.0",
   "main": "dist/main.js",
@@ -30,7 +30,7 @@
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.72.1"
   },
-  "description": "Spawnt local agent desktop",
+  "description": "Gnomcode local agent desktop",
   "author": "Wahaj",
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1"

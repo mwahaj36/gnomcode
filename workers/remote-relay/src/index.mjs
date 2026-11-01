@@ -1,5 +1,5 @@
 /**
- * Zero-Knowledge E2EE Relay Worker for Spawnt Remote Companion.
+ * Zero-Knowledge E2EE Relay Worker for Gnomcode Remote Companion.
  * Forwards sealed ciphertext frames between paired desktop and mobile peers.
  * Never inspects or stores message content.
  */
@@ -9,7 +9,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return new Response(JSON.stringify({ ok: true, service: 'spawnt-remote-relay' }), {
+      return new Response(JSON.stringify({ ok: true, service: 'gnomcode-remote-relay' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }

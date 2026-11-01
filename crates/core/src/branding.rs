@@ -28,7 +28,7 @@ mod tests {
     #[test]
     fn bundled_branding_is_valid_and_uses_an_https_origin() {
         let branding = super::branding().expect("valid bundled branding");
-        assert_eq!(branding.product_name, "Spawnt");
+        assert_eq!(branding.product_name, "Gnomcode");
         assert!(branding.base_url.starts_with("https://"));
         assert!(!branding.base_url.ends_with('/'));
     }

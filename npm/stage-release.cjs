@@ -14,7 +14,7 @@ if (!eula.length || /\bdraft\b/i.test(eula.toString('utf8')) || !notices.length)
   throw new Error('An approved EULA and non-empty third-party notices are required.');
 }
 const binaries = targets.map(target => {
-  const name = target.startsWith('win32-') ? 'spawnt.exe' : 'spawnt';
+  const name = target.startsWith('win32-') ? 'gnomcode.exe' : 'gnomcode';
   const file = path.join(artifactRoot, target, name);
   const bytes = fs.readFileSync(file);
   const header = bytes.subarray(0, 4).toString('hex');
@@ -29,6 +29,6 @@ for (const { target, name, file } of binaries) {
   fs.copyFileSync(eulaFile, path.join(dest, 'EULA.txt'));
   fs.copyFileSync(noticesFile, path.join(dest, 'THIRD_PARTY_NOTICES.html'));
 }
-fs.copyFileSync(eulaFile, path.join(__dirname, 'spawnt', 'EULA.txt'));
-fs.copyFileSync(noticesFile, path.join(__dirname, 'spawnt', 'THIRD_PARTY_NOTICES.html'));
-console.log('Staged seven Spawnt npm platform packages and the shim.');
+fs.copyFileSync(eulaFile, path.join(__dirname, 'gnomcode', 'EULA.txt'));
+fs.copyFileSync(noticesFile, path.join(__dirname, 'gnomcode', 'THIRD_PARTY_NOTICES.html'));
+console.log('Staged seven Gnomcode npm platform packages and the shim.');

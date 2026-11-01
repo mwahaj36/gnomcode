@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug, parsing error, or platform issue in Spawnt
+description: Report a bug, parsing error, or platform issue in Gnomcode
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -44,8 +44,8 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `spawnt doctor`
+      label: Output of `gnomcode doctor`
       render: shell
-      placeholder: Paste the output of `spawnt doctor` here...
+      placeholder: Paste the output of `gnomcode doctor` here...
     validations:
       required: false

@@ -2,7 +2,7 @@
 //! of agent logs into the SQLite store (`SPEC §3.5`, `§4.4`).
 
 use chrono::Utc;
-use spawnt_adapters::{
+use gnomcode_adapters::{
     FileCtx, SourceAdapter,
     aider::AiderAdapter,
     antigravity::{AntigravityAdapter, extract_conversation_id},
@@ -12,12 +12,12 @@ use spawnt_adapters::{
     cursor::CursorAdapter,
     gemini::GeminiAdapter,
 };
-use spawnt_core::{AgentId, Session};
-use spawnt_platform::{
+use gnomcode_core::{AgentId, Session};
+use gnomcode_platform::{
     AgentRoot, detect_local_subscriptions, discover_agent_roots, read_antigravity_fallback_model,
     read_from_offset,
 };
-use spawnt_store::{Database, SourceCheckpoint};
+use gnomcode_store::{Database, SourceCheckpoint};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -28,10 +28,10 @@ use thiserror::Error;
 pub enum Error {
     /// Platform reading error.
     #[error("platform error: {0}")]
-    Platform(#[from] spawnt_platform::Error),
+    Platform(#[from] gnomcode_platform::Error),
     /// Store operation error.
     #[error("store error: {0}")]
-    Store(#[from] spawnt_store::Error),
+    Store(#[from] gnomcode_store::Error),
     /// Standard I/O error.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -280,7 +280,7 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
 }
 
 fn import_native_titles(db: &Database, agent: AgentId, bytes: &[u8]) -> Result<(), Error> {
-    for (id, title) in spawnt_adapters::titles::native_session_titles(agent, bytes) {
+    for (id, title) in gnomcode_adapters::titles::native_session_titles(agent, bytes) {
         db.update_native_session_title(&id, &title)?;
     }
     Ok(())
@@ -319,7 +319,7 @@ fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error
 mod tests {
     #[test]
     fn legacy_markdown_repairs_from_native_source_without_rewinding_checkpoint() {
-        const CHILD: &str = "SPAWNT_TEST_CHAT_REPAIR";
+        const CHILD: &str = "GNOMCODE_TEST_CHAT_REPAIR";
         if std::env::var_os(CHILD).is_none() {
             let root = tempfile::tempdir().expect("root");
             let status=std::process::Command::new(std::env::current_exe().expect("test binary"))
@@ -437,11 +437,11 @@ mod tests {
     }
     #[test]
     fn codex_chat_batch_persists_and_replays_without_duplicates() {
-        use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        use gnomcode_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");
         let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
-        let mut db = spawnt_store::Database::open_in_memory().expect("database");
-        let checkpoint = spawnt_store::SourceCheckpoint {
+        let mut db = gnomcode_store::Database::open_in_memory().expect("database");
+        let checkpoint = gnomcode_store::SourceCheckpoint {
             file_path: "synthetic".into(),
             last_read_offset: bytes.len() as u64,
             file_size: bytes.len() as u64,
@@ -462,16 +462,16 @@ mod tests {
         }
         let chat = db.get_session_chat("codex:id_0001", None).expect("chat");
         assert_eq!(chat.len(), 2);
-        assert_eq!(chat[0].role, spawnt_core::ChatRole::User);
-        assert_eq!(chat[1].role, spawnt_core::ChatRole::Assistant);
+        assert_eq!(chat[0].role, gnomcode_core::ChatRole::User);
+        assert_eq!(chat[1].role, gnomcode_core::ChatRole::Assistant);
     }
     #[test]
     fn deleted_chat_stays_deleted_after_source_replay() {
-        use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        use gnomcode_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");
         let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
-        let mut db = spawnt_store::Database::open_in_memory().expect("database");
-        let checkpoint = spawnt_store::SourceCheckpoint {
+        let mut db = gnomcode_store::Database::open_in_memory().expect("database");
+        let checkpoint = gnomcode_store::SourceCheckpoint {
             file_path: "synthetic".into(),
             last_read_offset: bytes.len() as u64,
             file_size: bytes.len() as u64,
@@ -507,8 +507,8 @@ mod tests {
     }
 
     use super::{complete_jsonl_prefix_len, scan_log_files};
-    use spawnt_core::AgentId;
-    use spawnt_platform::AgentRoot;
+    use gnomcode_core::AgentId;
+    use gnomcode_platform::AgentRoot;
     use std::fs;
     use tempfile::tempdir;
 

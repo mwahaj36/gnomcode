@@ -1,13 +1,13 @@
 {
-  "name": "spawnt-remote-relay",
+  "name": "gnomcode-remote-relay",
   "version": "0.9.0",
-  "description": "Zero-knowledge end-to-end encrypted relay for Spawnt remote companion.",
+  "description": "Zero-knowledge end-to-end encrypted relay for Gnomcode remote companion.",
   "main": "src/index.mjs",
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },
   "keywords": [
-    "spawnt",
+    "gnomcode",
     "relay",
     "e2ee",
     "websocket"

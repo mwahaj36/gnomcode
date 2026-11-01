@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn agy_standard_install_works_without_path_entry() {
-        const CHILD: &str = "SPAWNT_TEST_AGY_INSTALL";
+        const CHILD: &str = "GNOMCODE_TEST_AGY_INSTALL";
         if let Some(root) = std::env::var_os(CHILD) {
             let root = std::path::PathBuf::from(root);
             let expected = if cfg!(windows) {
@@ -159,7 +159,7 @@ mod tests {
                 agent_command("agy"),
                 (expected.to_string_lossy().into_owned(), vec![])
             );
-            assert!(!executable_available("missing-spawnt-test-executable"));
+            assert!(!executable_available("missing-gnomcode-test-executable"));
             return;
         }
         let root = tempfile::tempdir().expect("install root");
@@ -200,7 +200,7 @@ mod tests {
         ));
         assert!(!executable_in(
             current.parent().expect("parent"),
-            "missing-spawnt-test-executable"
+            "missing-gnomcode-test-executable"
         ));
     }
 

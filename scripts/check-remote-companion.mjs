@@ -47,7 +47,7 @@ function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=e
 };desktop.onclose=()=>{if(!finished && connection===desktop)reconnectTimer=setTimeout(()=>{desktop=new WebSocket(`${relay}/${room}?role=desktop`);desktop.binaryType='arraybuffer';bindDesktop();},200);};
 }
 bindDesktop();
-const browser=await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
+const browser=await chromium.launch(process.env.GNOMCODE_TEST_BROWSER ? {executablePath:process.env.GNOMCODE_TEST_BROWSER} : {});
 try {
   const page=await browser.newPage({viewport:{width:390,height:844}});
   page.setDefaultTimeout(15000);
@@ -69,7 +69,7 @@ try {
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(singular?value:value?[value]:[])});
   });
   await page.route('**/rest/v1/spawnt_desktops**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:desktopId,name:'Test desktop',remote_enabled:true,last_seen_at:new Date().toISOString()},{id:'e'.repeat(32),name:'Second desktop',remote_enabled:true,last_seen_at:new Date().toISOString()}])}));
-  await page.route('**/rest/v1/spawnt_sync_state**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({live_snapshot:{sessions:[]}})}));
+  await page.route('**/rest/v1/gnomcode_sync_state**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({live_snapshot:{sessions:[]}})}));
   await page.route('**/auth/v1/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'})}));
   await page.addInitScript(({project,owner})=>{
     localStorage.setItem(`sb-${project}-auth-token`,JSON.stringify({access_token:'test-access',refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'}}));
@@ -85,10 +85,10 @@ try {
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'no code confirmation exists');
   await page.getByText('The login flow is ready for review.').waitFor();
   await page.evaluate(owner=>new Promise((resolve,reject)=>{
-    const request=indexedDB.open('spawnt-remote-device',1);
+    const request=indexedDB.open('gnomcode-remote-device',1);
     request.onsuccess=()=>{const db=request.result;const tx=db.transaction('devices','readwrite'),store=tx.objectStore('devices');const get=store.getAll();get.onsuccess=()=>{const saved=get.result.find(value=>value.offer.owner_id===owner);const old='0'.repeat(32);store.put({...saved,offer:{...saved.offer,desktop_id:old,room:old,request_id:old}},`${owner}:${old}`);};tx.oncomplete=()=>{db.close();resolve();};tx.onerror=reject;};request.onerror=reject;
   }),owner);
-  await page.evaluate(()=>sessionStorage.removeItem('spawnt-pairing-offer'));
+  await page.evaluate(()=>sessionStorage.removeItem('gnomcode-pairing-offer'));
   await page.getByRole('button',{name:'Desktop connection',exact:true}).click();
   await page.getByRole('link',{name:'Dashboard',exact:true}).click();
   for(let attempt=0;attempt<3;attempt++){
@@ -125,7 +125,7 @@ try {
   await page.screenshot({path:new URL('../.tmp/remote-verification/model-picker-390.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   modelCatalogError=true;
   await page.getByRole('button',{name:'Refresh models',exact:true}).click();
-  await page.getByText('Your desktop could not provide a model list. Update Spawnt on your desktop, then refresh.',{exact:true}).waitFor();
+  await page.getByText('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.',{exact:true}).waitFor();
   assert.equal(await page.locator('#remote-prompt').inputValue(),'Draft survives provider selection','catalog errors do not cancel the prompt');
   modelCatalogError=false;
   await page.getByRole('button',{name:'Refresh models',exact:true}).click();
@@ -140,7 +140,7 @@ try {
   assert.ok(streamBox.width >= chatWidth - 1,`phone bubbles use the available conversation width (${streamBox.width}/${chatWidth})`);
   await page.locator('.sp-chat-notice').filter({hasText:'Model active: gpt-6.1-sol'}).waitFor();
   assert.doesNotMatch(await page.locator('.sp-remote-chat').textContent(),/Command output/);
-  assert.equal(await page.locator('.sp-chat-user').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(255, 37, 68)','phone user bubbles use Spawnt red');
+  assert.equal(await page.locator('.sp-chat-user').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(255, 37, 68)','phone user bubbles use Gnomcode red');
   assert.equal(await page.locator('.sp-remote-chat').evaluate(element=>[...element.querySelectorAll('.sp-chat-body,pre,.sp-chat-table')].every(node=>node.scrollWidth<=node.clientWidth+1)),true,'phone bubble content never scrolls horizontally');
   await page.locator('#remote-prompt').fill('Review synthetic input\nThen run checks');
   await page.waitForFunction(()=>!document.querySelector('button[type="submit"]:disabled') || [...document.querySelectorAll('button')].some(button=>button.textContent==='Send'&&!button.disabled));
@@ -211,7 +211,7 @@ try {
   assert.equal(await page.getByText('Actions',{exact:true}).count(),0);
   await page.screenshot({path:new URL('../.tmp/remote-verification/recovered-chat.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   assert.ok(resumes>=1,'reload authenticates saved nonextractable device trust');
-  assert.equal(await page.evaluate(key=>new Promise((resolve,reject)=>{const r=indexedDB.open('spawnt-remote-device',1);r.onsuccess=()=>{const db=r.result;const q=db.transaction('devices').objectStore('devices').get(key);q.onsuccess=()=>{resolve(q.result?.proofKey?.extractable);db.close();};q.onerror=reject;};r.onerror=reject;}),`${owner}:${desktopId}`),false,'remembered proof key is not exportable');
+  assert.equal(await page.evaluate(key=>new Promise((resolve,reject)=>{const r=indexedDB.open('gnomcode-remote-device',1);r.onsuccess=()=>{const db=r.result;const q=db.transaction('devices').objectStore('devices').get(key);q.onsuccess=()=>{resolve(q.result?.proofKey?.extractable);db.close();};q.onerror=reject;};r.onerror=reject;}),`${owner}:${desktopId}`),false,'remembered proof key is not exportable');
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'reload does not ask for pairing');
   await page.evaluate(()=>{window.testSockets.at(-1).close();document.dispatchEvent(new Event('visibilitychange'));setTimeout(()=>document.dispatchEvent(new Event('visibilitychange')),10);});
   await page.locator('.sp-remote.is-paired').waitFor();

@@ -7,7 +7,7 @@ const http = require('node:http');
 const { readDaemon } = require('../dist/daemon-client.js');
 
 test('discovers only a healthy daemon with valid local metadata', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'spawnt-daemon-test-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gnomcode-daemon-test-'));
   const token = 'a'.repeat(64);
   const server = http.createServer((request, response) => {
     response.writeHead(request.url === '/health' && request.headers.authorization === `Bearer ${token}` ? 200 : 401);
@@ -26,4 +26,19 @@ test('discovers only a healthy daemon with valid local metadata', async () => {
     await new Promise(resolve => server.close(resolve));
     await fs.rm(dir, {recursive: true, force: true});
   }
+});
+
+
+test('data home preserves existing history and honors the new override first', async () => {
+  const { dataHome } = require('../dist/daemon-client.js');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'gnomcode-home-test-'));
+  try {
+    assert.equal(dataHome({}, root), path.join(root, '.gnomcode'));
+    await fs.mkdir(path.join(root, '.spawnt'));
+    assert.equal(dataHome({}, root), path.join(root, '.spawnt'));
+    await fs.mkdir(path.join(root, '.gnomcode'));
+    assert.equal(dataHome({}, root), path.join(root, '.spawnt'));
+    assert.equal(dataHome({SPAWNT_HOME:' /legacy '}, root), '/legacy');
+    assert.equal(dataHome({GNOMCODE_HOME:' /new ',SPAWNT_HOME:'/legacy'}, root), '/new');
+  } finally { await fs.rm(root, {recursive:true,force:true}); }
 });

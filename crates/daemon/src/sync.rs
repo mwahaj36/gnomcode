@@ -7,11 +7,11 @@
 //! - HMAC-SHA256 privacy-preserving project key generation (`SPEC §3.15.D`).
 
 use chrono::{DateTime, Utc};
+use gnomcode_store::Database;
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::Sha256;
-use spawnt_store::Database;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -92,7 +92,7 @@ pub fn hash_project_key(org_salt: &[u8], canonical_project_name: &str) -> String
     format!("proj_{hex}")
 }
 
-fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
+fn build_remote_snapshot(db: &Database) -> Result<Value, gnomcode_store::Error> {
     let today = db.generate_usage_report_timeline("today", None, None)?;
     let week = db.generate_usage_report_timeline("7d", None, None)?;
     let month = db.generate_usage_report_timeline("30d", None, None)?;
@@ -192,7 +192,7 @@ async fn poll_devices(
     db: &Arc<Mutex<Database>>,
     remote: &crate::remote::RemoteManager,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let path = spawnt_platform::spawnt_home().join("session.json");
+    let path = gnomcode_platform::gnomcode_home().join("session.json");
     if let Some(auth) = read_cloud_auth(client, &path).await? {
         remote.devices.poll(client, &auth, db.clone()).await?;
     } else {
@@ -205,7 +205,7 @@ async fn push_snapshot(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let session_path = spawnt_platform::spawnt_home().join("session.json");
+    let session_path = gnomcode_platform::gnomcode_home().join("session.json");
     let Some(CloudAuth {
         user_id,
         access_token,
@@ -225,7 +225,7 @@ async fn push_snapshot(
     snapshot["remote_offer"] = Value::Null;
     client
         .post(format!(
-            "{base_url}/rest/v1/spawnt_sync_state?on_conflict=user_id"
+            "{base_url}/rest/v1/gnomcode_sync_state?on_conflict=user_id"
         ))
         .header("apikey", &public_key)
         .bearer_auth(&access_token)
@@ -256,7 +256,7 @@ async fn credential_lock(path: &std::path::Path) -> Result<std::fs::File, std::i
     }
     let lock_path = path.with_extension("json.lock");
     for _ in 0..150 {
-        match spawnt_platform::open_exclusive_lock(&lock_path) {
+        match gnomcode_platform::open_exclusive_lock(&lock_path) {
             Ok(file) => return Ok(file),
             Err(error)
                 if error.kind() == std::io::ErrorKind::WouldBlock
@@ -285,7 +285,10 @@ pub(crate) async fn save_cloud_session(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _guard = AUTH_REFRESH_LOCK.lock().await;
     let _file_guard = credential_lock(path).await?;
-    spawnt_platform::write_private_file(path, &serde_json::to_vec(&stored_auth_session(session))?)?;
+    gnomcode_platform::write_private_file(
+        path,
+        &serde_json::to_vec(&stored_auth_session(session))?,
+    )?;
     Ok(())
 }
 
@@ -355,7 +358,7 @@ pub(crate) async fn read_cloud_auth(
                 .unwrap_or(3600);
             session["expires_at"] = json!(chrono::Utc::now().timestamp() + expires_in);
         }
-        spawnt_platform::write_private_file(
+        gnomcode_platform::write_private_file(
             session_path,
             &serde_json::to_vec(&stored_auth_session(&session))?,
         )?;
@@ -413,9 +416,9 @@ pub(crate) async fn validate_session(
 }
 
 pub(crate) fn cloud_config() -> (String, String) {
-    let url = std::env::var("SPAWNT_SUPABASE_URL")
+    let url = std::env::var("GNOMCODE_SUPABASE_URL")
         .unwrap_or_else(|_| obfstr::obfstr!("https://jjnuxngvhuvxkxrfmnqx.supabase.co").to_owned());
-    let key = std::env::var("SPAWNT_SUPABASE_KEY").unwrap_or_else(|_| {
+    let key = std::env::var("GNOMCODE_SUPABASE_KEY").unwrap_or_else(|_| {
         obfstr::obfstr!("sb_publishable_o2ZiGak7RHq_cmL81BOeZQ_g7JJeyCI").to_owned()
     });
     (url.trim_end_matches('/').to_owned(), key)
@@ -436,7 +439,7 @@ mod tests {
 
     #[test]
     fn project_key_hashing_is_deterministic_and_prefixes_proj() {
-        let salt = b"spawnt-test-org-salt-123456";
+        let salt = b"gnomcode-test-org-salt-123456";
         let h1 = hash_project_key(salt, "github.com/mwahaj36/spawnt");
         let h2 = hash_project_key(salt, "github.com/mwahaj36/spawnt");
         let h3 = hash_project_key(salt, "github.com/other/project");
@@ -450,8 +453,8 @@ mod tests {
     #[test]
     fn remote_snapshot_reports_total_beyond_the_session_limit() {
         use chrono::Utc;
-        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
-        use spawnt_store::{Database, SourceCheckpoint};
+        use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
+        use gnomcode_store::{Database, SourceCheckpoint};
 
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/test/project", None);
@@ -491,8 +494,8 @@ mod tests {
     #[test]
     fn remote_snapshot_contains_no_local_project_path_or_pairing_token() {
         use chrono::Utc;
-        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
-        use spawnt_store::{Database, SourceCheckpoint};
+        use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
+        use gnomcode_store::{Database, SourceCheckpoint};
 
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/private/client/source", None);
@@ -516,14 +519,14 @@ mod tests {
             fingerprint: "test".to_owned(),
             last_ingested_at: Utc::now(),
         };
-        let quota = spawnt_core::QuotaSnapshot {
+        let quota = gnomcode_core::QuotaSnapshot {
             provider: "codex".into(),
             limit_id: "pool".into(),
-            window: spawnt_core::QuotaWindow::FiveHour,
+            window: gnomcode_core::QuotaWindow::FiveHour,
             used_pct: 10.0,
             resets_at: None,
             plan: None,
-            basis: spawnt_core::TrustLevel::Exact,
+            basis: gnomcode_core::TrustLevel::Exact,
             observed_at: Utc::now(),
         };
         db.commit_batch(&[project], &[session], &[], &[], &[quota], &checkpoint)

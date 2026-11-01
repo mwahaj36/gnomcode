@@ -1,5 +1,5 @@
 ---
-name: spawnt
+name: gnomcode
 description: Restrained mission control for AI coding agents.
 colors:
   primary: "#ff2544"
@@ -100,13 +100,13 @@ components:
     padding: "16px 20px"
 ---
 
-# Design System: spawnt
+# Design System: gnomcode
 
 ## Overview
 
 **Creative North Star: "Mission control"**
 
-Spawnt keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.
+Gnomcode keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.
 
 Marketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in [the console surface brief](docs/design/console-workspace.md); product and security behavior remain governed by [SPEC](docs/SPEC.md).
 
@@ -119,11 +119,11 @@ Marketing keeps its established editorial scale and detaching navigation. Applic
 
 ## Colors
 
-The palette pairs a vivid red accent with cool neutral canvases, surfaces, borders and text. `web/app/spawnt-tokens.css` is the runtime source; the frontmatter records its current values.
+The palette pairs a vivid red accent with cool neutral canvases, surfaces, borders and text. `web/app/gnomcode-tokens.css` is the runtime source; the frontmatter records its current values.
 
 ### Primary
 
-- **Spawnt red** (`primary`) identifies primary actions, attention and user chat bubbles. Text on red uses `on-primary` in both themes.
+- **Gnomcode red** (`primary`) identifies primary actions, attention and user chat bubbles. Text on red uses `on-primary` in both themes.
 - **Readable accent text** (`primary-text-dark` / `primary-text-light`) is the theme-specific red used for small links and accent labels. Do not substitute the fill color for small text on light backgrounds.
 
 ### Secondary
@@ -174,7 +174,7 @@ Flat surfaces and hairlines provide the default depth. Floating menus and dialog
 
 Controls use the restrained `control` radius, replacing the old square-control guidance. They are neither sharp boxes nor pills. Code spans use the smaller code radius. Composers and dialogs use the panel radius; chat bubbles use larger corners with one small trailing corner. Grid cells, full-width dividers and reporting rows keep straight edges. Borders remain thin (1px).
 
-The canonical logo stays an unframed solid triangle-and-square mark in `currentColor`, from `web/public/spawnt-mark.svg`. Windows app and installer icons center that mark at 0.65x on the opaque dark canvas; the separate full-size tray icon retains its badge appearance. Small Windows ICO frames use DIB encoding for the existing tray renderer. These platform assets preserve their established geometry.
+The canonical logo stays an unframed solid triangle-and-square mark in `currentColor`, from `web/public/gnomcode-mark.svg`. Windows app and installer icons center that mark at 0.65x on the opaque dark canvas; the separate full-size tray icon retains its badge appearance. Small Windows ICO frames use DIB encoding for the existing tray renderer. These platform assets preserve their established geometry.
 
 ## Components
 
@@ -200,7 +200,7 @@ Reporting uses hairline grids, divided rows and truthful unavailable states. Tru
 
 User messages align right in red with dark text; agent replies align left on a neutral gray surface. Submission immediately adds the optimistic user bubble and a gray agent waiting bubble. Reconcile that feedback with recorded history without duplicating messages; failed delivery preserves the draft. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
 
-The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Selecting a model requests the change immediately within the same visible conversation. Distinguish the request from agent-observed confirmation using centered status text and a centered timestamp, without side rules. Keep CLI commands, session IDs and generated continuation briefings out of ordinary chat. Preserve the title, history, selection and draft across provider switches. Saved supported chats offer Resume conversation on desktop and mobile; mobile requires the laptop and Spawnt online. Conversation headers show compact remaining-limit readings with trust labels, refreshed with incoming observations; unknown and older readings remain explicit. Handoff also supports a workspace outside Git. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
+The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Selecting a model requests the change immediately within the same visible conversation. Distinguish the request from agent-observed confirmation using centered status text and a centered timestamp, without side rules. Keep CLI commands, session IDs and generated continuation briefings out of ordinary chat. Preserve the title, history, selection and draft across provider switches. Saved supported chats offer Resume conversation on desktop and mobile; mobile requires the laptop and Gnomcode online. Conversation headers show compact remaining-limit readings with trust labels, refreshed with incoming observations; unknown and older readings remain explicit. Handoff also supports a workspace outside Git. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
 
 ### Profile, pairing and feedback
 
@@ -208,7 +208,7 @@ Profile uses open sections and aligned action groups. Advanced settings use disc
 
 Devices is one account-wide screen. Before linking a native app through either sign-in or browser-account transfer, show the existing confirmation modal explaining that every current and future device signed into the account can access this native app's available conversations and supported controls. Cancel submits nothing. After confirmation, phones and browsers connect automatically without approval steps or code fields. Existing links require this new confirmation before broader access is enabled. Devices shows each native app's availability and can disable that host for every signed-in device. Re-enabling on native uses the same disclosure. Approval does not expire with updates or inactivity. Keep connection availability separate from account permission, preserve drafts during bounded recovery, and never expose credentials or proof material.
 
-Remote history without a live Spawnt-controlled agent offers Resume conversation where supported, otherwise Read-only history and New conversation. Mobile chat uses direct conversation-list, new-chat and desktop-connection controls; no generic Actions menu. Desktop connection and model selection use separate labeled bottom sheets with close controls. Keep model selection beside the composer. During reconnection, retain visible chat and the draft, disable delivery, and offer Try again plus Dashboard/Profile navigation without requiring the user to forget their desktop. The desktop-folder dialog scrolls its directory list independently while Cancel and Use this folder remain in a fixed footer.
+Remote history without a live Gnomcode-controlled agent offers Resume conversation where supported, otherwise Read-only history and New conversation. Mobile chat uses direct conversation-list, new-chat and desktop-connection controls; no generic Actions menu. Desktop connection and model selection use separate labeled bottom sheets with close controls. Keep model selection beside the composer. During reconnection, retain visible chat and the draft, disable delivery, and offer Try again plus Dashboard/Profile navigation without requiring the user to forget their desktop. The desktop-folder dialog scrolls its directory list independently while Cancel and Use this folder remain in a fixed footer.
 
 Confirmation dialogs describe the action and consequence, focus Cancel initially, use an explicit action label and cancel on Escape. Ordinary feedback uses a dismissible app notice rather than a blocking browser alert.
 

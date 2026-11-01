@@ -1,4 +1,4 @@
-# Spawnt engineering session log
+# Gnomcode engineering session log
 
 Session records have moved to [docs/sessions](sessions/README.md). Each session has its own file; the index preserves access to every historical entry.
 

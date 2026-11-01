@@ -1,14 +1,14 @@
-Spawnt End User License Agreement
+Gnomcode End User License Agreement
 
 Copyright (c) 2026 Wahaj. All rights reserved.
 
 License
 
-Wahaj grants you a limited, non-exclusive license to install and use Spawnt binaries for personal or business purposes. Local features are free and do not require an account. Ownership of Spawnt remains with its rights holder. Third-party components are licensed under their accompanying notices.
+Wahaj grants you a limited, non-exclusive license to install and use Gnomcode binaries for personal or business purposes. Local features are free and do not require an account. Ownership of Gnomcode remains with its rights holder. Third-party components are licensed under their accompanying notices.
 
 Distribution and modification
 
-You may obtain Spawnt through its authorized distribution channels. Do not redistribute or modify Spawnt binaries without the rights holder's permission, except where applicable law permits. This agreement does not restrict rights granted by third-party component licenses or rights that cannot legally be waived.
+You may obtain Gnomcode through its authorized distribution channels. Do not redistribute or modify Gnomcode binaries without the rights holder's permission, except where applicable law permits. This agreement does not restrict rights granted by third-party component licenses or rights that cannot legally be waived.
 
 Optional services
 
@@ -16,12 +16,12 @@ Remote access, Teams, and other optional services may be subject to separate ter
 
 Privacy
 
-Spawnt is designed to process local agent logs on your device. Optional network features and their data handling are described in the privacy policy. The current opt-in metadata sync is not end-to-end encrypted.
+Gnomcode is designed to process local agent logs on your device. Optional network features and their data handling are described in the privacy policy. The current opt-in metadata sync is not end-to-end encrypted.
 
 Warranty and liability
 
-Spawnt is provided as-is to the extent allowed by applicable law. The rights holder does not guarantee uninterrupted operation, compatibility with third-party agents, or accuracy of estimates. Nothing in this agreement excludes rights or remedies that applicable law does not permit a license to exclude.
+Gnomcode is provided as-is to the extent allowed by applicable law. The rights holder does not guarantee uninterrupted operation, compatibility with third-party agents, or accuracy of estimates. Nothing in this agreement excludes rights or remedies that applicable law does not permit a license to exclude.
 
 Contact
 
-For questions about Spawnt and this agreement, contact Wahaj at mwahaj25@gmail.com.
+For questions about Gnomcode and this agreement, contact Wahaj at mwahaj25@gmail.com.

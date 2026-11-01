@@ -6,7 +6,7 @@ const path = require('node:path');
 const { renderNotices } = require('../desktop-notices.cjs');
 
 test('notices include and escape the actual production dependency license', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spawnt-notices-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gnomcode-notices-'));
   try {
     fs.writeFileSync(path.join(dir,'package.json'), JSON.stringify({name:'example<unsafe>',version:'1.0.0',license:'MIT'}));
     assert.throws(() => renderNotices([dir]));
