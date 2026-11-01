@@ -241,7 +241,10 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
         ) {
             tracing::warn!("failed to commit batch for {path_str}: {e}");
         }
+        import_native_titles(db, file.agent, &read_result.bytes[..parsed_len])?;
     }
+
+    refresh_native_titles(db, &roots)?;
 
     let detected_subs = detect_local_subscriptions();
     let _ = db.auto_populate_subscriptions(
@@ -252,8 +255,97 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     Ok(total_records_ingested)
 }
 
+fn import_native_titles(db: &Database, agent: AgentId, bytes: &[u8]) -> Result<(), Error> {
+    for (id, title) in spawnt_adapters::titles::native_session_titles(agent, bytes) {
+        db.update_native_session_title(&id, &title)?;
+    }
+    Ok(())
+}
+
+fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error> {
+    for root in roots.iter().filter(|root| root.exists) {
+        let paths = match root.agent {
+            AgentId::Codex => root
+                .path
+                .parent()
+                .map(|parent| vec![parent.join(obfstr::obfstr!("session_index.jsonl"))])
+                .unwrap_or_default(),
+            AgentId::ClaudeCode => fs::read_dir(&root.path)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|entry| entry.path().is_dir())
+                .map(|entry| entry.path().join(obfstr::obfstr!("sessions-index.json")))
+                .collect(),
+            _ => Vec::new(),
+        };
+        for path in paths {
+            if !fs::metadata(&path).is_ok_and(|metadata| metadata.len() <= 8 * 1024 * 1024) {
+                continue;
+            }
+            if let Ok(read) = read_from_offset(&path, 0) {
+                import_native_titles(db, root.agent, &read.bytes)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_index_renames_refresh_without_reingesting_or_touching_activity() {
+        use super::*;
+        let batch = CodexAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl"),
+        );
+        let mut db = Database::open_in_memory().expect("database");
+        db.commit_batch_with_chat(
+            &batch.projects,
+            &batch.sessions,
+            &batch.usage_records,
+            &batch.activity_events,
+            &batch.quota_snapshots,
+            &SourceCheckpoint {
+                file_path: "fixture".into(),
+                last_read_offset: 1,
+                file_size: 1,
+                fingerprint: "unchanged".into(),
+                last_ingested_at: Utc::now(),
+            },
+            &batch.chat_events,
+        )
+        .expect("fixture");
+        let source = &batch.sessions[0];
+        let dir = tempfile::tempdir().expect("temp");
+        let sessions = dir.path().join("sessions");
+        fs::create_dir(&sessions).expect("sessions directory");
+        let roots = [AgentRoot {
+            agent: AgentId::Codex,
+            path: sessions,
+            exists: true,
+        }];
+        let raw_id = source.id.strip_prefix("codex:").expect("native id");
+        for name in ["Original native title", "Renamed in the app"] {
+            fs::write(
+                dir.path().join("session_index.jsonl"),
+                format!(r#"{{"id":"{raw_id}","thread_name":"{name}"}}"#),
+            )
+            .expect("index");
+            refresh_native_titles(&db, &roots).expect("refresh names");
+            let stored = db.list_active_sessions(10).expect("sessions");
+            assert_eq!(stored[0].title.as_deref(), Some(name));
+            assert_eq!(stored[0].last_event_at, source.last_event_at);
+            assert_eq!(
+                db.get_checkpoint("fixture")
+                    .expect("checkpoint")
+                    .expect("present")
+                    .fingerprint,
+                "unchanged"
+            );
+        }
+    }
     #[test]
     fn codex_chat_batch_persists_and_replays_without_duplicates() {
         use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
