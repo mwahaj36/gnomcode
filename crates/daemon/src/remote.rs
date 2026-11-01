@@ -601,6 +601,9 @@ fn chunk_response(value: &Value) -> Result<Vec<Value>, serde_json::Error> {
 
 async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     match request.get("type").and_then(Value::as_str) {
+        Some("models") => {
+            json!({"type":"models","providers":crate::model_catalog::discover().await})
+        }
         Some("workspaces") => {
             let path = request
                 .get("path")
@@ -794,7 +797,8 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             if session_id.len() > 128 || model.len() > 128 {
                 return json!({"type":"error","message":"Invalid switch request"});
             }
-            let prepared = crate::prepare_model_change(db, session_id, model, None).await;
+            let agent = request.get("agent").and_then(Value::as_str);
+            let prepared = crate::prepare_model_change(db, session_id, model, agent).await;
             let Ok(prepared) = prepared else {
                 return json!({"type":"error","message":"Could not prepare model switch"});
             };

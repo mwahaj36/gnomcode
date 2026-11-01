@@ -2,6 +2,20 @@
 
 use std::path::Path;
 
+/// Builds a hidden, shell-free command for a known official coding-agent CLI.
+#[must_use]
+pub fn background_agent_command(name: &str) -> std::process::Command {
+    let (program, args) = agent_command(name);
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        command.creation_flags(0x0800_0000);
+    }
+    command
+}
+
 /// Resolves official CLI executables, including Windows npm packages, without a shell.
 #[must_use]
 pub fn agent_command(name: &str) -> (String, Vec<String>) {

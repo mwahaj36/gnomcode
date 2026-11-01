@@ -11,15 +11,19 @@ fn models_command_reports_missing_catalog_without_inventing_models() {
         .arg("models")
         .env("SPAWNT_HOME", root.path())
         .env("CODEX_HOME", root.path())
+        .env("PATH", root.path())
         .output()
         .expect("models command");
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("No fresh CLI model catalog"));
-    assert!(!stdout.contains("claude-3"));
-    assert!(!stdout.contains("codex-mini"));
-    assert!(!stdout.contains("gemini-2.5"));
+    for provider in ["OpenAI Codex", "Claude Code", "Gemini CLI", "Antigravity"] {
+        assert!(stdout.contains(&format!("{provider} [unavailable]")));
+    }
+    assert!(
+        !stdout.lines().any(|line| line.starts_with("  ")),
+        "absent CLIs must produce no model choices"
+    );
 }
 
 #[test]
