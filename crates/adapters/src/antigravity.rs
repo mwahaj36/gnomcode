@@ -162,19 +162,15 @@ impl SourceAdapter for AntigravityAdapter {
                     SessionState::Idle
                 };
 
-                let raw_model = self
+                let model = self
                     .active_model
                     .as_deref()
                     .or(ctx.fallback_model.as_deref())
-                    .unwrap_or("Gemini 3.8 Flash (Default)");
-
-                let model = if raw_model.contains("MODEL_PLACEHOLDER") {
-                    "Gemini 3.8 Flash (Default)"
-                } else {
-                    raw_model
-                };
-
-                sess.model = Some(model.to_owned());
+                    .filter(|model| {
+                        !model.trim().is_empty() && !model.contains("MODEL_PLACEHOLDER")
+                    })
+                    .unwrap_or("unknown");
+                sess.model = (model != "unknown").then(|| model.to_owned());
 
                 if let Some(calls) = obj.get("tool_calls").and_then(Value::as_array) {
                     for call in calls {

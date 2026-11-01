@@ -131,8 +131,11 @@ impl SourceAdapter for GeminiAdapter {
                     let model = msg
                         .get("model")
                         .and_then(Value::as_str)
-                        .unwrap_or("gemini-2.5-pro");
-                    session.model = Some(model.to_owned());
+                        .filter(|model| !model.trim().is_empty())
+                        .unwrap_or("unknown");
+                    if model != "unknown" {
+                        session.model = Some(model.to_owned());
+                    }
 
                     if let Some(calls) = msg.get("toolCalls").and_then(Value::as_array) {
                         for call in calls {

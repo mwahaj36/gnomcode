@@ -52,13 +52,13 @@ Adapter inventory originally inspected on 2026-10-26. This table describes sourc
 
 | Agent | Tier | Source | Tokens | Model | Quota | Live state |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Claude Code** (CLI + IDE) | A (M1) | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | exact (incl. 5m/1h cache-write split) | Yes | estimated or unknown; no subscription-token API | heuristic → exact with hooks |
+| **Claude Code** (CLI + IDE) | A (M1) | `~/.claude/projects/**/*.jsonl`, `~/.config/claude/projects`, `$CLAUDE_CONFIG_DIR` | recorded when present (incl. cache-write split) | Sometimes | unknown; adapter emits no quota snapshots | heuristic → exact with hooks |
 | **Codex CLI + ChatGPT / Codex Desktop App** | A (M1) | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`; `session_meta.payload.originator` distinguishes `"Codex Desktop"` vs CLI vs VS Code) | exact (`last_token_usage`) | Yes (`provenance.model`) | **exact** (`rate_limits` 5h + weekly per `limit_id`) | heuristic |
-| **Antigravity** (app / IDE / CLI) | A (M1) | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | exact per `PLANNER_RESPONSE` | Yes extracted from `<USER_SETTINGS_CHANGE>` tags in `USER_INPUT` steps | per-model pool (`limit_id` per model family: Claude, Gemini, Fable, etc.) | heuristic |
-| **Gemini CLI** | A (M1) | `~/.gemini/tmp/<hash>/chats/` + `~/.gemini/` | exact | Yes | per-model pool | heuristic |
-| **Cline / Roo Code** | B (M4) | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | exact (`api_req_started`) | Yes | n/a (API) | heuristic |
-| **Cursor** | C (experimental, opt-in) | `Cursor/User/globalStorage` / compatible transcript exports | partial | partial | unknown | heuristic where recorded |
-| **Aider** | C (opt-in) | `--analytics-log <file>` | exact | Yes | n/a | No |
+| **Antigravity** (app / IDE / CLI) | A (M1) | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | recorded per `PLANNER_RESPONSE` when present | Sometimes, from settings/fallback | unknown; adapter emits no quota snapshots | heuristic |
+| **Gemini CLI** | A (M1) | `~/.gemini/tmp/<hash>/chats/` + `~/.gemini/` | recorded when present | Sometimes | unknown; adapter emits no quota snapshots | heuristic |
+| **Cline / Roo Code** | B (M4) | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | partial (`api_req_started`; missing fields can become zero) | Sometimes | unknown; adapter emits no quota snapshots | heuristic |
+| **Cursor** | C (experimental) | `Cursor/User/globalStorage` / compatible transcript exports | partial | partial | unknown | heuristic where recorded |
+| **Aider** | C (opt-in) | `AIDER_ANALYTICS_LOG` file/directory; configure Aider recording separately | partial; missing fields can become zero | Sometimes | unknown; adapter emits no quota snapshots | No |
 
 The A/B/C labels are historical adapter priorities, not release guarantees. Actual discovery and record coverage vary by installed version. No undocumented provider API is approved by this inventory.
 
@@ -104,7 +104,7 @@ Windows setup is per-user and waits for an explicit Install action. Choose a ded
 
 Cursor JSON discovery is not proof of a conversation: require a supported messages/conversation array with a recorded user/assistant timestamp. Never substitute ingestion time for missing Cursor timestamps or infer a running process from an imported transcript; such exports are saved/ended history, and missing models remain unknown. Store-open maintenance removes only legacy idle Cursor placeholders without model/title/PID/parent, events, conversation bindings, resume/alert/relay references or children. Keep all evidence-bearing history and agent-owned files.
 
-Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
+Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Discover Aider only when `AIDER_ANALYTICS_LOG` explicitly names an existing supported log file or directory. Aider command activity uses a generic tool name and redacts the command summary before persistence. Missing model identifiers remain unknown rather than being guessed. Cursor roots are automatically discovered when present. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
 
 ### 3.6 Storage and local conversation
 
@@ -112,7 +112,9 @@ Default SQLite: `~/.spawnt/state.db`, or `SPAWNT_HOME/state.db`; CLI `--db` may 
 
 Schema v9 adds local-only conversation membership, ordered native/host bindings, requested model and launch metadata, and pending-context delivery state. These mappings contain no credentials and are excluded from metadata sync. Retain them across restarts and chat deletion so routing does not resurrect deleted chat. Chat deletion removes rows for every linked native/host identity; retention applies to all chat rows under the existing timestamp policy. Agent-owned logs remain untouched.
 
-Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; label metadata-only search and explain that deletion does not remove agent logs or backups. retention primitives exist, but configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; Git diff and status output each have a 1 MiB limit and a ten-second timeout, with failures surfaced rather than empty success. Untracked files appear in status, not diff content. Directory browsing is bounded and not persisted.
+Schema v10 records SHA-256 digests of deleted event IDs as local tombstones, atomically with manual deletion and retention pruning. Both direct chat insertion and source ingestion reject tombstoned IDs while accepting new IDs. Tombstones remain until the local database is reset, are excluded from account sync, and contain no raw identifier or chat content. Digests are unsalted and may reveal predictable identifiers; apply the same local access controls as the database. They protect stable event identities, not changed IDs, older backups, agent-owned history or a database reset. Migration preserves existing data and cannot reconstruct tombstones for past deletions. Older Spawnt binaries ignore tombstones; restart all Spawnt processes on the updated version.
+
+Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; label metadata-only search and explain that deletion does not remove session titles, agent logs or backups and that changed source identifiers, restored backups or database resets can reimport deleted messages. Retention primitives compare timestamps as instants but are not automatically scheduled; configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; Git diff and status output each have a 1 MiB limit and a ten-second timeout, with failures surfaced rather than empty success. Untracked files appear in status, not diff content. Directory browsing is bounded and not persisted.
 
 ### 3.7 Session and conversation state
 
@@ -154,7 +156,7 @@ Use native focus integration where available and document Wayland/unsupported fa
 
 ### 3.14 Resume and routing
 
-Resume Queue and routing are free local features. Policies include `ask_first`, `automatic` and `deny_cross_provider`; legacy Context Relay has its own configuration. Respect eligibility, native approval and unique host binding. Do not promise replay of arbitrary original prompt text: the legacy privacy transition stopped storing custom queue prompts. Verify real quota-reset/native resume behavior before claiming universal automatic continuation.
+Resume Queue and routing are free local features. Policies include `ask_first`, `automatic` and `deny_cross_provider`; legacy Context Relay has its own configuration. Require a known quota observation recorded at or after the eligibility time, with a valid percentage, before resuming; reject future observations. Respect native approval and unique host binding. Do not promise replay of arbitrary original prompt text: the legacy privacy transition stopped storing custom queue prompts. Verify real quota-reset/native resume behavior before claiming universal automatic continuation.
 
 ### 3.14.1 Handoff
 
@@ -271,6 +273,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0020](./adr/0020-account-pairing-discovery.md) | Owner-only discovery of temporary public Remote offers; two-device verification retained | Accepted |
 | [0021](./adr/0021-remembered-remote-device-trust.md) | Remembered Remote trust, challenge-bound reconnect and seven-day activity expiry | Accepted |
 | [0022](./adr/0022-continuous-conversations-and-native-resume.md) | Stable local conversation identity, native model controls, hidden context and exact native resume | Accepted |
+| [0023](./adr/0023-deleted-chat-replay-markers.md) | Local hashed markers prevent stable-ID replay after chat deletion or retention | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 

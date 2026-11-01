@@ -316,7 +316,7 @@ impl SourceAdapter for CodexAdapter {
                                     .active_model
                                     .as_deref()
                                     .or(ctx.fallback_model.as_deref())
-                                    .unwrap_or("gpt-codex");
+                                    .unwrap_or("unknown");
                                 let context_win =
                                     info.get("model_context_window").and_then(Value::as_u64);
                                 let record = build_codex_usage(
