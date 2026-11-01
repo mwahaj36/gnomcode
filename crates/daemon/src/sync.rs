@@ -127,7 +127,6 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
         "active_count": active_count,
         "ongoing_count": ongoing_count,
         "total_count": count,
-        "total_pages": count.div_ceil(200).max(1),
     }))
 }
 
@@ -513,7 +512,7 @@ mod tests {
             200
         );
         assert_eq!(snapshot["total_count"], 201);
-        assert_eq!(snapshot["total_pages"], 2);
+        assert!(snapshot.get("total_pages").is_none());
     }
 
     #[test]
