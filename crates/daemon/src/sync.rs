@@ -130,25 +130,6 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, spawnt_store::Error> {
     }))
 }
 
-fn discovery_offer(status: &crate::remote::PairingStatus, now: DateTime<Utc>) -> Option<Value> {
-    if !status.enabled || status.paired {
-        return None;
-    }
-    let expires_at = status.expires_at.as_deref()?;
-    if DateTime::parse_from_rfc3339(expires_at).ok()? <= now {
-        return None;
-    }
-    Some(json!({
-        "room": status.room_id.as_deref()?,
-        "key": status.public_key.as_deref()?,
-        "relay": status.relay_url.as_deref()?,
-        "expires_at": expires_at,
-        "name": "My desktop",
-        "pairing_code": status.pairing_code()?,
-        "protocol_version": 2,
-    }))
-}
-
 /// Pushes a privacy-filtered live snapshot every minute after the user pairs an account.
 pub fn spawn_cloud_sync(
     db: Arc<Mutex<Database>>,
@@ -164,10 +145,19 @@ pub fn spawn_cloud_sync(
             return;
         };
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
+        let mut devices_ticker = tokio::time::interval(Duration::from_secs(5));
         loop {
             tokio::select! {
                 _ = ticker.tick() => {},
                 () = remote.discovery_changed() => {},
+                _ = devices_ticker.tick() => {
+                    if let Err(error)=poll_devices(&client,&db,&remote).await {tracing::warn!("Device directory unavailable: {error}");}
+                    continue;
+                },
+                () = remote.devices.changed() => {
+                    if let Err(error)=poll_devices(&client,&db,&remote).await {tracing::warn!("Device directory unavailable: {error}");}
+                    continue;
+                },
             }
             {
                 let mut status = SYNC_STATUS.lock().await;
@@ -175,7 +165,7 @@ pub fn spawn_cloud_sync(
                 status.last_attempt_at = Some(Utc::now().to_rfc3339());
                 status.message = "Publishing the latest metadata snapshot.";
             }
-            let result = push_snapshot(&client, &db, &remote).await;
+            let result = push_snapshot(&client, &db).await;
             let mut status = SYNC_STATUS.lock().await;
             match result {
                 Ok(true) => {
@@ -197,10 +187,23 @@ pub fn spawn_cloud_sync(
     })
 }
 
-async fn push_snapshot(
+async fn poll_devices(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
     remote: &crate::remote::RemoteManager,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let path = spawnt_platform::spawnt_home().join("session.json");
+    if let Some(auth) = read_cloud_auth(client, &path).await? {
+        remote.devices.poll(client, &auth, db.clone()).await?;
+    } else {
+        remote.devices.disconnect().await?;
+    }
+    Ok(())
+}
+
+async fn push_snapshot(
+    client: &reqwest::Client,
+    db: &Arc<Mutex<Database>>,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let session_path = spawnt_platform::spawnt_home().join("session.json");
     let Some(CloudAuth {
@@ -219,8 +222,7 @@ async fn push_snapshot(
         build_remote_snapshot(&guard)
     })
     .await??;
-    snapshot["remote_offer"] =
-        discovery_offer(&remote.status().await, Utc::now()).unwrap_or(Value::Null);
+    snapshot["remote_offer"] = Value::Null;
     client
         .post(format!(
             "{base_url}/rest/v1/spawnt_sync_state?on_conflict=user_id"
@@ -443,35 +445,6 @@ mod tests {
         assert_ne!(h1, h3);
         assert!(h1.starts_with("proj_"));
         assert_eq!(h1.len(), 5 + 32);
-    }
-
-    #[test]
-    fn discovery_offer_is_public_expiring_and_never_contains_the_confirmation_code() {
-        let now = chrono::Utc::now();
-        let mut status = crate::remote::PairingStatus {
-            remembered: false,
-            trust_expires_at: None,
-            enabled: true,
-            paired: false,
-            room_id: Some("a".repeat(32)),
-            public_key: Some("public-key".into()),
-            verify_code: Some("123456".into()),
-            relay_url: Some("wss://relay.example/relay".into()),
-            expires_at: Some((now + chrono::Duration::minutes(5)).to_rfc3339()),
-        };
-        let offer = super::discovery_offer(&status, now).expect("offer");
-        assert_eq!(offer.as_object().expect("object").len(), 7);
-        assert_eq!(offer["pairing_code"], "63311530");
-        assert!(!offer.to_string().contains("123456"));
-        assert!(offer.get("verify_code").is_none());
-        status.paired = true;
-        assert!(super::discovery_offer(&status, now).is_none());
-        status.paired = false;
-        status.enabled = false;
-        assert!(super::discovery_offer(&status, now).is_none());
-        status.enabled = true;
-        status.expires_at = Some((now - chrono::Duration::seconds(1)).to_rfc3339());
-        assert!(super::discovery_offer(&status, now).is_none());
     }
 
     #[test]

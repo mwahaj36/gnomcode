@@ -8,7 +8,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const {WebSocketServer} = createRequire(new URL('../web/package.json',import.meta.url))('next/dist/compiled/ws');
 const writes = [];
 const errors = [];
-let remotePaired = false;
+let remotePaired = false, remoteAccessEnabled=true;
 const session = { id:'codex:sample', title:'Review authentication', agent:'codex', model:'gpt-6.1-sol', state:'idle', last_event_at:new Date().toISOString() };
 const staticFiles = {
   '/':'crates/daemon/src/console.html', '/theme-init.js':'crates/daemon/src/theme-init.js', '/console-app.js':'crates/daemon/src/console-app.js',
@@ -34,7 +34,10 @@ const server = createServer(async (request, response) => {
     ...(writes.some(write => write.path.endsWith('/launch')) ? [{session_id:'codex-launched',agent:'codex',title:'Picked workspace',repo_path:'C:\\workspace\\picked',started_at:session.last_event_at}] : []),
   ] };
   else if (url.pathname === '/api/v1/projects') value = [];
-  else if (url.pathname === '/api/v1/remote/status') value = {enabled:true,paired:remotePaired};
+  else if(url.pathname==='/api/v1/remote/devices'){
+    if(request.method==='POST' && JSON.parse(body).type==='enable_account_access')remoteAccessEnabled=true;
+    value={desktop_id:'d'.repeat(32),account_access:true,remote_enabled:remoteAccessEnabled,devices:[{id:'a'.repeat(32),name:'Phone browser',state:'account',connected:remotePaired}]};
+  }
   else if (url.pathname.endsWith('/terminal')) value = {session_id:'terminal-test',repo_path:'C:\\workspace\\demo'};
   else if (url.pathname === '/api/v1/model-catalog') value = {providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{model:'@default',agent:'codex',display_name:'Codex default'},{model:'gpt-6.1-sol',agent:'codex',display_name:'GPT 6.1'},{model:'o3',agent:'codex',display_name:'OpenAI o3'}]}]};
   else if (url.pathname.endsWith('/chat')) value = [
@@ -62,13 +65,14 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
 try {
   const page = await browser.newPage({ viewport:{width:1440,height:1000} });
+  page.setDefaultTimeout(15000);
   await page.addInitScript(() => { window.spawntDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?token=test#sessions`);
   assert.equal(await page.getByRole('button',{name:'Pin navigation',exact:true}).count(),0,'navigation has a single predictable toggle');
   await page.getByRole('button', {name:/Review authentication/}).click();
   await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
-  await page.waitForFunction(() => document.getElementById('remote-status').textContent.includes('Waiting for the code'));
+  await page.waitForFunction(() => document.getElementById('remote-status').textContent.includes('accessible from any device'));
   assert.equal(await page.locator('#remote-connection-state').isVisible(),false,'initial connection status must not create a toast');
   remotePaired = true;
   await page.locator('#remote-connection-state').waitFor({state:'visible'});
@@ -191,19 +195,53 @@ try {
   await page.keyboard.press('End');
   assert.equal(await page.locator('#tab-btn-settings').getAttribute('aria-selected'), 'true', 'keyboard navigation returns to Profile');
   await page.getByRole('button', {name:'Manage account'}).click();
+  await page.locator('#auth-email').fill('test@example.invalid');
+  await page.locator('#auth-password').fill('synthetic-password');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.locator('#confirm-dialog[open]').waitFor();
+  assert.match(await page.locator('#confirm-message').textContent(),/any device signed in to your account/i);
+  await page.screenshot({path:'.tmp/ide-verification/account-access-confirmation-1440.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'.tmp/ide-verification/account-access-confirmation-390.png',fullPage:true});
+  assert.equal(await page.locator('#confirm-dialog').evaluate(node=>node.scrollWidth<=node.clientWidth),true,'account disclosure fits the phone modal');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(writes.filter(write=>write.path==='/api/v1/auth/signin').length,0,'Cancel must not link the native app');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.locator('#confirm-dialog[open]').waitFor();
+  await page.getByRole('button',{name:'Link and allow account access',exact:true}).click();
+  await page.waitForFunction(()=>document.getElementById('auth-password').value==='');
+  assert.deepEqual(writes.filter(write=>write.path==='/api/v1/auth/signin').at(-1).body,{email:'test@example.invalid',password:'synthetic-password',remote_access_confirmed:true});
+  await page.getByText('Connect an existing browser account',{exact:true}).click();
   const tokenInput = page.locator('#auth-token-input');
   await tokenInput.fill('example-token');
   await page.getByRole('button', {name:'Show token'}).click();
   assert.equal(await tokenInput.getAttribute('type'), 'text');
   await page.getByRole('button', {name:'Hide token'}).click();
   assert.equal(await tokenInput.getAttribute('type'), 'password');
+  await page.getByRole('button',{name:'Connect desktop',exact:true}).click();
+  await page.locator('#confirm-dialog[open]').waitFor();
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(writes.filter(write=>write.path==='/api/v1/auth/session').length,0,'cancelling browser-account linking does not send credentials');
+  await page.getByRole('button',{name:'Connect desktop',exact:true}).click();
+  await page.locator('#confirm-dialog[open]').waitFor();
+  await page.getByRole('button',{name:'Link and allow account access',exact:true}).click();
+  await page.waitForFunction(()=>document.getElementById('auth-token-input').value==='');
+  assert.equal(writes.filter(write=>write.path==='/api/v1/auth/session').at(-1).body.remote_access_confirmed,true);
+
   await page.locator('#tab-btn-settings').click();
   await page.evaluate(() => {document.documentElement.dataset.theme = 'dark'; document.activeElement?.blur();});
   await page.mouse.move(1000, 500);
   await page.waitForTimeout(250);
   await page.screenshot({path:new URL('../.tmp/ide-verification/profile-dark-1440.png', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-  await page.evaluate(() => {const status={enabled:true,paired:false,room_id:'a'.repeat(32),public_key:'b'.repeat(64),relay_url:'wss://relay.example/relay',pairing_code:'63311530'};showRemoteStatus(status);document.getElementById('desktop-pairing-code').focus();document.getElementById('desktop-pairing-code').select();window.pairingNode=document.getElementById('desktop-pairing-code');showRemoteStatus(status);});
-  assert.equal(await page.locator('#desktop-pairing-code').evaluate(node=>node===window.pairingNode && node.selectionEnd-node.selectionStart===8),true,'status polling preserves code selection for copying');
+  remoteAccessEnabled=false;
+  await page.getByRole('button',{name:'Enable account access',exact:true}).waitFor();
+  assert.equal(await page.locator('#remote-code,#desktop-pairing-code').count(),0,'account access never asks for codes');
+  await page.getByRole('button',{name:'Enable account access',exact:true}).click();
+  await page.locator('#confirm-dialog[open]').waitFor();
+  await page.getByRole('button',{name:'Link and allow account access',exact:true}).click();
+  await page.getByRole('button',{name:'Disable account access',exact:true}).waitFor();
+  assert.deepEqual(writes.filter(write=>write.path==='/api/v1/remote/devices').at(-1).body,{type:'enable_account_access',remote_access_confirmed:true});
   await page.route('**/api/v1/model-catalog', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{agent:'codex',model:'@default',display_name:'Codex default'}]}]})}));
   await page.locator('#tab-btn-sessions').click();
   await page.reload();

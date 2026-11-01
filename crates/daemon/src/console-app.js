@@ -1191,7 +1191,21 @@ function cycleTheme() {
       }
     }
 
+    const accountAccessDisclosure='Linking this native app makes its available conversations and supported session controls accessible from any device signed in to your account, anywhere. This includes devices already signed in and devices you sign in to later. No phone pairing or per-desktop approval will be required. This desktop must stay awake with Spawnt running. Protect your account: anyone with access to it can use these controls. You can disable account access in Devices or disconnect this desktop.';
+    function confirmAccountAccess(){return confirmAction(accountAccessDisclosure,'Link and allow account access');}
     let accountWriteBusy = false;
+    async function signInAccount(){
+      if(accountWriteBusy)return;
+      accountWriteBusy=true;
+      const button=document.getElementById('auth-signin-button'),password=document.getElementById('auth-password'),status=document.getElementById('auth-pair-status');
+      button.disabled=true;button.textContent='Signing in...';status.hidden=false;
+      try{
+        if(!await confirmAccountAccess()){status.hidden=true;return;}
+        await apiJson('/api/v1/auth/signin',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('auth-email').value.trim(),password:password.value,remote_access_confirmed:true}),signal:AbortSignal.timeout(15000)});
+        password.value='';status.textContent='Signed in. Your desktop will appear in Devices.';await checkAuthSession();
+      }catch{status.textContent='Sign-in failed. Check your email, password and connection. Browser accounts can use the connection option below.';}
+      finally{accountWriteBusy=false;button.disabled=false;button.textContent='Sign in';}
+    }
     async function pairTokenDirectly() {
       if (accountWriteBusy) return;
       const input = document.getElementById('auth-token-input');
@@ -1218,6 +1232,8 @@ function cycleTheme() {
           }
         }
 
+        if(!await confirmAccountAccess()){status.hidden=true;return;}
+        sessionData.remote_access_confirmed=true;
         const res = await fetch('/api/v1/auth/session', {
           method: 'POST', signal: AbortSignal.timeout(30000),
           headers: { ...headers, 'Content-Type': 'application/json' },
@@ -1434,57 +1450,40 @@ function cycleTheme() {
 
     let remoteWasPaired = null;
     let remoteNoticeTimer;
-    let remotePairingMarkup = '';
-    function showRemoteStatus(status) {
-      const badge = document.getElementById('remote-connection-state');
-      if (remoteWasPaired !== null && Boolean(status.paired) !== remoteWasPaired) {
-        remoteWasPaired = Boolean(status.paired);
-        document.getElementById('remote-connection-message').textContent = status.paired ? 'Phone connected' : 'Phone disconnected';
-        badge.hidden = false;
-        clearTimeout(remoteNoticeTimer);
-        remoteNoticeTimer = setTimeout(() => { badge.hidden = true; }, 5000);
-      }
-      remoteWasPaired = Boolean(status.paired);
-      document.getElementById('remote-confirmation').hidden = !status.verify_code || status.paired || status.remembered;
-      const output = document.getElementById('remote-status');
-      const link = document.getElementById('remote-link');
-      if (!output || !link) return;
-      output.textContent = status.remembered && !status.paired ? 'Device remembered. Waiting for the phone to reconnect.' : !status.enabled ? 'No remote connection.' : status.paired ? 'Phone connected.' : status.verify_code ? 'Enter the six-digit security code shown on your phone.' : 'Waiting for the code to be entered on the web.';
-      if (!status.paired && !status.remembered && !status.verify_code && status.room_id && status.public_key && status.relay_url) {
-        const markup = `<div class="desktop-pairing-code"><label for="desktop-pairing-code">Enter this code in web Profile</label><input id="desktop-pairing-code" readonly value="${escapeHtml(status.pairing_code || '')}" aria-label="Desktop pairing code"><small>Expires in five minutes. Sign in to the same account on both devices.</small></div>`;
-        if (remotePairingMarkup !== markup) { link.innerHTML = markup; remotePairingMarkup = markup; }
-      } else if (remotePairingMarkup) { link.textContent = ''; remotePairingMarkup = ''; }
-
-    }
-
+    let remoteDevicesMarkup = '';
     async function loadRemoteStatus() {
-      try { showRemoteStatus(await apiJson('/api/v1/remote/status', { headers })); }
-      catch { document.getElementById('remote-status').textContent = 'Remote status unavailable.'; document.getElementById('remote-connection-state').hidden = true; }
-    }
-
-    async function startRemote() {
-      try { showRemoteStatus(await apiJson('/api/v1/remote/pairing', { headers })); }
-      catch { document.getElementById('remote-status').textContent = 'Could not start pairing. Check your Pro account and internet connection, then retry.'; }
-    }
-
-    async function confirmRemote() {
-      const code = document.getElementById('remote-code').value.trim();
-      if (!/^\d{6}$/.test(code)) { document.getElementById('remote-status').textContent = 'Enter the six-digit code shown on both devices.'; return; }
       try {
-        showRemoteStatus(await apiJson('/api/v1/remote/confirm', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }));
-        document.getElementById('remote-code').value = '';
-      } catch { document.getElementById('remote-status').textContent = 'Codes did not match or pairing expired.'; }
+        const result=await apiJson('/api/v1/remote/devices',{headers});
+        const connected=result.devices.some(device=>device.connected);
+        if(remoteWasPaired!==null && connected!==remoteWasPaired){
+          document.getElementById('remote-connection-message').textContent=connected?'Device connected':'Device disconnected';
+          const badge=document.getElementById('remote-connection-state');badge.hidden=false;
+          clearTimeout(remoteNoticeTimer);remoteNoticeTimer=setTimeout(()=>{badge.hidden=true;},5000);
+        }
+        remoteWasPaired=connected;
+        document.getElementById('remote-status').textContent=result.directory_error?'Device discovery is unavailable. Check your connection.':!result.desktop_id?'Sign in to your account to make this desktop available.':!result.account_access?'Confirm account access to make this desktop available to signed-in devices.':!result.remote_enabled?'Account access is disabled for this desktop.':'This desktop is accessible from any device signed in to your account.';
+        const accountAction=result.desktop_id?`<p><button type="button" class="btn-control" data-action="remote-device" data-device-operation="${result.account_access&&result.remote_enabled?'disable_account_access':'enable_account_access'}">${result.account_access&&result.remote_enabled?'Disable account access':'Enable account access'}</button></p>`:'';
+        const markup=accountAction+result.devices.map(device=>`<div class="sp-device-row"><div><strong>${escapeHtml(device.name)}</strong><p>${device.connected?'Connected':'Saved connection'}</p></div></div>`).join('');
+        if(markup!==remoteDevicesMarkup){document.getElementById('remote-link').innerHTML=markup;remoteDevicesMarkup=markup;}
+      }catch{document.getElementById('remote-status').textContent='Devices unavailable. Reload to try again.';}
     }
-
-    async function revokeRemote() {
-      try { await apiJson('/api/v1/remote/revoke', { method: 'POST', headers }); await loadRemoteStatus(); }
-      catch { document.getElementById('remote-status').textContent = 'Could not revoke remote connection.'; }
+    async function manageRemoteDevice(target){
+      target.disabled=true;
+      try{
+        const enable=target.dataset.deviceOperation==='enable_account_access';
+        if(enable && !await confirmAccountAccess())return;
+        if(!enable && !await confirmAction('Disable access to this desktop for every device signed in to your account?','Disable account access'))return;
+        await apiJson('/api/v1/remote/devices',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({type:target.dataset.deviceOperation,remote_access_confirmed:enable})});
+        await loadRemoteStatus();
+      }catch{document.getElementById('remote-status').textContent='Could not update account access. Refresh Devices and retry.';}
+      finally{target.disabled=false;}
     }
 
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-action]');
       if (!target) return;
       const action = target.dataset.action;
+      if(action==='remote-device'){void manageRemoteDevice(target);return;}
       if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); if (event.detail && matchMedia('(max-width:760px)').matches) document.querySelector('.view-content.active')?.focus({preventScroll:true}); return; }
       if (action.startsWith('export:')) { exportData(action.slice(7)); return; }
     async function handlePermissionAction(sessionId, action, toolCallId) {
@@ -1512,7 +1511,7 @@ function cycleTheme() {
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
-        'remote-start': startRemote, 'remote-confirm': confirmRemote, 'remote-revoke': revokeRemote };
+ };
       if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
@@ -1541,7 +1540,8 @@ function cycleTheme() {
       const form = event.target.closest('[data-submit]');
       if (!form) return;
       const submit = form.dataset.submit;
-      if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
+      if (submit === 'signin') { event.preventDefault(); signInAccount(); }
+      else if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
       else if (submit === 'launch-agent') { event.preventDefault(); launchNewAgent(event); }
       else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
     });

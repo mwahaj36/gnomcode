@@ -6,7 +6,7 @@ import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
 import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
-import {deviceProof,forgetDevice,rememberDevice,savedDevice} from '../lib/remote-device';
+import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
 import { reconcileChat, renderConversationLimits, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -16,14 +16,13 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type Reply = { type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[] } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false }: { embedded?: boolean }) {
-  const [link, setLink] = useState<{room:string;key:string;relay:string;protocol_version?:number}>({ room: '', key: '', relay: '' });
+  const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
   const autoConnect = useRef(false);
   const [optimistic, setOptimistic] = useState<Record<string,PendingChat[]>>({});
   const [conversationSearch, setConversationSearch] = useState('');
   const [desktopPanel, setDesktopPanel] = useState(false);
   const [modelPanel, setModelPanel] = useState(false);
-  const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'verify' | 'paired'>('ready');
-  const [code, setCode] = useState('');
+  const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'unavailable' | 'paired'>('ready');
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selected, setSelected] = useState('');
@@ -40,7 +39,6 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const [launchRepo, setLaunchRepo] = useState('');
   const [launchModel, setLaunchModel] = useState('');
   const [notice, setNotice] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [hasEarlier, setHasEarlier] = useState(false);
@@ -54,8 +52,6 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const pendingPrompt = useRef<{session:string; text:string; id:string} | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const channel = useRef<Channel | null>(null);
-  const phoneConfirmed = useRef(false);
-  const desktopConfirmed = useRef(false);
   const selectedRef = useRef('');
   const loadingHistory = useRef(false);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -63,6 +59,9 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const outgoing = useRef(Promise.resolve());
   const chunks = useRef('');
   const proofKey=useRef<CryptoKey|null>(null);
+  const accountOwner=useRef('');
+  const connectedDesktop=useRef('');
+  const retryStart=useRef(0);
   const reconnectTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const manualDisconnect=useRef(false);
   const restoredSession=useRef('');
@@ -79,13 +78,18 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const sidebarClose=useRef<HTMLButtonElement|null>(null);
 
   useEffect(() => {
-    try {
-      const value = sessionStorage.getItem('spawnt-pairing-offer');
-      sessionStorage.removeItem('spawnt-pairing-offer');
-      if (value) { const offer = JSON.parse(value); if (Date.parse(offer.expires_at) > Date.now()) {autoConnect.current = true; setLink(offer);} }
-      else void savedDevice().then(saved=>{if(saved){proofKey.current=saved.proofKey;autoConnect.current=true;setLink(saved.offer);}}).catch(()=>{});
-    } catch { setError('Pairing code expired. Generate a fresh code on your desktop.'); }
-    return () => {manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);if (poll.current) clearInterval(poll.current); socket.current?.close(); };
+    let active=true;
+    manualDisconnect.current=false;
+    void supabase.auth.getSession().then(async({data:{session}})=>{
+      if(!active || !session)return;
+      accountOwner.current=session.user.id;
+      const value=sessionStorage.getItem('spawnt-pairing-offer');sessionStorage.removeItem('spawnt-pairing-offer');
+      const offer=value?JSON.parse(value):null;
+      if(offer?.owner_id===session.user.id){if(active){autoConnect.current=true;setLink(offer);}return;}
+      const saved=await savedDevice(session.user.id);
+      if(active && saved?.offer.key){autoConnect.current=true;setLink(saved.offer);}
+    }).catch(()=>{if(active)setError('Could not restore this device. Open Devices to try again.');});
+    return () => {active=false;manualDisconnect.current=true;connectionEpoch.current++;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);if (poll.current) clearInterval(poll.current); socket.current?.close();};
   }, []);
 
   useEffect(()=>{
@@ -99,13 +103,13 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   },[]);
 
   useEffect(()=>{
-    if(phase!=='paired' && phase!=='reconnecting')return;
+    if(phase!=='paired' && phase!=='reconnecting' && !(phase==='unavailable' && sessions.length))return;
     const body=document.body,html=document.documentElement;
     const previous={position:body.style.position,top:body.style.top,width:body.style.width,overflow:body.style.overflow,htmlOverflow:html.style.overflow};
     const y=window.scrollY;
     body.style.position='fixed';body.style.top=`${-y}px`;body.style.width='100%';body.style.overflow='hidden';html.style.overflow='hidden';
     return()=>{body.style.position=previous.position;body.style.top=previous.top;body.style.width=previous.width;body.style.overflow=previous.overflow;html.style.overflow=previous.htmlOverflow;window.scrollTo(0,y);};
-  },[phase]);
+  },[phase,sessions.length]);
 
   useEffect(()=>{const visible=()=>{
     if(document.visibilityState!=='visible' || !proofKey.current)return;
@@ -113,7 +117,12 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     else if(socket.current?.readyState!==WebSocket.CONNECTING){if(reconnectTimer.current)clearTimeout(reconnectTimer.current);reconnect.current();}
   };document.addEventListener('visibilitychange',visible);window.addEventListener('online',visible);return()=>{document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible);};},[]);
 
-  useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT')disconnect();});return()=>subscription.unsubscribe();},[]);
+  useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+    const previous=accountOwner.current;
+    if(event==='SIGNED_OUT' || (previous && session?.user.id && previous!==session.user.id)){
+      disconnect();if(previous)void forgetDevice(previous);accountOwner.current=session?.user.id||'';
+    }
+  });return()=>subscription.unsubscribe();},[]);
 
   useEffect(()=>{
     if(phase!=='paired')return;
@@ -212,7 +221,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   async function beginPaired() {
     const epoch=connectionEpoch.current;
-    authenticated.current=true;setError('');setPhase('paired');
+    authenticated.current=true;retryStart.current=0;setError('');setPhase('paired');
     await send({type:'sessions'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
@@ -224,10 +233,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   async function handle(reply: Reply, epoch:number) {
     if(epoch!==connectionEpoch.current)return;
-    if (reply.type === 'confirm') {
-      desktopConfirmed.current = true;
-      if(phoneConfirmed.current && link.protocol_version!==2)await beginPaired();
-    } else if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
+    if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
       setFoldersLoading(false); setFolderBrowser({path:reply.path,parent:reply.parent || null,roots:reply.roots,folders:reply.folders,truncated:Boolean(reply.truncated)});
     } else if (reply.type === 'sessions') {
       setSessions(reply.sessions || []);
@@ -249,7 +255,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       }
     } else if(reply.type==='trusted' && reply.secret){const key=await rememberDevice(link,reply.secret,()=>epoch===connectionEpoch.current && !manualDisconnect.current);if(epoch!==connectionEpoch.current)return;proofKey.current=key;await beginPaired();}
     else if(reply.type==='resumed'){await beginPaired();}
-    else if(reply.type==='resume_rejected'){manualDisconnect.current=true;proofKey.current=null;await forgetDevice();socket.current?.close();setPhase('ready');setError('Device trust expired or was revoked. Pair this desktop again.');}
+    else if(reply.type==='resume_rejected'){manualDisconnect.current=true;proofKey.current=null;await forgetDevice(accountOwner.current,connectedDesktop.current);socket.current?.close();setPhase('ready');setError('Access was revoked or this browser credential is no longer recognized. Open Devices to reconnect through your account.');}
     else if (reply.type === 'launch_ack') { setNotice('Agent started. Send its first message below.');setNewSession(false); await send({ type: 'sessions' }); if (reply.session_id) selectSession(reply.session_id); }
     else if (reply.type === 'prompt_ack') {
       const pending = pendingPrompt.current;
@@ -273,6 +279,15 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   async function connect(force=false) {
     if(!force && (socket.current?.readyState===WebSocket.OPEN || socket.current?.readyState===WebSocket.CONNECTING))return;
+    if(force || !retryStart.current)retryStart.current=Date.now();
+    if(Date.now()-retryStart.current>=30000){
+      authenticated.current=false;manualDisconnect.current=true;connectionEpoch.current++;
+      if(reconnectTimer.current)clearTimeout(reconnectTimer.current);
+      if(connectionWatch.current)clearInterval(connectionWatch.current);
+      if(poll.current)clearInterval(poll.current);
+      const previous=socket.current;socket.current=null;previous?.close();
+      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Spawnt is running. Your account connection is still saved.');return;
+    }
     if(reconnectTimer.current)clearTimeout(reconnectTimer.current);
     if(connectionWatch.current)clearInterval(connectionWatch.current);
     authenticated.current=false;
@@ -284,29 +299,40 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     setNotice('');
     if (!/^[a-zA-Z0-9_-]{16,128}$/.test(link.room) || !/^[0-9a-f]{64}$/.test(link.key)
       || !(/^wss:\/\//.test(link.relay) || /^ws:\/\/(127\.0\.0\.1|localhost):/.test(link.relay))) {
-      setError('Pairing code is invalid or expired. Generate a new code on your desktop.'); return;
+      setPhase('ready');setError('Open Devices to select your desktop.');return;
     }
     try {
       setOptimistic({});
       if(selectedRef.current)drafts.current.set(selectedRef.current,promptRef.current);
+      if(connectedDesktop.current && connectedDesktop.current!==link.desktop_id){proofKey.current=null;}
       if(!proofKey.current){selectedRef.current = ''; setSelected(''); setSessions([]); setEvents([]);}
       pendingPrompt.current = null; setSending(false); loadingHistory.current = false; setHistoryLoading(false);
       setFolderBrowser(null); setFoldersLoading(false); if(!proofKey.current){changePrompt('');drafts.current.clear();}
-      setPhase(proofKey.current ? 'reconnecting' : 'connecting');
-      setConfirmed(false);
-      phoneConfirmed.current = false;
-      desktopConfirmed.current = false;
-      chunks.current = '';
-      outgoing.current = Promise.resolve();
-      incoming.current = Promise.resolve();
-      const keys = await generateKeyPair();
+      setPhase('connecting');
+      chunks.current='';outgoing.current=Promise.resolve();incoming.current=Promise.resolve();
+      const {data:{session}}=await supabase.auth.getSession();
       if(epoch!==connectionEpoch.current)return;
-      if(link.protocol_version!==2){const legacy=await createChannel(keys,link.key,link.room,'phone');if(epoch!==connectionEpoch.current)return;channel.current=legacy;setCode(legacy.verifyCode);}
+      if(!session || session.user.id!==link.owner_id)throw new Error('Sign in to the desktop account.');
+      accountOwner.current=session.user.id;connectedDesktop.current=link.desktop_id||'';
+      const saved=await savedDevice(session.user.id,link.desktop_id);
+      if(epoch!==connectionEpoch.current)return;
+      if(!saved)throw new Error('This browser credential is missing. Open Devices to reconnect automatically through your account.');
+      proofKey.current=saved.proofKey||null;
+      const {data:request,error:directoryError}=await supabase.from('spawnt_device_requests').select('offer,revoked,state').eq('user_id',session.user.id).eq('desktop_id',link.desktop_id!).eq('id',link.request_id!).abortSignal(AbortSignal.timeout(10000)).maybeSingle();
+      if(epoch!==connectionEpoch.current)return;
+      if(directoryError)throw new Error('Device discovery is unavailable. Check your connection and try again.');
+      if(!request || request.revoked)throw new Error('Access was revoked. Open Devices to reconnect through your account.');
+      if(request.state!=='approved' || !request.offer)throw new Error('Your desktop is not ready. Keep it awake with Spawnt running.');
+      if(request.offer.key!==link.key || request.offer.room!==link.room || request.offer.relay!==link.relay)throw new Error('The desktop identity changed. Open Devices to review its connection.');
+      const keys=proofKey.current?await generateKeyPair():saved.enrollment;
+      if(!keys || link.protocol_version!==3)throw new Error('Update your desktop and open Devices to reconnect.');
+      if(epoch!==connectionEpoch.current)return;
+      setPhase(proofKey.current?'reconnecting':'connecting');
       const ws = new WebSocket(`${link.relay.replace(/\/$/, '')}/${link.room}?role=phone`);
       ws.binaryType = 'arraybuffer'; socket.current = ws;
       lastReply.current=Date.now();
       connectionWatch.current=setInterval(()=>{
-        if(epoch!==connectionEpoch.current || document.visibilityState!=='visible' || (!proofKey.current && !authenticated.current))return;
+        if(epoch!==connectionEpoch.current || document.visibilityState!=='visible')return;
         if(Date.now()-lastReply.current<=15000)return;
         ws.close();
         if(socket.current===ws){
@@ -316,7 +342,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       },3000);
       let helloTimer:ReturnType<typeof setInterval>|undefined;
       const hello=()=>{if(ws.readyState===WebSocket.OPEN)ws.send(new TextEncoder().encode(JSON.stringify({type:'hello',public_key:keys.publicHex})));};
-      ws.onopen = () => { hello();if(link.protocol_version===2)helloTimer=setInterval(hello,2000);else setPhase('verify'); };
+      ws.onopen = () => {hello();helloTimer=setInterval(hello,2000);};
       ws.onmessage = event => {
         incoming.current = incoming.current.then(async () => {
           if (socket.current !== ws || epoch!==connectionEpoch.current) return;
@@ -328,7 +354,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
             if(epoch!==connectionEpoch.current || socket.current!==ws)return;
             channel.current=fresh;
             if(proofKey.current){const proof=await deviceProof(proofKey.current,`${link.room}:${frame.nonce}:${keys.publicHex}`);if(epoch!==connectionEpoch.current || socket.current!==ws)return;await send({type:'resume',proof});}
-            else {setCode(fresh.verifyCode);setPhase('verify');}
+            else {await send({type:'enroll'});}
             return;
           }
           const message = await channel.current!.open(frame) as Reply & { data?: string; final?: boolean };
@@ -341,19 +367,12 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
             chunks.current = '';
             await handle(complete,epoch);
           }
-        }).catch(() => {if(epoch!==connectionEpoch.current)return;setError('Could not verify or save this device connection. Try pairing again.'); ws.close(); });
+        }).catch(() => {if(epoch!==connectionEpoch.current)return;setError('Could not verify or save this device connection. Open Devices to retry.'); ws.close(); });
       };
-      ws.onclose = () => {clearInterval(helloTimer);if(socket.current===ws && connectionWatch.current)clearInterval(connectionWatch.current);if (socket.current !== ws || manualDisconnect.current) return;authenticated.current=false;setError(''); if (poll.current) clearInterval(poll.current); loadingHistory.current=false;setHistoryLoading(false);pendingPrompt.current = null; setSending(false);if(proofKey.current){setPhase('reconnecting');reconnectTimer.current=setTimeout(()=>void connect(),1500);}else{setPhase('ready');setError('Connection closed before pairing completed. Start pairing again.');}};
-    } catch { setPhase('ready'); setError('Could not start encrypted pairing.'); }
+      ws.onclose = () => {clearInterval(helloTimer);if(socket.current===ws && connectionWatch.current)clearInterval(connectionWatch.current);if (socket.current !== ws || manualDisconnect.current) return;authenticated.current=false;setError(''); if (poll.current) clearInterval(poll.current); loadingHistory.current=false;setHistoryLoading(false);pendingPrompt.current = null; setSending(false);setPhase('reconnecting');reconnectTimer.current=setTimeout(()=>void connect(),1500);};
+    } catch(error) {if(epoch!==connectionEpoch.current)return;setPhase('unavailable');setError(error instanceof Error?error.message:'Could not connect to your desktop. Try again.');}
   }
   reconnect.current=()=>void connect();
-
-  async function confirm() {
-    try {
-      await send({ type: 'confirm' }); phoneConfirmed.current = true; setConfirmed(true);
-      if(desktopConfirmed.current && link.protocol_version!==2)await beginPaired();
-    } catch { setError('Could not confirm pairing.'); }
-  }
 
   function selectSession(id: string) {
     setShowSessions(false);
@@ -368,34 +387,33 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   function disconnect() {
     modelRequest.current=false;setModelProviders([]);setModelsError('');setModelsLoading(false);
     authenticated.current=false;connectionEpoch.current++;
-    manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice().catch(()=>{});
+    manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice(accountOwner.current,connectedDesktop.current).catch(()=>{});
     setOptimistic({});
     const previous = socket.current; socket.current = null; previous?.close(); if (poll.current) clearInterval(poll.current);
     selectedRef.current = ''; setSelected(''); pendingPrompt.current = null; setSending(false); setError(''); setNotice('');
-    setPhase('ready'); setCode(''); setSessions([]); setEvents([]); setConfirmed(false); setHistoryLoading(false);
+    setPhase('ready');setSessions([]);setEvents([]);setHistoryLoading(false);retryStart.current=0;
   }
 
   const active = sessions.find(session => session.id === selected);
   const readOnly=active?.hosted === false;
   const connected=phase==='paired';
-  const workspace=connected || (phase==='reconnecting' && sessions.length>0);
+  const workspace=connected || ((phase==='reconnecting'||phase==='unavailable') && sessions.length>0);
   const startNew=()=>{setNewSession(true);setShowSessions(true);};
   const Heading = embedded ? 'h2' : 'h1';
-  return <section ref={remoteRoot} className={`sp-remote ${embedded?'is-embedded':''} ${phase === 'paired' ? 'is-paired' : phase==='reconnecting'?'is-reconnecting':''}`} aria-label="Encrypted Remote conversation">
+  return <section ref={remoteRoot} className={`sp-remote ${embedded?'is-embedded':''} ${phase === 'paired' ? 'is-paired' : (phase==='reconnecting'||(phase==='unavailable'&&workspace))?'is-reconnecting':''}`} aria-label="Encrypted Remote conversation">
     <header className="remote-heading">
       {workspace && <button ref={sidebarToggle} className="remote-sidebar-toggle" type="button" aria-label={showSessions ? "Close conversations" : "Open conversations"} aria-controls="remote-session-sidebar" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>}
       <div><Heading aria-live="polite">{workspace ? active?.title || 'Conversations' : 'Connect your desktop'}</Heading>{connected && <div className="sp-conversation-limits" aria-label="Remaining limits" dangerouslySetInnerHTML={{__html:renderConversationLimits(active?.limits || [])}} />}</div>
       {connected && <button type="button" className="remote-new" aria-label="New conversation" onClick={startNew}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>}
       <button type="button" className="remote-desktop-button" aria-label="Desktop connection" onClick={()=>setDesktopPanel(true)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button>
     </header>
-    {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Pair your phone with Spawnt on your laptop.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
+    {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Open any linked desktop through your signed-in account.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
     {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><ModelChoices providers={modelProviders} loading={modelsLoading} error={modelsError} disabled={!connected} onRefresh={()=>void loadModels()} onSelect={selectModel}/></dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
-    {phase === 'ready' && <DesktopDevices onPair={offer => {autoConnect.current = true;setLink(offer);setError('');}} />}
-    {phase === 'connecting' && <p role="status">Connecting to your desktop...</p>}{phase === 'reconnecting' && <div className="remote-reconnect" role="status"><div><strong>Reconnecting to your desktop</strong><p>Your chat and draft are saved here. Mobile networks can interrupt the connection even when your laptop is on.</p></div><button type="button" onClick={()=>void connect(true)}>Try again</button><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a></div>}
-    {phase === 'verify' && <section><h2>Verify this device</h2><p>Enter this code in desktop Profile, then confirm here. The desktop checks the encrypted connection before allowing access.</p><strong style={{ fontSize: 32, letterSpacing: 6 }}>{code}</strong><p><button type="button" onClick={confirm} disabled={confirmed}>Codes match</button></p>{confirmed && <p role="status">Waiting for desktop confirmation...</p>}<button type="button" onClick={disconnect}>Disconnect</button></section>}
+    {(phase==='ready'||(phase==='unavailable'&&!workspace)) && <DesktopDevices autoOpen={phase==='ready'&&!manualDisconnect.current&&!link.room} onPair={offer => {autoConnect.current = true;setLink(offer);setError('');}} />}
+    {phase === 'connecting' && <p role="status">Connecting to your desktop...</p>}{(phase==='reconnecting'||phase==='unavailable') && <div className="remote-reconnect" role="status"><div><strong>{phase==='unavailable'?'Desktop unavailable':'Reconnecting to your desktop'}</strong><p>Your chat and draft are saved here. Mobile networks can interrupt the connection even when your laptop is on.</p></div><button type="button" onClick={()=>void connect(true)}>Try again</button><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a></div>}
     {workspace && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>
       <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button ref={sidebarClose} type="button" aria-label="Close conversations" onClick={()=>{setShowSessions(false);sidebarToggle.current?.focus();}}>Close</button></div>
       <details open={newSession} onToggle={event=>setNewSession(event.currentTarget.open)}><summary>New conversation</summary>
