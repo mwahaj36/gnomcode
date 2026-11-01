@@ -2,6 +2,7 @@
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
 pub mod api;
+pub mod model_catalog;
 pub mod pro;
 pub mod remote;
 mod remote_trust;
@@ -68,13 +69,16 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
             _ => None,
         };
     }
-    if matches!(requested_agent, Some("antigravity" | "agy"))
-        && !model.is_empty()
-        && model.len() <= 128
-        && model
+    if model.is_empty()
+        || model.len() > 128
+        || model.starts_with('-')
+        || !model
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/".contains(&byte))
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:/[]".contains(&byte))
     {
+        return None;
+    }
+    if matches!(requested_agent, Some("antigravity" | "agy")) {
         return Some("antigravity");
     }
     let lower = model.to_ascii_lowercase();
@@ -90,7 +94,12 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
     {
         "codex"
     } else {
-        return None;
+        return match requested_agent {
+            Some("codex") => Some("codex"),
+            Some("claude" | "claude-code") => Some("claude-code"),
+            Some("gemini" | "gemini-cli") => Some("gemini-cli"),
+            _ => None,
+        };
     };
     match requested_agent {
         None => Some(inferred),
@@ -105,6 +114,15 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
 mod switch_tests {
     #[test]
     fn model_switch_rejects_wrong_agent_and_unknown_model() {
+        assert_eq!(
+            super::agent_for_model("catalog.custom-model", Some("codex")),
+            Some("codex")
+        );
+        assert_eq!(super::agent_for_model("--yolo", Some("antigravity")), None);
+        assert_eq!(
+            super::agent_for_model("sonnet", Some("claude")),
+            Some("claude-code")
+        );
         assert_eq!(super::agent_for_model("o3", None), Some("codex"));
         assert_eq!(
             super::agent_for_model("claude-sonnet-4", None),
