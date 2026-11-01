@@ -63,7 +63,7 @@ export const faqGroups = [
     "questions": [
       {
         "question": "How do I pair my phone?",
-        "answer": "Use the desktop eight-digit discovery code while signed into the same account on the phone. Then enter the separate phone security code on desktop and confirm on both devices."
+        "answer": "Confirm account access when linking the native app. Every device signed in to that account can then open its available sessions automatically. No phone pairing or per-desktop approval is required."
       },
       {
         "question": "Is Remote independently security approved?",
@@ -79,7 +79,7 @@ export const faqGroups = [
       },
       {
         "question": "Does pairing survive a reload?",
-        "answer": "Remembered trust reconnects after reload/backgrounding with fresh connection keys. It expires after seven inactive days; desktop revocation or browser forgetting/sign-out removes access."
+        "answer": "Native consent survives updates, reloads and inactivity. Devices can disable a native app for all signed-in devices. Native sign-out clears its consent; browser sign-out clears local connection credentials."
       }
     ]
   },

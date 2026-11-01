@@ -120,6 +120,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fonts/inter-variable.woff2", get(inter_font_handler))
         .route("/fonts/jetbrains-mono.woff2", get(mono_font_handler))
         .route("/auth/callback", get(auth_callback_handler))
+        .route("/api/v1/auth/signin", post(auth_signin_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/conversations", get(list_conversations_handler))
@@ -215,9 +216,11 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/routing/policy",
             get(routing_policy_get_handler).post(routing_policy_post_handler),
         )
-        .route("/api/v1/remote/pairing", get(remote_pairing_handler))
+        .route(
+            "/api/v1/remote/devices",
+            get(remote_devices_handler).post(remote_device_action_handler),
+        )
         .route("/api/v1/remote/status", get(remote_status_handler))
-        .route("/api/v1/remote/confirm", post(remote_confirm_handler))
         .route("/api/v1/remote/revoke", post(remote_revoke_handler))
         .with_state(state)
 }
@@ -1694,30 +1697,44 @@ async fn routing_policy_post_handler(
     Ok(Json(json!({ "ok": true, "policy": policy.as_str() })))
 }
 
-async fn remote_pairing_handler(
+async fn remote_devices_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    if !crate::pro::has_remote_access().await {
-        return Err(StatusCode::FORBIDDEN);
-    }
-    let status = state
-        .remote
-        .start(state.db.clone())
-        .await
-        .map_err(|error| match error {
-            crate::remote::RemoteError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
-            _ => StatusCode::BAD_GATEWAY,
-        })?;
-    Ok(Json(remote_pairing_view(&status)))
+    Ok(Json(state.remote.devices.view().await))
 }
 
-fn remote_pairing_view(status: &crate::remote::PairingStatus) -> serde_json::Value {
-    let mut body = json!(status);
-    body["pairing_code"] = json!(status.pairing_code());
-
-    body
+async fn remote_device_action_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let enabled = match payload["type"].as_str() {
+        Some("enable_account_access") => true,
+        Some("disable_account_access") => false,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+    if enabled && payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
+    }
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let auth = crate::sync::read_cloud_auth(&client, &session_file_path())
+        .await
+        .map_err(|_| StatusCode::UNAUTHORIZED)?
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    state
+        .remote
+        .devices
+        .set_account_access(&client, &auth, enabled)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    Ok(Json(state.remote.devices.view().await))
 }
 
 async fn remote_status_handler(
@@ -1725,32 +1742,7 @@ async fn remote_status_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(remote_pairing_view(&state.remote.status().await)))
-}
-
-/// Desktop-side confirmation of the shared six-digit code.
-#[derive(Debug, Deserialize)]
-pub struct RemoteConfirmRequest {
-    /// Code displayed on both devices.
-    pub code: String,
-}
-
-async fn remote_confirm_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Json(payload): Json<RemoteConfirmRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    validate_auth(&headers, &state.bearer_token)?;
-    let status = state
-        .remote
-        .confirm(&payload.code)
-        .await
-        .map_err(|error| match error {
-            crate::remote::RemoteError::WrongCode => StatusCode::BAD_REQUEST,
-            crate::remote::RemoteError::Expired => StatusCode::GONE,
-            _ => StatusCode::CONFLICT,
-        })?;
-    Ok(Json(json!(status)))
+    Ok(Json(json!(state.remote.status().await)))
 }
 
 async fn remote_revoke_handler(
@@ -1758,6 +1750,12 @@ async fn remote_revoke_handler(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    state
+        .remote
+        .devices
+        .disconnect()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let revoked = state
         .remote
         .revoke()
@@ -2390,6 +2388,9 @@ async fn auth_session_post_handler(
     Json(payload): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    if payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
+    }
     let client = reqwest::Client::builder()
         .https_only(true)
         .timeout(std::time::Duration::from_secs(10))
@@ -2402,8 +2403,89 @@ async fn auth_session_post_handler(
     crate::sync::save_cloud_session(&session_file_path(), &payload)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let owner = payload
+        .pointer("/user/id")
+        .and_then(Value::as_str)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let auth = crate::sync::CloudAuth {
+        user_id: owner.to_owned(),
+        access_token: payload["access_token"]
+            .as_str()
+            .ok_or(StatusCode::BAD_REQUEST)?
+            .to_owned(),
+        base_url: base,
+        public_key: key,
+    };
+    state
+        .remote
+        .devices
+        .set_account_access(&client, &auth, true)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
     Ok((cors_headers(), Json(json!({ "success": true }))))
+}
+
+async fn auth_signin_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
+    }
+    let email = payload["email"]
+        .as_str()
+        .filter(|value| value.len() <= 320 && value.contains('@'))
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let password = payload["password"]
+        .as_str()
+        .filter(|value| !value.is_empty() && value.len() <= 1024)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    let (base, key) = crate::sync::cloud_config();
+    let response = client
+        .post(format!("{base}/auth/v1/token?grant_type=password"))
+        .header("apikey", &key)
+        .json(&json!({"email":email,"password":password}))
+        .send()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    if !response.status().is_success() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let session = response
+        .json::<Value>()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    crate::sync::save_cloud_session(&session_file_path(), &session)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let owner = session
+        .pointer("/user/id")
+        .and_then(Value::as_str)
+        .ok_or(StatusCode::BAD_GATEWAY)?;
+    let auth = crate::sync::CloudAuth {
+        user_id: owner.to_owned(),
+        access_token: session["access_token"]
+            .as_str()
+            .ok_or(StatusCode::BAD_REQUEST)?
+            .to_owned(),
+        base_url: base,
+        public_key: key,
+    };
+    state
+        .remote
+        .devices
+        .set_account_access(&client, &auth, true)
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    Ok(Json(json!({"success":true})))
 }
 
 async fn auth_session_delete_handler(
@@ -2412,6 +2494,29 @@ async fn auth_session_delete_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
+    if let Ok(bytes) = tokio::fs::read(&path).await {
+        if let Ok(session) = serde_json::from_slice::<Value>(&bytes) {
+            if let Some(owner) = session.pointer("/user/id").and_then(Value::as_str) {
+                state
+                    .remote
+                    .devices
+                    .disconnect_owner(owner)
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
+    }
+    state
+        .remote
+        .devices
+        .disconnect()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .remote
+        .revoke()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     crate::sync::remove_cloud_session(&path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -2913,6 +3018,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_link_requires_account_wide_consent_before_auth_or_persistence() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "consent-test".into(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        for path in [
+            "/api/v1/auth/signin",
+            "/api/v1/auth/session",
+            "/api/v1/remote/devices",
+        ] {
+            let request = Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("Host", "127.0.0.1")
+                .header("Authorization", "Bearer consent-test")
+                .header("Content-Type", "application/json")
+                .body(Body::from(if path.ends_with("devices") {
+                    r#"{"type":"enable_account_access"}"#
+                } else {
+                    "{}"
+                }))
+                .expect("request");
+            assert_eq!(
+                app.clone()
+                    .oneshot(request)
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::PRECONDITION_REQUIRED,
+                "linking must require explicit account-wide access consent before any network/write: {path}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn retired_browser_pairing_endpoint_cannot_start_a_collector() {
         let db = Database::open_in_memory().expect("database");
         let app = build_router(AppState {
@@ -2921,22 +3063,28 @@ mod tests {
             orchestrator: None,
             remote: Arc::new(crate::remote::RemoteManager::new()),
         });
-        for method in ["GET", "POST", "DELETE"] {
-            let request = Request::builder()
-                .method(method)
-                .uri("/api/v1/auth/pair")
-                .header("Host", "127.0.0.1:41738")
-                .header("Authorization", "Bearer local-test-token")
-                .body(Body::empty())
-                .expect("request");
-            assert_eq!(
-                app.clone()
-                    .oneshot(request)
-                    .await
-                    .expect("response")
-                    .status(),
-                StatusCode::NOT_FOUND
-            );
+        for path in [
+            "/api/v1/auth/pair",
+            "/api/v1/remote/pairing",
+            "/api/v1/remote/confirm",
+        ] {
+            for method in ["GET", "POST", "DELETE"] {
+                let request = Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .header("Host", "127.0.0.1:41738")
+                    .header("Authorization", "Bearer local-test-token")
+                    .body(Body::empty())
+                    .expect("request");
+                assert_eq!(
+                    app.clone()
+                        .oneshot(request)
+                        .await
+                        .expect("response")
+                        .status(),
+                    StatusCode::NOT_FOUND
+                );
+            }
         }
     }
 
@@ -3006,27 +3154,6 @@ mod tests {
             StatusCode::UNAUTHORIZED,
             "model discovery must not launch CLI probes before authentication"
         );
-    }
-
-    #[test]
-    fn pairing_view_has_code_only_before_confirmation() {
-        let mut status = crate::remote::PairingStatus {
-            remembered: false,
-            trust_expires_at: None,
-            enabled: true,
-            paired: false,
-            room_id: Some("a".repeat(32)),
-            public_key: Some("b".repeat(64)),
-            verify_code: None,
-            relay_url: Some("wss://relay.example/relay".to_owned()),
-            expires_at: Some((chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339()),
-        };
-        let view = super::remote_pairing_view(&status);
-        assert_eq!(view["pairing_code"].as_str().map(str::len), Some(8));
-        status.paired = true;
-        let view = super::remote_pairing_view(&status);
-        assert!(view["pairing_code"].is_null());
-        assert!(view.get("pairing_url").is_none());
     }
 
     #[test]
@@ -3104,6 +3231,7 @@ mod tests {
             "/api/v1/auth/session",
             "/api/v1/supabase-config",
             "/api/v1/sync/status",
+            "/api/v1/remote/devices",
             "/api/v1/reconcile",
         ] {
             let mut builder = Request::builder();

@@ -47,15 +47,19 @@ for(const name of ['lastReportJson','lastSessionsJson','lastQuotaJson']) assert.
 console.log('PASS: native authorization, loading recovery, initialized caches and successful quota retry');
 
 const accountNodes=new Map();
-const accountDocument={getElementById(id){if(!accountNodes.has(id))accountNodes.set(id,{hidden:false,style:{},value:'unit-local-pairing',focus(){}});return accountNodes.get(id);}};
+const accountDocument={getElementById(id){if(!accountNodes.has(id))accountNodes.set(id,{hidden:false,style:{},value:'unit-local-pairing',focus(){}});return accountNodes.get(id);},querySelector:()=>({setAttribute(){}})};
 let accountPaired=true,accountFailed=false;
 const checkAccount=new Function('document','apiJson',`const headers={};${fn('checkAuthSession')}return checkAuthSession;`)(accountDocument,async url=>{if(accountFailed)throw new Error('offline');return url.includes('auth/session')?{paired:accountPaired,email:'unit@example.invalid'}:{message:'Ready',last_success_at:null};});
 assert.equal(await checkAccount(),true);assert.equal(accountNodes.get('auth-unpaired-card').hidden,true);
 accountPaired=false;assert.equal(await checkAccount(),true);assert.equal(accountNodes.get('auth-paired-card').hidden,true);
 accountFailed=true;assert.equal(await checkAccount(),false);assert.doesNotMatch(accountNodes.get('auth-cloud-status').textContent,/Checking/);
-let requests=0,finishPair;
-const pair=new Function('document','fetch','checkAuthSession',`const headers={};let accountWriteBusy=false;${fn('pairTokenDirectly')}return pairTokenDirectly;`)(accountDocument,()=>{requests++;return new Promise(resolve=>finishPair=resolve);},async()=>true);
+let requests=0,finishPair,consent=false,submitted;
+const pair=new Function('document','fetch','checkAuthSession','confirmAccountAccess',`const headers={};let accountWriteBusy=false;${fn('pairTokenDirectly')}return pairTokenDirectly;`)(accountDocument,(_url,options)=>{requests++;submitted=JSON.parse(options.body);return new Promise(resolve=>finishPair=resolve);},async()=>true,async()=>consent);
+await pair();assert.equal(requests,0,'cancelled account consent must not send credentials');assert.equal(accountNodes.get('auth-token-input').value,'unit-local-pairing');
+assert.equal(accountNodes.get('auth-pair-status').hidden,true,'cancelling consent must clear the connecting status');
+consent=true;
 const pendingPair=pair();await pair();assert.equal(requests,1,'concurrent pairing must be ignored');
+assert.equal(submitted.remote_access_confirmed,true,'confirmed account scope must reach the native API');
 finishPair({ok:true});await pendingPair;assert.equal(accountNodes.get('auth-token-input').value,'');assert.equal(accountNodes.get('auth-pair-button').disabled,false);
 console.log('PASS: account connected/disconnected/error states and duplicate pairing prevention without reload');
 
