@@ -59,6 +59,12 @@ impl SourceAdapter for ClaudeAdapter {
                 batch.parse_errors += 1;
                 continue;
             };
+            if matches!(
+                obj.get("type").and_then(Value::as_str),
+                Some("custom-title" | "summary")
+            ) {
+                continue;
+            }
 
             let parsed_ts = obj
                 .get("timestamp")
@@ -204,6 +210,7 @@ impl SourceAdapter for ClaudeAdapter {
         if let Some(sess) = current_session {
             batch.sessions.push(sess);
         }
+        crate::titles::apply_native_titles(&mut batch, AgentId::ClaudeCode, chunk);
         batch
     }
 }

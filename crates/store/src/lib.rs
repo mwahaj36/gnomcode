@@ -821,14 +821,35 @@ impl Database {
         Ok(())
     }
 
-    /// Reads bounded opening user-message previews for local or encrypted conversation labels.
+    /// Reads the native label before bounded opening-message fallback candidates.
     ///
     /// # Errors
     /// Returns [`Error`] if the query fails.
     pub fn conversation_title_candidates(&self, session_id: &str) -> Result<Vec<String>, Error> {
+        let mut titles: Vec<String> = self.conn.query_row(obfstr::obfstr!("SELECT title FROM session WHERE id=?1 AND title IS NOT NULL AND trim(title)<>''"), [session_id], |row| row.get(0)).optional()?.into_iter().collect();
         let mut statement = self.conn.prepare(obfstr::obfstr!("SELECT substr(content, 1, 8192) FROM chat_event WHERE session_id = ?1 AND role = 'user' ORDER BY turn_index, created_at, event_id LIMIT 16"))?;
         let rows = statement.query_map(params![session_id], |row| row.get(0))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+        titles.extend(rows.collect::<Result<Vec<_>, _>>()?);
+        Ok(titles)
+    }
+
+    /// Updates a native app's redacted label without changing activity timestamps.
+    ///
+    /// # Errors
+    /// Returns an error if SQLite cannot update existing session metadata.
+    pub fn update_native_session_title(&self, session_id: &str, title: &str) -> Result<(), Error> {
+        let title: String = spawnt_core::redact::redact_chat_content(title)
+            .trim()
+            .chars()
+            .take(256)
+            .collect();
+        if !title.is_empty() {
+            self.conn.execute(
+                obfstr::obfstr!("UPDATE session SET title=?2 WHERE id=?1 AND title IS NOT ?2"),
+                params![session_id, title],
+            )?;
+        }
+        Ok(())
     }
 
     /// Retrieves the most recent structured chat events for a session in turn order.

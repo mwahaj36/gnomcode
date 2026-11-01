@@ -14,4 +14,4 @@ At store open, remove only legacy idle Cursor placeholders lacking title/model/P
 
 ## Verification
 
-Regression tests failed on the old settings/session/timestamp behavior and old placeholder retention, then passed after the fixes. The golden settings fixture contains a redacted crash-reporter identifier, no personal paths or contents. Focused adapter/store tests and the full Rust quality gate passed. A refreshed installer will follow the native-title change requested in the same chat. No user database was manually edited.
+Regression tests failed on the old settings/session/timestamp behavior and old placeholder retention, then passed after the fixes. The golden settings fixture contains a redacted crash-reporter identifier, no personal paths or contents. Focused adapter/store tests and the full Rust quality gate passed. The [native-title follow-up](2026-11-01-native-chat-titles.md) records the refreshed verified Desktop installer containing this repair. No user database was manually edited.

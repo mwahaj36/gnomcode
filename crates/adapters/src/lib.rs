@@ -9,6 +9,7 @@ pub mod cline;
 pub mod codex;
 pub mod cursor;
 pub mod gemini;
+pub mod titles;
 
 use serde::{Deserialize, Serialize};
 use spawnt_core::{ActivityEvent, AgentId, Project, QuotaSnapshot, Session, UsageRecord};
@@ -71,6 +72,28 @@ pub trait SourceAdapter {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_titles_are_retained_by_supported_transcript_adapters() {
+        use super::{FileCtx, SourceAdapter};
+        let cases: Vec<(Box<dyn SourceAdapter>, &[u8])> = vec![
+            (Box::new(super::codex::CodexAdapter::new()), br#"{"type":"session_meta","timestamp":"2026-10-26T12:00:00Z","payload":{"id":"native","cwd":"/workspace","title":"Saved chat name"}}
+"#),
+            (Box::new(super::claude::ClaudeAdapter::new()), br#"{"type":"user","sessionId":"native","timestamp":"2026-10-26T12:00:00Z","cwd":"/workspace","message":{"role":"user","content":"Question"}}
+{"type":"custom-title","sessionId":"native","customTitle":"Saved chat name"}
+"#),
+            (Box::new(super::gemini::GeminiAdapter::new()), br#"{"sessionId":"native","summary":"Saved chat name","messages":[]}"#),
+            (Box::new(super::cursor::CursorAdapter::new()), br#"{"sessionId":"native","title":"Saved chat name","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"}]}"#),
+        ];
+        for (mut adapter, bytes) in cases {
+            let batch = adapter.parse(&FileCtx::default(), bytes);
+            assert_eq!(
+                batch.sessions[0].title.as_deref(),
+                Some("Saved chat name"),
+                "{}",
+                adapter.agent_id().as_str()
+            );
+        }
+    }
     #[test]
     fn codex_injected_context_is_not_a_user_turn() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
