@@ -1,75 +1,38 @@
-# Spawnt
+# Spawnt product brief
 
-Updated 2026-10-30. This product brief is for discussion. [SPEC](docs/SPEC.md) owns technical requirements and status; [LAUNCH_CHECKLIST](docs/LAUNCH_CHECKLIST.md) owns remaining release work.
+Reviewed 2026-11-01 against repository baseline `617e07c`. This describes implemented surfaces and their boundaries, not a guarantee of production readiness. [SPEC](docs/SPEC.md) owns requirements; [audit](docs/APP_AUDIT_2026-11-01.md) records evidence, issues, market comparison and verification limits. [Launch checklist](docs/LAUNCH_CHECKLIST.md) tracks release gates.
 
-## What the product is
+## Product and audience
 
-Spawnt is a local-first runtime and orchestrator for AI coding agents. Developers get one place to launch official agent CLIs, work in their conversations, switch models with a compact handoff, and control supported sessions from a paired phone or browser. Windows, macOS and Linux are design targets; Windows currently has the locally verified desktop build.
+Spawnt is a local-first workspace around existing AI coding agent CLIs. It aims to help developers launch and follow sessions across projects, preserve useful conversation continuity when changing agents, see usage and limits, and interact with an online desktop from a paired device. The agent and its provider perform the coding and inference; Spawnt does not supply the user's vendor account, entitlement or permissions.
 
-The agent does the coding. Spawnt coordinates the workflow around it: workspace selection, session state, conversation continuity, usage and quota visibility, and remote interaction. It does not replace vendor accounts, subscriptions, authentication or permissions.
+The intended user is a developer already using one or more supported coding agents who wants a common place to manage sessions and understand usage. This audience and its willingness to pay are hypotheses; this review found no independent customer research establishing demand.
 
-## Who it is for
+## What exists and what it does
 
-Developers running multiple agents across several projects. They already know Claude Code, Codex or Gemini CLI and want less terminal juggling, continuity when a model reaches its limit, and a way to direct work away from the desk. API users also need cross-provider spend visibility. Teams are a later commercial direction.
+| Capability | User value and boundary | Evidence |
+| --- | --- | --- |
+| Local launch and conversations | Select a workspace and supported official CLI, converse and use terminal access for native prompts. A separate PTY owner is implemented. Process survival and reattachment across all supported OSes still need acceptance. | `crates/pty/src/lib.rs`, `crates/daemon/src/console.html` |
+| Discovery and history | Agent adapters ingest supported local records; session list, metadata search and paged Spawnt-owned redacted chat help users return to work. Search does not cover message content. Redaction is not guaranteed to catch every secret; agent-owned history remains separate. | `crates/adapters`, `crates/ingest`, `web/lib/console-presentation.js`, `crates/store` |
+| Model/provider handoff | A bounded briefing can carry selected context into a target; provider-internal state is not transferred and the receiving model consumes tokens. Real authenticated switching and model availability require acceptance. | `crates/daemon/src/pro.rs`, `crates/daemon/src/api.rs`, `docs/SPEC.md` §3.14 |
+| Usage and quota | Recorded usage and pricing can inform estimated API-equivalent costs and quota views. Completeness varies by agent and source; estimates are not invoices and unknown values must remain unknown. | `crates/core`, `crates/adapters`, `web/lib/console-presentation.js` |
+| Local rules and resume | Guardrail rules, alerts, routing and a resume queue are implemented. Hard-stop enforcement is Claude-specific and fail-open; it is not a guaranteed cross-provider billing cap. Native compatibility and timing need real-agent validation. | `crates/daemon/src/pro.rs`, `crates/core/src/rules.rs` |
+| Paired Remote | A paired browser can use an encrypted channel for supported conversation and control operations while the desktop is online. Pairing, reconnection and revocation are implemented; real-phone acceptance and independent security review remain open. It is not an independently running cloud agent. | `crates/daemon/src/remote.rs`, `web/components/RemoteCompanion.tsx` |
+| Optional account sync | Account-backed metadata snapshots support remote account views. This is separate from encrypted Remote and includes selected session metadata, project names, reports and quota; consent and historical cloud copies need review. The session list is limited to 200, with the total reported separately. | `crates/daemon/src/sync.rs`; audit findings |
+| Desktop and CLI | Electron shell, tray and CLI provide local entry points. Windows, macOS and Linux are design targets, not equally verified release claims. | `apps/desktop`, `crates/cli`, `crates/tray` |
 
-## Three main workflows
+## Agent support is not uniform
 
-1. **Launch and work.** Select a folder and installed supported CLI. Spawnt opens a conversation backed by the official process. Use Terminal stream for login, trust and permission prompts. A separate same-workspace terminal handles local shell work. Discovered sessions remain readable without granting control of their processes.
-2. **Switch and continue.** Supported named-model changes use the existing official CLI session. Changing providers keeps the same conversation, title and visible history; the next message carries bounded redacted context privately to the new agent. Reopen saved Codex, Claude Code and Gemini CLI conversations from desktop or paired mobile while the laptop and Spawnt are online. Native commands, session IDs and generated briefings stay out of ordinary chat. Provider-internal state is not transferred between providers; receiving agents still consume input tokens.
-3. **Step away and stay in control.** Start Remote in desktop Profile. Sign into the same Spawnt account on the phone, enter the desktop's eight-digit discovery code, then confirm the separate security code on both devices. The encrypted channel carries conversations, prompts, session discovery and bounded folder selection. Remembered trust reconnects after reload/backgrounding and expires after seven inactive days. Remote cannot execute arbitrary shell commands or bypass native permissions.
+Source contains observation adapters for Claude Code, Codex, Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider. The launcher accepts Claude, Codex, Gemini and Antigravity CLI names; observation does not establish hosted control, complete history, model switching or quota coverage for each. Installed CLI versions, authentication and available provider entitlements govern what actually works. Test real versions before making support claims.
 
-## Supporting capabilities
+## Why someone might choose it
 
-- A searchable session list, paged local chat history, safe Markdown and per-session drafts held in browser memory.
-- Token usage, estimated API-equivalent spend, cache savings and plan-value comparisons across agents/projects.
-- Per-provider/model quota windows and resets when recorded by a reliable source. Missing information stays unknown.
-- Free local guardrails, alerts, Resume Queue, routing policy and exports. Native agent acceptance varies by operation.
-- A separate PTY owner keeps agent processes independent of the desktop UI; full crash-survival and reattachment acceptance remains a platform release gate.
+The proposed advantage is a combination: keep familiar official CLI workflows, see local cross-agent activity and usage in one place, carry bounded context between providers, and interact with the online machine remotely. Local-first operation and explicit uncertainty labels can appeal to developers who value control and want to understand data provenance. These are hypotheses, not evidence of uniqueness: other products provide parallel workspaces, code review and remote agents. Spawnt currently has weaker managed isolation and integrated review workflows than selected competitors; see the audit.
 
-## What agent support means
+## Data, trust and limits
 
-| Agent | Observation | Hosted control |
-| :--- | :--- | :--- |
-| Claude Code | Local adapter/history | Official CLI |
-| OpenAI Codex | CLI/desktop/IDE logs and observed quota | Official CLI, no desktop takeover |
-| Gemini CLI | Local adapter/history | Official CLI |
-| Antigravity | Local transcript adapter | Official `agy` CLI; live authenticated acceptance outstanding |
-| Cline / Roo | Editor log adapter | No hosted editor takeover |
-| Cursor | Local log adapter | No hosted editor takeover |
-| Aider | Opt-in local adapter | No hosted launcher |
+Spawnt-owned state is local by default, including redacted conversation records. Redaction reduces exposure; it is not a confidentiality guarantee. Deleting Spawnt history does not imply deleting agent-owned logs, backups or forensic remnants. Local API security and Remote encryption are implemented controls, not independent certification. Account metadata sync has a separate trust model from Remote. Agent CLIs contact their own providers; optional update, pricing, vendor, account and relay traffic depends on configuration. No telemetry is intended by the product invariants.
 
-An adapter does not imply equal chat, cost, quota or Remote capabilities. Model discovery uses fresh visible Codex CLI cache entries. Other CLIs retain native model selectors where no reliable local catalog exists.
+## Commercial and release state
 
-## Data and trust
-
-Rust owns parsing, pricing, quota math, routing and security. SQLite defaults to `~/.spawnt/state.db` or `SPAWNT_HOME/state.db`. It contains metadata, source checkpoints and redacted conversation records for continuity. Agent-owned histories are preserved. Redaction reduces exposure but cannot guarantee removal of every user-entered secret.
-
-Local HTTP requires authentication and binds to loopback. Remote uses outbound TLS and end-to-end encryption between paired devices. Optional account metadata sync is a separate service without E2EE. Its current live snapshot includes project/session labels, profile/report data and automation metadata; it must not be described as a hashed-project-only feed. Field-level minimization is a launch blocker. Chat events are excluded from that snapshot.
-
-Spawnt does not read official agent subscription tokens. Its own optional account credentials are separate. No product analytics or telemetry are permitted. Official agent CLIs contact their providers under their own settings.
-
-Numbers declare `exact`, `estimated`, `api` or `unknown`. Exact token counts do not make calculated dollar amounts exact invoices. Model catalog entries do not prove current entitlement or quota.
-
-## Business model
-
-Closed-source software. All local features are free, without a Spawnt account or local license. Remote and Teams are the paid categories; prices and commercial terms are not finalized. Existing signed-license/live-account checks gate the Remote prototype. Old paid-local tiers and historical 1.x notes do not define the current offer. Development version: 0.9.0.
-
-## Current state
-
-The repo contains the Rust engine, CLI, Electron shell, Next.js site, chat/terminal workspace, routing/handoff and encrypted Remote implementation. Prior sessions record automated browser/relay checks and Windows packaging. This is a prelaunch product.
-
-Physical-phone acceptance, real authenticated model/provider switching, macOS/Linux desktop acceptance, independent Remote security review, metadata privacy review, legal/commercial approval and distribution remain open. Teams is a roadmap direction, not a complete service. [LAUNCH_CHECKLIST](docs/LAUNCH_CHECKLIST.md) explains how to close each gap.
-
-## Positioning
-
-**The runtime for your AI coding agents.** Launch agents, switch models mid-task and continue from your phone, with one view of usage and limits.
-
-Lead with launch, continuity and encrypted remote control. Reporting supports those workflows. Marketing should be optimistic and outcome-focused; documentation records limitations and launch evidence. Avoid promising perfect context transfer, free provider inference, universal agent control or security certification.
-
-## Questions for product discussion
-
-- Should first run prioritize launching a new agent or importing existing sessions?
-- What evidence is required before charging for Remote?
-- Which account snapshot fields should be removed or require separate consent?
-- What is the smallest useful Teams product beyond personal snapshots?
-- Which platforms and channels will be enabled on launch day?
+The repository describes local features as free and Remote/Teams as paid directions, but pricing, terms and distribution are not finalized. Teams is not a complete service. Before a public release or sale, close the security, actual device/agent, platform, privacy, legal and distribution gates in the launch checklist or explicitly narrow the offer. This audit did not run Rust tests or exercise a real desktop, account, agent or phone; its findings should guide further validation, not replace it.
