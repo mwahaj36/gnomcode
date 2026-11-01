@@ -316,7 +316,10 @@ pub fn resolve_git_repo_and_remote(path: &Path) -> (Option<PathBuf>, Option<Stri
         let dot_git = dir.join(".git");
         if dot_git.is_dir() {
             let remote = read_git_remote_url(&dot_git.join("config"));
-            return (Some(dir.to_path_buf()), remote);
+            return (
+                Some(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf())),
+                remote,
+            );
         } else if dot_git.is_file() {
             if let Ok(content) = fs::read_to_string(&dot_git) {
                 if let Some(gitdir_line) = content
@@ -858,6 +861,14 @@ mod tests {
             remote.as_deref(),
             Some("git@github.com:mwahaj36/spawnt.git")
         );
+
+        #[cfg(unix)]
+        {
+            let alias = dir.path().join("repo-alias");
+            std::os::unix::fs::symlink(&repo_root, &alias).expect("symlink");
+            let (alias_root, _) = resolve_git_repo_and_remote(&alias.join("src"));
+            assert_eq!(alias_root, Some(expected_root.clone()));
+        }
 
         // 2. Worktree simulation
         let worktree_dir = dir.path().join("my-repo-worktree");
