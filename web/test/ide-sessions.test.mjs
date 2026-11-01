@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-const source = await readFile(new URL('../lib/console-presentation.js', import.meta.url));
-const presentation = await import(`data:text/javascript;base64,${source.toString('base64')}`);
+const presentation = await import(new URL('../lib/console-presentation.js',import.meta.url));
 
 test('session sidebar searches titles and escapes session metadata', () => {
   const sessions = [
@@ -38,12 +36,22 @@ test('agent replies render Markdown while user messages retain literal text', ()
   assert.match(markup, /<h1>Result<\/h1>/);
   assert.match(markup, /<strong>Fixed<\/strong>/);
   assert.match(markup, /<code>cargo test<\/code>/);
-  assert.match(markup, /<ul><li>First<\/li><li>Second<\/li><\/ul>/);
+  assert.match(markup, /<ul>\s*<li>First<\/li>\s*<li>Second<\/li>\s*<\/ul>/);
   assert.match(markup, /<pre><code[^>]*>let x = &quot;&lt;script&gt;&quot;;/);
   assert.match(markup, /<th>Check<\/th>/);
   assert.match(markup, /<td data-label="Result">Pass<\/td>/);
   assert.match(markup, /\*\*Keep this literal\*\*/);
   assert.doesNotMatch(markup, /<script>/);
+});
+
+test('CommonMark emphasis, escaped punctuation and quoted Markdown remain correct', () => {
+  const html=presentation.renderChatCards([{role:'assistant',content:'__strong__ and _emphasis_ with snake_case.\\*literal\\*\n\n> ## Quoted heading\n>\n> - Item\n\n- [x] Complete\n- [ ] Pending',created_at:'2026-11-02'}]);
+  assert.match(html,/<strong>strong<\/strong>/);
+  assert.match(html,/<em>emphasis<\/em>/);
+  assert.match(html,/snake_case/);
+  assert.match(html,/\*literal\*/);
+  assert.match(html,/<blockquote>\s*<h2>Quoted heading<\/h2>/);
+  assert.match(html,/<input[^>]+checked/);
 });
 
 test('reply formatting never enables HTML or executable links', () => {
@@ -55,13 +63,13 @@ test('reply formatting never enables HTML or executable links', () => {
 
 test('nested steps and multiline paragraphs retain their structure', () => {
   const markup = presentation.renderChatCards([{role:'assistant', content:'First line\nsecond line\n\n1. Run checks\n   - Unit tests\n   - Browser tests\n2. Review changes', created_at:'2026-10-29'}]);
-  assert.match(markup, /<p>First line<br>second line<\/p>/);
-  assert.match(markup, /<ol><li>Run checks<ul><li>Unit tests<\/li><li>Browser tests<\/li><\/ul><\/li><li>Review changes<\/li><\/ol>/);
+  assert.match(markup, /<p>First line<br>\s*second line<\/p>/);
+  assert.match(markup, /<ol>\s*<li>Run checks\s*<ul>\s*<li>Unit tests<\/li>\s*<li>Browser tests<\/li>\s*<\/ul>\s*<\/li>\s*<li>Review changes<\/li>\s*<\/ol>/);
 });
 
 test('continued numbered steps keep the agent numbering', () => {
   const markup = presentation.renderChatCards([{role:'assistant',content:'4. Build\n5. Verify',created_at:'2026-10-29'}]);
-  assert.match(markup, /<ol start="4"><li>Build<\/li><li>Verify<\/li><\/ol>/);
+  assert.match(markup, /<ol start="4">\s*<li>Build<\/li>\s*<li>Verify<\/li>\s*<\/ol>/);
 });
 
 test('confirmed model changes appear as notices instead of chat bubbles', () => {
@@ -103,6 +111,16 @@ test('pending prompts survive empty history and reconcile without duplicate bubb
   const replied = presentation.reconcileChat([...recorded,{event_id:'reply',role:'assistant',content:'Hi',created_at:'2026-10-29T00:00:03Z'}],pending,'idle');
   assert.equal(replied.pending.length,0);
   assert.equal(replied.events.length,2);
+});
+
+test('an unrecorded old prompt stays in chronological order without an endless response spinner', () => {
+  const pending=[{id:'missing',text:'heyo',created_at:'2026-11-01T18:38:39Z',baseline:[],delivered:true}];
+  const events=[{event_id:'hey',role:'user',content:'hey',created_at:'2026-11-01T18:39:19Z'},{event_id:'reply',role:'assistant',content:'Hello',created_at:'2026-11-01T18:39:20Z'}];
+  const result=presentation.reconcileChat(events,pending,'idle');
+  assert.deepEqual(result.events.filter(e=>e.role==='user').map(e=>e.content),['heyo','hey']);
+  assert.equal(result.events.some(e=>e.waiting),false);
+  assert.match(presentation.renderChatCards(result.events),/Not confirmed by agent/);
+  assert.equal(result.pending.length,1,'keep the unconfirmed text until its native turn appears');
 });
 
 test('identical pending prompts consume distinct logged turns and ended sessions stop waiting', () => {
