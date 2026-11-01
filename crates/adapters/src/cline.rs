@@ -175,7 +175,7 @@ impl SourceAdapter for ClineAdapter {
                             .or_else(|| meta.get("model"))
                             .and_then(Value::as_str)
                             .or(session.model.as_deref())
-                            .unwrap_or("claude-3-5-sonnet");
+                            .unwrap_or("unknown");
 
                         if in_tok > 0 || out_tok > 0 || cache_reads > 0 {
                             let dedup_key = format!("{task_id}:{idx}:{ts}");
