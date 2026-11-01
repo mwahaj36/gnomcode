@@ -5,9 +5,10 @@ import { generateKeyPair, createChannel } from '../web/lib/remote-crypto.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const [site, relay] = process.argv.slice(2);
+const modelsOnly=process.argv.includes('--models-only');
 if (!site || !relay?.startsWith('wss://')) throw Error('Usage: node scripts/check-remote-companion.mjs <site> <public-wss-relay>');
 const keys=await generateKeyPair(); const room=crypto.randomUUID().replaceAll('-','');
-let finished=false,reconnectTimer,launched=false,firstPrompt=false,resumes=0,savedResumed=false;
+let finished=false,reconnectTimer,launched=false,firstPrompt=false,resumes=0,savedResumed=false,modelCatalogError=false;
 let desktop=new WebSocket(`${relay}/${room}?role=desktop`); desktop.binaryType='arraybuffer';
 await new Promise((resolve,reject)=>{desktop.onopen=resolve;desktop.onerror=reject;setTimeout(()=>reject(Error('Relay timeout')),15000).unref();});
 const secret=crypto.getRandomValues(new Uint8Array(32));const secretHex=Array.from(secret,b=>b.toString(16).padStart(2,'0')).join('');
@@ -27,6 +28,7 @@ function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=e
     if(message.type==='confirm') {await reply({type:'confirm'});await reply({type:'trusted',secret:secretHex});}
     else if(message.type==='resume'){const proof=Uint8Array.from(message.proof.match(/../g),part=>parseInt(part,16));assert.equal(await crypto.subtle.verify('HMAC',proofKey,proof,new TextEncoder().encode(resumeContext)),true);resumes++;await reply({type:'resumed'});}
     else if(message.type==='sessions') { sessionReads++; await reply({type:'sessions',sessions:sessionReads===1?[]:[{id:'saved-session',title:'Saved conversation',agent:'codex',state:savedResumed?'idle':'ended',hosted:savedResumed,can_prompt:savedResumed,can_resume:!savedResumed},{id:'external-history',title:'External history',agent:'codex',state:'idle',hosted:false,can_prompt:false},...(launched?[{id:'codex:new',title:'New phone conversation',agent:'codex',state:'waiting_for_history',hosted:true,can_prompt:true}]:[]),{hosted:true,id:'codex-hosted',limits:[{label:'5h',remaining_pct:sessionReads>4?37:75,basis:'exact',observed_at:new Date().toISOString(),stale:false}],title:'Review authentication',agent:'codex',model:sessionReads>2?'gpt-6.1-sol':null,state:sessionReads>2?'idle':'waiting_for_history',can_prompt:sessionReads>2}]}); }
+    else if(message.type==='models') await reply(modelCatalogError?{type:'error',request_type:'models',message:'Update desktop model service.'}:{type:'models',providers:[{agent:'codex',name:'OpenAI Codex',status:'authenticated',message:'Signed in',models:[{agent:'codex',model:'gpt-test',display_name:'GPT test'}]},{agent:'claude',name:'Claude Code',status:'authenticated',message:'Signed in',models:[{agent:'claude',model:'sonnet',display_name:'Sonnet test'}]},{agent:'gemini',name:'Gemini CLI',status:'configured',message:'Account configured',models:[{agent:'gemini',model:'gemini-test',display_name:'Gemini test'}]},{agent:'antigravity',name:'Antigravity',status:'unknown',message:'Native catalog unavailable.',models:[]}]});
     else if(message.type==='chat') await reply({type:'chat',session_id:message.session_id,events:message.session_id==='codex:new' ? (firstPrompt?[{event_id:'new-reply',turn_index:1,role:'assistant',content:'First phone prompt received.',created_at:new Date().toISOString()}]:[]) : [
       {event_id:'0',turn_index:0,role:'system',status:'model_active',content:'Model active: gpt-6.1-sol',created_at:'2026-10-29T00:00:00Z'},
       {event_id:'1',turn_index:1,role:'user',content:'Review authentication',created_at:'2026-10-29T00:00:00Z'},
@@ -67,6 +69,26 @@ try {
   assert.equal(await page.locator('.remote-session-list button[aria-current]').count(),1,'newest session is discovered and opened without manual selection');
   await page.locator('.sp-chat-body strong').getByText('ready').waitFor();
   await page.locator('.remote-heading').getByText('37% left',{exact:true}).waitFor();
+  await page.locator('#remote-prompt').fill('Draft survives provider selection');
+  await page.getByRole('button',{name:'Change model',exact:true}).click();
+  await page.getByRole('button',{name:'Sonnet test',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'GPT test',exact:true}).isVisible(),true);
+  assert.equal(await page.getByRole('button',{name:'Gemini test',exact:true}).isVisible(),true);
+  assert.equal(await page.getByText('Native catalog unavailable.',{exact:true}).isVisible(),true);
+  assert.equal(await page.locator('#remote-model').count(),0,'model selection never requires typing a model ID');
+  await page.screenshot({path:new URL('../.tmp/remote-verification/model-picker-390.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
+  modelCatalogError=true;
+  await page.getByRole('button',{name:'Refresh models',exact:true}).click();
+  await page.getByText('Your desktop could not provide a model list. Update Spawnt on your desktop, then refresh.',{exact:true}).waitFor();
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Draft survives provider selection','catalog errors do not cancel the prompt');
+  modelCatalogError=false;
+  await page.getByRole('button',{name:'Refresh models',exact:true}).click();
+  await page.getByRole('button',{name:'Sonnet test',exact:true}).click();
+  await page.getByText('Switching model...',{exact:true}).waitFor();
+  assert.equal(requests.filter(request=>request.type==='switch').at(-1).agent,'claude');
+  assert.equal(requests.filter(request=>request.type==='switch').at(-1).model,'sonnet');
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Draft survives provider selection');
+  if(!modelsOnly){
   const chatWidth = await page.locator('.sp-remote-chat').evaluate(node => node.clientWidth - parseFloat(getComputedStyle(node).paddingLeft) - parseFloat(getComputedStyle(node).paddingRight));
   const streamBox = await page.locator('.sp-chat-stream').boundingBox();
   assert.ok(streamBox.width >= chatWidth - 1,`phone bubbles use the available conversation width (${streamBox.width}/${chatWidth})`);
@@ -126,6 +148,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),true);
   await page.setViewportSize({width:390,height:350});
   await page.locator('#remote-prompt').focus();
+  await page.waitForFunction(()=>document.querySelector('.sp-remote').getBoundingClientRect().height<=innerHeight+1);
   const reconnectSend=await page.getByRole('button',{name:'Send',exact:true}).boundingBox();
   assert.ok(reconnectSend && reconnectSend.y>=0 && reconnectSend.y+reconnectSend.height<=350,'Send stays visible under a short reconnect keyboard');
   await page.screenshot({path:new URL('../.tmp/remote-verification/reconnecting-chat.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
@@ -141,7 +164,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'reload does not ask for pairing');
   await page.evaluate(()=>{window.testSockets.at(-1).close();document.dispatchEvent(new Event('visibilitychange'));setTimeout(()=>document.dispatchEvent(new Event('visibilitychange')),10);});
   await page.locator('.sp-remote.is-paired').waitFor();
-  await page.waitForFunction(()=>document.querySelector('.remote-heading h1')?.textContent==='New phone conversation');
+  await page.waitForFunction(()=>document.querySelector('.remote-heading :is(h1,h2)')?.textContent==='New phone conversation');
   for(const width of [320,390]) for(const height of [600,350,844]){
     await page.setViewportSize({width,height});await page.locator('#remote-prompt').focus();await page.waitForTimeout(100);
     assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed','keyboard focus cannot scroll the document');
@@ -150,27 +173,35 @@ try {
     assert.ok(send && send.y>=0 && send.y+send.height<=height,`Send visible without page scroll at ${width}x${height}`);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
-  await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
+  await page.getByRole('button',{name:'Open conversations',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Close conversations',exact:true}).last().evaluate(node=>node===document.activeElement),true,'drawer receives keyboard focus');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('button',{name:'Open conversations',exact:true}).evaluate(node=>node===document.activeElement),true,'Escape closes the drawer and restores focus');
+  await page.getByRole('button',{name:'Open conversations',exact:true}).click();
   await page.getByRole('button',{name:/External history/}).click();
   await page.getByText('Read-only history.',{exact:true}).waitFor();
   assert.equal(await page.locator('.remote-composer').count(),0);
   await page.getByRole('status').filter({hasText:'Loading messages...'}).waitFor({state:'hidden'});
   assert.deepEqual(await page.locator('.sp-remote [role=alert]').allTextContents(),[]);
   await page.screenshot({path:new URL('../.tmp/remote-verification/phone-readonly.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-  await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
+  await page.getByRole('button',{name:'Open conversations',exact:true}).click();
   await page.locator('#remote-history-search').fill('Saved');
   assert.equal(await page.locator('.remote-session-list button').count(),1);
   await page.getByRole('button',{name:/Saved conversation/}).click();
   await page.getByRole('button',{name:'Resume conversation',exact:true}).click();
   await page.getByText('Ready to continue.',{exact:true}).waitFor();
   await page.locator('.remote-composer').waitFor();
-  assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation','native resume retains the selected conversation');
+  assert.equal(await page.locator('.remote-heading :is(h1,h2)').textContent(),'Saved conversation','native resume retains the selected conversation');
   await page.locator('#remote-prompt').fill('Continue this saved chat');
   await page.getByRole('button',{name:'Change model',exact:true}).click();
-  await page.locator('#remote-model').fill('gpt-5.6-luna');
-  await page.getByRole('button',{name:'Switch model',exact:true}).click();
+  await page.getByRole('button',{name:'Sonnet test',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'GPT test',exact:true}).isVisible(),true);
+  assert.equal(await page.getByRole('button',{name:'Gemini test',exact:true}).isVisible(),true);
+  await page.getByRole('button',{name:'Sonnet test',exact:true}).click();
   await page.getByText('Switching model...',{exact:true}).waitFor();
-  assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation');
+  assert.equal(requests.filter(request=>request.type==='switch').at(-1).agent,'claude');
+  assert.equal(requests.filter(request=>request.type==='switch').at(-1).model,'sonnet');
+  assert.equal(await page.locator('.remote-heading :is(h1,h2)').textContent(),'Saved conversation');
   assert.equal(await page.locator('#remote-prompt').inputValue(),'Continue this saved chat','model change retains the phone draft');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.waitForFunction(()=>document.getElementById('remote-prompt').value==='');
@@ -183,5 +214,6 @@ try {
   assert.deepEqual(await page.locator('.sp-remote [role="alert"]').allTextContents(),[],'intentional disconnect must not show a connection failure');
   assert.deepEqual(failures,[]);
   console.log('PASS: encrypted mobile pairing, touch sheets, searchable history, visible composer, resume/model switch, trust reload, stalled-open-socket recovery with preserved draft and usable navigation');
+  }else{assert.deepEqual(failures,[]);console.log('PASS: encrypted provider-grouped model choices, explicit cross-provider switch, catalog failure/retry and preserved draft');}
 } finally {finished=true;clearTimeout(reconnectTimer);await browser.close(); desktop.close();}
 process.exit(0);
