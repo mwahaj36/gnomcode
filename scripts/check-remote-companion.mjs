@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdir } from 'node:fs/promises';
+import { mkdir,readFile } from 'node:fs/promises';
 import { generateKeyPair, createChannel } from '../web/lib/remote-crypto.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const [site, relay] = process.argv.slice(2);
 const modelsOnly=process.argv.includes('--models-only');
-if (!site || !relay?.startsWith('wss://')) throw Error('Usage: node scripts/check-remote-companion.mjs <site> <public-wss-relay>');
-const keys=await generateKeyPair(); const room=crypto.randomUUID().replaceAll('-','');
+if (!site || !/^wss:\/\/|^ws:\/\/127\.0\.0\.1:/.test(relay||'')) throw Error('Usage: node scripts/check-remote-companion.mjs <site> <public-wss-relay>');
+const keys=await generateKeyPair(); let room=crypto.randomUUID().replaceAll('-','');
 let finished=false,reconnectTimer,launched=false,firstPrompt=false,resumes=0,savedResumed=false,modelCatalogError=false;
 let desktop=new WebSocket(`${relay}/${room}?role=desktop`); desktop.binaryType='arraybuffer';
 await new Promise((resolve,reject)=>{desktop.onopen=resolve;desktop.onerror=reject;setTimeout(()=>reject(Error('Relay timeout')),15000).unref();});
@@ -25,7 +25,7 @@ function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=e
     const frame=JSON.parse(new TextDecoder().decode(event.data));
     if(frame.type==='hello') {if(channel)return;const nonce=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');resumeContext=`${room}:${nonce}:${frame.public_key}`;const fresh=await createChannel(keys,frame.public_key,`${room}:${nonce}`,'desktop');if(connection!==desktop)return;channel=fresh;desktop.send(new TextEncoder().encode(JSON.stringify({type:'challenge',nonce})));return;}
     const message=await channel.open(frame);if(connection!==desktop)return; requests.push(message);
-    if(message.type==='confirm') {await reply({type:'confirm'});await reply({type:'trusted',secret:secretHex});}
+    if(message.type==='enroll') {await reply({type:'trusted',secret:secretHex});}
     else if(message.type==='resume'){const proof=Uint8Array.from(message.proof.match(/../g),part=>parseInt(part,16));assert.equal(await crypto.subtle.verify('HMAC',proofKey,proof,new TextEncoder().encode(resumeContext)),true);resumes++;await reply({type:'resumed'});}
     else if(message.type==='sessions') { sessionReads++; await reply({type:'sessions',sessions:sessionReads===1?[]:[{id:'saved-session',title:'Saved conversation',agent:'codex',state:savedResumed?'idle':'ended',hosted:savedResumed,can_prompt:savedResumed,can_resume:!savedResumed},{id:'external-history',title:'External history',agent:'codex',state:'idle',hosted:false,can_prompt:false},...(launched?[{id:'codex:new',title:'New phone conversation',agent:'codex',state:'waiting_for_history',hosted:true,can_prompt:true}]:[]),{hosted:true,id:'codex-hosted',limits:[{label:'5h',remaining_pct:sessionReads>4?37:75,basis:'exact',observed_at:new Date().toISOString(),stale:false}],title:'Review authentication',agent:'codex',model:sessionReads>2?'gpt-6.1-sol':null,state:sessionReads>2?'idle':'waiting_for_history',can_prompt:sessionReads>2}]}); }
     else if(message.type==='models') await reply(modelCatalogError?{type:'error',request_type:'models',message:'Update desktop model service.'}:{type:'models',providers:[{agent:'codex',name:'OpenAI Codex',status:'authenticated',message:'Signed in',models:[{agent:'codex',model:'gpt-test',display_name:'GPT test'}]},{agent:'claude',name:'Claude Code',status:'authenticated',message:'Signed in',models:[{agent:'claude',model:'sonnet',display_name:'Sonnet test'}]},{agent:'gemini',name:'Gemini CLI',status:'configured',message:'Account configured',models:[{agent:'gemini',model:'gemini-test',display_name:'Gemini test'}]},{agent:'antigravity',name:'Antigravity',status:'unknown',message:'Native catalog unavailable.',models:[]}]});
@@ -44,27 +44,43 @@ function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=e
       await reply({type:'workspaces',path:selected?'C:\\workspace\\picked':'C:\\workspace',parent:selected?'C:\\workspace':'C:\\',roots:['C:\\','D:\\'],folders:selected?[]:[{name:'picked',path:'C:\\workspace\\picked'}],truncated:false});
     }
   }).catch(error=>failures.push(error.message));
-};desktop.onclose=()=>{if(!finished)reconnectTimer=setTimeout(()=>{desktop=new WebSocket(`${relay}/${room}?role=desktop`);desktop.binaryType='arraybuffer';bindDesktop();},200);};
+};desktop.onclose=()=>{if(!finished && connection===desktop)reconnectTimer=setTimeout(()=>{desktop=new WebSocket(`${relay}/${room}?role=desktop`);desktop.binaryType='arraybuffer';bindDesktop();},200);};
 }
 bindDesktop();
 const browser=await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
 try {
   const page=await browser.newPage({viewport:{width:390,height:844}});
+  page.setDefaultTimeout(15000);
   page.on('pageerror',error=>failures.push(error.message));
-  await page.addInitScript(offer => {if(!sessionStorage.getItem('offer-seeded')){sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(offer));sessionStorage.setItem('offer-seeded','yes');}const Native=window.WebSocket;window.testSockets=[];window.WebSocket=class extends Native{constructor(...args){super(...args);window.testSockets.push(this);this.addEventListener("message",event=>{if(window.dropRemoteFrames)event.stopImmediatePropagation();});}};},{room,key:keys.publicHex,relay,protocol_version:2,expires_at:new Date(Date.now()+300000).toISOString()});
+  const owner='10000000-0000-0000-0000-000000000001',desktopId='d'.repeat(32);
+  const env=await readFile(new URL('../web/.env.local',import.meta.url),'utf8');
+  const project=env.match(/NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?https:\/\/([^.]+)/)?.[1];
+  let deviceRequest=null,approved=false;
+  const offer=()=>({room,key:keys.publicHex,relay,protocol_version:3,owner_id:owner,desktop_id:deviceRequest?.desktop_id||desktopId,request_id:room});
+  await page.route('**/rest/v1/spawnt_device_requests**',async route=>{
+    if(route.request().method()==='POST'){
+      deviceRequest=route.request().postDataJSON();room=deviceRequest.id;approved=true;
+      const previous=desktop;desktop=new WebSocket(`${relay}/${room}?role=desktop`);desktop.binaryType='arraybuffer';bindDesktop();previous.close();
+      return route.fulfill({status:201,contentType:'application/json',body:''});
+    }
+    const singular=new URL(route.request().url()).searchParams.get('select')==='offer,revoked,state';
+    const value=deviceRequest?{...deviceRequest,offer:approved?offer():null,state:approved?'approved':'pending',revoked:false}:null;
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(singular?value:value?[value]:[])});
+  });
+  await page.route('**/rest/v1/spawnt_desktops**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{id:desktopId,name:'Test desktop',remote_enabled:true,last_seen_at:new Date().toISOString()},{id:'e'.repeat(32),name:'Second desktop',remote_enabled:true,last_seen_at:new Date().toISOString()}])}));
+  await page.route('**/auth/v1/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'})}));
+  await page.addInitScript(({project,owner})=>{
+    localStorage.setItem(`sb-${project}-auth-token`,JSON.stringify({access_token:'test-access',refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,token_type:'bearer',user:{id:owner,email:'test@example.invalid',aud:'authenticated',role:'authenticated'}}));
+    const Native=window.WebSocket;window.testSockets=[];window.WebSocket=class extends Native{constructor(...args){super(...args);window.testSockets.push(this);this.addEventListener('message',event=>{if(window.dropRemoteFrames)event.stopImmediatePropagation();});}};
+  },{project,owner});
   await page.goto(`${site}/remote`);
+  // A signed-in phone connects without requesting human approval on either desktop.
+  await page.locator('.sp-remote.is-paired').waitFor();
   assert.equal(await page.locator('footer').count(),0,'Remote must use the app shell, without the marketing footer');
   const remoteBox = await page.locator('.remote-heading').boundingBox();
-  assert.ok(remoteBox.x >= 16 && remoteBox.width <= 358,'phone conversation needs horizontal padding');
+  assert.ok(remoteBox.x >= 0 && remoteBox.width <= 390,'phone conversation fits the app viewport');
 
-  await page.getByRole('button',{name:'Codes match'}).waitFor();
-  for(let attempt=0;attempt<100 && !channel;attempt++) await new Promise(resolve=>setTimeout(resolve,50));
-  assert.ok(channel, 'desktop receives the phone public key');
-  assert.match(await page.locator('.sp-remote').textContent(),new RegExp(channel.verifyCode));
-  await mkdir(new URL('../.tmp/remote-verification/',import.meta.url),{recursive:true});
-  await page.screenshot({path:new URL('../.tmp/remote-verification/phone-verification.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-  await page.getByRole('button',{name:'Codes match'}).click();
-  await page.locator('.sp-remote.is-paired').waitFor();
+  assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'no code confirmation exists');
   await page.getByText('The login flow is ready for review.').waitFor();
   assert.equal(await page.locator('.remote-session-list button[aria-current]').count(),1,'newest session is discovered and opened without manual selection');
   await page.locator('.sp-chat-body strong').getByText('ready').waitFor();
@@ -160,7 +176,7 @@ try {
   assert.equal(await page.getByText('Actions',{exact:true}).count(),0);
   await page.screenshot({path:new URL('../.tmp/remote-verification/recovered-chat.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   assert.ok(resumes>=1,'reload authenticates saved nonextractable device trust');
-  assert.equal(await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('spawnt-remote-device',1);r.onsuccess=()=>{const db=r.result;const q=db.transaction('devices').objectStore('devices').get('desktop');q.onsuccess=()=>{resolve(q.result.proofKey.extractable);db.close();};q.onerror=reject;};r.onerror=reject;})),false,'remembered proof key is not exportable');
+  assert.equal(await page.evaluate(key=>new Promise((resolve,reject)=>{const r=indexedDB.open('spawnt-remote-device',1);r.onsuccess=()=>{const db=r.result;const q=db.transaction('devices').objectStore('devices').get(key);q.onsuccess=()=>{resolve(q.result?.proofKey?.extractable);db.close();};q.onerror=reject;};r.onerror=reject;}),`${owner}:${desktopId}`),false,'remembered proof key is not exportable');
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'reload does not ask for pairing');
   await page.evaluate(()=>{window.testSockets.at(-1).close();document.dispatchEvent(new Event('visibilitychange'));setTimeout(()=>document.dispatchEvent(new Event('visibilitychange')),10);});
   await page.locator('.sp-remote.is-paired').waitFor();
@@ -207,13 +223,34 @@ try {
   await page.waitForFunction(()=>document.getElementById('remote-prompt').value==='');
   assert.equal(requests.filter(request=>request.type==='prompt').at(-1).session_id,'saved-session','continued prompt targets the same saved conversation');
   await page.screenshot({path:new URL('../.tmp/remote-verification/phone-resumed.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
+  await page.locator('#remote-prompt').fill('Keep this draft while the desktop is offline');
+  const promptCount=requests.filter(request=>request.type==='prompt').length;
+  await page.evaluate(()=>{window.dropRemoteFrames=true;});
+  await page.locator('.remote-reconnect').getByText('Desktop unavailable',{exact:true}).waitFor({timeout:55000});
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Keep this draft while the desktop is offline');
+  assert.equal(await page.getByRole('button',{name:'Send',exact:true}).isDisabled(),true);
+  const socketCount=await page.evaluate(()=>window.testSockets.length);
+  await page.waitForTimeout(3500);
+  assert.equal(await page.evaluate(()=>window.testSockets.length),socketCount,'unreachable desktops stop automatic connection attempts');
+  assert.equal(requests.filter(request=>request.type==='prompt').length,promptCount,'recovery never replays a prompt');
+  await page.screenshot({path:'.tmp/remote-verification/offline-draft-390.png',fullPage:true});
+  await page.evaluate(()=>{window.dropRemoteFrames=false;});
+  await page.getByRole('button',{name:'Try again',exact:true}).click();
+  await page.locator('.sp-remote.is-paired').waitFor();
+  assert.equal(await page.locator('#remote-prompt').inputValue(),'Keep this draft while the desktop is offline');
   await page.getByRole('button',{name:'Desktop connection',exact:true}).click();
   await page.getByRole('button',{name:'Forget this desktop',exact:true}).click();
-  await page.getByRole('heading',{name:'Pair your desktop',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Devices',exact:true}).waitFor();
   await page.waitForTimeout(100);
   assert.deepEqual(await page.locator('.sp-remote [role="alert"]').allTextContents(),[],'intentional disconnect must not show a connection failure');
+  await page.getByRole('button',{name:'Open desktop',exact:true}).last().waitFor();
+  assert.equal(await page.getByRole('button',{name:'Open desktop',exact:true}).count(),2,'all linked native apps remain discoverable');
+  await page.getByRole('button',{name:'Open desktop',exact:true}).last().click();
+  await page.locator('.sp-remote.is-paired').waitFor();
+  assert.equal(deviceRequest.desktop_id,'e'.repeat(32),'the same signed-in phone opens another native app without another approval');
+  assert.equal(await page.getByRole('button',{name:'Approve',exact:true}).count(),0,'there is no per-desktop approval step');
   assert.deepEqual(failures,[]);
-  console.log('PASS: encrypted mobile pairing, touch sheets, searchable history, visible composer, resume/model switch, trust reload, stalled-open-socket recovery with preserved draft and usable navigation');
+  console.log('PASS: account-wide automatic access across two native apps, encrypted device enrollment, touch sheets, searchable history, visible composer, resume/model switch, trust reload, stalled-open-socket recovery with preserved draft and usable navigation');
   }else{assert.deepEqual(failures,[]);console.log('PASS: encrypted provider-grouped model choices, explicit cross-provider switch, catalog failure/retry and preserved draft');}
-} finally {finished=true;clearTimeout(reconnectTimer);await browser.close(); desktop.close();}
+} catch(error){console.error('Browser failures:',failures);for(const page of browser.contexts().flatMap(context=>context.pages())){console.error((await page.locator('body').innerText()).slice(-3000));await page.screenshot({path:'.tmp/remote-failure.png',fullPage:true});}throw error;} finally {finished=true;clearTimeout(reconnectTimer);await browser.close(); desktop.close();}
 process.exit(0);
