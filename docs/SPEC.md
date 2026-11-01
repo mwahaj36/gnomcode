@@ -146,7 +146,7 @@ Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electr
 
 ### 3.12 Platform scope
 
-Windows, macOS and Linux are required design targets. Current recorded local packaged acceptance is Windows. macOS/Linux and architecture-specific release acceptance remain open. Use platform-resolved paths/env overrides; all OS-specific Rust code belongs in platform. Document fallback instead of silently omitting support.
+Windows, macOS and Linux are required design targets. Current recorded local packaged acceptance is Windows. macOS/Linux and architecture-specific release acceptance remain open. Use platform-resolved paths/env overrides; canonicalize ordinary Git roots as well as worktree roots so path aliases identify the same project. All OS-specific Rust code belongs in platform. Document fallback instead of silently omitting support.
 
 ### 3.13 Focus and desktop chrome
 
