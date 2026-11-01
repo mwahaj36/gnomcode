@@ -4,6 +4,7 @@ import { sessionStateLabel } from "../lib/console-presentation.js";
 import { useEffect, useRef, useState } from 'react';
 import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
 import DesktopDevices from './DesktopDevices';
+import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice} from '../lib/remote-device';
 import { reconcileChat, renderConversationLimits, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
@@ -12,7 +13,7 @@ type Channel = Awaited<ReturnType<typeof createChannel>>;
 type Session = { id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean };
 type ChatEvent = { event_id: string; turn_index: number; created_at: string; role: string; content: string; status?: string | null };
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
-type Reply = { type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; session_id?: string; new_session_id?: string; events?: ChatEvent[] } & Partial<FolderListing>;
+type Reply = { type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[] } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false }: { embedded?: boolean }) {
   const [link, setLink] = useState<{room:string;key:string;relay:string;protocol_version?:number}>({ room: '', key: '', relay: '' });
@@ -30,7 +31,11 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const [newSession,setNewSession]=useState(false);
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [prompt, setPrompt] = useState('');
-  const [targetModel, setTargetModel] = useState('');
+  const [modelProviders,setModelProviders]=useState<ProviderCatalog[]>([]);
+  const [modelsLoading,setModelsLoading]=useState(false);
+  const [modelsError,setModelsError]=useState('');
+  const modelRequest=useRef(false);
+  const modelDeadline=useRef(0);
   const [launchAgent, setLaunchAgent] = useState('claude');
   const [launchRepo, setLaunchRepo] = useState('');
   const [launchModel, setLaunchModel] = useState('');
@@ -119,6 +124,24 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
 
   useEffect(()=>{if(desktopPanel)desktopDialog.current?.showModal();},[desktopPanel]);
   useEffect(()=>{if(modelPanel)modelDialog.current?.showModal();},[modelPanel]);
+  useEffect(()=>{
+    if(!modelPanel || phase!=='paired'){modelRequest.current=false;setModelsLoading(false);return;}
+    void loadModels();
+    const timer=setInterval(()=>{if(modelRequest.current && Date.now()>=modelDeadline.current){modelRequest.current=false;setModelsLoading(false);setModelsError('The desktop did not return its model list. Refresh or update Spawnt on your desktop.');}},500);
+    return()=>clearInterval(timer);
+  },[modelPanel,phase]);
+
+  async function loadModels(){
+    if(!authenticated.current || modelRequest.current)return;
+    modelRequest.current=true;modelDeadline.current=Date.now()+12000;setModelsLoading(true);setModelsError('');setModelProviders([]);
+    try{await send({type:'models'});}catch{modelRequest.current=false;setModelsLoading(false);setModelsError('Could not load models. Check your desktop connection and refresh.');}
+  }
+
+  function selectModel(model:ModelChoice){
+    if(!authenticated.current)return;
+    modelDialog.current?.close();
+    void send({type:'switch',session_id:selectedRef.current,agent:model.agent,model:model.model}).catch(()=>setError('Could not change model. Your draft is saved. Try again.'));
+  }
   useEffect(()=>{if(folderBrowser && !folderDialog.current?.open)folderDialog.current?.showModal();},[folderBrowser]);
   useEffect(()=>{
     if (!showSessions || !matchMedia('(max-width: 760px)').matches) return;
@@ -237,8 +260,10 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       }
     }
     else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await send({type:'sessions'}); if(reply.session_id) loadChat(reply.session_id); }
+    else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await send({ type: 'sessions' }); }
     else if (reply.type === 'error') {
+      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Spawnt on your desktop, then refresh.');return;}
       if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
       if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
       if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
@@ -341,6 +366,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   }
 
   function disconnect() {
+    modelRequest.current=false;setModelProviders([]);setModelsError('');setModelsLoading(false);
     authenticated.current=false;connectionEpoch.current++;
     manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice().catch(()=>{});
     setOptimistic({});
@@ -363,7 +389,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       <button type="button" className="remote-desktop-button" aria-label="Desktop connection" onClick={()=>setDesktopPanel(true)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button>
     </header>
     {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Pair your phone with Spawnt on your laptop.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
-    {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><form onSubmit={event=>{event.preventDefault();void send({type:'switch',session_id:selected,model:targetModel}).then(()=>modelDialog.current?.close()).catch(()=>setError('Could not change model. Try again.'));}}><label htmlFor="remote-model">Model name</label><input id="remote-model" value={targetModel} onChange={event=>setTargetModel(event.target.value)} maxLength={128}/><button type="submit" disabled={!connected || !targetModel.trim()}>Switch model</button></form></dialog>}
+    {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><ModelChoices providers={modelProviders} loading={modelsLoading} error={modelsError} disabled={!connected} onRefresh={()=>void loadModels()} onSelect={selectModel}/></dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
