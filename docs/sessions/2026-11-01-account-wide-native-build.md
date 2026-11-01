@@ -29,3 +29,11 @@ No production site, download channel, tag or release was published, and PR #116 
 ## Owner-approved development rollout
 
 After reviewing the matching installer and the request to merge PR #116 and publish the matching site/downloads as a development rollout, Wahaj answered "yes" on 2026-11-01. This explicitly authorizes that scoped rollout with the phone/security gates remaining open. Preserve the distinction from a completed public launch or payment approval. Publication verification follows this authorization; no update-manifest channel or release tag is included.
+
+## Publication verification
+
+- Staged and then promoted deployment `dpl_36rVptQk2REdDMqPUtC3Gp6syASj` (`spawnt-e5i65akfa-wahajs-projects-81d8234d.vercel.app`) to the existing public project domain on 2026-11-01.
+- Public `https://spawntv.vercel.app/console`, `/remote`, `/downloads` and `/docs/remote-access` returned successfully. The public Remote guide contains the new account-wide, no-per-desktop-approval instructions.
+- Downloaded the public setup, ZIP and CLI from `/downloads/` and verified every SHA-256 against the private verified build listed above. The deployed downloads are the matching build, not stale root artifacts.
+- Source was verified to match the approved runtime code before deployment; existing original root download files remain untouched. No tag, public GitHub release or update-manifest change was made.
+- Previous public deployment for rollback: `dpl_CJjLKLDFCNWBmJv19GKkPgowLmZi` (`spawnt-mbds4n9pv-wahajs-projects-81d8234d.vercel.app`). `vercel promote dpl_CJjLKLDFCNWBmJv19GKkPgowLmZi` restores its site/downloads if needed. Keep native and web versions matched; do not drop the additive migration or erase device/history data. A live rollback and physical-phone login were not exercised.
