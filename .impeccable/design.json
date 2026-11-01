@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-10-29T17:33:13.315026+00:00",
-  "title": "Design System: spawnt",
+  "title": "Design System: gnomcode",
   "extensions": {
     "colorMeta": {
       "primary": {
@@ -362,7 +362,7 @@
       "name": "Primary action",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "A direct action using Spawnt red.",
+      "description": "A direct action using Gnomcode red.",
       "html": "<button class=\"ds-primary\">Save preferences</button>",
       "css": ".ds-primary{font-family:var(--sp-font-sans,Inter,Arial,sans-serif);font-size:13px;line-height:1.4;font-weight:600;min-height:44px;padding:9px 14px;background:var(--sp-primary);color:var(--sp-on-primary);border:1px solid transparent;border-radius:var(--sp-control-radius,6px);cursor:pointer}.ds-primary:hover{filter:brightness(.96)}.ds-primary:active{filter:brightness(.88)}.ds-primary:focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px;}"
     },
@@ -420,7 +420,7 @@
   ],
   "narrative": {
     "northStar": "Mission control",
-    "overview": "Spawnt keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.\n\nMarketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in [the console surface brief](docs/design/console-workspace.md); product and security behavior remain governed by [SPEC](docs/SPEC.md).",
+    "overview": "Gnomcode keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.\n\nMarketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in [the console surface brief](docs/design/console-workspace.md); product and security behavior remain governed by [SPEC](docs/SPEC.md).",
     "keyCharacteristics": [
       "Canonical red accents and quiet neutral surfaces.",
       "Sans-led hierarchy with monospace reserved for data and commands.",

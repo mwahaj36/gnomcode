@@ -1,7 +1,7 @@
 export default function HeroWorkflow() {
   return <figure className="sp-workflow-visual" aria-label="Illustrative workflow: launch an agent, carry context to another agent and continue from your phone">
     <div className="sp-workflow-desktop">
-      <div className="sp-workflow-chrome"><span><i className="sp-brand-mark" aria-hidden="true" /> spawnt</span><span>Workspace / storefront</span></div>
+      <div className="sp-workflow-chrome"><span><i className="sp-brand-mark" aria-hidden="true" /> gnomcode</span><span>Workspace / storefront</span></div>
       <div className="sp-workflow-task"><h2>Build the checkout flow</h2><span>Conversation</span></div>
       <div className="sp-workflow-thread">
         <div className="sp-workflow-message is-user">Build checkout with saved addresses.</div>

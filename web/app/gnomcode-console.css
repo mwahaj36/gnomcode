@@ -244,7 +244,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .web-profile-actions{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:760px){.sp-web-app{padding:0 16px 24px 72px}.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px;flex-direction:column;padding:8px 4px}.sp-web-app .web-context{flex-wrap:wrap;padding:12px 0}.sp-web-app .web-context>span{font-size:10px}.web-navigation-pinned{padding-left:72px}}
 
-/* Controls retain Spawnt's restrained geometric corners. */
+/* Controls retain Gnomcode's restrained geometric corners. */
 :is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(button,.btn-control,.btn-primary,.sp-console-action,.sp-theme-control,input,select,textarea){border-radius:6px}
 .sp-native-console #chat-prompt-form{border-radius:12px}
 .sp-native-console .conversation-menu>div{border-radius:6px}
@@ -498,7 +498,7 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .conversation-heading>.sp-conversation-limits{margin-left:auto;max-width:48%}.remote-heading .sp-conversation-limits{margin-top:6px}
 @media(max-width:700px){.sp-native-console .conversation-heading{flex-wrap:wrap}.conversation-heading>.sp-conversation-limits{order:5;flex-basis:100%;max-width:100%;margin:0}.remote-heading .sp-conversation-limits{gap:4px 12px}}
 
-/* Shared renderer scrollbars follow the current Spawnt theme. */
+/* Shared renderer scrollbars follow the current Gnomcode theme. */
 *{scrollbar-width:thin;scrollbar-color:var(--sp-text-3) var(--sp-surface)}
 *::-webkit-scrollbar{width:8px;height:8px}
 *::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:var(--sp-surface)}

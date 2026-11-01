@@ -13,15 +13,15 @@ Run through every item below before finishing any change that touches OS behavio
 
 ## 1. Paths & Filesystem (`crates/platform`, `crates/ingest`)
 - [ ] Zero hardcoded `/` or `\` separators; uses `Path`/`PathBuf` and `platform::paths`.
-- [ ] Respects env overrides: `SPAWNT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`.
+- [ ] Respects env overrides: `GNOMCODE_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`.
 - [ ] **Windows shared reads:** log files opened with `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`; file handles closed immediately after reading to EOF.
 - [ ] **File identity:** `(dev, inode)` on Unix; volume serial + 64-bit file index on Windows.
 - [ ] **Line endings:** parsers accept both `\n` and `\r\n`.
-- [ ] **Linux inotify:** handles `IN_Q_OVERFLOW` and `max_user_watches` exhaustion by falling back to the reconciler/poller and surfacing a warning in `spawnt doctor`.
+- [ ] **Linux inotify:** handles `IN_Q_OVERFLOW` and `max_user_watches` exhaustion by falling back to the reconciler/poller and surfacing a warning in `gnomcode doctor`.
 - [ ] **WSL:** Windows daemon discovers `\\wsl$\<distro>\home\*` roots and polls them (since `ReadDirectoryChangesW` does not cross 9P reliably).
 
 ## 2. Processes, IPC & Security (`crates/platform`, `crates/daemon`)
-- [ ] IPC uses Named Pipes (`\\.\pipe\spawnt-<user>`) on Windows and Unix Domain Sockets (`~/.spawnt/ipc.sock`, mode `0600`) on macOS/Linux.
+- [ ] IPC uses Named Pipes (`\\.\pipe\gnomcode-<user>`) on Windows and Unix Domain Sockets (`~/.gnomcode/ipc.sock`, mode `0600`) on macOS/Linux.
 - [ ] `daemon.json` bearer token file sets `0600` on Unix and user-only ACL on Windows.
 - [ ] HTTP/WS binds strictly to `127.0.0.1` and validates `Host` and `Origin`.
 - [ ] Process signals: uses `SIGINT` on Unix; on Windows never calls `TerminateProcess` without explicit user confirmation, and never kills IDE host processes (`Code.exe`, `Cursor.exe`, `Antigravity.exe`).

@@ -8,19 +8,19 @@ edition = "2024"
 rust-version = "1.87"
 license-file = "LICENSE"
 repository = "https://github.com/mwahaj36/spawnt"
-homepage = "https://spawntv.vercel.app"
+homepage = "https://gnomcode.vercel.app"
 authors = ["Wahaj <https://github.com/mwahaj36>"]
 publish = false
 
 [workspace.dependencies]
 # Internal crates
-spawnt-core = { path = "crates/core" }
-spawnt-adapters = { path = "crates/adapters" }
-spawnt-ingest = { path = "crates/ingest" }
-spawnt-store = { path = "crates/store" }
-spawnt-pty = { path = "crates/pty" }
-spawnt-platform = { path = "crates/platform" }
-spawnt-daemon = { path = "crates/daemon" }
+gnomcode-core = { path = "crates/core" }
+gnomcode-adapters = { path = "crates/adapters" }
+gnomcode-ingest = { path = "crates/ingest" }
+gnomcode-store = { path = "crates/store" }
+gnomcode-pty = { path = "crates/pty" }
+gnomcode-platform = { path = "crates/platform" }
+gnomcode-daemon = { path = "crates/daemon" }
 # External dependencies (see AGENTS.md §5).
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

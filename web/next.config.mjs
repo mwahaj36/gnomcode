@@ -9,7 +9,7 @@ const nextConfig = {
       },
       {
         source: "/download",
-        destination: "/downloads/Spawnt-Setup.exe",
+        destination: "/downloads/Gnomcode-Setup.exe",
       },
       {
         source: "/sh",

@@ -3,7 +3,7 @@ import {createRequire} from 'node:module';
 const {chromium}=createRequire(import.meta.url)('playwright');
 const site=process.argv[2];
 if (!site) throw Error('Usage: node scripts/check-account-ux.mjs <site>');
-const browser=await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
+const browser=await chromium.launch(process.env.GNOMCODE_TEST_BROWSER ? {executablePath:process.env.GNOMCODE_TEST_BROWSER} : {});
 try {
   const page=await browser.newPage({viewport:{width:390,height:844}});
   await page.goto(`${site}/auth`);

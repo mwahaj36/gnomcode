@@ -50,7 +50,7 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
   },[requests,desktops,waiting,busy]);
   useEffect(()=>{
     if(!waiting)return;
-    const timer=setTimeout(()=>{setWaiting('');setStatus('Your desktop is not responding. Keep it awake with Spawnt running, then select Open desktop to retry.');},30000);
+    const timer=setTimeout(()=>{setWaiting('');setStatus('Your desktop is not responding. Keep it awake with Gnomcode running, then select Open desktop to retry.');},30000);
     return()=>clearTimeout(timer);
   },[waiting]);
   async function connect(desktop:Desktop){
@@ -65,9 +65,9 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
         if(error)throw error;
         setWaiting(desktop.id);setStatus('Connecting securely through your account...');return;
       }
-      if(!request.offer || request.state!=='approved'){setWaiting(desktop.id);setStatus('Waiting for your desktop to connect. Keep it awake with Spawnt running.');return;}
+      if(!request.offer || request.state!=='approved'){setWaiting(desktop.id);setStatus('Waiting for your desktop to connect. Keep it awake with Gnomcode running.');return;}
       const offer={...request.offer,owner_id:owner,desktop_id:desktop.id,request_id:request.id};
-      if(onPair)onPair(offer);else{sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(offer));window.location.assign('/remote');}
+      if(onPair)onPair(offer);else{sessionStorage.setItem('gnomcode-pairing-offer',JSON.stringify(offer));window.location.assign('/remote');}
     }catch{setStatus('Could not connect this device. Check your connection and retry.');}
     finally{setBusy(false);}
   }

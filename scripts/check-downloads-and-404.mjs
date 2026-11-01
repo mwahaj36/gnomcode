@@ -4,7 +4,7 @@ import {mkdir} from 'node:fs/promises';
 const {chromium}=createRequire(import.meta.url)('playwright');
 const site=process.argv[2];
 if(!site)throw Error('Usage: node scripts/check-downloads-and-404.mjs <site>');
-const browser=await chromium.launch(process.env.SPAWNT_TEST_BROWSER?{executablePath:process.env.SPAWNT_TEST_BROWSER}:{});
+const browser=await chromium.launch(process.env.GNOMCODE_TEST_BROWSER?{executablePath:process.env.GNOMCODE_TEST_BROWSER}:{});
 try{
   const page=await browser.newPage();
   await mkdir('.tmp/downloads-404-verification',{recursive:true});
@@ -13,8 +13,8 @@ try{
     await page.emulateMedia({colorScheme:theme});
     await page.goto(`${site}/downloads`);
     await page.getByRole('tab',{name:'Windows',exact:true}).click();
-    assert.equal(await page.getByRole('link',{name:/Download Windows installer/}).getAttribute('href'),'/downloads/Spawnt-Setup.exe');
-    assert.match(await page.getByRole('link',{name:/Download ZIP/}).getAttribute('href'),/^\/downloads\/Spawnt-v[\d.]+-windows-x64.zip$/);
+    assert.equal(await page.getByRole('link',{name:/Download Windows installer/}).getAttribute('href'),'/downloads/Gnomcode-Setup.exe');
+    assert.match(await page.getByRole('link',{name:/Download ZIP/}).getAttribute('href'),/^\/downloads\/Gnomcode-v[\d.]+-windows-x64.zip$/);
     const legal=page.getByText('By downloading, you agree to the',{exact:false});
     assert.equal(await legal.evaluate(node=>getComputedStyle(node).display),'block','legal text keeps ordinary inline flow');
     for(const platform of ['macOS','Linux']){
@@ -34,6 +34,6 @@ try{
   }
   await page.goto(`${site}/docs`);
   await page.getByRole('tab',{name:'Windows',exact:true}).click();
-  assert.equal(await page.getByRole('link',{name:/Download Windows installer/}).getAttribute('href'),'/downloads/Spawnt-Setup.exe');
+  assert.equal(await page.getByRole('link',{name:/Download Windows installer/}).getAttribute('href'),'/downloads/Gnomcode-Setup.exe');
   console.log('PASS: Windows downloads, inline legal/guide text, honest platform availability and themed responsive HTTP 404 recovery');
 }finally{await browser.close();}

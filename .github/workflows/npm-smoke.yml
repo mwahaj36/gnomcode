@@ -20,7 +20,7 @@ jobs:
           node-version: '22'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --locked --release -p spawnt
+      - run: cargo build --locked --release -p gnomcode
       - name: Require approved release legal files
         shell: bash
         run: |
@@ -32,8 +32,8 @@ jobs:
         run: |
           target=$(node -p 'process.platform + "-" + process.arch')
           extension=$(node -p 'process.platform === "win32" ? ".exe" : ""')
-          node apps/desktop/stage-release.cjs "$target" "target/release/spawnt${extension}" EULA.txt web/public/downloads/THIRD_PARTY_NOTICES.html
-          cp EULA.txt npm/spawnt/EULA.txt
-          cp web/public/downloads/THIRD_PARTY_NOTICES.html npm/spawnt/THIRD_PARTY_NOTICES.html
+          node apps/desktop/stage-release.cjs "$target" "target/release/gnomcode${extension}" EULA.txt web/public/downloads/THIRD_PARTY_NOTICES.html
+          cp EULA.txt npm/gnomcode/EULA.txt
+          cp web/public/downloads/THIRD_PARTY_NOTICES.html npm/gnomcode/THIRD_PARTY_NOTICES.html
       - name: Install tarballs and run standalone commands offline
         run: node npm/smoke-release.cjs

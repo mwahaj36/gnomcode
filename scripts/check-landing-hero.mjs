@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir, readFile } from 'node:fs/promises';
 const { chromium } = createRequire(import.meta.url)('playwright');
-const browser = await chromium.launch({headless:true, executablePath:process.env.SPAWNT_TEST_BROWSER});
+const browser = await chromium.launch({headless:true, executablePath:process.env.GNOMCODE_TEST_BROWSER});
 const base = process.argv[2] || 'http://127.0.0.1:43929';
 await mkdir('.tmp/orchestration-hero', {recursive:true});
 try {
@@ -10,7 +10,7 @@ try {
   for (const width of [390, 768, 1440]) for (const theme of ['dark', 'light']) {
     await page.setViewportSize({width,height:1000});
     await page.goto(base, {waitUntil:'networkidle'});
-    await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;localStorage.setItem('spawnt-theme',theme);},theme);
+    await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;localStorage.setItem('gnomcode-theme',theme);},theme);
     assert.equal(await page.locator('#content > section#agents').count(),1,'agent strip is its own section');
     const hero=page.locator('.sp-hero');
     assert.equal(await hero.locator('table,.sp-summary-grid,.sp-tour-overview').count(),0,'hero shows orchestration, not reporting');

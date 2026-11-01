@@ -18,7 +18,7 @@ test('navigation cannot escape the selected loopback daemon', () => {
 
 test('daemon inherits its environment', () => {
   const { daemonEnvironment } = require('../dist/security.js');
-  assert.deepEqual(daemonEnvironment({ SPAWNT_HOME: '/test/new', OTHER: 'kept' }), { SPAWNT_HOME: '/test/new', OTHER: 'kept' });
+  assert.deepEqual(daemonEnvironment({ GNOMCODE_HOME: '/test/new', OTHER: 'kept' }), { GNOMCODE_HOME: '/test/new', OTHER: 'kept' });
 });
 
 test('tray status shows daemon-provided ongoing counts and handles malformed data', () => {
@@ -30,21 +30,21 @@ test('tray status shows daemon-provided ongoing counts and handles malformed dat
   assert.equal(trayTooltip({ ongoing_count: 2, awaiting_approval_count: 1 }), '2 ongoing sessions · 1 awaiting approval (estimated)');
   assert.equal(trayTooltip({ ongoing_count: 1, awaiting_approval_count: 0 }), '1 ongoing session (estimated)');
   for (const value of [null, {}, {ongoing_count: -1}, {ongoing_count: 1.5}, {ongoing_count: '3'}]) {
-    assert.equal(trayTooltip(value), 'Spawnt: daemon unavailable');
+    assert.equal(trayTooltip(value), 'Gnomcode: daemon unavailable');
   }
 });
 
 test('tray count selects a numbered icon only for ongoing sessions', () => {
   const { trayBadgeName } = require('../dist/security.js');
-  assert.equal(trayBadgeName({ ongoing_count: 0 }), 'spawnt-tray.ico');
-  assert.equal(trayBadgeName({ ongoing_count: 3 }), 'spawnt-tray-3.png');
-  assert.equal(trayBadgeName({ ongoing_count: 27 }), 'spawnt-tray-9plus.png');
-  assert.equal(trayBadgeName({ ongoing_count: '3' }), 'spawnt-tray.ico');
+  assert.equal(trayBadgeName({ ongoing_count: 0 }), 'gnomcode-tray.ico');
+  assert.equal(trayBadgeName({ ongoing_count: 3 }), 'gnomcode-tray-3.png');
+  assert.equal(trayBadgeName({ ongoing_count: 27 }), 'gnomcode-tray-9plus.png');
+  assert.equal(trayBadgeName({ ongoing_count: '3' }), 'gnomcode-tray.ico');
 });
 
 test('renderer requests are limited to local daemon resources and local generated blobs', () => {
   const { isAllowedResource } = require('../dist/security.js');
-  assert.equal(isAllowedResource('http://127.0.0.1:41738/spawnt-tokens.css', 41738), true);
+  assert.equal(isAllowedResource('http://127.0.0.1:41738/gnomcode-tokens.css', 41738), true);
   assert.equal(isAllowedResource('blob:http://127.0.0.1:41738/123', 41738), true);
   assert.equal(isAllowedResource('data:image/png;base64,AA==', 41738), true);
   for (const url of ['https://example.com/a', 'http://localhost:41738/', 'blob:https://example.com/id', 'file:///etc/passwd', 'javascript:alert(1)']) {
@@ -71,17 +71,17 @@ test('terminal resources allow only the daemon PTY WebSocket while navigation st
 
 test('external links open only approved product pages without embedded credentials or query data', () => {
   const { isAllowedExternalUrl } = require('../dist/security.js');
-  assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/docs'), true);
-  assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/pricing'), true);
-  for (const value of ['https://evil.example/', 'http://spawntv.vercel.app/', 'https://user@spawntv.vercel.app/', 'https://spawntv.vercel.app/docs?token=secret', 'https://spawntv.vercel.app:444/']) {
+  assert.equal(isAllowedExternalUrl('https://gnomcode.vercel.app/docs'), true);
+  assert.equal(isAllowedExternalUrl('https://gnomcode.vercel.app/pricing'), true);
+  for (const value of ['https://evil.example/', 'http://gnomcode.vercel.app/', 'https://user@gnomcode.vercel.app/', 'https://gnomcode.vercel.app/docs?token=secret', 'https://gnomcode.vercel.app:444/']) {
     assert.equal(isAllowedExternalUrl(value), false);
   }
 });
 
 test('external links do not carry arbitrary fragments', () => {
   const { isAllowedExternalUrl } = require('../dist/security.js');
-  assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/docs#privacy'), true);
-  assert.equal(isAllowedExternalUrl('https://spawntv.vercel.app/docs#secret'), false);
+  assert.equal(isAllowedExternalUrl('https://gnomcode.vercel.app/docs#privacy'), true);
+  assert.equal(isAllowedExternalUrl('https://gnomcode.vercel.app/docs#secret'), false);
 });
 
 test('desktop chrome uses themed native window controls on each platform', () => {

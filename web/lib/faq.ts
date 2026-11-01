@@ -3,12 +3,12 @@ export const faqGroups = [
     "title": "Getting started",
     "questions": [
       {
-        "question": "Do I need a Spawnt account?",
-        "answer": "No account is needed for local features. Optional account metadata sync and Remote discovery use a Spawnt account; your agents keep separate vendor accounts."
+        "question": "Do I need a Gnomcode account?",
+        "answer": "No account is needed for local features. Optional account metadata sync and Remote discovery use a Gnomcode account; your agents keep separate vendor accounts."
       },
       {
-        "question": "Does Spawnt work offline?",
-        "answer": "Local reporting, inspection and orchestration do not require Spawnt cloud services. Official agent inference may still require the vendor network; disable update checks and leave optional services off to avoid Spawnt network traffic."
+        "question": "Does Gnomcode work offline?",
+        "answer": "Local reporting, inspection and orchestration do not require Gnomcode cloud services. Official agent inference may still require the vendor network; disable update checks and leave optional services off to avoid Gnomcode network traffic."
       },
       {
         "question": "Which operating systems are supported?",
@@ -16,7 +16,7 @@ export const faqGroups = [
       },
       {
         "question": "Do I install agent CLIs separately?",
-        "answer": "Yes. Install and authenticate the official CLI you want to launch, then let Spawnt discover it on PATH. Spawnt does not supply provider subscriptions or credentials."
+        "answer": "Yes. Install and authenticate the official CLI you want to launch, then let Gnomcode discover it on PATH. Gnomcode does not supply provider subscriptions or credentials."
       }
     ]
   },
@@ -24,12 +24,12 @@ export const faqGroups = [
     "title": "Supported agents",
     "questions": [
       {
-        "question": "Which agents does Spawnt observe?",
+        "question": "Which agents does Gnomcode observe?",
         "answer": "Adapters cover Claude Code, Codex, Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider records. Available token, model and quota fields vary by source."
       },
       {
         "question": "Can I control Cursor, Cline or Aider remotely?",
-        "answer": "Their observation adapters do not provide hosted takeover. Remote prompting and launch use supported official CLI processes owned by Spawnt."
+        "answer": "Their observation adapters do not provide hosted takeover. Remote prompting and launch use supported official CLI processes owned by Gnomcode."
       },
       {
         "question": "Will more agents be added?",
@@ -91,12 +91,12 @@ export const faqGroups = [
         "answer": "All local features are free without a local license. Remote and Teams are paid categories; commercial prices and terms are not finalized."
       },
       {
-        "question": "Does Spawnt charge per token?",
-        "answer": "Spawnt reports estimated API-equivalent usage rather than reselling inference. Your agent provider determines its own subscription or usage charges; final paid Spawnt service terms require launch approval."
+        "question": "Does Gnomcode charge per token?",
+        "answer": "Gnomcode reports estimated API-equivalent usage rather than reselling inference. Your agent provider determines its own subscription or usage charges; final paid Gnomcode service terms require launch approval."
       },
       {
-        "question": "Does Spawnt read my agent API keys?",
-        "answer": "It does not read official agent subscription tokens for launch or model discovery. Optional Spawnt account authentication uses its own separate credentials; avoid typing secrets into conversations because redaction is not perfect."
+        "question": "Does Gnomcode read my agent API keys?",
+        "answer": "It does not read official agent subscription tokens for launch or model discovery. Optional Gnomcode account authentication uses its own separate credentials; avoid typing secrets into conversations because redaction is not perfect."
       },
       {
         "question": "What data leaves my machine?",
@@ -104,7 +104,7 @@ export const faqGroups = [
       },
       {
         "question": "Can I delete local history?",
-        "answer": "Session deletion removes Spawnt chat rows without modifying agent logs. A complete store reset requires stopping Spawnt and handling state.db, sidecars and backups; preserved agent logs can be ingested again."
+        "answer": "Session deletion removes Gnomcode chat rows without modifying agent logs. A complete store reset requires stopping Gnomcode and handling state.db, sidecars and backups; preserved agent logs can be ingested again."
       }
     ]
   },
@@ -113,11 +113,11 @@ export const faqGroups = [
     "questions": [
       {
         "question": "Why is my agent not detected?",
-        "answer": "Start the official agent and run spawnt doctor. Check its supported log location, home overrides and PATH, then restart Spawnt after a CLI installation."
+        "answer": "Start the official agent and run gnomcode doctor. Check its supported log location, home overrides and PATH, then restart Gnomcode after a CLI installation."
       },
       {
         "question": "Why is my quota unknown?",
-        "answer": "Not every agent records a reliable quota window. Spawnt leaves missing data unknown; inspect your official CLI or provider usage page rather than treating unknown as zero."
+        "answer": "Not every agent records a reliable quota window. Gnomcode leaves missing data unknown; inspect your official CLI or provider usage page rather than treating unknown as zero."
       },
       {
         "question": "Why will the companion not connect?",

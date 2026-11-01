@@ -18,7 +18,7 @@ else
 fi
 
 echo "==> 5/5 core purity check"
-if grep -E "^[[:space:]]*(spawnt-|tokio|rusqlite|notify|axum)[[:space:]]*=" crates/core/Cargo.toml >/dev/null 2>&1; then
+if grep -E "^[[:space:]]*(gnomcode-|tokio|rusqlite|notify|axum)[[:space:]]*=" crates/core/Cargo.toml >/dev/null 2>&1; then
   echo "ERROR: crates/core/Cargo.toml must stay pure (no internal, I/O, or async crates)." >&2
   exit 1
 fi

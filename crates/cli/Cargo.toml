@@ -1,6 +1,6 @@
 [package]
-name = "spawnt"
-description = "Live mission control for AI coding agents: the spawnt CLI."
+name = "gnomcode"
+description = "Live mission control for AI coding agents: the gnomcode CLI."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,17 +9,17 @@ repository.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "spawnt"
+name = "gnomcode"
 path = "src/main.rs"
 
 [dependencies]
-spawnt-core = { workspace = true }
-spawnt-adapters = { workspace = true }
-spawnt-store = { workspace = true }
-spawnt-platform = { workspace = true }
-spawnt-ingest = { workspace = true }
-spawnt-daemon = { workspace = true }
-spawnt-pty = { workspace = true }
+gnomcode-core = { workspace = true }
+gnomcode-adapters = { workspace = true }
+gnomcode-store = { workspace = true }
+gnomcode-platform = { workspace = true }
+gnomcode-ingest = { workspace = true }
+gnomcode-daemon = { workspace = true }
+gnomcode-pty = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }

@@ -164,7 +164,7 @@ impl Database {
                     content: if role == "tool" {
                         String::new()
                     } else {
-                        spawnt_core::redact::redact_chat_content(&row.get::<_, String>(4)?)
+                        gnomcode_core::redact::redact_chat_content(&row.get::<_, String>(4)?)
                     },
                     tool_name: row.get(5)?,
                     status: row.get(6)?,
@@ -179,7 +179,7 @@ impl Database {
         Ok(events)
     }
 
-    /// Deletes all Spawnt-owned chat in a conversation, retaining routing metadata.
+    /// Deletes all Gnomcode-owned chat in a conversation, retaining routing metadata.
     ///
     /// # Errors
     /// Returns an error if deletion fails.

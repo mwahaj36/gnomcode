@@ -95,7 +95,7 @@ export default function AuthPage() {
           <h1>{mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Reset password"}</h1>
           <p>
           {mode === "signin" && "Sign in to access your synced account and cloud console."}
-          {mode === "signup" && "Create a spawnt account to sync your account settings across devices."}
+          {mode === "signup" && "Create a gnomcode account to sync your account settings across devices."}
           {mode === "forgot" && "Enter your registered email address to receive password reset instructions."}
           </p>
         </header>
@@ -203,7 +203,7 @@ export default function AuthPage() {
             {loading
               ? "Processing..."
               : mode === "signup"
-              ? "Create spawnt Account"
+              ? "Create gnomcode Account"
               : mode === "signin"
               ? "Sign In to Console"
               : "Send Reset Link"}

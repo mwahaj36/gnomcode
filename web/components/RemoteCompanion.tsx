@@ -83,7 +83,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     void supabase.auth.getSession().then(async({data:{session}})=>{
       if(!active || !session)return;
       accountOwner.current=session.user.id;
-      const value=sessionStorage.getItem('spawnt-pairing-offer');sessionStorage.removeItem('spawnt-pairing-offer');
+      const value=sessionStorage.getItem('gnomcode-pairing-offer');sessionStorage.removeItem('gnomcode-pairing-offer');
       const offer=value?JSON.parse(value):null;
       if(offer?.owner_id===session.user.id){if(active){autoConnect.current=true;setLink(offer);}return;}
     }).catch(()=>{if(active)setError('Could not restore this device. Open Devices to try again.');});
@@ -134,7 +134,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   useEffect(()=>{
     if(!modelPanel || phase!=='paired'){modelRequest.current=false;setModelsLoading(false);return;}
     void loadModels();
-    const timer=setInterval(()=>{if(modelRequest.current && Date.now()>=modelDeadline.current){modelRequest.current=false;setModelsLoading(false);setModelsError('The desktop did not return its model list. Refresh or update Spawnt on your desktop.');}},500);
+    const timer=setInterval(()=>{if(modelRequest.current && Date.now()>=modelDeadline.current){modelRequest.current=false;setModelsLoading(false);setModelsError('The desktop did not return its model list. Refresh or update Gnomcode on your desktop.');}},500);
     return()=>clearInterval(timer);
   },[modelPanel,phase]);
 
@@ -220,7 +220,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   async function beginPaired() {
     const epoch=connectionEpoch.current;
     authenticated.current=true;retryStart.current=0;setError('');setPhase('paired');
-    try {sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(link));}catch{}
+    try {sessionStorage.setItem('gnomcode-pairing-offer',JSON.stringify(link));}catch{}
     await send({type:'sessions'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
@@ -268,7 +268,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await send({ type: 'sessions' }); }
     else if (reply.type === 'error') {
-      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Spawnt on your desktop, then refresh.');return;}
+      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
       if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
       if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
       if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
@@ -285,7 +285,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if(connectionWatch.current)clearInterval(connectionWatch.current);
       if(poll.current)clearInterval(poll.current);
       const previous=socket.current;socket.current=null;previous?.close();
-      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Spawnt is running. Your account connection is still saved.');return;
+      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Gnomcode is running. Your account connection is still saved.');return;
     }
     if(reconnectTimer.current)clearTimeout(reconnectTimer.current);
     if(connectionWatch.current)clearInterval(connectionWatch.current);
@@ -293,7 +293,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     const epoch=++connectionEpoch.current;
     const previous=socket.current;socket.current=null;previous?.close();channel.current=null;
     manualDisconnect.current=false;
-    try{restoredSession.current=sessionStorage.getItem(`spawnt-remote-selected:${link.room}`)||'';}catch{}
+    try{restoredSession.current=sessionStorage.getItem(`gnomcode-remote-selected:${link.room}`)||'';}catch{}
     setError('');
     setNotice('');
     if (!/^[a-zA-Z0-9_-]{16,128}$/.test(link.room) || !/^[0-9a-f]{64}$/.test(link.key)
@@ -324,7 +324,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if(directoryError)throw new Error('Device discovery is unavailable. Check your connection and try again.');
       discoveryPending=false;
       if(!request || request.revoked)throw new Error('Access was revoked. Open Devices to reconnect through your account.');
-      if(request.state!=='approved' || !request.offer)throw new Error('Your desktop is not ready. Keep it awake with Spawnt running.');
+      if(request.state!=='approved' || !request.offer)throw new Error('Your desktop is not ready. Keep it awake with Gnomcode running.');
       if(request.offer.key!==link.key || request.offer.room!==link.room || request.offer.relay!==link.relay)throw new Error('The desktop identity changed. Open Devices to review its connection.');
       const keys=proofKey.current?await generateKeyPair():saved.enrollment;
       if(!keys || link.protocol_version!==3)throw new Error('Update your desktop and open Devices to reconnect.');
@@ -386,12 +386,12 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     changePrompt(drafts.current.get(id) || '');
     setHasEarlier(false); historyAnchor.current = null;
     selectedRef.current = id; setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
-    try {sessionStorage.setItem(`spawnt-remote-selected:${link.room}`,id);}catch{}
+    try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
   }
 
   function disconnect() {
-    try {sessionStorage.removeItem('spawnt-pairing-offer');}catch{}
+    try {sessionStorage.removeItem('gnomcode-pairing-offer');}catch{}
     modelRequest.current=false;setModelProviders([]);setModelsError('');setModelsLoading(false);
     authenticated.current=false;connectionEpoch.current++;
     manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice(accountOwner.current,connectedDesktop.current).catch(()=>{});
@@ -458,7 +458,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
           <label htmlFor="remote-prompt">Message the agent</label>
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
           <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="submit" disabled={!connected || sending || !prompt.trim() || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
-          {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Spawnt terminal.' : 'The agent is busy or waiting for approval. Prompting becomes available when it is idle.'}</p>}
+          {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'The agent is busy or waiting for approval. Prompting becomes available when it is idle.'}</p>}
         </form>}
       </> : <div className="remote-empty"><h2>Your conversations</h2><p>Choose a conversation or start an agent to begin.</p><button type="button" className="sp-primary-action" onClick={startNew}>New conversation</button><button type="button" onClick={() => setShowSessions(true)}>Browse history</button></div>}</div>
     </div>}

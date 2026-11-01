@@ -19,11 +19,11 @@ if ($LASTEXITCODE -ne 0) { throw "Native console navigation/recovery regression 
 & powershell -NoProfile -File scripts/check-tray.ps1
 if ($LASTEXITCODE -ne 0) { throw "Native tray icon regression failed" }
 
-& $Cargo build --locked -p spawnt --release
+& $Cargo build --locked -p gnomcode --release
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $RepoRoot "target" }
-$NativeExe = Join-Path $TargetDir "release/spawnt.exe"
-if ((& $NativeExe --version) -ne "spawnt $Version") { throw "Binary version mismatch" }
+$NativeExe = Join-Path $TargetDir "release/gnomcode.exe"
+if ((& $NativeExe --version) -ne "gnomcode $Version") { throw "Binary version mismatch" }
 & $Cargo about generate about.hbs --output-file "$Out/THIRD_PARTY_NOTICES.html"
 if ($LASTEXITCODE -ne 0) { throw "Third-party notices generation failed; install cargo-about --features cli --locked" }
 $TerminalLicense = [System.Net.WebUtility]::HtmlEncode([IO.File]::ReadAllText((Join-Path $RepoRoot "web/public/vendor/XTERM-LICENSE.txt")))
@@ -36,43 +36,43 @@ $FontNotices = Get-ChildItem "$RepoRoot/web/public/fonts/*-LICENSE.txt" | ForEac
 [IO.File]::AppendAllText("$Out/THIRD_PARTY_NOTICES.html", ($FontNotices -join "`n"), [Text.Encoding]::UTF8)
 $NoticeLines = [IO.File]::ReadAllText("$Out/THIRD_PARTY_NOTICES.html") -split "`n" | ForEach-Object { $_.TrimEnd() }
 [IO.File]::WriteAllText("$Out/THIRD_PARTY_NOTICES.html", ($NoticeLines -join "`n"), (New-Object Text.UTF8Encoding($false)))
-Copy-Item $NativeExe "$Out/spawnt.exe" -Force
+Copy-Item $NativeExe "$Out/gnomcode.exe" -Force
 Copy-Item "LICENSE" "$Out/LICENSE" -Force
 $CompilerArgs = @(
-    "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/spawnt.ico",
+    "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/gnomcode.ico",
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
-    "/resource:$NativeExe,spawnt.exe",
-    "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/spawnt.ico,spawnt.ico", "/resource:$RepoRoot/scripts/spawnt-tray.ico,spawnt-tray.ico",
-    "/resource:$RepoRoot/web/public/icons/spawnt-512.png,spawnt-mark.png",
+    "/resource:$NativeExe,gnomcode.exe",
+    "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/gnomcode.ico,gnomcode.ico", "/resource:$RepoRoot/scripts/gnomcode-tray.ico,gnomcode-tray.ico",
+    "/resource:$RepoRoot/web/public/icons/gnomcode-512.png,gnomcode-mark.png",
     "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
     "/resource:$RepoRoot/scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:$RepoRoot/LICENSE,LICENSE",
     "/resource:$RepoRoot/scripts/open-folder.ps1,open-folder.ps1",
     "/resource:$RepoRoot/web/public/downloads/THIRD_PARTY_NOTICES.html,THIRD_PARTY_NOTICES.html",
-    "/out:$Out/Spawnt-Setup.exe", "$RepoRoot/scripts/Setup.cs"
+    "/out:$Out/Gnomcode-Setup.exe", "$RepoRoot/scripts/Setup.cs"
 )
 # Framework csc parses forward slashes in source paths as compiler switches.
 $CompilerArgs = @($CompilerArgs | ForEach-Object { if ($_.StartsWith('/')) { '/' + $_.Substring(1).Replace('/', '\') } else { $_.Replace('/', '\') } })
 & $Csc $CompilerArgs
 if ($LASTEXITCODE -ne 0) { throw "Native installer compilation failed" }
-$Checker = Join-Path ([IO.Path]::GetTempPath()) ("spawnt-check-" + [Guid]::NewGuid().ToString("N") + ".exe")
+$Checker = Join-Path ([IO.Path]::GetTempPath()) ("gnomcode-check-" + [Guid]::NewGuid().ToString("N") + ".exe")
 try {
     & $Csc "/out:$Checker" (Resolve-Path "$RepoRoot/scripts/check-installer-payload.cs").Path
     if ($LASTEXITCODE -ne 0) { throw "Installer verification helper compilation failed" }
-    & $Checker "$Out/Spawnt-Setup.exe" $NativeExe "$Out/THIRD_PARTY_NOTICES.html" "$Version.0"
+    & $Checker "$Out/Gnomcode-Setup.exe" $NativeExe "$Out/THIRD_PARTY_NOTICES.html" "$Version.0"
     if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
 } finally { Remove-Item $Checker -Force -ErrorAction SilentlyContinue }
 
 try {
     & $Csc /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$Checker" (Resolve-Path "$RepoRoot/scripts/check-installer-options.cs").Path
     if ($LASTEXITCODE -ne 0) { throw "Installer options checker compilation failed" }
-    & $Checker "$Out/Spawnt-Setup.exe"
+    & $Checker "$Out/Gnomcode-Setup.exe"
     if ($LASTEXITCODE -ne 0) { throw "Installer options verification failed" }
     & powershell -NoProfile -File "$RepoRoot/scripts/check-open-folder.ps1"
     if ($LASTEXITCODE -ne 0) { throw "Explorer launcher verification failed" }
 } finally { Remove-Item $Checker -Force -ErrorAction SilentlyContinue }
 
-& python scripts/package-artifacts.py --windows-exe $NativeExe --windows-setup "$Out/Spawnt-Setup.exe"
+& python scripts/package-artifacts.py --windows-exe $NativeExe --windows-setup "$Out/Gnomcode-Setup.exe"
 if ($LASTEXITCODE -ne 0) { throw "Release archive and checksum generation failed" }
 & npm run build --prefix web
 if ($LASTEXITCODE -ne 0) { throw "Web production build failed" }
-Write-Output "spawnt v$Version release packaged with verified installer payload and SHA-256 manifests."
+Write-Output "gnomcode v$Version release packaged with verified installer payload and SHA-256 manifests."

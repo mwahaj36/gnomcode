@@ -73,7 +73,7 @@ pub fn launch_command(
         "gemini" | "gemini-cli" => "gemini".to_owned(),
         "terminal" | "shell" => {
             return Ok({
-                let (executable, arguments) = spawnt_platform::executables::terminal_shell();
+                let (executable, arguments) = gnomcode_platform::executables::terminal_shell();
                 LaunchCommand {
                     executable,
                     arguments,
@@ -145,7 +145,7 @@ pub struct SessionRecord {
 /// Directory where active session records are stored.
 #[must_use]
 pub fn sessions_dir() -> PathBuf {
-    spawnt_platform::spawnt_home().join("sessions")
+    gnomcode_platform::gnomcode_home().join("sessions")
 }
 
 /// Path to a specific session's JSON record file.
@@ -173,7 +173,7 @@ pub fn save_session_record(record: &SessionRecord) -> Result<(), Error> {
     fs::create_dir_all(&dir)?;
     let path = session_file_path(&record.session_id);
     let bytes = serde_json::to_vec_pretty(record)?;
-    spawnt_platform::write_private_file(&path, &bytes)
+    gnomcode_platform::write_private_file(&path, &bytes)
         .map_err(|e| Error::Process(e.to_string()))?;
     Ok(())
 }
@@ -232,7 +232,7 @@ pub fn list_active_sessions() -> Vec<SessionRecord> {
 /// Checks whether a process ID is currently alive.
 #[must_use]
 pub fn is_pid_alive(pid: u32) -> bool {
-    spawnt_platform::process_is_alive(pid)
+    gnomcode_platform::process_is_alive(pid)
 }
 
 /// Bounded in-memory terminal output buffer.
@@ -348,7 +348,7 @@ pub async fn run_pty_host_resuming(
                 None => launch_command(agent, repo, model)?,
             };
             let (executable, mut arguments) =
-                spawnt_platform::executables::agent_command(&launch.executable);
+                gnomcode_platform::executables::agent_command(&launch.executable);
             arguments.extend(launch.arguments);
             (executable, arguments)
         };
@@ -672,7 +672,7 @@ async fn host_stop_handler(
         return StatusCode::UNAUTHORIZED;
     }
 
-    if spawnt_platform::stop_owned_process(state.child_pid).is_err() {
+    if gnomcode_platform::stop_owned_process(state.child_pid).is_err() {
         return StatusCode::INTERNAL_SERVER_ERROR;
     }
     state.stopping.store(true, Ordering::Relaxed);

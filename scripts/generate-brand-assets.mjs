@@ -4,7 +4,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 const require = createRequire(new URL('../web/package.json', import.meta.url));
 const sharp = require('sharp');
 const root = new URL('../', import.meta.url);
-const source = await readFile(new URL('web/public/spawnt-mark.svg', root));
+const source = await readFile(new URL('web/public/gnomcode-mark.svg', root));
 const directory = new URL('web/public/icons/', root);
 await mkdir(directory, { recursive: true });
 const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
@@ -12,7 +12,7 @@ const images = new Map();
 for (const size of sizes) {
   const png = await sharp(source).resize(size, size).png().toBuffer();
   images.set(size, png);
-  await writeFile(new URL(`spawnt-${size}.png`, directory), png);
+  await writeFile(new URL(`gnomcode-${size}.png`, directory), png);
 }
 const iconSizes = sizes.filter(size => size <= 256);
 // Legacy Windows tray/GDI+ cannot draw PNG-compressed small ICO frames.
@@ -58,16 +58,16 @@ return Buffer.concat([header, ...iconSizes.map(size => frames.get(size))]);
 }
 const ico = await windowsIcon(0.65);
 const trayIco = await windowsIcon(1);
-for (const path of ['scripts/spawnt-tray.ico', 'web/public/downloads/spawnt-tray.ico']) await writeFile(new URL(path, root), trayIco);
+for (const path of ['scripts/gnomcode-tray.ico', 'web/public/downloads/gnomcode-tray.ico']) await writeFile(new URL(path, root), trayIco);
 const badgeDirectory = new URL('scripts/tray-badges/', root);
 await mkdir(badgeDirectory, { recursive: true });
 for (let count = 1; count <= 10; count++) {
   const label = count === 10 ? '9+' : String(count);
   const badge = Buffer.from(`<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="13" width="18" height="18" fill="#ff2544" stroke="#070708" stroke-width="2"/><text x="22" y="26" text-anchor="middle" font-family="Arial" font-size="${count === 10 ? 10 : 14}" font-weight="bold" fill="#070708">${label}</text></svg>`);
   const icon = await sharp(images.get(32)).flatten({ background: '#070708' }).composite([{ input: badge }]).png().toBuffer();
-  await writeFile(new URL(`spawnt-tray-${count === 10 ? '9plus' : count}.png`, badgeDirectory), icon);
+  await writeFile(new URL(`gnomcode-tray-${count === 10 ? '9plus' : count}.png`, badgeDirectory), icon);
 }
-for (const path of ['scripts/spawnt.ico', 'web/app/favicon.ico', 'web/public/downloads/spawnt.ico']) {
+for (const path of ['scripts/gnomcode.ico', 'web/app/favicon.ico', 'web/public/downloads/gnomcode.ico']) {
   await writeFile(new URL(path, root), ico);
 }
 await writeFile(new URL('web/app/apple-icon.png', root), await sharp(source).resize(180, 180).flatten({ background: '#070708' }).png().toBuffer());
@@ -81,5 +81,5 @@ const chunks = [ [512, 'ic09'], [1024, 'ic10'] ].map(([size, type]) => {
 const icns = Buffer.alloc(8);
 icns.write('icns');
 icns.writeUInt32BE(8 + chunks.reduce((sum, chunk) => sum + chunk.length, 0), 4);
-await writeFile(new URL('spawnt.icns', directory), Buffer.concat([icns, ...chunks]));
-console.log('Generated Windows, macOS, Linux, favicon and Apple assets from spawnt-mark.svg');
+await writeFile(new URL('gnomcode.icns', directory), Buffer.concat([icns, ...chunks]));
+console.log('Generated Windows, macOS, Linux, favicon and Apple assets from gnomcode-mark.svg');

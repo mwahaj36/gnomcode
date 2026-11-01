@@ -3,17 +3,17 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", "Download Spawnt — Windows, macOS, Linux", "Download the Spawnt AI agent orchestrator for your platform. All local features are free, with no account required.");
+export const metadata = pageMetadata("/downloads", "Download Gnomcode — Windows, macOS, Linux", "Download the Gnomcode AI agent orchestrator for your platform. All local features are free, with no account required.");
 
 export default function DownloadsPage() {
   return (
     <div className="sp-console-shell sp-downloads-page mx-auto max-w-7xl px-6 py-16 font-sans">
       <header className="sp-downloads-header">
         <div>
-          <h1>Download spawnt</h1>
+          <h1>Download gnomcode</h1>
           <p>One place to launch, switch and control AI coding agents. Choose Windows, macOS or Linux.</p>
         </div>
-        <span className="sp-download-release">SPAWNT · v{packageInfo.version}</span>
+        <span className="sp-download-release">GNOMCODE · v{packageInfo.version}</span>
       </header>
 
       <PlatformDownloads />

@@ -7,13 +7,13 @@
 
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter, claude::fallback_id_from_path};
 use chrono::{DateTime, TimeZone, Utc};
-use serde_json::Value;
-use spawnt_core::redact::clean_user_message;
-use spawnt_core::{
+use gnomcode_core::redact::clean_user_message;
+use gnomcode_core::{
     ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
     SessionState, Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
 };
+use serde_json::Value;
 use std::collections::HashSet;
 
 /// Stateful parser for a Codex `rollout-*.jsonl` session log.
@@ -170,8 +170,8 @@ impl SourceAdapter for CodexAdapter {
                     && payload.get("type").and_then(Value::as_str) == Some("message")
                 {
                     let role = match payload.get("role").and_then(Value::as_str) {
-                        Some("user") => Some(spawnt_core::ChatRole::User),
-                        Some("assistant") => Some(spawnt_core::ChatRole::Assistant),
+                        Some("user") => Some(gnomcode_core::ChatRole::User),
+                        Some("assistant") => Some(gnomcode_core::ChatRole::Assistant),
                         _ => None,
                     };
                     if let (Some(role), Some(content)) =
@@ -188,7 +188,7 @@ impl SourceAdapter for CodexAdapter {
                                     .and_then(|item| item.get("provenance"))
                                     .and_then(|value| value.get("type"))
                                     .and_then(Value::as_str);
-                                role != spawnt_core::ChatRole::User
+                                role != gnomcode_core::ChatRole::User
                                     || !matches!(provenance, Some("agents_md" | "harness"))
                             })
                             .filter_map(|(_, part)| {
@@ -200,7 +200,7 @@ impl SourceAdapter for CodexAdapter {
                                 }
                             })
                             .map(|text| {
-                                if role == spawnt_core::ChatRole::User {
+                                if role == gnomcode_core::ChatRole::User {
                                     clean_user_message(text)
                                 } else {
                                     text.to_owned()
@@ -210,12 +210,12 @@ impl SourceAdapter for CodexAdapter {
                             .collect::<Vec<_>>()
                             .join("\n");
                         if !text.is_empty() {
-                            batch.chat_events.push(spawnt_core::ChatEvent {
+                            batch.chat_events.push(gnomcode_core::ChatEvent {
                                 event_id: format!("{}:{}", session_id, current_offset),
                                 session_id: session_id.clone(),
                                 turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
                                 role,
-                                content: spawnt_core::redact::redact_chat_content(&text),
+                                content: gnomcode_core::redact::redact_chat_content(&text),
                                 tool_name: None,
                                 status: None,
                                 created_at: ts,
@@ -271,12 +271,12 @@ impl SourceAdapter for CodexAdapter {
                                     )
                                 },
                             );
-                            batch.chat_events.push(spawnt_core::ChatEvent {
+                            batch.chat_events.push(gnomcode_core::ChatEvent {
                                 event_id: format!("{session_id}:{current_offset}:model"),
                                 session_id: session_id.clone(),
                                 turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
-                                role: spawnt_core::ChatRole::System,
-                                content: spawnt_core::redact::redact_chat_content(&content),
+                                role: gnomcode_core::ChatRole::System,
+                                content: gnomcode_core::redact::redact_chat_content(&content),
                                 tool_name: None,
                                 status: Some(status.to_owned()),
                                 created_at: ts,
@@ -361,10 +361,10 @@ impl SourceAdapter for CodexAdapter {
 /// Hides injected Codex context in legacy rows without changing history or paging cursors.
 #[must_use]
 pub fn clean_stored_conversation(
-    mut events: Vec<spawnt_core::ChatEvent>,
-) -> Vec<spawnt_core::ChatEvent> {
+    mut events: Vec<gnomcode_core::ChatEvent>,
+) -> Vec<gnomcode_core::ChatEvent> {
     for event in &mut events {
-        if event.session_id.starts_with("codex:") && event.role == spawnt_core::ChatRole::User {
+        if event.session_id.starts_with("codex:") && event.role == gnomcode_core::ChatRole::User {
             event.content = clean_user_message(&event.content);
         }
     }

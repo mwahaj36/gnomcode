@@ -1,7 +1,7 @@
 //! Native chat labels from supported transcript and session-index metadata.
 
+use gnomcode_core::AgentId;
 use serde_json::Value;
-use spawnt_core::AgentId;
 use std::collections::BTreeMap;
 
 /// Reads bounded, redacted native labels without interpreting prompt text as metadata.
@@ -56,7 +56,7 @@ pub fn native_session_titles(agent: AgentId, bytes: &[u8]) -> BTreeMap<String, S
             let Some((id, title)) = id.zip(title.and_then(Value::as_str)) else {
                 continue;
             };
-            let title: String = spawnt_core::redact::redact_chat_content(title)
+            let title: String = gnomcode_core::redact::redact_chat_content(title)
                 .trim()
                 .chars()
                 .take(256)
@@ -64,7 +64,7 @@ pub fn native_session_titles(agent: AgentId, bytes: &[u8]) -> BTreeMap<String, S
             if title.is_empty() {
                 continue;
             }
-            let id = spawnt_core::Session::compose_id(agent, id);
+            let id = gnomcode_core::Session::compose_id(agent, id);
             if labels.get(&id).is_none_or(|(rank, _)| *rank <= priority) {
                 labels.insert(id, (priority, title));
             }

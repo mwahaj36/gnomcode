@@ -1,5 +1,5 @@
 ---
-source: /spawnt/crates/adapters/src/lib.rs
+source: /gnomcode/crates/adapters/src/lib.rs
 expression: "(batch.sessions, batch.usage_records, batch.chat_events)"
 ---
 (

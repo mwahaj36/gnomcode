@@ -9,13 +9,13 @@ use crate::{
     claude::{classify_tool_kind, extract_tool_detail},
 };
 use chrono::{DateTime, Utc};
-use serde_json::Value;
-use spawnt_core::{
+use gnomcode_core::{
     ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
     Surface, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::{redact_chat_content, redact_summary},
 };
+use serde_json::Value;
 use std::collections::HashSet;
 
 /// Stateful parser for an Antigravity `transcript.jsonl` conversation log.
@@ -427,7 +427,7 @@ pub fn extract_antigravity_user_prompt(content: &str) -> Option<String> {
         if let Some(end) = after.find("</USER_REQUEST>") {
             let prompt = after[..end].trim();
             if !prompt.is_empty() {
-                return Some(spawnt_core::redact::clean_user_message(prompt));
+                return Some(gnomcode_core::redact::clean_user_message(prompt));
             }
         }
     }
@@ -443,6 +443,6 @@ pub fn extract_antigravity_user_prompt(content: &str) -> Option<String> {
     if trimmed.is_empty() {
         None
     } else {
-        Some(spawnt_core::redact::clean_user_message(trimmed))
+        Some(gnomcode_core::redact::clean_user_message(trimmed))
     }
 }
