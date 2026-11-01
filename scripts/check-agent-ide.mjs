@@ -36,7 +36,7 @@ const server = createServer(async (request, response) => {
   else if (url.pathname === '/api/v1/projects') value = [];
   else if (url.pathname === '/api/v1/remote/status') value = {enabled:true,paired:remotePaired};
   else if (url.pathname.endsWith('/terminal')) value = {session_id:'terminal-test',repo_path:'C:\\workspace\\demo'};
-  else if (url.pathname === '/api/v1/models') value = [{ model:'gpt-6.1-sol',agent:'codex',display_name:'GPT 6.1' },{ model:'o3', agent:'codex',display_name:'OpenAI o3' }];
+  else if (url.pathname === '/api/v1/model-catalog') value = {providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{model:'@default',agent:'codex',display_name:'Codex default'},{model:'gpt-6.1-sol',agent:'codex',display_name:'GPT 6.1'},{model:'o3',agent:'codex',display_name:'OpenAI o3'}]}]};
   else if (url.pathname.endsWith('/chat')) value = [
     { event_id:'1', turn_index:1, role:'user', content:'Review authentication', created_at:session.last_event_at },
     { event_id:'2', turn_index:2, role:'assistant', content:'I will review the login flow.\n\n## Findings\n\n**Validated** with `cargo test`.\n\n- Session stays in chat\n- Terminal stays available\n\n```rust\nlet safe = "<script>";\n```\n\n| Check | Status |\n| --- | --- |\n| Tests | Pass |', created_at:session.last_event_at },
@@ -82,7 +82,7 @@ try {
   assert.match(terminalInput.join(''), /pwd/, 'integrated terminal forwards real typing');
   assert.ok(writes.some(write=>write.path.endsWith('/terminal')),'shell launch resolves the current conversation workspace');
   await page.getByRole('button',{name:'Hide',exact:true}).click();
-  assert.equal(await page.locator('#chat-model-select').inputValue(), 'gpt-6.1-sol', 'model picker shows the running model');
+  assert.equal(await page.locator('#chat-model-select').inputValue(), 'codex:gpt-6.1-sol', 'model picker shows the running model');
   assert.equal(await page.locator('#chat-model-status').textContent(), '', 'confirmed model is not repeated beside its selector');
   await page.locator('#chat-stream h2').getByText('Findings').waitFor();
   assert.equal(await page.locator('#chat-stream pre code').textContent(), 'let safe = "<script>";');
@@ -118,7 +118,7 @@ try {
   await page.locator('[data-action="dismiss-notice"]').click();
   assert.equal(await page.locator('#app-notice').isHidden(), true);
   await page.unroute('**/api/v1/sessions/*/prompt');
-  await page.locator('#chat-model-select').selectOption('o3');
+  await page.locator('#chat-model-select').selectOption('codex:o3');
   await page.getByRole('heading',{name:'Model handoff',exact:true}).waitFor();
   assert.doesNotMatch(await page.locator('#chat-session-label').textContent(), /codex-switched/);
   assert.deepEqual(writes.find(write => write.path.endsWith('/switch')).body, {target_model:'o3',agent:'codex'});
@@ -134,7 +134,7 @@ try {
   await sendStarted;
   await page.locator('.sp-chat-user').filter({hasText:'Keep my draft'}).waitFor();
   await page.locator('.sp-chat-waiting').getByText('Sending...').waitFor();
-  await page.locator('#chat-model-select').selectOption('o3');
+  await page.locator('#chat-model-select').selectOption('codex:o3');
   await page.getByRole('heading',{name:'Model handoff',exact:true}).waitFor();
   await page.locator('#chat-prompt-text').fill('New session draft');
   await finishSend();
@@ -204,12 +204,12 @@ try {
   await page.screenshot({path:new URL('../.tmp/ide-verification/profile-dark-1440.png', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   await page.evaluate(() => {const status={enabled:true,paired:false,room_id:'a'.repeat(32),public_key:'b'.repeat(64),relay_url:'wss://relay.example/relay',pairing_code:'63311530'};showRemoteStatus(status);document.getElementById('desktop-pairing-code').focus();document.getElementById('desktop-pairing-code').select();window.pairingNode=document.getElementById('desktop-pairing-code');showRemoteStatus(status);});
   assert.equal(await page.locator('#desktop-pairing-code').evaluate(node=>node===window.pairingNode && node.selectionEnd-node.selectionStart===8),true,'status polling preserves code selection for copying');
-  await page.route('**/api/v1/models', route => route.fulfill({status:200,contentType:'application/json',body:'[]'}));
+  await page.route('**/api/v1/model-catalog', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({providers:[{agent:'codex',name:'Codex',status:'authenticated',models:[{agent:'codex',model:'@default',display_name:'Codex default'}]}]})}));
   await page.locator('#tab-btn-sessions').click();
   await page.reload();
   await page.getByRole('button', {name:/Review authentication/}).click();
   await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
-  assert.equal(await page.locator('#chat-model-select option[value="o3"]').count(),0,'missing CLI metadata cannot produce guessed model names');
+  assert.equal(await page.locator('#chat-model-select option[value="codex:o3"]').count(),0,'missing CLI metadata cannot produce guessed model names');
   assert.ok(await page.locator('#chat-model-select option[data-model="@default"]').count()>0,'installed agents remain switchable through their actual CLI defaults');
   assert.equal(await page.locator('#chat-switch-btn').isDisabled(), true);
   await page.evaluate(async () => {

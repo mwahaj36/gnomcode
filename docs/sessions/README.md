@@ -4,6 +4,7 @@ One file per recorded session or follow-up. Historical entries retain their orig
 
 For each new session, add a dated file with goals, outcomes, problems/root-cause fixes, decisions and verification, then link it here. Do not append session bodies to SESSION_LOG.md.
 
+- [2026-11-01 - PR #111 ponytail ultra review](2026-11-01-pr111-ponytail-review.md)
 - [2026-11-01 - CLI account model picker](2026-11-01-cli-account-model-picker.md)
 - [2026-11-01 - UI accessibility and usability pass](2026-11-01-ui-accessibility-pass.md)
 - [2026-11-01 - Native chat titles](2026-11-01-native-chat-titles.md)
