@@ -28,6 +28,7 @@ const server = createServer(async (request, response) => {
   else if (url.pathname === '/api/v1/license') value = {licensed:false};
   else if (url.pathname === '/api/v1/pro/relay') value = {relays:[],config:{}};
   else if (url.pathname === '/api/v1/sessions') value = { sessions:[session], page:1, total_pages:1, total_count:1 };
+  else if (url.pathname === '/api/v1/conversations') value = [session];
   else if (url.pathname === '/api/v1/sessions/hosted') value = { sessions:[
     ...(writes.some(write => write.path.endsWith('/switch')) ? [{session_id:'codex-switched',agent:'codex',title:'Model handoff',model:'o3',repo_path:'C:\\workspace\\demo',started_at:session.last_event_at}] : []),
     ...(writes.some(write => write.path.endsWith('/launch')) ? [{session_id:'codex-launched',agent:'codex',title:'Picked workspace',repo_path:'C:\\workspace\\picked',started_at:session.last_event_at}] : []),
@@ -183,6 +184,19 @@ try {
   assert.equal(await page.locator('.sp-console-nav').evaluate(node=>Math.round(node.getBoundingClientRect().width)),208,'hover opens the rail');
   await page.mouse.move(1000,500);await page.waitForTimeout(200);
   assert.equal(await page.locator('.sp-console-nav').evaluate(node=>Math.round(node.getBoundingClientRect().width)),64,'pointer leave collapses the rail');
+  await page.locator('#tab-btn-settings').click();
+  await page.locator('#tab-btn-settings').focus();
+  await page.keyboard.press('Home');
+  assert.equal(await page.locator('#tab-btn-overview').getAttribute('aria-selected'), 'true', 'keyboard navigation selects the first view');
+  await page.keyboard.press('End');
+  assert.equal(await page.locator('#tab-btn-settings').getAttribute('aria-selected'), 'true', 'keyboard navigation returns to Profile');
+  await page.getByRole('button', {name:'Manage account'}).click();
+  const tokenInput = page.locator('#auth-token-input');
+  await tokenInput.fill('example-token');
+  await page.getByRole('button', {name:'Show token'}).click();
+  assert.equal(await tokenInput.getAttribute('type'), 'text');
+  await page.getByRole('button', {name:'Hide token'}).click();
+  assert.equal(await tokenInput.getAttribute('type'), 'password');
   await page.locator('#tab-btn-settings').click();
   await page.evaluate(() => {document.documentElement.dataset.theme = 'dark'; document.activeElement?.blur();});
   await page.mouse.move(1000, 500);

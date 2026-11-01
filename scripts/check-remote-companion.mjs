@@ -164,7 +164,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'reload does not ask for pairing');
   await page.evaluate(()=>{window.testSockets.at(-1).close();document.dispatchEvent(new Event('visibilitychange'));setTimeout(()=>document.dispatchEvent(new Event('visibilitychange')),10);});
   await page.locator('.sp-remote.is-paired').waitFor();
-  await page.waitForFunction(()=>document.querySelector('.remote-heading h1')?.textContent==='New phone conversation');
+  await page.waitForFunction(()=>document.querySelector('.remote-heading :is(h1,h2)')?.textContent==='New phone conversation');
   for(const width of [320,390]) for(const height of [600,350,844]){
     await page.setViewportSize({width,height});await page.locator('#remote-prompt').focus();await page.waitForTimeout(100);
     assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed','keyboard focus cannot scroll the document');
@@ -173,21 +173,25 @@ try {
     assert.ok(send && send.y>=0 && send.y+send.height<=height,`Send visible without page scroll at ${width}x${height}`);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
-  await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
+  await page.getByRole('button',{name:'Open conversations',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Close conversations',exact:true}).last().evaluate(node=>node===document.activeElement),true,'drawer receives keyboard focus');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('button',{name:'Open conversations',exact:true}).evaluate(node=>node===document.activeElement),true,'Escape closes the drawer and restores focus');
+  await page.getByRole('button',{name:'Open conversations',exact:true}).click();
   await page.getByRole('button',{name:/External history/}).click();
   await page.getByText('Read-only history.',{exact:true}).waitFor();
   assert.equal(await page.locator('.remote-composer').count(),0);
   await page.getByRole('status').filter({hasText:'Loading messages...'}).waitFor({state:'hidden'});
   assert.deepEqual(await page.locator('.sp-remote [role=alert]').allTextContents(),[]);
   await page.screenshot({path:new URL('../.tmp/remote-verification/phone-readonly.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
-  await page.getByRole('button',{name:'Toggle conversations',exact:true}).click();
+  await page.getByRole('button',{name:'Open conversations',exact:true}).click();
   await page.locator('#remote-history-search').fill('Saved');
   assert.equal(await page.locator('.remote-session-list button').count(),1);
   await page.getByRole('button',{name:/Saved conversation/}).click();
   await page.getByRole('button',{name:'Resume conversation',exact:true}).click();
   await page.getByText('Ready to continue.',{exact:true}).waitFor();
   await page.locator('.remote-composer').waitFor();
-  assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation','native resume retains the selected conversation');
+  assert.equal(await page.locator('.remote-heading :is(h1,h2)').textContent(),'Saved conversation','native resume retains the selected conversation');
   await page.locator('#remote-prompt').fill('Continue this saved chat');
   await page.getByRole('button',{name:'Change model',exact:true}).click();
   await page.getByRole('button',{name:'Sonnet test',exact:true}).waitFor();
@@ -197,7 +201,7 @@ try {
   await page.getByText('Switching model...',{exact:true}).waitFor();
   assert.equal(requests.filter(request=>request.type==='switch').at(-1).agent,'claude');
   assert.equal(requests.filter(request=>request.type==='switch').at(-1).model,'sonnet');
-  assert.equal(await page.locator('.remote-heading h1').textContent(),'Saved conversation');
+  assert.equal(await page.locator('.remote-heading :is(h1,h2)').textContent(),'Saved conversation');
   assert.equal(await page.locator('#remote-prompt').inputValue(),'Continue this saved chat','model change retains the phone draft');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.waitForFunction(()=>document.getElementById('remote-prompt').value==='');

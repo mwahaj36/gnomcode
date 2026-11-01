@@ -39,7 +39,7 @@ function cycleTheme() {
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
     function jsArg(value) { return escapeHtml(JSON.stringify(String(value ?? ''))); }
     const consoleNavigation = document.querySelector('.sp-console-nav');
-    const updateNavOrientation = () => consoleNavigation.setAttribute('aria-orientation', 'vertical');
+    const updateNavOrientation = () => consoleNavigation.querySelector('[role=tablist]').setAttribute('aria-orientation', 'vertical');
     updateNavOrientation(); window.addEventListener('resize', updateNavOrientation);
     let currentTimeline = 'all';
     let currentPage = 1;
@@ -76,7 +76,7 @@ function cycleTheme() {
         const selected = button.dataset.view === view;
         button.classList.toggle('active', selected);
         button.setAttribute('aria-selected', String(selected));
-        button.tabIndex = selected ? 0 : -1;
+        button.tabIndex = selected || (view === 'auth' && button.dataset.view === 'settings') ? 0 : -1;
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
       document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
@@ -87,6 +87,7 @@ function cycleTheme() {
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
       const tabs = [...document.querySelectorAll('.nav-tabs [role="tab"]')];
       const current = tabs.indexOf(document.activeElement);
+      if (current < 0) return;
       let next = current;
       if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
       else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
@@ -1089,7 +1090,10 @@ function cycleTheme() {
     }
     function toggleNavigation() {
       const expanded = document.body.classList.toggle('navigation-expanded');
-      document.getElementById('navigation-toggle').setAttribute('aria-expanded', String(expanded));
+      const toggle = document.getElementById('navigation-toggle');
+      toggle.setAttribute('aria-expanded', String(expanded));
+      toggle.setAttribute('aria-label', expanded ? 'Collapse navigation' : 'Expand navigation');
+      toggle.querySelector('.rail-label').textContent = expanded ? 'Collapse navigation' : 'Expand navigation';
     }
     function toggleChatList() {
       const collapsed = document.body.classList.toggle('chat-list-collapsed');
@@ -1224,6 +1228,10 @@ function cycleTheme() {
           status.style.color = 'var(--green)';
           status.textContent = 'Desktop connected. Waiting for its next metadata update.';
           input.value = '';
+          input.type = 'password';
+          const visibility = document.querySelector('[data-action="toggle-pair-token"]');
+          visibility.setAttribute('aria-pressed', 'false');
+          visibility.textContent = 'Show token';
           if (await checkAuthSession()) document.getElementById('auth-cloud-status').focus({ preventScroll: true });
         } else {
           status.style.color = 'var(--red)';
@@ -1505,6 +1513,7 @@ function cycleTheme() {
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
         'remote-start': startRemote, 'remote-confirm': confirmRemote, 'remote-revoke': revokeRemote };
+      if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
