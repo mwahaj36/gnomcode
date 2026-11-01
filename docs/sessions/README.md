@@ -6,6 +6,9 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 
 - [2026-11-01 - Audit remediation](2026-11-01-audit-remediation.md)
 - [2026-11-01 - Independent product audit](2026-11-01-independent-product-audit.md)
+- [2026-11-01 - PR #111 ponytail ultra review](2026-11-01-pr111-ponytail-review.md)
+- [2026-11-01 - CLI account model picker](2026-11-01-cli-account-model-picker.md)
+- [2026-11-01 - UI accessibility and usability pass](2026-11-01-ui-accessibility-pass.md)
 - [2026-11-01 - Native chat titles](2026-11-01-native-chat-titles.md)
 - [2026-11-01 - Cursor phantom sessions](2026-11-01-cursor-phantom-sessions.md)
 - [2026-11-01 - Mobile console navigation and project activity](2026-11-01-mobile-console-navigation-projects.md)
