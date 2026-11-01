@@ -52,3 +52,5 @@ The [product audit](APP_AUDIT_2026-11-01.md) identifies managed worktrees, integ
 ## Release decision
 
 Close every blocking gate or record an explicit owner-approved scope reduction. Record exact commit/version/platforms, artifact hashes, security and legal approvals, production URL checks and rollback procedure. Marketing approval does not authorize Remote payments or publication of an unreviewed release.
+
+On 2026-11-01, Wahaj explicitly approved merging PR #116 and publishing its matching site and Windows downloads as a **0.9.0 development rollout** while the remaining phone/security gates stay open. This is a scoped development exception, not v1.0, security certification, cross-platform acceptance or payment approval. Native source, artifact hashes and rollout verification are recorded in the [post-migration build session](sessions/2026-11-01-account-wide-native-build.md).

@@ -25,3 +25,7 @@ The extended cancellation test then exposed a real UI issue: cancelling consent 
 ## Rollout boundary
 
 No production site, download channel, tag or release was published, and PR #116 remains a draft. The installer is an unsigned 0.9.0 development build, not evidence of physical-phone, clean-install or cross-platform acceptance. Production publication still requires the owner decision specified by the launch checklist; the reported migration alone does not close independent Remote security and device gates.
+
+## Owner-approved development rollout
+
+After reviewing the matching installer and the request to merge PR #116 and publish the matching site/downloads as a development rollout, Wahaj answered "yes" on 2026-11-01. This explicitly authorizes that scoped rollout with the phone/security gates remaining open. Preserve the distinction from a completed public launch or payment approval. Publication verification follows this authorization; no update-manifest channel or release tag is included.

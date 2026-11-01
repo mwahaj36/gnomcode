@@ -3,6 +3,12 @@
 All notable changes to Spawnt are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [0.9.0 development refresh] — 2026-11-01
+
+- Confirm account-wide access before native linking; signed-in devices then connect automatically to all linked native apps without phone pairing or per-desktop approval.
+- Preserve account consent across updates and inactivity, keep account-side disable effective across restarts, and bound reconnect recovery while preserving drafts without replaying prompts.
+- Publish the matching Windows x64 development installer and account UI under the owner's scoped rollout approval. Physical-phone/platform acceptance and independent Remote security review remain open.
+
 ## [1.5.3] — 2026-10-28
 
 - Order Overview as activity, compact spend summary, then aligned provider-limit and ongoing-session columns. Group quota windows per provider and remove duplicate chart cost.
