@@ -12,12 +12,11 @@ async function database() {
 }
 const recordKey=(owner:string,desktop:string)=>`${owner}:${desktop}`;
 
-export async function savedDevice(owner:string,desktop?:string):Promise<SavedDevice|undefined> {
+export async function savedDevice(owner:string,desktop:string):Promise<SavedDevice|undefined> {
   const db=await database();
   try {return await new Promise((resolve,reject)=>{
     const store=db.transaction('devices').objectStore('devices');
-    if(desktop){const request=store.get(recordKey(owner,desktop));request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);}
-    else {const request=store.getAll();request.onsuccess=()=>resolve(request.result.find((saved:SavedDevice)=>saved.offer.owner_id===owner));request.onerror=()=>reject(request.error);}
+    const request=store.get(recordKey(owner,desktop));request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
   });} finally {db.close();}
 }
 

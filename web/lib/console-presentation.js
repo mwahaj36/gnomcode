@@ -1,3 +1,5 @@
+import MarkdownIt from "./markdown-it.mjs";
+
 export const sessionStateLabel = state => ({ thinking: 'Running', tool: 'Running', running: 'Running', awaiting_approval: 'Waiting', waiting: 'Waiting', idle: 'Idle', error: 'Error', ended: 'Idle' }[state] || 'Unknown');
 // Shared presentation only. Rust supplies totals, pricing, and chart proportions.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -139,62 +141,36 @@ export function renderSessionList(sessions, selected = '', query = '') {
   return matching.map(session => `<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.agent)} · ${escape(sessionStateLabel(session.state))}</span>${session.state === 'ended' ? '<small>Session ended</small>' : ''}<time datetime="${escape(session.last_event_at || '')}">${escape(relativeActivity(session.last_event_at))}</time></button>`).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
-// A deliberately restricted Markdown surface: raw HTML and embedded media stay inert.
-function chatInline(text) {
-  return text.split(/(`+[^`]+`+|\[[^\]]+\]\([^\s)]+\))/g).map(part => {
-    if (part.startsWith('`')) return `<code>${escape(part.replace(/^`+|`+$/g, ''))}</code>`;
-    const link = part.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
-    if (link) return /^https?:\/\//i.test(link[2]) ? `<a href="${escape(link[2])}" target="_blank" rel="noopener noreferrer">${escape(link[1])}</a>` : escape(part);
-    return escape(part).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>').replace(/~~([^~]+)~~/g, '<del>$1</del>');
-  }).join('');
-}
-
-function chatMarkdown(text) {
-  const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  const html = [];
-  const cells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
-  for (let i = 0; i < lines.length;) {
-    const line = lines[i];
-    if (!line.trim()) { i++; continue; }
-    const fence = line.match(/^\s*(`{3,}|~{3,})([^\s]*)\s*$/);
-    if (fence) {
-      const code = []; i++;
-      while (i < lines.length && !new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`).test(lines[i])) code.push(lines[i++]);
-      i++;
-      html.push(`<pre><code${/^[\w+-]+$/.test(fence[2]) ? ` class="language-${escape(fence[2])}"` : ''}>${escape(code.join('\n'))}</code></pre>`);
-      continue;
-    }
-    const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading) { html.push(`<h${heading[1].length}>${chatInline(heading[2])}</h${heading[1].length}>`); i++; continue; }
-    if (line.includes('|') && lines[i + 1] && cells(lines[i + 1]).every(cell => /^:?-{3,}:?$/.test(cell))) {
-      const head = cells(line); i += 2;
-      const rows = [];
-      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(`<tr>${cells(lines[i++]).map((cell, index) => `<td data-label="${escape(head[index] || '')}">${chatInline(cell)}</td>`).join('')}</tr>`);
-      html.push(`<div class="sp-chat-table"${head.length > 3 ? ' data-wide="true"' : ''}><table><thead><tr>${head.map(cell => `<th>${chatInline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
-      continue;
-    }
-    const list = line.match(/^\s*(?:([-+*])|\d+[.)])\s+(.+)$/);
-    if (list) {
-      const tag = list[1] ? 'ul' : 'ol'; const items = [];
-      const indent = line.match(/^\s*/)[0].length;
-      while (i < lines.length) {
-        const item = lines[i].match(/^\s*(?:([-+*])|\d+[.)])\s+(.+)$/);
-        if (!item || lines[i].match(/^\s*/)[0].length !== indent || Boolean(item[1]) !== Boolean(list[1])) break;
-        const continuation = []; i++;
-        while (i < lines.length && lines[i].trim() && lines[i].match(/^\s*/)[0].length > indent) continuation.push(lines[i++].slice(indent + 2));
-        items.push(`<li>${chatInline(item[2])}${continuation.length ? chatMarkdown(continuation.join('\n')) : ''}</li>`);
-      }
-      const start = tag === 'ol' ? Number.parseInt(line.trim(), 10) : 1;
-      html.push(`<${tag}${start !== 1 ? ` start="${start}"` : ''}>${items.join('')}</${tag}>`); continue;
-    }
-    if (/^>\s?/.test(line)) { html.push(`<blockquote>${chatInline(line.replace(/^>\s?/, ''))}</blockquote>`); i++; continue; }
-    if (/^\s*(?:---+|\*\*\*+|___+)\s*$/.test(line)) { html.push('<hr>'); i++; continue; }
-    const paragraph = [line]; i++;
-    while (i < lines.length && lines[i].trim() && !/^\s*(?:#{1,6}\s|`{3,}|~{3,}|>|[-+*]\s|\d+[.)]\s|---+$|___+$)/.test(lines[i]) && !(lines[i].includes('|') && lines[i + 1] && cells(lines[i + 1]).every(cell => /^:?-{3,}:?$/.test(cell)))) paragraph.push(lines[i++]);
-    html.push(`<p>${paragraph.map(chatInline).join('<br>')}</p>`);
+// Raw HTML and remote image fetching stay disabled for agent-supplied Markdown.
+const markdown = new MarkdownIt({html:false,breaks:true,linkify:false});
+markdown.renderer.rules.image = (tokens,index) => `<span class="sp-chat-attachment">Image: ${escape(tokens[index].content || 'attachment')} (preview unavailable)</span>`;
+markdown.renderer.rules.table_open = (tokens,index,options,env) => {
+  env.chatTableHeaders=[];
+  for(let i=index+1;i<tokens.length && tokens[i].type!=='thead_close';i++) if(tokens[i].type==='inline') env.chatTableHeaders.push(tokens[i].children?.map(token=>token.content).join('') || tokens[i].content);
+  return `<div class="sp-chat-table"${env.chatTableHeaders.length>3?' data-wide="true"':''}><table>`;
+};
+markdown.renderer.rules.table_close = () => '</table></div>';
+markdown.renderer.rules.link_open = (tokens,index,options,env,self) => {
+  tokens[index].attrSet('target','_blank');tokens[index].attrSet('rel','noopener noreferrer');
+  return self.renderToken(tokens,index,options);
+};
+markdown.renderer.rules.tr_open = (tokens,index,options,env,self) => {env.chatTableColumn=0;return self.renderToken(tokens,index,options);};
+markdown.renderer.rules.td_open = (tokens,index,options,env,self) => {
+  tokens[index].attrSet('data-label',env.chatTableHeaders?.[env.chatTableColumn++] || '');
+  return self.renderToken(tokens,index,options);
+};
+markdown.core.ruler.after('inline','chat-task-lists',state=>{
+  for(let i=2;i<state.tokens.length;i++){
+    const token=state.tokens[i],first=token.children?.[0];
+    if(token.type!=='inline' || state.tokens[i-2].type!=='list_item_open' || first?.type!=='text')continue;
+    const task=first.content.match(/^\[([ xX])\]\s+/);if(!task)continue;
+    first.content=first.content.slice(task[0].length);
+    const checkbox=new state.Token('html_inline','',0);
+    checkbox.content=`<input type="checkbox" disabled${task[1].toLowerCase()==='x'?' checked':''} aria-label="Task status"> `;
+    token.children.unshift(checkbox);
   }
-  return html.join('');
-}
+});
+const chatMarkdown = text => markdown.render(text,{});
 
 export function renderChatCards(events) {
   events = events?.filter(evt => (evt.role === 'user' || evt.role === 'assistant' || (evt.role === 'system' && ['model_active','model_changed'].includes(evt.status))) && evt.content?.trim());
@@ -214,6 +190,7 @@ export function renderChatCards(events) {
         <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
       </header>
       <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : escape(evt.content)}</div>
+      ${evt.delivery_note ? `<p class="sp-chat-delivery-note" role="status">${escape(evt.delivery_note)}</p>` : ''}
       ${approvalPrompt}
     </article>`;
   }).join('')}</div>`;
@@ -223,16 +200,23 @@ export function reconcileChat(events, pending, state = '') {
   const output = [...(events || [])];
   const remaining = [];
   const consumed = new Set();
+  let waiting;
   for (const prompt of pending || []) {
     const index = output.findIndex((event,index) => !consumed.has(index) && !event.local_pending && event.role === 'user' && !prompt.baseline.includes(event.event_id) && event.content?.trim() === prompt.text.trim());
     if (index >= 0) consumed.add(index);
     if (index >= 0 && output.slice(index + 1).some(event => event.role === 'assistant' && !event.local_pending)) continue;
     prompt.baseline = [...new Set([...prompt.baseline,...[...consumed].filter(i=>i!==index).map(i=>output[i].event_id)])];
     remaining.push(prompt);
-    if (index < 0) output.push({event_id:prompt.id,role:'user',content:prompt.text,created_at:prompt.created_at,local_pending:true});
+    const unconfirmed = index < 0 && prompt.delivered && (Date.now()-Date.parse(prompt.created_at)>15000 || output.some(event=>event.role==='user' && !event.local_pending && Date.parse(event.created_at)>Date.parse(prompt.created_at)));
+    if (!unconfirmed) waiting = prompt;
+    if (index < 0) {
+      const event={event_id:prompt.id,role:'user',content:prompt.text,created_at:prompt.created_at,local_pending:true,...(unconfirmed ? {delivery_note:'Not confirmed by agent. Check Terminal before retrying.'}: {})};
+      const before=output.findIndex(item=>Date.parse(item.created_at)>Date.parse(prompt.created_at));
+      if(before<0)output.push(event);else output.splice(before,0,event);
+    }
   }
-  if (remaining.length) {
-    const latest = remaining.at(-1);
+  if (waiting || (remaining.length && ['ended','disconnected'].includes(state))) {
+    const latest = waiting || remaining.at(-1);
     const content = ['ended','disconnected'].includes(state) ? 'Agent session ended without a recorded reply.' : !latest.delivered ? 'Sending...' : state === 'thinking' ? 'Thinking...' : state === 'waiting' ? 'Waiting for approval in Terminal stream' : 'Waiting for agent response...';
     output.push({event_id:latest.id+':response',role:'assistant',content,created_at:latest.created_at,local_pending:true,waiting:true});
   }

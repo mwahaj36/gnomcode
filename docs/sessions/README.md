@@ -1,9 +1,12 @@
 # Engineering sessions
 
+- [2026-11-02 — PR 118 repair retry](2026-11-02-pr118-repair-retry.md)
+
 One file per recorded session or follow-up. Historical entries retain their original wording, duplicate titles and verification claims; these are records of their time, not current product guarantees. The filename disambiguates repeated titles. Current truth lives in [SPEC](../SPEC.md), [PRODUCT](../../PRODUCT.md) and the [launch checklist](../LAUNCH_CHECKLIST.md).
 
 For each new session, add a dated file with goals, outcomes, problems/root-cause fixes, decisions and verification, then link it here. Do not append session bodies to SESSION_LOG.md.
 
+- [2026-11-02 - Chat delivery, Markdown and mobile navigation](2026-11-02-chat-delivery-markdown-mobile-navigation.md)
 - [2026-11-01 - Downloads, native reconnect and provider switching fixes](2026-11-01-downloads-native-reconnect-provider-fixes.md)
 - [2026-11-01 - Account-wide Remote post-migration native build](2026-11-01-account-wide-native-build.md)
 

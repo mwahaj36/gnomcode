@@ -587,9 +587,9 @@ pub fn handoff_summary(events: &[ChatEvent]) -> String {
     for event in events {
         match event.role {
             ChatRole::User => {
-                let prompt = redact::clean_user_text(&event.content);
+                let prompt = redact::clean_user_message(&event.content);
                 if !prompt.trim().is_empty() {
-                    lines.push(format!("Goal: {}", redact::redact_chat_content(prompt)));
+                    lines.push(format!("Goal: {}", redact::redact_chat_content(&prompt)));
                 }
             }
             ChatRole::Tool => {

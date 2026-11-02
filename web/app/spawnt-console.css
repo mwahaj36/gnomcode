@@ -518,3 +518,5 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 
 .sp-account-access-dialog{width:min(480px,calc(100vw - 32px));box-sizing:border-box;max-height:calc(100dvh - 32px);padding:24px;border:1px solid var(--sp-border);border-radius:12px;background:var(--sp-surface);color:var(--sp-text);overflow:auto}
 .sp-account-access-dialog::backdrop{background:rgb(0 0 0 / .45)}
+.sp-chat-delivery-note{margin:10px 0 0;font-size:12px;line-height:1.5;color:inherit}
+.sp-chat-body input[type="checkbox"]{width:14px;height:14px;min-height:0;margin:0 6px 0 0;vertical-align:middle;accent-color:var(--sp-primary)}

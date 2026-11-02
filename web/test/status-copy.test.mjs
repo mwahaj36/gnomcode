@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-const source = await readFile(new URL('../lib/console-presentation.js', import.meta.url));
-const ui = await import(`data:text/javascript;base64,${source.toString('base64')}`);
+const ui = await import(new URL('../lib/console-presentation.js',import.meta.url));
 
 test('session rows translate internal activity into public statuses and give empty views a next action', () => {
   for (const [state, label] of [['thinking', 'Running'], ['tool', 'Running'], ['awaiting_approval', 'Waiting'], ['idle', 'Idle'], ['error', 'Error']]) {

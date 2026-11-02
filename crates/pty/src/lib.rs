@@ -279,6 +279,7 @@ struct WsQuery {
 
 /// Shared state for the session host server.
 struct HostState {
+    agent: String,
     token: String,
     session_id: String,
     child_pid: u32,
@@ -504,6 +505,7 @@ pub async fn run_pty_host_resuming(
     save_session_record(&record)?;
 
     let state = Arc::new(HostState {
+        agent: agent.to_owned(),
         token,
         session_id: session_id.to_owned(),
         child_pid,
@@ -584,6 +586,31 @@ async fn host_health_handler(
     .into_response()
 }
 
+fn antigravity_needs_setup(bytes: &[u8]) -> bool {
+    let raw = String::from_utf8_lossy(bytes);
+    let mut characters = raw.chars();
+    let mut text = String::new();
+    while let Some(character) = characters.next() {
+        if character == '\x1b' {
+            if characters.next() == Some('[') {
+                for control in characters.by_ref() {
+                    if ('@'..='~').contains(&control) {
+                        break;
+                    }
+                }
+            }
+        } else {
+            text.push(character);
+        }
+    }
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let Some(question) = text.rfind("Do you trust the contents of this project?") else {
+        return false;
+    };
+    text.rfind("? for shortcuts")
+        .is_none_or(|ready| ready < question)
+}
+
 async fn host_input_handler(
     headers: HeaderMap,
     State(state): State<Arc<HostState>>,
@@ -601,6 +628,15 @@ async fn host_input_handler(
     }
     if body.is_empty() {
         return StatusCode::BAD_REQUEST;
+    }
+    if matches!(state.agent.as_str(), "antigravity" | "agy")
+        && body.starts_with(b"\x1b[200~")
+        && state
+            .scrollback
+            .lock()
+            .is_ok_and(|output| antigravity_needs_setup(&output.bytes()))
+    {
+        return StatusCode::CONFLICT;
     }
     let (written, acknowledged) = tokio::sync::oneshot::channel();
     if state
@@ -899,6 +935,62 @@ mod tests {
     use super::*;
 
     #[test]
+    fn antigravity_startup_requires_explicit_terminal_trust_before_chat_input() {
+        let waiting=b"\x1b[1mDo you trust the contents of this project?\x1b[0m\r\n> Yes, I trust this folder\r\n  No, exit";
+        assert!(antigravity_needs_setup(waiting));
+        assert!(antigravity_needs_setup(
+            b"Do you trust the contents of\r\nthis project?"
+        ));
+        let mut ready = waiting.to_vec();
+        ready.extend_from_slice(b"\x1b[2J\x1b[H>\r\n? for shortcuts");
+        assert!(
+            !antigravity_needs_setup(&ready),
+            "an old trust prompt in scrollback must not block a ready CLI"
+        );
+        ready.extend_from_slice(waiting);
+        assert!(
+            antigravity_needs_setup(&ready),
+            "a new workspace trust prompt requires desktop confirmation"
+        );
+    }
+
+    #[tokio::test]
+    async fn chat_input_cannot_confirm_antigravity_workspace_trust() {
+        let (input_tx, input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let mut scrollback = Scrollback::new(4096);
+        scrollback
+            .append(b"Do you trust the contents of this project?\r\n> Yes, I trust this folder");
+        let state = Arc::new(HostState {
+            agent: "antigravity".into(),
+            token: "setup-test".into(),
+            session_id: "setup-test".into(),
+            child_pid: 0,
+            scrollback: Arc::new(Mutex::new(scrollback)),
+            output_tx,
+            input_tx,
+            stopping: Arc::new(AtomicBool::new(false)),
+            resize: Arc::new(|_, _| {}),
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+        headers.insert("authorization", "Bearer setup-test".parse().expect("token"));
+        assert_eq!(
+            host_input_handler(
+                headers,
+                State(state),
+                axum::body::Bytes::from_static(b"\x1b[200~heyo\x1b[201~")
+            )
+            .await,
+            StatusCode::CONFLICT
+        );
+        assert!(
+            input_rx.try_recv().is_err(),
+            "a chat message must not type into a trust dialog"
+        );
+    }
+
+    #[test]
     fn resume_uses_the_exact_native_session_without_permission_flags() {
         let repo = tempfile::tempdir().expect("workspace");
         assert_eq!(
@@ -930,6 +1022,7 @@ mod tests {
         let (input_tx, input_rx) = std::sync::mpsc::channel();
         let (output_tx, _) = broadcast::channel(8);
         let state = Arc::new(HostState {
+            agent: "codex".into(),
             token: "input-test".into(),
             session_id: "input-test".into(),
             child_pid: 0,

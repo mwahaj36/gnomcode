@@ -3,6 +3,7 @@
   "version": "0.9.0",
   "private": true,
   "scripts": {
+    "prebuild": "node ../scripts/build-chat-markdown.mjs --check",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -16,6 +17,7 @@
     "@supabase/supabase-js": "^2.118.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
+    "markdown-it": "15.0.3",
     "next": "^15.1.0",
     "pg": "^8.13.0",
     "react": "^19.0.0",
