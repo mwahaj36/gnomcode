@@ -2,11 +2,11 @@
 
 use crate::remote_trust::DeviceTrust;
 use futures_util::{SinkExt, StreamExt};
+use gnomcode_core::remote_crypto::{PeerRole, RemoteChannel, RemoteKeyPair};
+use gnomcode_core::{EncryptedRemoteFrame, Project, Session};
+use gnomcode_store::Database;
 use serde::Serialize;
 use serde_json::{Value, json};
-use spawnt_core::remote_crypto::{PeerRole, RemoteChannel, RemoteKeyPair};
-use spawnt_core::{EncryptedRemoteFrame, Project, Session};
-use spawnt_store::Database;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -18,7 +18,7 @@ use tokio_tungstenite::tungstenite::Message;
 #[derive(Debug, Error)]
 pub enum RemoteError {
     /// The relay has not been configured.
-    #[error("configure SPAWNT_REMOTE_RELAY_URL before pairing")]
+    #[error("configure GNOMCODE_REMOTE_RELAY_URL before pairing")]
     NotConfigured,
     /// The relay could not be reached.
     #[error("remote relay connection failed")]
@@ -134,7 +134,7 @@ impl RemoteManager {
             getrandom::fill(&mut secret).map_err(|_| RemoteError::Relay)?;
             DeviceTrust {
                 room,
-                relay: std::env::var("SPAWNT_REMOTE_RELAY_URL").unwrap_or_else(|_| {
+                relay: std::env::var("GNOMCODE_REMOTE_RELAY_URL").unwrap_or_else(|_| {
                     "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay".into()
                 }),
                 private,
@@ -616,12 +616,12 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 return json!({"type":"error","message":"Invalid workspace path"});
             }
             match tokio::task::spawn_blocking(move || {
-                spawnt_platform::workspaces::browse(path.as_deref())
+                gnomcode_platform::workspaces::browse(path.as_deref())
             })
             .await
             {
                 Ok(Ok(listing)) => {
-                    let display = spawnt_platform::workspaces::display_path;
+                    let display = gnomcode_platform::workspaces::display_path;
                     json!({"type":"workspaces","path":display(&listing.path),"parent":listing.parent.as_deref().map(display),"roots":listing.roots.iter().map(|path| display(path)).collect::<Vec<_>>(),"folders":listing.folders.iter().map(|path| json!({"path":display(path),"name":path.file_name().unwrap_or_default().to_string_lossy()})).collect::<Vec<_>>(),"truncated":listing.truncated})
                 }
                 _ => {
@@ -633,7 +633,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
             let result = db.lock().await.list_active_sessions(1000);
             match result {
                 Ok(sessions) => {
-                    let hosted = spawnt_pty::list_active_sessions();
+                    let hosted = gnomcode_pty::list_active_sessions();
                     let guard = db.lock().await;
                     let mut visible = match conversation_sessions(&guard, &sessions, &hosted) {
                         Ok(rows) => rows,
@@ -702,7 +702,7 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                     .map(|d| d.as_nanos())
                     .unwrap_or(0)
             );
-            match spawnt_pty::launch_session(&session_id, agent, repo, model).await {
+            match gnomcode_pty::launch_session(&session_id, agent, repo, model).await {
                 Ok(record) => {
                     json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent})
                 }
@@ -727,8 +727,11 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 .min(500);
             let db = db.lock().await;
             let sessions = db.list_active_sessions(1000).unwrap_or_default();
-            let native_id =
-                conversation_session_id(session_id, &sessions, &spawnt_pty::list_active_sessions());
+            let native_id = conversation_session_id(
+                session_id,
+                &sessions,
+                &gnomcode_pty::list_active_sessions(),
+            );
             match conversation_chat(
                 &db,
                 session_id,
@@ -738,8 +741,8 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 before,
             ) {
                 Ok(events) => {
-                    let events = spawnt_adapters::codex::clean_stored_conversation(
-                        spawnt_adapters::antigravity::clean_stored_conversation(events),
+                    let events = gnomcode_adapters::codex::clean_stored_conversation(
+                        gnomcode_adapters::antigravity::clean_stored_conversation(events),
                     );
                     json!({"type":"chat","session_id":session_id,"before":before,"events":events})
                 }
@@ -820,10 +823,10 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
 pub(crate) fn record_model_change(
     db: &Database,
     source: &str,
-    target: &spawnt_pty::SessionRecord,
-) -> Result<(), spawnt_store::Error> {
+    target: &gnomcode_pty::SessionRecord,
+) -> Result<(), gnomcode_store::Error> {
     let sessions = db.list_active_sessions(1000)?;
-    sync_conversation_bindings(db, &sessions, &spawnt_pty::list_active_sessions())?;
+    sync_conversation_bindings(db, &sessions, &gnomcode_pty::list_active_sessions())?;
     let previous_native = db
         .conversation_target(source)?
         .and_then(|(_, native, _)| native);
@@ -841,7 +844,7 @@ pub(crate) fn record_model_change(
     )?;
     let source = previous_native.unwrap_or(db.conversation_source(source)?);
     let last = db.get_session_chat(&source, Some(1))?;
-    let event = spawnt_core::ChatEvent {
+    let event = gnomcode_core::ChatEvent {
         event_id: format!(
             "handoff:{}:{}",
             target.session_id,
@@ -851,7 +854,7 @@ pub(crate) fn record_model_change(
         turn_index: last
             .last()
             .map_or(0, |event| event.turn_index.saturating_add(1)),
-        role: spawnt_core::ChatRole::System,
+        role: gnomcode_core::ChatRole::System,
         content: format!(
             "Switching to {}...",
             target.model.as_deref().unwrap_or("agent default")
@@ -866,8 +869,8 @@ pub(crate) fn record_model_change(
 pub(crate) fn sync_conversation_bindings(
     db: &Database,
     sessions: &[Session],
-    hosted: &[spawnt_pty::SessionRecord],
-) -> Result<(), spawnt_store::Error> {
+    hosted: &[gnomcode_pty::SessionRecord],
+) -> Result<(), gnomcode_store::Error> {
     for (session, record) in session_bindings(sessions, hosted) {
         db.bind_conversation_host(&record.session_id, &session.id)?;
     }
@@ -878,8 +881,8 @@ pub(crate) fn active_conversation_id(
     db: &Database,
     id: &str,
     sessions: &[Session],
-    hosted: &[spawnt_pty::SessionRecord],
-) -> Result<String, spawnt_store::Error> {
+    hosted: &[gnomcode_pty::SessionRecord],
+) -> Result<String, gnomcode_store::Error> {
     sync_conversation_bindings(db, sessions, hosted)?;
     Ok(db.conversation_target(id)?.map_or_else(
         || conversation_session_id(id, sessions, hosted),
@@ -891,8 +894,8 @@ pub(crate) fn conversation_host<'a>(
     db: &Database,
     id: &str,
     sessions: &[Session],
-    hosted: &'a [spawnt_pty::SessionRecord],
-) -> Result<Option<&'a spawnt_pty::SessionRecord>, spawnt_store::Error> {
+    hosted: &'a [gnomcode_pty::SessionRecord],
+) -> Result<Option<&'a gnomcode_pty::SessionRecord>, gnomcode_store::Error> {
     if let Some((host, _, _)) = db.conversation_target(id)? {
         return Ok(hosted.iter().find(|record| record.session_id == host));
     }
@@ -914,8 +917,8 @@ pub(crate) fn conversation_chat(
     sessions: &[Session],
     limit: Option<usize>,
     before: Option<&str>,
-) -> Result<Vec<spawnt_core::ChatEvent>, spawnt_store::Error> {
-    sync_conversation_bindings(db, sessions, &spawnt_pty::list_active_sessions())?;
+) -> Result<Vec<gnomcode_core::ChatEvent>, gnomcode_store::Error> {
+    sync_conversation_bindings(db, sessions, &gnomcode_pty::list_active_sessions())?;
     if requested != native && db.conversation_target(requested)?.is_some() {
         // History can arrive after the new host was linked, including after restart.
         let target = db.conversation_target(requested)?;
@@ -932,7 +935,7 @@ pub(crate) fn conversation_chat(
     };
     let mut events = db.conversation_chat(id, limit, before)?;
     for event in &mut events {
-        if event.role == spawnt_core::ChatRole::User {
+        if event.role == gnomcode_core::ChatRole::User {
             if let Some((_, message)) = event
                 .content
                 .strip_prefix("<spawnt_context>")
@@ -945,7 +948,7 @@ pub(crate) fn conversation_chat(
     Ok(events)
 }
 
-fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -> Vec<Value> {
+fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord]) -> Vec<Value> {
     let mut visible = sessions.iter().take(100).map(|session| {
         json!({"id":session.id,"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"last_event_at":session.last_event_at})
     }).collect::<Vec<_>>();
@@ -978,8 +981,8 @@ fn remote_sessions(sessions: &[Session], hosted: &[spawnt_pty::SessionRecord]) -
 pub(crate) fn conversation_sessions(
     db: &Database,
     sessions: &[Session],
-    hosted: &[spawnt_pty::SessionRecord],
-) -> Result<Vec<Value>, spawnt_store::Error> {
+    hosted: &[gnomcode_pty::SessionRecord],
+) -> Result<Vec<Value>, gnomcode_store::Error> {
     sync_conversation_bindings(db, sessions, hosted)?;
     let quota = db.get_latest_quota_snapshots()?;
     let mut visible = Vec::new();
@@ -1029,7 +1032,7 @@ pub(crate) fn conversation_sessions(
             }));
         let can_prompt = host.is_some_and(|record| {
             observed.is_none_or(|session| {
-                session.state == spawnt_core::SessionState::Idle
+                session.state == gnomcode_core::SessionState::Idle
                     || chrono::DateTime::parse_from_rfc3339(&record.started_at)
                         .is_ok_and(|started| session.last_event_at < started)
             })
@@ -1074,7 +1077,7 @@ pub(crate) fn conversation_sessions(
 pub(crate) fn conversation_session_id(
     id: &str,
     sessions: &[Session],
-    hosted: &[spawnt_pty::SessionRecord],
+    hosted: &[gnomcode_pty::SessionRecord],
 ) -> String {
     session_bindings(sessions, hosted)
         .into_iter()
@@ -1085,8 +1088,8 @@ pub(crate) fn conversation_session_id(
 pub(crate) fn session_host<'a>(
     session: &Session,
     sessions: &[Session],
-    hosted: &'a [spawnt_pty::SessionRecord],
-) -> Option<&'a spawnt_pty::SessionRecord> {
+    hosted: &'a [gnomcode_pty::SessionRecord],
+) -> Option<&'a gnomcode_pty::SessionRecord> {
     session_bindings(sessions, hosted)
         .into_iter()
         .find(|(candidate, _)| candidate.id == session.id)
@@ -1096,8 +1099,8 @@ pub(crate) fn session_host<'a>(
 /// Resolves unique native/hosted pairs with repository discovery once per host.
 pub(crate) fn session_bindings<'s, 'h>(
     sessions: &'s [Session],
-    hosted: &'h [spawnt_pty::SessionRecord],
-) -> Vec<(&'s Session, &'h spawnt_pty::SessionRecord)> {
+    hosted: &'h [gnomcode_pty::SessionRecord],
+) -> Vec<(&'s Session, &'h gnomcode_pty::SessionRecord)> {
     let bindings = hosted
         .iter()
         .filter_map(|record| {
@@ -1114,7 +1117,7 @@ pub(crate) fn session_bindings<'s, 'h>(
                 other => other,
             };
             let path = Path::new(&record.repo_path);
-            let (root, remote) = spawnt_platform::resolve_git_repo_and_remote(path);
+            let (root, remote) = gnomcode_platform::resolve_git_repo_and_remote(path);
             let root = root.as_deref().unwrap_or(path);
             let project = Project::from_origin(remote.as_deref(), &root.to_string_lossy(), None);
             let workspace_project = Project::from_origin(None, &record.repo_path, None);
@@ -1181,18 +1184,18 @@ mod tests {
         let now = chrono::Utc::now();
         let session = Session {
             id: "codex:native".into(),
-            agent: spawnt_core::AgentId::Codex,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
             project_id: project.id,
             parent_session_id: None,
             model: None,
             title: None,
-            state: spawnt_core::SessionState::Idle,
+            state: gnomcode_core::SessionState::Idle,
             pid: None,
             started_at: now,
             last_event_at: now,
         };
-        let record = spawnt_pty::SessionRecord {
+        let record = gnomcode_pty::SessionRecord {
             session_id: "host".into(),
             agent: "codex".into(),
             repo_path: workspace.to_string_lossy().into_owned(),
@@ -1240,18 +1243,18 @@ mod tests {
         let now = chrono::Utc::now();
         let session = Session {
             id: "codex:native".into(),
-            agent: spawnt_core::AgentId::Codex,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
             project_id: "test".into(),
             parent_session_id: None,
             model: None,
             title: None,
-            state: spawnt_core::SessionState::Thinking,
+            state: gnomcode_core::SessionState::Thinking,
             pid: Some(12),
             started_at: now,
             last_event_at: now,
         };
-        let record = spawnt_pty::SessionRecord {
+        let record = gnomcode_pty::SessionRecord {
             session_id: "codex-host".into(),
             agent: "codex".into(),
             repo_path: "unused".into(),
@@ -1276,7 +1279,7 @@ mod tests {
                 .expect("busy conversation")[0]["can_prompt"],
             false
         );
-        let record = spawnt_pty::SessionRecord {
+        let record = gnomcode_pty::SessionRecord {
             session_id: "first-turn".into(),
             agent: "codex".into(),
             repo_path: std::env::temp_dir().to_string_lossy().into_owned(),
@@ -1296,7 +1299,7 @@ mod tests {
             conversation_sessions(&db, &[], std::slice::from_ref(&record)).expect("hosted")[0]["can_prompt"],
             true
         );
-        let shell = spawnt_pty::SessionRecord {
+        let shell = gnomcode_pty::SessionRecord {
             agent: "terminal".into(),
             ..record.clone()
         };
@@ -1314,18 +1317,18 @@ mod tests {
         let now = chrono::Utc::now();
         let session = Session {
             id: "codex:native".to_owned(),
-            agent: spawnt_core::AgentId::Codex,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
             project_id: Project::from_origin(None, &path, None).id,
             parent_session_id: None,
             model: None,
             title: None,
-            state: spawnt_core::SessionState::Idle,
+            state: gnomcode_core::SessionState::Idle,
             pid: None,
             started_at: now,
             last_event_at: now,
         };
-        let record = spawnt_pty::SessionRecord {
+        let record = gnomcode_pty::SessionRecord {
             session_id: "codex-hosted".to_owned(),
             agent: "codex".to_owned(),
             repo_path: path,
@@ -1441,7 +1444,7 @@ mod tests {
 
     #[tokio::test]
     async fn approved_device_enrolls_without_codes_and_resumes_after_restart() {
-        if std::env::var_os("SPAWNT_TEST_ISOLATED_PAIRING").is_none() {
+        if std::env::var_os("GNOMCODE_TEST_ISOLATED_PAIRING").is_none() {
             let home = tempfile::tempdir().expect("isolated pairing home");
             let output = std::process::Command::new(
                 std::env::current_exe().expect("test executable"),
@@ -1450,8 +1453,8 @@ mod tests {
                 "--exact",
                 "remote::tests::approved_device_enrolls_without_codes_and_resumes_after_restart",
             ])
-            .env("SPAWNT_HOME", home.path())
-            .env("SPAWNT_TEST_ISOLATED_PAIRING", "1")
+            .env("GNOMCODE_HOME", home.path())
+            .env("GNOMCODE_TEST_ISOLATED_PAIRING", "1")
             .output()
             .expect("isolated pairing test");
             assert!(
@@ -1500,7 +1503,7 @@ mod tests {
         ));
         let db = Arc::new(Mutex::new(Database::open_in_memory().expect("database")));
         // Network verification is explicit; normal test runs stay on loopback.
-        let base = std::env::var("SPAWNT_TEST_REMOTE_RELAY_URL")
+        let base = std::env::var("GNOMCODE_TEST_REMOTE_RELAY_URL")
             .unwrap_or_else(|_| format!("ws://127.0.0.1:{port}/relay"));
         let status = manager
             .start_with_url(db.clone(), base.clone())
@@ -1744,18 +1747,18 @@ mod tests {
         let project = Project::from_origin(None, "fixture", None);
         let sessions = ["source", "new-native"].map(|id| Session {
             id: id.into(),
-            agent: spawnt_core::AgentId::Codex,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
             project_id: project.id.clone(),
             parent_session_id: None,
             model: None,
             title: None,
-            state: spawnt_core::SessionState::Idle,
+            state: gnomcode_core::SessionState::Idle,
             pid: None,
             started_at: now,
             last_event_at: now,
         });
-        let cp = spawnt_store::SourceCheckpoint {
+        let cp = gnomcode_store::SourceCheckpoint {
             file_path: "fixture".into(),
             last_read_offset: 0,
             file_size: 0,
@@ -1764,7 +1767,7 @@ mod tests {
         };
         db.commit_batch(&[project], &sessions, &[], &[], &[], &cp)
             .expect("source metadata");
-        let target = spawnt_pty::SessionRecord {
+        let target = gnomcode_pty::SessionRecord {
             session_id: "new-host".into(),
             agent: "codex".into(),
             repo_path: "fixture".into(),
@@ -1776,11 +1779,11 @@ mod tests {
             started_at: chrono::Utc::now().to_rfc3339(),
         };
         record_model_change(&db, "source", &target).expect("persist request notice");
-        db.insert_chat_event(&spawnt_core::ChatEvent {
+        db.insert_chat_event(&gnomcode_core::ChatEvent {
             event_id: "original-message".into(),
             session_id: "source".into(),
             turn_index: 0,
-            role: spawnt_core::ChatRole::User,
+            role: gnomcode_core::ChatRole::User,
             content: "Keep our conversation".into(),
             created_at: now,
             tool_name: None,
@@ -1806,11 +1809,11 @@ mod tests {
         assert_eq!(visible[0]["id"], "source");
         assert_eq!(visible[0]["can_resume"], true);
         assert_eq!(visible[0]["title"], "Keep our conversation");
-        db.insert_chat_event(&spawnt_core::ChatEvent {
+        db.insert_chat_event(&gnomcode_core::ChatEvent {
             event_id: "continued-prompt".into(),
             session_id: "new-native".into(),
             turn_index: 1,
-            role: spawnt_core::ChatRole::User,
+            role: gnomcode_core::ChatRole::User,
             content:
                 "<spawnt_context>\nInternal continuation data\n</spawnt_context>\n\nHello again"
                     .into(),

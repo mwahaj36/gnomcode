@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const site = process.argv[2];
 if (!site) throw Error('Usage: check-mobile-console.mjs <local-site>');
-const browser = await chromium.launch({executablePath:process.env.SPAWNT_TEST_BROWSER,headless:true});
+const browser = await chromium.launch({executablePath:process.env.GNOMCODE_TEST_BROWSER,headless:true});
 const failures=[];
 try {
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
@@ -21,7 +21,7 @@ try {
   let snapshot={generated_at:new Date().toISOString(),sessions:[{id:'one',project_name:'Fleet HUD <test>',agent:'codex',state:'idle',is_active:false,last_event_at:new Date().toISOString()}],timelines:{},quota:[]};
   await context.route('https://*.supabase.co/**',route=>{
     const url=new URL(route.request().url());
-    return route.fulfill({contentType:'application/json',body:JSON.stringify(url.pathname.includes('spawnt_sync_state')?{live_snapshot:snapshot}:[])});
+    return route.fulfill({contentType:'application/json',body:JSON.stringify(url.pathname.includes('gnomcode_sync_state')?{live_snapshot:snapshot}:[])});
   });
   const projects=await context.newPage();
   await projects.goto(`${site}/console?view=projects`);

@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 pub enum TrustLevel {
     /// Read directly from agent data (e.g. token counts in a log line).
     Exact,
-    /// Derived by Spawnt heuristics (e.g. Claude 5-hour window estimate).
+    /// Derived by Gnomcode heuristics (e.g. Claude 5-hour window estimate).
     Estimated,
     /// Obtained from an opt-in, possibly unofficial vendor API.
     Api,
@@ -145,7 +145,7 @@ pub struct Project {
     pub canonical_key: String,
     /// Most recently observed working directory path on disk.
     pub repo_root: String,
-    /// Short human-readable project name (e.g. `spawnt`).
+    /// Short human-readable project name (e.g. `gnomcode`).
     pub name: String,
     /// Last active Git branch, if known.
     pub git_branch: Option<String>,
@@ -741,7 +741,7 @@ mod tests {
         );
         let https = Project::from_origin(
             Some("https://github.com/mwahaj36/spawnt/"),
-            "/Users/dev/code/spawnt",
+            "/Users/dev/code/gnomcode",
             Some("main"),
         );
         assert_eq!(ssh.id, https.id);

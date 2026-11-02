@@ -1,4 +1,4 @@
-name = "spawnt-remote-relay"
+name = "spawnt-remote-relay" # Existing deployed Worker; URL is retained.
 main = "src/index.mjs"
 compatibility_date = "2024-09-23"
 

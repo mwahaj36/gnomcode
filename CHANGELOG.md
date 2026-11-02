@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Spawnt are documented in this file.
+All notable changes to Gnomcode are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
 ## [0.9.0 development refresh] — 2026-11-01
@@ -42,7 +42,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ## [1.5.0] — 2026-10-28
 
 ### Changed
-- Applied spawnt branding, theme tokens, self-hosted fonts, canonical icons and balanced square controls across marketing, account, settings, both consoles and Windows setup/tray.
+- Applied gnomcode branding, theme tokens, self-hosted fonts, canonical icons and balanced square controls across marketing, account, settings, both consoles and Windows setup/tray.
 - Shared console summary, daily activity grid/chart, provider/model breakdown, quota panels and session details while retaining separate local/cloud authentication and data.
 - Kept Settings in the console shell and replaced generic landing tour content with consistent illustrative samples using completed presenters.
 
@@ -96,7 +96,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 ## [Unreleased]
 
 ### Added
-- Initial Rust Cargo workspace (`spawnt-core`, `spawnt-adapters`, `spawnt-store`, `spawnt-platform`, `spawnt-ingest`, `spawnt-daemon`, `spawnt` CLI).
+- Initial Rust Cargo workspace (`gnomcode-core`, `gnomcode-adapters`, `gnomcode-store`, `gnomcode-platform`, `gnomcode-ingest`, `gnomcode-daemon`, `gnomcode` CLI).
 - Single source of truth specification (`docs/SPEC.md`), engineering rules (`AGENTS.md`), and Architecture Decision Records (`docs/adr/0001`–`0003`).
 - Workspace engineering skills (`.agents/skills/`): `ponytail`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `rust-best-practices`, `tauri-v2`, `supabase-postgres-best-practices`, `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`.
 - Binary and UI anti-reverse-engineering hardening (`Cargo.toml` release profile, `.cargo/config.toml` path remapping).

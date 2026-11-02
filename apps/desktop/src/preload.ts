@@ -19,12 +19,12 @@ const desktop: DesktopApi = Object.freeze({
   stopSession: (sessionId: string): Promise<unknown> =>
     ipcRenderer.invoke('desktop:stop-session', sessionId),
 });
-contextBridge.exposeInMainWorld('spawntDesktop', desktop);
+contextBridge.exposeInMainWorld('gnomcodeDesktop', desktop);
 
 window.addEventListener('DOMContentLoaded', () => {
   if (!document.body.classList.contains('sp-native-console')) return;
   document.body.classList.add('sp-desktop-window');
-  const header=document.createElement('div');header.className='desktop-titlebar';header.textContent='Spawnt';
+  const header=document.createElement('div');header.className='desktop-titlebar';header.textContent='Gnomcode';
   document.body.prepend(header);
   const style=document.createElement('style');style.textContent=`
     .desktop-titlebar{position:fixed;inset:0 0 auto;height:32px;z-index:100;background:var(--sp-surface,#0d0d0f);color:var(--sp-text-2,#aaa);font:500 12px/32px var(--sp-font-sans,sans-serif);padding:0 150px 0 16px;user-select:none;-webkit-app-region:drag;border-bottom:1px solid var(--sp-border,#222)}

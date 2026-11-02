@@ -1,30 +1,30 @@
-# winget manifest for Spawnt — https://spawntv.vercel.app
+# winget manifest for Gnomcode — https://gnomcode.vercel.app
 #
 # PRE-RELEASE STUB. Do not submit to microsoft/winget-pkgs until:
-#   1. A signed installer (Spawnt-Setup.exe) is available from the public releases repo.
+#   1. A signed installer (Gnomcode-Setup.exe) is available from the public releases repo.
 #   2. SHA-256 is computed from the real artifact.
 #   3. Code-signing certificate is obtained.
 #   4. winget validation pipeline passes.
 #
 # Manifest format: https://github.com/microsoft/winget-pkgs/blob/master/doc/manifest/schema/1.6.0/
-# Future path: manifests/m/mwahaj36/spawnt/PLACEHOLDER/
+# Future path: manifests/m/mwahaj36/gnomcode/PLACEHOLDER/
 
-PackageIdentifier: mwahaj36.spawnt
+PackageIdentifier: mwahaj36.gnomcode
 PackageVersion: PLACEHOLDER
-PackageName: Spawnt
+PackageName: Gnomcode
 Publisher: Wahaj
-PublisherUrl: https://spawntv.vercel.app
+PublisherUrl: https://gnomcode.vercel.app
 License: BUSL-1.1
-LicenseUrl: https://spawntv.vercel.app/legal/eula
+LicenseUrl: https://gnomcode.vercel.app/legal/eula
 ShortDescription: Mission control for AI coding agents
 Description: |
-  Spawnt is live mission control for AI coding agents (Claude Code, Codex, Gemini CLI,
+  Gnomcode is live mission control for AI coding agents (Claude Code, Codex, Gemini CLI,
   Antigravity, Cline, Cursor). Reads agent logs, shows live state, cost and quota through
   a CLI, a local web dashboard and an Electron desktop shell.
 Installers:
   - Architecture: x64
     InstallerType: exe
-    InstallerUrl: https://github.com/mwahaj36/spawnt-releases/releases/download/vPLACEHOLDER/Spawnt-Setup.exe
+    InstallerUrl: https://github.com/mwahaj36/spawnt-releases/releases/download/vPLACEHOLDER/Gnomcode-Setup.exe
     InstallerSha256: PLACEHOLDER_SHA256_WIN32_SETUP
     InstallerSwitches:
       Silent: /SILENT

@@ -4,8 +4,8 @@
 //! - Window focus bring-to-front dispatcher (Windows Win32 `SetForegroundWindow`, macOS AppleScript, Linux wmctrl/KWin fallback).
 //! - Desktop notification triggers for awaiting approval, quota warnings, and quota resets.
 
+use gnomcode_core::AgentId;
 use serde::{Deserialize, Serialize};
-use spawnt_core::AgentId;
 
 /// Desktop notification event payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,12 +64,12 @@ pub fn notify_context_saturation(
     }
 }
 
-pub use spawnt_platform::{bring_to_front, send_desktop_notification};
+pub use gnomcode_platform::{bring_to_front, send_desktop_notification};
 
 #[cfg(test)]
 mod tests {
     use super::{notify_approval_needed, notify_context_saturation, notify_quota_reset};
-    use spawnt_core::AgentId;
+    use gnomcode_core::AgentId;
 
     #[test]
     fn context_saturation_notification_formats_cleanly_without_emojis() {

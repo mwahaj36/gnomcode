@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Spawnt Version Synchronizer & Release Bumper
+ * Gnomcode Version Synchronizer & Release Bumper
  * Usage:
  *   node .agents/skills/cut-release/scripts/bump-version.mjs <version | patch | minor | major>
  * Examples:
@@ -76,7 +76,7 @@ if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
   process.exit(1);
 }
 
-console.log(`[spawnt:release] Updating version: ${currentVersion} -> ${newVersion}\n`);
+console.log(`[gnomcode:release] Updating version: ${currentVersion} -> ${newVersion}\n`);
 
 const results = [];
 
@@ -123,8 +123,8 @@ if (npmPkg) {
   results.push({ file: npmPkgPath, detail: `"version": "${newVersion}"` });
 }
 
-// 5. npm/spawnt/package.json
-const npmFleetPath = "npm/spawnt/package.json";
+// 5. npm/gnomcode/package.json
+const npmFleetPath = "npm/gnomcode/package.json";
 let npmFleet = read(npmFleetPath);
 if (npmFleet) {
   npmFleet = npmFleet.replace(/("version":\s*")[^"]+(")/, `$1${newVersion}$2`);
@@ -148,8 +148,8 @@ let installPs1 = read(installPs1Path);
 if (installPs1) {
   installPs1 = installPs1
     .replace(/(\$Version\s*=\s*")[^"]+(";?)/, `$1${newVersion}$2`)
-    .replace(/Spawnt-v[0-9.]+-windows-(?:\$Arch|x64)\.zip/g, `Spawnt-v${newVersion}-windows-x64.zip`)
-    .replace(/Spawnt v[0-9.]+ installation complete/g, `Spawnt v${newVersion} installation complete`);
+    .replace(/Gnomcode-v[0-9.]+-windows-(?:\$Arch|x64)\.zip/g, `Gnomcode-v${newVersion}-windows-x64.zip`)
+    .replace(/Gnomcode v[0-9.]+ installation complete/g, `Gnomcode v${newVersion} installation complete`);
   write(installPs1Path, installPs1);
   results.push({ file: installPs1Path, detail: `Archive URL & Banner -> v${newVersion}` });
 
@@ -169,7 +169,7 @@ if (unixInstaller) {
 
 // Keep the public landing badge and npm lock root metadata synchronized.
 let landing = read("web/app/page.tsx");
-if (landing) write("web/app/page.tsx", landing.replace(/Spawnt v[0-9.]+ Production Release/g, `Spawnt v${newVersion} Production Release`));
+if (landing) write("web/app/page.tsx", landing.replace(/Gnomcode v[0-9.]+ Production Release/g, `Gnomcode v${newVersion} Production Release`));
 let lockText = read("web/package-lock.json");
 if (lockText) {
   const lock = JSON.parse(lockText);
@@ -184,7 +184,7 @@ let downloadsPage = read(downloadsPagePath);
 if (downloadsPage) {
   downloadsPage = downloadsPage
     .replace(/v[0-9]+\.[0-9]+\.[0-9]+/g, `v${newVersion}`)
-    .replace(/\/downloads\/Spawnt-v[0-9.]+-windows-x64\.zip/g, `/downloads/Spawnt-v${newVersion}-windows-x64.zip`);
+    .replace(/\/downloads\/Gnomcode-v[0-9.]+-windows-x64\.zip/g, `/downloads/Gnomcode-v${newVersion}-windows-x64.zip`);
   write(downloadsPagePath, downloadsPage);
   results.push({ file: downloadsPagePath, detail: `UI Badge & Download Link -> v${newVersion}` });
 }
@@ -194,4 +194,4 @@ for (const res of results) {
   console.log(`  - ${res.file.padEnd(35)} : ${res.detail}`);
 }
 
-console.log(`\n[spawnt:release] Version successfully synchronized across all ${results.length} files to v${newVersion}`);
+console.log(`\n[gnomcode:release] Version successfully synchronized across all ${results.length} files to v${newVersion}`);

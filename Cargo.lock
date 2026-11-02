@@ -803,6 +803,178 @@ dependencies = [
 ]
 
 [[package]]
+name = "gnomcode"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "clap",
+ "futures-util",
+ "gnomcode-adapters",
+ "gnomcode-core",
+ "gnomcode-daemon",
+ "gnomcode-ingest",
+ "gnomcode-platform",
+ "gnomcode-pty",
+ "gnomcode-store",
+ "obfstr",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite 0.26.2",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "gnomcode-adapters"
+version = "0.9.0"
+dependencies = [
+ "chrono",
+ "gnomcode-core",
+ "insta",
+ "obfstr",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "gnomcode-core"
+version = "0.9.0"
+dependencies = [
+ "aes-gcm",
+ "chrono",
+ "ed25519-dalek",
+ "hmac",
+ "insta",
+ "obfstr",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.21",
+ "x25519-dalek",
+ "zeroize",
+]
+
+[[package]]
+name = "gnomcode-daemon"
+version = "0.9.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "futures-util",
+ "getrandom 0.4.3",
+ "gnomcode-adapters",
+ "gnomcode-core",
+ "gnomcode-ingest",
+ "gnomcode-platform",
+ "gnomcode-pty",
+ "gnomcode-store",
+ "hmac",
+ "obfstr",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite 0.26.2",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "gnomcode-ingest"
+version = "0.9.0"
+dependencies = [
+ "chrono",
+ "gnomcode-adapters",
+ "gnomcode-core",
+ "gnomcode-platform",
+ "gnomcode-store",
+ "notify",
+ "obfstr",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "gnomcode-platform"
+version = "0.9.0"
+dependencies = [
+ "gnomcode-core",
+ "libc",
+ "obfstr",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "gnomcode-pty"
+version = "0.9.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "conpty-oxide",
+ "getrandom 0.4.3",
+ "gnomcode-core",
+ "gnomcode-platform",
+ "portable-pty",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "gnomcode-store"
+version = "0.9.0"
+dependencies = [
+ "chrono",
+ "gnomcode-core",
+ "obfstr",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "gnomcode-tray"
+version = "0.9.0"
+dependencies = [
+ "gnomcode-core",
+ "gnomcode-daemon",
+ "gnomcode-platform",
+ "gnomcode-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2132,178 +2304,6 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "spawnt"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "axum",
- "chrono",
- "clap",
- "futures-util",
- "obfstr",
- "reqwest",
- "serde_json",
- "spawnt-adapters",
- "spawnt-core",
- "spawnt-daemon",
- "spawnt-ingest",
- "spawnt-platform",
- "spawnt-pty",
- "spawnt-store",
- "tempfile",
- "tokio",
- "tokio-tungstenite 0.26.2",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "spawnt-adapters"
-version = "0.9.0"
-dependencies = [
- "chrono",
- "insta",
- "obfstr",
- "serde",
- "serde_json",
- "spawnt-core",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "spawnt-core"
-version = "0.9.0"
-dependencies = [
- "aes-gcm",
- "chrono",
- "ed25519-dalek",
- "hmac",
- "insta",
- "obfstr",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.21",
- "x25519-dalek",
- "zeroize",
-]
-
-[[package]]
-name = "spawnt-daemon"
-version = "0.9.0"
-dependencies = [
- "axum",
- "chrono",
- "futures-util",
- "getrandom 0.4.3",
- "hmac",
- "obfstr",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "spawnt-adapters",
- "spawnt-core",
- "spawnt-ingest",
- "spawnt-platform",
- "spawnt-pty",
- "spawnt-store",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-tungstenite 0.26.2",
- "tower",
- "tracing",
-]
-
-[[package]]
-name = "spawnt-ingest"
-version = "0.9.0"
-dependencies = [
- "chrono",
- "notify",
- "obfstr",
- "serde_json",
- "spawnt-adapters",
- "spawnt-core",
- "spawnt-platform",
- "spawnt-store",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "spawnt-platform"
-version = "0.9.0"
-dependencies = [
- "libc",
- "obfstr",
- "serde_json",
- "spawnt-core",
- "sysinfo",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "spawnt-pty"
-version = "0.9.0"
-dependencies = [
- "axum",
- "chrono",
- "conpty-oxide",
- "getrandom 0.4.3",
- "portable-pty",
- "reqwest",
- "serde",
- "serde_json",
- "spawnt-core",
- "spawnt-platform",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tower",
- "tracing",
-]
-
-[[package]]
-name = "spawnt-store"
-version = "0.9.0"
-dependencies = [
- "chrono",
- "obfstr",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "spawnt-core",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "spawnt-tray"
-version = "0.9.0"
-dependencies = [
- "serde",
- "serde_json",
- "spawnt-core",
- "spawnt-daemon",
- "spawnt-platform",
- "spawnt-store",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
 ]
 
 [[package]]

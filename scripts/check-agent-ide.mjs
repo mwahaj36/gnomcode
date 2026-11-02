@@ -12,8 +12,8 @@ let remotePaired = false, remoteAccessEnabled=true;
 const session = { id:'codex:sample', title:'Review authentication', agent:'codex', model:'gpt-6.1-sol', state:'idle', last_event_at:new Date().toISOString() };
 const staticFiles = {
   '/':'crates/daemon/src/console.html', '/theme-init.js':'crates/daemon/src/theme-init.js', '/console-app.js':'crates/daemon/src/console-app.js',
-  '/console-presentation.js':'web/lib/console-presentation.js', '/markdown-it.mjs':'web/lib/markdown-it.mjs', '/spawnt-console.css':'web/app/spawnt-console.css',
-  '/vendor/xterm-addon-fit.js':'web/public/vendor/xterm-addon-fit.js', '/vendor/xterm.js':'web/public/vendor/xterm.js', '/vendor/xterm.css':'web/public/vendor/xterm.css', '/spawnt-tokens.css':'web/app/spawnt-tokens.css', '/spawnt-mark.svg':'web/public/spawnt-mark.svg',
+  '/console-presentation.js':'web/lib/console-presentation.js', '/markdown-it.mjs':'web/lib/markdown-it.mjs', '/gnomcode-console.css':'web/app/gnomcode-console.css',
+  '/vendor/xterm-addon-fit.js':'web/public/vendor/xterm-addon-fit.js', '/vendor/xterm.js':'web/public/vendor/xterm.js', '/vendor/xterm.css':'web/public/vendor/xterm.css', '/gnomcode-tokens.css':'web/app/gnomcode-tokens.css', '/gnomcode-mark.svg':'web/public/gnomcode-mark.svg',
 };
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost');
@@ -62,11 +62,11 @@ const terminalServer = new WebSocketServer({noServer:true});
 const terminalInput=[];
 server.on('upgrade',(request,socket,head)=>terminalServer.handleUpgrade(request,socket,head,ws=>{ws.send('\x1b[32mWorkspace shell ready\x1b[0m\r\n> ');ws.on('message',data=>{if(data.toString().startsWith('{"resize":'))return;terminalInput.push(data.toString());ws.send(data);});}));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const browser = await chromium.launch(process.env.SPAWNT_TEST_BROWSER ? {executablePath:process.env.SPAWNT_TEST_BROWSER} : {});
+const browser = await chromium.launch(process.env.GNOMCODE_TEST_BROWSER ? {executablePath:process.env.GNOMCODE_TEST_BROWSER} : {});
 try {
   const page = await browser.newPage({ viewport:{width:1440,height:1000} });
   page.setDefaultTimeout(15000);
-  await page.addInitScript(() => { window.spawntDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
+  await page.addInitScript(() => { window.gnomcodeDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?token=test#sessions`);
   assert.equal(await page.getByRole('button',{name:'Pin navigation',exact:true}).count(),0,'navigation has a single predictable toggle');
@@ -159,7 +159,7 @@ try {
   await page.locator('#launch-agent-select').selectOption('codex');
   await page.getByRole('button', {name:'Choose folder',exact:true}).click();
   assert.equal(await page.locator('#launch-repo-input').inputValue(),'C:\\workspace\\picked');
-  await page.evaluate(() => {window.spawntDesktop.chooseWorkspace = async () => null;});
+  await page.evaluate(() => {window.gnomcodeDesktop.chooseWorkspace = async () => null;});
   await page.getByRole('button', {name:'Choose folder',exact:true}).click();
   assert.equal(await page.locator('#launch-repo-input').inputValue(),'C:\\workspace\\picked','cancelling the folder dialog preserves the chosen workspace');
   await page.locator('#launch-agent-btn').click();
@@ -267,12 +267,12 @@ try {
     updateChat(stream, [...events, {role:'assistant',content:'Latest reply',created_at:'2026-10-29'}]);
     if (stream.scrollHeight - stream.scrollTop - stream.clientHeight > 2) throw new Error('Latest replies did not stay in view');
   });
-  if (process.env.SPAWNT_CAPTURE_ALL) {
+  if (process.env.GNOMCODE_CAPTURE_ALL) {
     await mkdir(new URL('../.tmp/interface-review/', import.meta.url), {recursive:true});
     for (const width of [1440,390]) for (const theme of ['dark','light']) {
       await page.setViewportSize({width,height:900});
       await page.evaluate(theme => { delete document.documentElement.dataset.theme; while ((document.documentElement.dataset.theme || 'system') !== theme) cycleTheme(); },theme);
-      for (const view of (process.env.SPAWNT_CAPTURE_VIEW ? [process.env.SPAWNT_CAPTURE_VIEW] : ['overview','sessions','usage','limits','projects','automations','settings','auth'])) {
+      for (const view of (process.env.GNOMCODE_CAPTURE_VIEW ? [process.env.GNOMCODE_CAPTURE_VIEW] : ['overview','sessions','usage','limits','projects','automations','settings','auth'])) {
         await page.evaluate(view => { location.hash = view; }, view);
         await page.waitForTimeout(300);
         await page.evaluate(() => document.activeElement?.blur());

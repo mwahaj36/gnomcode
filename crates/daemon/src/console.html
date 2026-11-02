@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>spawnt — Local Console</title>
+  <title>gnomcode — Local Console</title>
   <script src="/theme-init.js"></script>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
-    @import url("/spawnt-tokens.css");
+    @import url("/gnomcode-tokens.css");
     .ide-layout { display:grid; grid-template-columns:280px minmax(0,1fr); min-height:620px; border:1px solid var(--sp-border); }
     .ide-sidebar { padding:16px; border-right:1px solid var(--sp-border); min-width:0; }
     .ide-sidebar > button, .ide-sidebar input { width:100%; margin-bottom:12px; }
@@ -38,7 +38,7 @@
     .ide-layout :focus-visible { outline:2px solid var(--sp-primary); outline-offset:3px; }
     @media(max-width:900px) { .ide-layout { grid-template-columns:220px minmax(0,1fr); } .ide-main { padding:16px; } }
     @media(max-width:600px) { .ide-layout { grid-template-columns:1fr; } .ide-sidebar { border-right:0; border-bottom:1px solid var(--sp-border); } #ide-session-list { max-height:220px; } .ide-launcher { margin:24px auto; } }
-    .sp-brand-mark { display: inline-block; flex: none; background: currentColor; -webkit-mask: url("/spawnt-mark.svg") center / contain no-repeat; mask: url("/spawnt-mark.svg") center / contain no-repeat; }
+    .sp-brand-mark { display: inline-block; flex: none; background: currentColor; -webkit-mask: url("/gnomcode-mark.svg") center / contain no-repeat; mask: url("/gnomcode-mark.svg") center / contain no-repeat; }
 
     :root {
       --bg: var(--sp-bg);
@@ -447,13 +447,13 @@
       opacity: 0.9;
     }
   </style>
-<link rel="stylesheet" href="/spawnt-tokens.css">
-<link rel="stylesheet" href="/spawnt-console.css">
+<link rel="stylesheet" href="/gnomcode-tokens.css">
+<link rel="stylesheet" href="/gnomcode-console.css">
 <link rel="stylesheet" href="/vendor/xterm.css">
 </head>
 <body class="sp-native-console">
       <div class="sp-console-workspace"><nav class="nav-tabs sp-console-nav" aria-label="Console views">
-        <a class="app-brand" href="#" data-action="view:overview" aria-label="Spawnt dashboard"><span class="sp-brand-mark" aria-hidden="true"></span><span class="rail-label">spawnt</span></a>
+        <a class="app-brand" href="#" data-action="view:overview" aria-label="Gnomcode dashboard"><span class="sp-brand-mark" aria-hidden="true"></span><span class="rail-label">gnomcode</span></a>
         <button type="button" id="navigation-toggle" data-action="toggle-navigation" aria-label="Expand navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16"/></svg><span class="rail-label">Expand navigation</span></button>
         <div role="tablist" aria-label="Console views" aria-orientation="vertical" style="display: contents"><button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg><span class="rail-label">Dashboard</span></button>
         <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span class="rail-label">Workspace</span></button>
@@ -543,7 +543,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <div class="sp-settings-resources"><a href="__SPAWNT_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__SPAWNT_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__SPAWNT_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
+    <div class="sp-settings-resources"><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
     <section class="profile-devices" aria-labelledby="remote-heading">
       <h2 id="remote-heading">Devices</h2>
@@ -595,7 +595,7 @@
 
         <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
           <div class="section-title" style="margin-bottom: 8px;">Local Flight Recorder Storage</div>
-          <div>Database: ~/.spawnt/state.db</div>
+          <div>Database: ~/.gnomcode/state.db</div>
           <div id="settings-db-stats" style="margin-top: 4px;">Loading local storage stats...</div>
         </div>
       </div>
@@ -631,13 +631,13 @@
   <!-- ==================== VIEW 3: ACCOUNT ==================== -->
   <main id="view-auth" class="view-content" tabindex="0">
     <section class="sp-account-panel" aria-labelledby="account-heading">
-      <div class="sp-account-intro"><div><span class="sp-account-label">THIS DESKTOP</span><h2 id="account-heading">Your account, on this device.</h2><p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p></div><a href="__SPAWNT_BASE_URL__/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a></div>
+      <div class="sp-account-intro"><div><span class="sp-account-label">THIS DESKTOP</span><h2 id="account-heading">Your account, on this device.</h2><p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p></div><a href="__GNOMCODE_BASE_URL__/console" target="_blank" rel="noopener noreferrer" class="btn-control">Open web console</a></div>
       <div class="sp-account-state"><span class="sp-account-label">CONNECTION</span><p id="auth-cloud-status" role="status" tabindex="-1">Checking account connection...</p><p id="auth-publication-status">Checking the last desktop update...</p></div>
       <div class="sp-account-columns">
-        <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. This snapshot is not end-to-end encrypted. New snapshots exclude conversation text and titles; older copies may still contain titles. Project names and other metadata can still be sensitive. Remote conversations use a separate encrypted connection.</p><p>Snapshots update about once a minute while spawnt is running. Local monitoring works without an account.</p></div>
+        <div class="sp-account-guide"><h3>Local first. Connected when you choose.</h3><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. This snapshot is not end-to-end encrypted. New snapshots exclude conversation text and titles; older copies may still contain titles. Project names and other metadata can still be sensitive. Remote conversations use a separate encrypted connection.</p><p>Snapshots update about once a minute while gnomcode is running. Local monitoring works without an account.</p></div>
         <div>
           <div id="auth-paired-card" hidden><h3>Desktop connected</h3><p id="auth-paired-email"></p><p>This desktop is linked to your account. Account access lets any signed-in device open its available sessions. Disconnecting stops Remote and keeps its recorded local sessions.</p><button id="auth-disconnect-button" type="button" class="btn-control" data-action="unpair">Disconnect desktop</button></div>
-          <div id="auth-unpaired-card" hidden><h3>Sign in on this desktop</h3><form data-submit="signin"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" required><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" required><button id="auth-signin-button" type="submit" class="btn-primary">Sign in</button></form><p>Use the same account on your phone. Your desktop appears automatically.</p><details><summary>Connect an existing browser account</summary><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy account connection</strong>.</li><li>Paste the token below and connect.</li></ol><form data-submit="pair"><label for="auth-token-input">Account connection</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your account connection" required><button type="button" class="btn-control" data-action="toggle-pair-token" aria-controls="auth-token-input" aria-pressed="false">Show token</button><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local spawnt app.</p></form></details></div>
+          <div id="auth-unpaired-card" hidden><h3>Sign in on this desktop</h3><form data-submit="signin"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" required><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" required><button id="auth-signin-button" type="submit" class="btn-primary">Sign in</button></form><p>Use the same account on your phone. Your desktop appears automatically.</p><details><summary>Connect an existing browser account</summary><ol class="sp-pairing-steps"><li>Sign in to the web console.</li><li>Select <strong>Copy account connection</strong>.</li><li>Paste the token below and connect.</li></ol><form data-submit="pair"><label for="auth-token-input">Account connection</label><div class="sp-pairing-input"><input type="password" id="auth-token-input" autocomplete="off" spellcheck="false" placeholder="Paste your account connection" required><button type="button" class="btn-control" data-action="toggle-pair-token" aria-controls="auth-token-input" aria-pressed="false">Show token</button><button id="auth-pair-button" type="submit" class="btn-primary">Connect desktop</button></div><p class="sp-pairing-hint">Treat this token like a password. Only paste it into your local gnomcode app.</p></form></details></div>
           <p id="auth-pair-status" role="status" hidden></p>
         </div>
       </div>
@@ -720,13 +720,13 @@
           <span class="badge" style="font-size: 10px; font-weight: 700;">PRO LABS</span>
         </div>
         <div style="font-size: 11px; color: var(--text-muted);">
-          Fresh-session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 0;">.spawnt/HANDOFF.md</code>
+          Fresh-session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 0;">.gnomcode/HANDOFF.md</code>
         </div>
       </div>
 
       <!-- Explainer Box (SPEC §3.14 & Transparency) -->
       <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
-        <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. spawnt maintains strict privacy invariants and does not access closed GUI databases. Rotated sessions launch in your terminal pane with a repository handoff summary. The new agent may still receive its own startup instructions and context.
+        <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. gnomcode maintains strict privacy invariants and does not access closed GUI databases. Rotated sessions launch in your terminal pane with a repository handoff summary. The new agent may still receive its own startup instructions and context.
       </div>
 
       <!-- Relay Controls Form -->

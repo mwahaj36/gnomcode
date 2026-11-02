@@ -10,9 +10,9 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("spawnt Setup")]
-[assembly: AssemblyProduct("spawnt")]
-[assembly: AssemblyCompany("spawnt")]
+[assembly: AssemblyTitle("gnomcode Setup")]
+[assembly: AssemblyProduct("gnomcode")]
+[assembly: AssemblyCompany("gnomcode")]
 [assembly: AssemblyVersion("0.9.0.0")]
 [assembly: AssemblyFileVersion("0.9.0.0")]
 
@@ -71,17 +71,17 @@ public class SetupForm : Form
         this.BackColor = Color.FromArgb(7, 7, 8); // #070708
         this.ForeColor = Color.FromArgb(246, 247, 248); // #f6f7f8
         this.DoubleBuffered = true;
-        this.Text = "spawnt Setup";
+        this.Text = "gnomcode Setup";
         this.Font = new Font("Segoe UI", 9);
-        using (Stream icon = Assembly.GetExecutingAssembly().GetManifestResourceStream("spawnt.ico")) {
+        using (Stream icon = Assembly.GetExecutingAssembly().GetManifestResourceStream("gnomcode.ico")) {
             if (icon != null) using (var embedded = new Icon(icon)) this.Icon = (Icon)embedded.Clone();
         }
 
-        installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Spawnt");
-        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Spawnt")) {
+        installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Gnomcode");
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode")) {
             if (key != null) installDir = key.GetValue("InstallLocation", installDir).ToString();
         }
-        exeDest = Path.Combine(installDir, "spawnt.exe");
+        exeDest = Path.Combine(installDir, "gnomcode.exe");
 
         // Draggable form
         this.MouseDown += (s, e) => {
@@ -93,7 +93,7 @@ public class SetupForm : Form
 
         // Title
         lblTitle = new Label();
-        lblTitle.Text = "spawnt";
+        lblTitle.Text = "gnomcode";
         lblTitle.Font = new Font("Segoe UI", 15, FontStyle.Bold);
         lblTitle.ForeColor = Color.White;
         lblTitle.Location = new Point(88, 38);
@@ -110,7 +110,7 @@ public class SetupForm : Form
 
         // Status
         lblStatus = new Label();
-        lblStatus.Text = "Choose where to install spawnt for your Windows account.";
+        lblStatus.Text = "Choose where to install gnomcode for your Windows account.";
         lblStatus.Font = new Font("Segoe UI", 9.0f, FontStyle.Regular);
         lblStatus.ForeColor = Color.FromArgb(169, 180, 194);
         lblStatus.Location = new Point(36, 105);
@@ -139,12 +139,12 @@ public class SetupForm : Form
         installPath = new TextBox { Name = "installPath", Text = installDir, Location = new Point(36, 170), Size = new Size(382, 26), BackColor = SystemColors.Window, ForeColor = SystemColors.WindowText };
         Controls.Add(installPath);
         browseButton = new Button { Text = "Browse...", Location = new Point(428, 168), Size = new Size(96, 30) };
-        browseButton.Click += (s, e) => { using (var dialog = new FolderBrowserDialog { Description = "Choose a dedicated spawnt installation folder", SelectedPath = installPath.Text }) { if (dialog.ShowDialog(this) == DialogResult.OK) installPath.Text = dialog.SelectedPath; } };
+        browseButton.Click += (s, e) => { using (var dialog = new FolderBrowserDialog { Description = "Choose a dedicated gnomcode installation folder", SelectedPath = installPath.Text }) { if (dialog.ShowDialog(this) == DialogResult.OK) installPath.Text = dialog.SelectedPath; } };
         Controls.Add(browseButton);
         desktopShortcut = AddOption("desktopShortcut", "Create a desktop shortcut", 216, true);
         startMenuShortcut = AddOption("startMenuShortcut", "Add to the Start menu", 248, true);
-        startAtLogin = AddOption("startAtLogin", "Start spawnt when I sign in to Windows", 280, false);
-        explorerMenu = AddOption("explorerMenu", "Add Open with Spawnt to Explorer folders", 312, true);
+        startAtLogin = AddOption("startAtLogin", "Start gnomcode when I sign in to Windows", 280, false);
+        explorerMenu = AddOption("explorerMenu", "Add Open with Gnomcode to Explorer folders", 312, true);
         Controls.Add(new Label { Text = "Windows 11: available under Show more options.", Location = new Point(58, 341), AutoSize = true });
         installButton = new Button { Name = "installButton", Text = "Install", Location = new Point(324, 398), Size = new Size(96, 32) };
         installButton.Click += (s, e) => BeginInstall();
@@ -174,7 +174,7 @@ public class SetupForm : Form
         try {
             installDir = Path.GetFullPath(installPath.Text.Trim());
             InstallerIntegration.ValidateInstallDirectory(installDir);
-            exeDest = Path.Combine(installDir, "spawnt.exe");
+            exeDest = Path.Combine(installDir, "gnomcode.exe");
             foreach (Control control in new Control[] { installPath, browseButton, desktopShortcut, startMenuShortcut, startAtLogin, explorerMenu, installButton, cancelButton }) control.Enabled = false;
             ControlBox = false;
             timer.Start();
@@ -192,8 +192,8 @@ public class SetupForm : Form
             g.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
         }
 
-        // Draw the solid triangle-and-square spawnt mark.
-        using (Stream mark = Assembly.GetExecutingAssembly().GetManifestResourceStream("spawnt-mark.png")) {
+        // Draw the solid triangle-and-square gnomcode mark.
+        using (Stream mark = Assembly.GetExecutingAssembly().GetManifestResourceStream("gnomcode-mark.png")) {
             if (mark != null) using (Image image = Image.FromStream(mark)) g.DrawImage(image, 36, 34, 42, 42);
         }
     }
@@ -207,7 +207,7 @@ public class SetupForm : Form
                 progressBar.Value = 20;
                 Directory.CreateDirectory(installDir);
             } else if (step == 4) {
-                lblStatus.Text = "Installing spawnt engine...";
+                lblStatus.Text = "Installing gnomcode engine...";
                 progressBar.Value = 45;
                 ExtractEmbeddedFiles();
             } else if (step == 6) {
@@ -224,11 +224,11 @@ public class SetupForm : Form
                 ConfigureAutostart();
                 InstallerIntegration.ConfigureExplorer(Registry.CurrentUser, installDir, explorerMenu.Checked);
             } else if (step == 12) {
-                lblStatus.Text = "Launching spawnt...";
+                lblStatus.Text = "Launching gnomcode...";
                 progressBar.Value = 100;
             } else if (step == 14) {
                 timer.Stop();
-                if (Environment.GetEnvironmentVariable("SPAWNT_SETUP_NO_LAUNCH") != "1") LaunchSpawnt();
+                if (Environment.GetEnvironmentVariable("GNOMCODE_SETUP_NO_LAUNCH") != "1") LaunchGnomcode();
                 this.Close();
             }
         } catch (Exception ex) {
@@ -237,13 +237,13 @@ public class SetupForm : Form
             lblStatus.Text = "Installation failed. Close setup and try again.";
             ControlBox = true;
             cancelButton.Enabled = true;
-            MessageBox.Show(this, ex.Message, "spawnt Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, ex.Message, "gnomcode Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void ExtractEmbeddedFiles()
     {
-        foreach (Process process in Process.GetProcessesByName("spawnt")) {
+        foreach (Process process in Process.GetProcessesByName("gnomcode")) {
             try {
                 if (String.Equals(process.MainModule.FileName, exeDest, StringComparison.OrdinalIgnoreCase)) {
                     process.Kill();
@@ -267,21 +267,21 @@ public class SetupForm : Form
             }
         }
 
-        // Copy setup binary itself as Spawnt-Uninstall.exe
+        // Copy setup binary itself as Gnomcode-Uninstall.exe
         string currentExe = Process.GetCurrentProcess().MainModule.FileName;
-        string uninstallerDest = Path.Combine(installDir, "Spawnt-Uninstall.exe");
+        string uninstallerDest = Path.Combine(installDir, "Gnomcode-Uninstall.exe");
         File.Copy(currentExe, uninstallerDest, true);
     }
 
     private void RegisterUninstallEntry()
     {
-        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Spawnt")) {
+        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode")) {
             if (key != null) {
-                string uninstallExe = Path.Combine(installDir, "Spawnt-Uninstall.exe");
-                string ico = Path.Combine(installDir, "spawnt.ico");
-                key.SetValue("DisplayName", "spawnt");
+                string uninstallExe = Path.Combine(installDir, "Gnomcode-Uninstall.exe");
+                string ico = Path.Combine(installDir, "gnomcode.ico");
+                key.SetValue("DisplayName", "gnomcode");
                 key.SetValue("DisplayVersion", "0.9.0");
-                key.SetValue("Publisher", "spawnt");
+                key.SetValue("Publisher", "gnomcode");
                 key.SetValue("DisplayIcon", ico + ",0");
                 key.SetValue("InstallLocation", installDir);
                 key.SetValue("UninstallString", "\"" + uninstallExe + "\" --uninstall");
@@ -289,8 +289,8 @@ public class SetupForm : Form
                 key.SetValue("EstimatedSize", 16500, RegistryValueKind.DWord);
                 key.SetValue("NoModify", 1, RegistryValueKind.DWord);
                 key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
-                key.SetValue("URLInfoAbout", "https://spawntv.vercel.app");
-                key.SetValue("HelpLink", "https://spawntv.vercel.app/docs");
+                key.SetValue("URLInfoAbout", "https://gnomcode.vercel.app");
+                key.SetValue("HelpLink", "https://gnomcode.vercel.app/docs");
             }
         }
     }
@@ -300,35 +300,35 @@ public class SetupForm : Form
         Type shellType = Type.GetTypeFromProgID("WScript.Shell");
         dynamic shell = Activator.CreateInstance(shellType);
         string vbs = Path.Combine(installDir, "open-console.vbs");
-        string ico = Path.Combine(installDir, "spawnt.ico");
+        string ico = Path.Combine(installDir, "gnomcode.ico");
 
         // Replace legacy shortcuts without changing the installation or data directory.
         foreach (string folder in new string[] { Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs") }) {
-            foreach (string name in new string[] { "Spawnt.lnk", "Spawnt Console.lnk" }) { string old = Path.Combine(folder, name); if (File.Exists(old)) File.Delete(old); }
+            foreach (string name in new string[] { "Gnomcode.lnk", "Gnomcode Console.lnk" }) { string old = Path.Combine(folder, name); if (File.Exists(old)) File.Delete(old); }
         }
 
         // Desktop shortcut
         string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string desktopLnk = Path.Combine(desktopDir, "spawnt.lnk");
+        string desktopLnk = Path.Combine(desktopDir, "gnomcode.lnk");
         if (desktopShortcut.Checked) {
             dynamic scDesktop = shell.CreateShortcut(desktopLnk);
             scDesktop.TargetPath = "wscript.exe";
             scDesktop.Arguments = "\"" + vbs + "\"";
             scDesktop.IconLocation = ico + ",0";
-            scDesktop.Description = "spawnt";
+            scDesktop.Description = "gnomcode";
             scDesktop.WorkingDirectory = installDir;
             scDesktop.Save();
         }
 
         // Start Menu shortcut
         string startMenuDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs");
-        string startLnk = Path.Combine(startMenuDir, "spawnt.lnk");
+        string startLnk = Path.Combine(startMenuDir, "gnomcode.lnk");
         if (startMenuShortcut.Checked) {
             dynamic scStart = shell.CreateShortcut(startLnk);
             scStart.TargetPath = "wscript.exe";
             scStart.Arguments = "\"" + vbs + "\"";
             scStart.IconLocation = ico + ",0";
-            scStart.Description = "spawnt";
+            scStart.Description = "gnomcode";
             scStart.WorkingDirectory = installDir;
             scStart.Save();
         }
@@ -345,13 +345,13 @@ public class SetupForm : Form
         using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
             if (key != null) {
                 string vbs = Path.Combine(installDir, "run-tray.vbs");
-                if (startAtLogin.Checked) key.SetValue("Spawnt", "wscript.exe \"" + vbs + "\"");
-                else key.DeleteValue("Spawnt", false);
+                if (startAtLogin.Checked) key.SetValue("Gnomcode", "wscript.exe \"" + vbs + "\"");
+                else key.DeleteValue("Gnomcode", false);
             }
         }
     }
 
-    private void LaunchSpawnt()
+    private void LaunchGnomcode()
     {
         try {
             string runTray = Path.Combine(installDir, "run-tray.vbs");
@@ -383,10 +383,10 @@ public static class InstallerIntegration
     public static void ValidateInstallDirectory(string installDir) {
         if (installDir.StartsWith(@"\\") || installDir == Path.GetPathRoot(installDir)) throw new IOException("Choose a dedicated folder on a local drive.");
         if (!Directory.Exists(installDir) || Directory.GetFileSystemEntries(installDir).Length == 0) return;
-        bool native = File.Exists(Path.Combine(installDir, "spawnt.exe")) &&
-            (File.Exists(Path.Combine(installDir, "Spawnt-Uninstall.exe")) || File.Exists(Path.Combine(installDir, "open-console.vbs")));
-        bool desktop = File.Exists(Path.Combine(installDir, "spawnt-desktop.exe")) && File.Exists(Path.Combine(installDir, "Update.exe"));
-        if (!native && !desktop) throw new IOException("Choose an empty folder or an existing spawnt installation.");
+        bool native = File.Exists(Path.Combine(installDir, "gnomcode.exe")) &&
+            (File.Exists(Path.Combine(installDir, "Gnomcode-Uninstall.exe")) || File.Exists(Path.Combine(installDir, "open-console.vbs")));
+        bool desktop = File.Exists(Path.Combine(installDir, "gnomcode-desktop.exe")) && File.Exists(Path.Combine(installDir, "Update.exe"));
+        if (!native && !desktop) throw new IOException("Choose an empty folder or an existing gnomcode installation.");
     }
 
     public static void RemovePayloadFiles(Assembly payload, string installDir) {
@@ -409,12 +409,12 @@ public static class InstallerIntegration
     }
 
     public static void ConfigureExplorer(RegistryKey user, string installDir, bool enabled) {
-        foreach (string target in new[] { @"Directory\shell\Spawnt", @"Directory\Background\shell\Spawnt" }) {
+        foreach (string target in new[] { @"Directory\shell\Gnomcode", @"Directory\Background\shell\Gnomcode" }) {
             string path = @"Software\Classes\" + target;
             if (!enabled) { user.DeleteSubKeyTree(path, false); continue; }
             using (RegistryKey key = user.CreateSubKey(path)) {
-                key.SetValue("", "Open with Spawnt");
-                key.SetValue("Icon", "\"" + Path.Combine(installDir, "spawnt.ico") + "\"");
+                key.SetValue("", "Open with Gnomcode");
+                key.SetValue("Icon", "\"" + Path.Combine(installDir, "gnomcode.ico") + "\"");
                 using (RegistryKey command = key.CreateSubKey("command")) {
                     string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe");
                     command.SetValue("", "\"" + powershell + "\" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"" + Path.Combine(installDir, "open-folder.ps1") + "\" -Folder \"" + (target.Contains("Background") ? "%V" : "%1") + "\\.\"");
@@ -450,7 +450,7 @@ public class UninstallForm : Form
         this.BackColor = Color.FromArgb(7, 7, 8); // #070708
         this.ForeColor = Color.FromArgb(246, 247, 248); // #f6f7f8
         this.DoubleBuffered = true;
-        this.Text = "spawnt";
+        this.Text = "gnomcode";
 
         this.MouseDown += (s, e) => {
             if (e.Button == MouseButtons.Left) {
@@ -460,7 +460,7 @@ public class UninstallForm : Form
         };
 
         lblTitle = new Label();
-        lblTitle.Text = "Uninstall spawnt";
+        lblTitle.Text = "Uninstall gnomcode";
         lblTitle.Font = new Font("Segoe UI", 14, FontStyle.Bold);
         lblTitle.ForeColor = Color.White;
         lblTitle.Location = new Point(88, 38);
@@ -507,7 +507,7 @@ public class UninstallForm : Form
             g.DrawRectangle(p, 0, 0, this.Width - 1, this.Height - 1);
         }
 
-        using (Stream mark = Assembly.GetExecutingAssembly().GetManifestResourceStream("spawnt-mark.png")) {
+        using (Stream mark = Assembly.GetExecutingAssembly().GetManifestResourceStream("gnomcode-mark.png")) {
             if (mark != null) using (Image image = Image.FromStream(mark)) g.DrawImage(image, 36, 34, 42, 42);
         }
     }
@@ -516,9 +516,9 @@ public class UninstallForm : Form
     {
         step++;
         if (step == 2) {
-            lblStatus.Text = "Stopping spawnt processes...";
+            lblStatus.Text = "Stopping gnomcode processes...";
             progressBar.Value = 25;
-            KillSpawntProcesses();
+            KillGnomcodeProcesses();
         } else if (step == 4) {
             lblStatus.Text = "Removing autostart and environment settings...";
             progressBar.Value = 50;
@@ -538,17 +538,17 @@ public class UninstallForm : Form
         } else if (step == 12) {
             timer.Stop();
             if (!isQuiet) {
-                MessageBox.Show("spawnt was successfully uninstalled from your computer.", "spawnt Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("gnomcode was successfully uninstalled from your computer.", "gnomcode Uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             this.Close();
         }
     }
 
-    private void KillSpawntProcesses()
+    private void KillGnomcodeProcesses()
     {
         try {
-            foreach (Process p in Process.GetProcessesByName("spawnt")) {
-                try { if (String.Equals(p.MainModule.FileName, Path.Combine(installDir, "spawnt.exe"), StringComparison.OrdinalIgnoreCase)) { p.Kill(); p.WaitForExit(2000); } } catch {}
+            foreach (Process p in Process.GetProcessesByName("gnomcode")) {
+                try { if (String.Equals(p.MainModule.FileName, Path.Combine(installDir, "gnomcode.exe"), StringComparison.OrdinalIgnoreCase)) { p.Kill(); p.WaitForExit(2000); } } catch {}
                 p.Dispose();
             }
             InstallerIntegration.StopTrayProcesses(installDir);
@@ -560,7 +560,7 @@ public class UninstallForm : Form
         try {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
                 if (key != null) {
-                    key.DeleteValue("Spawnt", false);
+                    key.DeleteValue("Gnomcode", false);
                 }
             }
         } catch {}
@@ -583,10 +583,10 @@ public class UninstallForm : Form
     private void RemoveShortcuts()
     {
         try {
-            string desktopLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "spawnt.lnk");
+            string desktopLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "gnomcode.lnk");
             if (File.Exists(desktopLnk)) File.Delete(desktopLnk);
 
-            string startLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\spawnt.lnk");
+            string startLnk = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Start Menu\Programs\gnomcode.lnk");
             if (File.Exists(startLnk)) File.Delete(startLnk);
         } catch {}
     }
@@ -595,7 +595,7 @@ public class UninstallForm : Form
     {
         try {
             InstallerIntegration.ConfigureExplorer(Registry.CurrentUser, installDir, false);
-            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Spawnt", false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode", false);
         } catch {}
     }
 
@@ -604,7 +604,7 @@ public class UninstallForm : Form
         try {
             // Remove only shipped files; never recursively delete a user-selected directory.
             string currentExe = Path.GetFullPath(Assembly.GetExecutingAssembly().Location);
-            if (!String.Equals(Path.GetFileName(currentExe), "Spawnt-Uninstall.exe", StringComparison.OrdinalIgnoreCase)) return;
+            if (!String.Equals(Path.GetFileName(currentExe), "Gnomcode-Uninstall.exe", StringComparison.OrdinalIgnoreCase)) return;
             InstallerIntegration.RemovePayloadFiles(Assembly.GetExecutingAssembly(), installDir);
             string cleanup = "Start-Sleep -Seconds 2; Remove-Item -LiteralPath '" + currentExe.Replace("'", "''") + "' -Force; if (-not (Get-ChildItem -LiteralPath '" + installDir.Replace("'", "''") + "' -Force)) { Remove-Item -LiteralPath '" + installDir.Replace("'", "''") + "' }";
             Process.Start(new ProcessStartInfo {
@@ -647,15 +647,15 @@ public class Program
         }
 
         if (isUninstall) {
-            if (!String.Equals(Path.GetFileName(exeName), "Spawnt-Uninstall.exe", StringComparison.OrdinalIgnoreCase)) {
-                MessageBox.Show("Use Installed apps in Windows Settings to uninstall spawnt.", "spawnt Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (!String.Equals(Path.GetFileName(exeName), "Gnomcode-Uninstall.exe", StringComparison.OrdinalIgnoreCase)) {
+                MessageBox.Show("Use Installed apps in Windows Settings to uninstall gnomcode.", "gnomcode Setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 Environment.ExitCode = 1;
                 return;
             }
             if (!isQuiet) {
                 DialogResult dr = MessageBox.Show(
-                    "Are you sure you want to completely remove spawnt from your computer?",
-                    "spawnt Uninstall",
+                    "Are you sure you want to completely remove gnomcode from your computer?",
+                    "gnomcode Uninstall",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question
                 );

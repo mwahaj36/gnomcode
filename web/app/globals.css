@@ -1,4 +1,4 @@
-@import "./spawnt-tokens.css";
+@import "./gnomcode-tokens.css";
 
 @tailwind base;
 @tailwind components;
@@ -18,7 +18,7 @@ body {
 .sp-site-header { position: sticky; top: 0; z-index: 100; height: 64px; margin-top: var(--nav-top, 0px); margin-left: var(--nav-inset, 0px); margin-right: var(--nav-inset, 0px); background: var(--sp-surface); border: 1px solid var(--sp-border); border-radius: var(--nav-radius, 0px); transition: margin .18s cubic-bezier(.16,1,.3,1), border-radius .18s cubic-bezier(.16,1,.3,1); }
 .sp-site-nav { width: min(1200px, calc(100% - 48px)); height: 100%; margin: auto; display: flex; align-items: center; gap: 24px; }
 .sp-site-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--sp-text); font-size: 19px; font-weight: 600; text-decoration: none; white-space: nowrap; }
-.sp-brand-mark { display: inline-block; flex: none; width: 24px; height: 24px; background: currentColor; -webkit-mask: url("/spawnt-mark.svg") center / contain no-repeat; mask: url("/spawnt-mark.svg") center / contain no-repeat; }
+.sp-brand-mark { display: inline-block; flex: none; width: 24px; height: 24px; background: currentColor; -webkit-mask: url("/gnomcode-mark.svg") center / contain no-repeat; mask: url("/gnomcode-mark.svg") center / contain no-repeat; }
 .sp-site-divider { color: var(--sp-text-3); font-size: 20px; }
 .sp-site-links, .sp-site-actions { display: flex; align-items: center; gap: 22px; }
 .sp-site-links a, .sp-site-login, .sp-site-download { color: var(--sp-text-2); font: 600 11px/16px var(--sp-font-mono); letter-spacing: .04em; text-decoration: none; text-transform: uppercase; }

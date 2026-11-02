@@ -6,7 +6,7 @@ const path = require('node:path');
 const { WebSocketServer } = require('ws');
 const { isAllowedResource, windowChrome } = require('../dist/security.js');
 
-app.setPath('userData', mkdtempSync(path.join(tmpdir(), 'spawnt-electron-test-')));
+app.setPath('userData', mkdtempSync(path.join(tmpdir(), 'gnomcode-electron-test-')));
 const timeout = setTimeout(() => { console.error('Terminal WebSocket timed out'); app.exit(1); }, 15000);
 app.whenReady().then(async () => {
   const server = createServer((_request, response) => {
@@ -24,7 +24,7 @@ app.whenReady().then(async () => {
   let appearance;ipcMain.handle('desktop:set-appearance',(_event,theme)=>{appearance=theme;});
   await window.loadURL(`http://127.0.0.1:${port}`);
   const chrome = await window.webContents.executeJavaScript(`new Promise(resolve=>setTimeout(()=>{document.documentElement.dataset.theme='dark';resolve({header:document.querySelector('.desktop-titlebar')?.textContent,drag:getComputedStyle(document.querySelector('.desktop-titlebar')).webkitAppRegion,padding:getComputedStyle(document.body).paddingTop});},100))`);
-  if(chrome.header !== 'Spawnt' || chrome.drag !== 'drag' || chrome.padding !== '32px') throw new Error('Desktop titlebar failed: '+JSON.stringify(chrome));
+  if(chrome.header !== 'Gnomcode' || chrome.drag !== 'drag' || chrome.padding !== '32px') throw new Error('Desktop titlebar failed: '+JSON.stringify(chrome));
   if(await window.webContents.executeJavaScript("getComputedStyle(document.querySelector('.ide-sidebar')).top") !== '104px') throw new Error('Intermediate-width drawer overlaps titlebar');
   await new Promise(resolve=>setTimeout(resolve,100));
   if(appearance !== 'dark') throw new Error('Titlebar theme did not synchronize');

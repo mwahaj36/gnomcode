@@ -1,5 +1,5 @@
-# spawnt Windows system tray - https://spawntv.vercel.app
-$trayMutex = New-Object System.Threading.Mutex($false, "Local\SpawntTray")
+# gnomcode Windows system tray - https://gnomcode.vercel.app
+$trayMutex = New-Object System.Threading.Mutex($false, "Local\GnomcodeTray")
 try {
     $ownsTray = $trayMutex.WaitOne(0)
 } catch [System.Threading.AbandonedMutexException] {
@@ -13,7 +13,7 @@ if (-not $ownsTray) {
 # Older tray scripts predate the mutex and can survive an upgrade.
 try {
     Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
-        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*Spawnt*tray.ps1*' } |
+        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*Gnomcode*tray.ps1*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 } catch {}
 
@@ -21,13 +21,13 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $Port = 41738
-$SpawntHome = if ($env:SPAWNT_HOME -and $env:SPAWNT_HOME.Trim()) { $env:SPAWNT_HOME.Trim() } else { Join-Path $env:USERPROFILE '.spawnt' }
-$DaemonInfoPath = Join-Path $SpawntHome "daemon.json"
+$GnomcodeHome = if ($env:GNOMCODE_HOME -and $env:GNOMCODE_HOME.Trim()) { $env:GNOMCODE_HOME.Trim() } elseif ($env:SPAWNT_HOME -and $env:SPAWNT_HOME.Trim()) { $env:SPAWNT_HOME.Trim() } elseif (Test-Path (Join-Path $env:USERPROFILE '.spawnt')) { Join-Path $env:USERPROFILE '.spawnt' } else { Join-Path $env:USERPROFILE '.gnomcode' }
+$DaemonInfoPath = Join-Path $GnomcodeHome "daemon.json"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$IconPath = Join-Path $ScriptDir "spawnt-tray.ico"
+$IconPath = Join-Path $ScriptDir "gnomcode-tray.ico"
 if (-not (Test-Path $IconPath)) {
-    $IconPath = "$env:LOCALAPPDATA\Spawnt\spawnt-tray.ico"
-    if (-not (Test-Path $IconPath)) { $IconPath = Join-Path $ScriptDir "spawnt.ico" }
+    $IconPath = "$env:LOCALAPPDATA\Gnomcode\gnomcode-tray.ico"
+    if (-not (Test-Path $IconPath)) { $IconPath = Join-Path $ScriptDir "gnomcode.ico" }
 }
 
 Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -ErrorAction Stop @"
@@ -71,10 +71,10 @@ function Get-ConsoleUrl {
     return "http://127.0.0.1:$Port/"
 }
 
-function Find-SpawntWindow {
+function Find-GnomcodeWindow {
     $procs = Get-Process -Name "msedge", "chrome" -ErrorAction SilentlyContinue
     foreach ($p in $procs) {
-        if (($p.MainWindowTitle -like "*spawnt*" -or $p.MainWindowTitle -like "*Spawnt*") -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
+        if (($p.MainWindowTitle -like "*gnomcode*" -or $p.MainWindowTitle -like "*Gnomcode*") -and $p.MainWindowHandle -ne [IntPtr]::Zero) {
             return $p.MainWindowHandle
         }
     }
@@ -83,13 +83,13 @@ function Find-SpawntWindow {
 
 function Open-Console {
     try {
-        $engine = Join-Path $ScriptDir "spawnt.exe"
+        $engine = Join-Path $ScriptDir "gnomcode.exe"
         Start-Process -FilePath $engine -ArgumentList "daemon" -WindowStyle Hidden -ErrorAction Stop
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("Spawnt could not start. Reinstall the latest build from spawntv.vercel.app/downloads.", "Spawnt") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("Gnomcode could not start. Reinstall the latest build from gnomcode.vercel.app/downloads.", "Gnomcode") | Out-Null
         return
     }
-    $existingHwnd = Find-SpawntWindow
+    $existingHwnd = Find-GnomcodeWindow
     if ($existingHwnd -ne [IntPtr]::Zero -and $script:lastConsoleUrl -eq (Get-ConsoleUrl)) {
         if ([Win32]::IsIconic($existingHwnd)) {
             [Win32]::ShowWindow($existingHwnd, 9) | Out-Null # SW_RESTORE
@@ -102,8 +102,8 @@ function Open-Console {
     $url = Get-ConsoleUrl
     $script:lastConsoleUrl = $url
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    $profileArg = "--user-data-dir=`"$localAppData\Spawnt\AppProfile`""
-    $windowArg = "--window-name=spawnt"
+    $profileArg = "--user-data-dir=`"$localAppData\Gnomcode\AppProfile`""
+    $windowArg = "--window-name=gnomcode"
     $candidateExes = @(
         "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
         "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
@@ -139,7 +139,7 @@ if (Test-Path $IconPath) {
 } else {
     $notifyIcon.Icon = [System.Drawing.SystemIcons]::Application
 }
-$notifyIcon.Text = "spawnt Mission Control"
+$notifyIcon.Text = "gnomcode Mission Control"
 $notifyIcon.Visible = $true
 
 function Update-TrayIconBadge([int]$count) {
@@ -229,7 +229,7 @@ $contextMenu.Add_Opening({
 })
 
 # 1. Open Console
-$openItem = $contextMenu.Items.Add("Open spawnt")
+$openItem = $contextMenu.Items.Add("Open gnomcode")
 $openItem.Font = New-Object System.Drawing.Font("Segoe UI", 9.0, [System.Drawing.FontStyle]::Bold)
 $openItem.ForeColor = [System.Drawing.Color]::White
 $openItem.Add_Click({ Open-Console })
@@ -269,7 +269,7 @@ $spendItem.ForeColor = [System.Drawing.Color]::FromArgb(139, 148, 158)
 $contextMenu.Items.Add("-") | Out-Null
 
 # Exit
-$exitItem = $contextMenu.Items.Add("Quit spawnt")
+$exitItem = $contextMenu.Items.Add("Quit gnomcode")
 $exitItem.ForeColor = [System.Drawing.Color]::FromArgb(248, 81, 73)
 $exitItem.Add_Click({
     $notifyIcon.Visible = $false
@@ -444,7 +444,7 @@ $timer.Add_Tick({
             }
         }
     } catch {
-        $notifyIcon.Text = "spawnt: daemon unavailable - click to restart"
+        $notifyIcon.Text = "gnomcode: daemon unavailable - click to restart"
         $sessionsHeader.Text = "Local sessions unavailable"
         $idleSessionItem.Text = "  Open Mission Control to reconnect"
         $idleSessionItem.Visible = $true

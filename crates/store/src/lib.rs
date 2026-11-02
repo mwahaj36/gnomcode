@@ -1,13 +1,13 @@
 //! SQLite storage schema, migrations, queries, and rollups (`SPEC §3.6`, `§4.3`).
 
 use chrono::{DateTime, Datelike, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
-use sha2::{Digest, Sha256};
-use spawnt_core::rules::{GuardrailRule, ResumeQueueEntry};
-use spawnt_core::{
+use gnomcode_core::rules::{GuardrailRule, ResumeQueueEntry};
+use gnomcode_core::{
     ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
     RoutingPolicy, Session, SessionState, Surface, TrustLevel, UsageRecord,
 };
+use rusqlite::{Connection, OptionalExtension, params};
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use thiserror::Error;
 
@@ -169,7 +169,7 @@ pub struct SessionListItem {
     pub is_ongoing: bool,
     /// Source-independent presence classification.
     #[serde(default)]
-    pub presence: spawnt_core::presence::SessionPresence,
+    pub presence: gnomcode_core::presence::SessionPresence,
     /// Started at timestamp.
     pub started_at: String,
     /// Last event timestamp.
@@ -486,7 +486,7 @@ pub struct ContextRelayEntry {
     pub executed_at: Option<String>,
 }
 
-/// Managed SQLite database handle wrapped with Spawnt schema & queries.
+/// Managed SQLite database handle wrapped with Gnomcode schema & queries.
 pub struct Database {
     conn: Connection,
 }
@@ -853,14 +853,14 @@ impl Database {
                 let content = if event.role == ChatRole::Tool {
                     String::new()
                 } else {
-                    spawnt_core::redact::redact_chat_content(&event.content)
+                    gnomcode_core::redact::redact_chat_content(&event.content)
                 };
                 let old = if event.role == ChatRole::User {
-                    spawnt_core::redact::clean_user_message(&old)
+                    gnomcode_core::redact::clean_user_message(&old)
                 } else {
                     old
                 };
-                let old = spawnt_core::redact::redact_chat_content(&old);
+                let old = gnomcode_core::redact::redact_chat_content(&old);
                 if !old.split_whitespace().eq(content.split_whitespace()) {
                     continue;
                 }
@@ -901,9 +901,9 @@ impl Database {
                 event.session_id,
                 event.turn_index,
                 event.role.as_str(),
-                if event.role == ChatRole::Tool { String::new() } else { spawnt_core::redact::redact_chat_content(&event.content) },
-                event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content),
-                event.status.as_deref().map(spawnt_core::redact::redact_chat_content),
+                if event.role == ChatRole::Tool { String::new() } else { gnomcode_core::redact::redact_chat_content(&event.content) },
+                event.tool_name.as_deref().map(gnomcode_core::redact::redact_chat_content),
+                event.status.as_deref().map(gnomcode_core::redact::redact_chat_content),
                 created_at,
                 event_marker(&event.event_id),
             ],
@@ -928,7 +928,7 @@ impl Database {
     /// # Errors
     /// Returns an error if SQLite cannot update existing session metadata.
     pub fn update_native_session_title(&self, session_id: &str, title: &str) -> Result<(), Error> {
-        let title: String = spawnt_core::redact::redact_chat_content(title)
+        let title: String = gnomcode_core::redact::redact_chat_content(title)
             .trim()
             .chars()
             .take(256)
@@ -1016,7 +1016,7 @@ impl Database {
             let content = if role == ChatRole::Tool {
                 String::new()
             } else {
-                spawnt_core::redact::redact_chat_content(&content)
+                gnomcode_core::redact::redact_chat_content(&content)
             };
             let created_at = DateTime::parse_from_rfc3339(&created_at_str)
                 .map(|dt| dt.with_timezone(&Utc))
@@ -1051,7 +1051,7 @@ impl Database {
         session_id: &str,
         target_model: &str,
         touched_files: Vec<String>,
-    ) -> Result<Option<spawnt_core::HandoffPacket>, Error> {
+    ) -> Result<Option<gnomcode_core::HandoffPacket>, Error> {
         let source_model: Option<Option<String>> = self
             .conn
             .query_row(
@@ -1064,11 +1064,11 @@ impl Database {
             return Ok(None);
         };
         let events = self.get_session_chat(session_id, Some(50))?;
-        Ok(Some(spawnt_core::HandoffPacket {
+        Ok(Some(gnomcode_core::HandoffPacket {
             session_id: session_id.to_owned(),
             source_model: source_model.unwrap_or_else(|| "unknown".to_owned()),
             target_model: target_model.to_owned(),
-            prompt_summary: spawnt_core::handoff_summary(&events),
+            prompt_summary: gnomcode_core::handoff_summary(&events),
             touched_files,
             turn_count: u32::try_from(events.len()).unwrap_or(u32::MAX),
             created_at: Utc::now(),
@@ -1662,9 +1662,9 @@ impl Database {
             let content = if event.role == ChatRole::Tool {
                 String::new()
             } else {
-                spawnt_core::redact::redact_chat_content(&event.content)
+                gnomcode_core::redact::redact_chat_content(&event.content)
             };
-            tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)"), params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(spawnt_core::redact::redact_chat_content), event.status.as_deref().map(spawnt_core::redact::redact_chat_content), event.created_at.to_rfc3339(), event_marker(&event.event_id)])?;
+            tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)"), params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(gnomcode_core::redact::redact_chat_content), event.status.as_deref().map(gnomcode_core::redact::redact_chat_content), event.created_at.to_rfc3339(), event_marker(&event.event_id)])?;
         }
 
         // 6. Update source file checkpoint
@@ -1809,7 +1809,7 @@ impl Database {
         Ok(out)
     }
 
-    /// Aggregates usage report grouped by project, agent, and model for `spawnt report`.
+    /// Aggregates usage report grouped by project, agent, and model for `gnomcode report`.
     ///
     /// # Errors
     /// Returns [`Error`] if query execution fails.
@@ -2027,7 +2027,7 @@ impl Database {
                     }
 
                     if let Some(ws) = detected_ws {
-                        let project = spawnt_core::Project::from_origin(None, &ws, None);
+                        let project = gnomcode_core::Project::from_origin(None, &ws, None);
                         let _ = self.conn.execute(
                             r#"
                             INSERT INTO project (id, canonical_key, repo_root, name, git_branch)
@@ -2316,10 +2316,10 @@ impl Database {
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let now = Utc::now();
         let cutoff = (now
-            - chrono::Duration::milliseconds(spawnt_core::presence::RECENT_ACTIVITY_GRACE_MS))
+            - chrono::Duration::milliseconds(gnomcode_core::presence::RECENT_ACTIVITY_GRACE_MS))
         .to_rfc3339();
         let stale_cutoff = (now
-            - chrono::Duration::milliseconds(spawnt_core::presence::STALE_EXECUTION_LIMIT_MS))
+            - chrono::Duration::milliseconds(gnomcode_core::presence::STALE_EXECUTION_LIMIT_MS))
         .to_rfc3339();
         let agent = agent_filter
             .filter(|value| !value.is_empty())
@@ -2422,10 +2422,10 @@ impl Database {
                     ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
                 );
                 let presence =
-                    spawnt_core::presence::classify_presence(&state_str, age, open_execution);
+                    gnomcode_core::presence::classify_presence(&state_str, age, open_execution);
                 let is_ongoing = presence.is_ongoing();
                 let is_active = presence.is_active();
-                let state = if presence == spawnt_core::presence::SessionPresence::Inactive
+                let state = if presence == gnomcode_core::presence::SessionPresence::Inactive
                     && matches!(state_str.as_str(), "thinking" | "tool")
                 {
                     "unknown".to_owned()
@@ -2740,7 +2740,7 @@ impl Database {
         let mut agent_models: BTreeMap<&'static str, BTreeMap<String, ModelReport>> =
             BTreeMap::new();
         for item in raw_items {
-            let agent_label = spawnt_core::pricing::format_agent_display(&item.agent);
+            let agent_label = gnomcode_core::pricing::format_agent_display(&item.agent);
             let models_map = agent_models.entry(agent_label).or_default();
             let entry = models_map
                 .entry(item.model.clone())
@@ -2995,16 +2995,16 @@ mod tests {
     fn format_repair_updates_existing_chat_without_resurrecting_deleted_rows() {
         let mut db = super::Database::open_in_memory().expect("db");
         let now = chrono::Utc::now();
-        let project = spawnt_core::Project::from_origin(None, "/fixture", None);
-        let session = spawnt_core::Session {
+        let project = gnomcode_core::Project::from_origin(None, "/fixture", None);
+        let session = gnomcode_core::Session {
             id: "codex:format".into(),
-            agent: spawnt_core::AgentId::Codex,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
             project_id: project.id.clone(),
             parent_session_id: None,
             model: None,
             title: None,
-            state: spawnt_core::SessionState::Idle,
+            state: gnomcode_core::SessionState::Idle,
             pid: None,
             started_at: now,
             last_event_at: now,
@@ -3018,11 +3018,11 @@ mod tests {
         };
         db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
             .expect("metadata");
-        let mut event = spawnt_core::ChatEvent {
+        let mut event = gnomcode_core::ChatEvent {
             event_id: "format-event".into(),
             session_id: "codex:format".into(),
             turn_index: 1,
-            role: spawnt_core::ChatRole::Assistant,
+            role: gnomcode_core::ChatRole::Assistant,
             content: "# Heading body".into(),
             tool_name: None,
             status: None,
@@ -3118,8 +3118,8 @@ mod tests {
     }
     use super::{ContextRelayEntry, Database, SourceCheckpoint};
     use chrono::Utc;
-    use spawnt_core::rules::{GuardrailRule, RuleAction};
-    use spawnt_core::{
+    use gnomcode_core::rules::{GuardrailRule, RuleAction};
+    use gnomcode_core::{
         ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
         SessionState, Surface, TrustLevel, UsageRecord,
     };
@@ -3160,11 +3160,11 @@ mod tests {
             },
         )
         .expect("sessions");
-        db.insert_chat_event(&spawnt_core::ChatEvent {
+        db.insert_chat_event(&gnomcode_core::ChatEvent {
             event_id: "preserve".into(),
             session_id: "cursor:chat".into(),
             turn_index: 0,
-            role: spawnt_core::ChatRole::User,
+            role: gnomcode_core::ChatRole::User,
             content: "Keep history".into(),
             tool_name: None,
             status: None,
@@ -3373,7 +3373,7 @@ mod tests {
 
     #[test]
     fn resume_queue_does_not_store_user_prompt_text() {
-        use spawnt_core::rules::ResumeQueueEntry;
+        use gnomcode_core::rules::ResumeQueueEntry;
         let db = Database::open_in_memory().expect("database");
         let entry = ResumeQueueEntry {
             session_id: "codex:session-privacy".to_owned(),
@@ -3390,7 +3390,7 @@ mod tests {
     }
     #[test]
     fn resume_queue_persists_arms_and_disarms() {
-        use spawnt_core::rules::ResumeQueueEntry;
+        use gnomcode_core::rules::ResumeQueueEntry;
         let db = Database::open_in_memory().expect("in-memory db");
         let entry = ResumeQueueEntry {
             session_id: "claude-code:session-1".to_owned(),
@@ -3416,7 +3416,7 @@ mod tests {
 
     #[test]
     fn context_relay_config_and_ledger_persist() {
-        use spawnt_core::RoutingPolicy;
+        use gnomcode_core::RoutingPolicy;
         let db = Database::open_in_memory().expect("in-memory db");
         let def = db.get_context_relay_config().expect("default config");
         assert_eq!(def.policy, "ask_first");
@@ -3447,8 +3447,8 @@ mod tests {
             session_id: "claude-code:s1".to_owned(),
             source_agent: "claude-code".to_owned(),
             target_agent: "claude-code".to_owned(),
-            project_name: "spawnt".to_owned(),
-            cwd: "/workspace/spawnt".to_owned(),
+            project_name: "gnomcode".to_owned(),
+            cwd: "/workspace/gnomcode".to_owned(),
             fill_pct: 92,
             status: "pending".to_owned(),
             created_at: Utc::now().to_rfc3339(),
@@ -3472,7 +3472,7 @@ mod tests {
         let mut db = Database::open_in_memory().expect("in-memory db");
         let p = Project::from_origin(
             Some("https://github.com/mwahaj36/spawnt"),
-            "/workspace/spawnt",
+            "/workspace/gnomcode",
             Some("main"),
         );
         let s = Session {
@@ -3668,7 +3668,7 @@ mod tests {
 
         let other_project = Project::from_origin(
             Some("https://github.com/other/spawnt"),
-            "/workspace/other/spawnt",
+            "/workspace/other/gnomcode",
             None,
         );
         let mut other_session = db.list_active_sessions(1).expect("session").remove(0);
@@ -3864,7 +3864,7 @@ mod tests {
         let mut db = Database::open_in_memory().expect("in-memory db");
         let p = Project::from_origin(
             Some("https://github.com/mwahaj36/spawnt"),
-            "/workspace/spawnt",
+            "/workspace/gnomcode",
             Some("main"),
         );
         let s = Session {
@@ -4021,7 +4021,7 @@ mod tests {
 
     #[test]
     fn chat_event_storage_retrieval_and_hard_deletion() {
-        use spawnt_core::{ChatEvent, ChatRole};
+        use gnomcode_core::{ChatEvent, ChatRole};
         let mut db = Database::open_in_memory().expect("db");
         let project = Project::from_origin(None, "C:\\repo", None);
         let session = Session {
