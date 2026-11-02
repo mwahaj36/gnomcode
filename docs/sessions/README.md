@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-02 - Case-sensitive rename follow-up](2026-11-02-rename-filename-followup.md)
+
 - [2026-11-02 â€” Gnomcode rename and PR 118 review](2026-11-02-gnomcode-rename-and-pr118-review.md)
 - [2026-11-02 — PR 118 repair retry](2026-11-02-pr118-repair-retry.md)
 
