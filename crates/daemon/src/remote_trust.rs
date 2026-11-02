@@ -33,13 +33,13 @@ impl DeviceTrust {
     pub(crate) fn save_at(&self, path: &std::path::Path) -> Result<(), crate::remote::RemoteError> {
         let bytes =
             serde_json::to_vec(self).map_err(|_| crate::remote::RemoteError::Persistence)?;
-        spawnt_platform::write_private_file(path, &bytes)
+        gnomcode_platform::write_private_file(path, &bytes)
             .map_err(|_| crate::remote::RemoteError::Persistence)
     }
 }
 
 pub(crate) fn path() -> std::path::PathBuf {
-    spawnt_platform::spawnt_home().join(obfstr::obfstr!("remote-device.json"))
+    gnomcode_platform::gnomcode_home().join(obfstr::obfstr!("remote-device.json"))
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {

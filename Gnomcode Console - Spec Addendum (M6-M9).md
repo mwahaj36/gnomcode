@@ -1,4 +1,4 @@
-# FleetHUD Console - Spec Addendum (M6-M9)
+# Gnomcode Console - Spec Addendum (M6-M9)
 
 Draft for merging into SPEC.md. Owner: Wahaj. Written 2026-10-28. Items marked *(verify)* depend on third-party tools that change often; check them against current docs before building.
 
@@ -9,7 +9,7 @@ Draft for merging into SPEC.md. Owner: Wahaj. Written 2026-10-28. Items marked *
 | Native app or VS Code fork? | **Native Tauri v2 app**, not a fork | You already have the Tauri shell and React bundle. A fork means rebasing Code OSS every month, no official Marketplace, and competing with Cursor and Windsurf on the editor, which is not your edge. |
 | Does it include a code editor? | **No editor. Read-only file viewer, diff review, terminal, and an Open in VS Code/Cursor button.** | Keeps scope small. Editing, LSP and extensions are years of work. |
 | How do you drive agents? | **Official CLIs, through structured protocols (ACP first), with raw terminal mode as the fallback.** | Spawning the vendor binary keeps subscription login with the vendor, and the structured stream gives you a real chat UI. |
-| Where does chat history live? | **In the agents' own logs. FleetHUD does not create a second copy.** | You already parse these logs. Replay is a re-read, which keeps your privacy promise intact. |
+| Where does chat history live? | **In the agents' own logs. Gnomcode does not create a second copy.** | You already parse these logs. Replay is a re-read, which keeps your privacy promise intact. |
 | Pricing | **Everything local is free. Paid: Remote and Teams.** | Remote and sync are the only features with a recurring server cost. |
 | First thing to ship | **Launcher + Claude/Codex chat view, with failover and resume in the existing tray.** | Fastest path to a demo and to real feedback. |
 
@@ -21,7 +21,7 @@ Draft for merging into SPEC.md. Owner: Wahaj. Written 2026-10-28. Items marked *
 
 ### 1.2 What changes from SPEC v0.8
 
-- FleetHUD stops being only an observer. It can also **launch and host** agent sessions.
+- Gnomcode stops being only an observer. It can also **launch and host** agent sessions.
 - All local features become free: guardrails, Resume Queue, Context Relay, custom alerts, export, failover.
 - Paid features are the ones that cost you server money or serve organizations: **Remote** (phone access) and **Teams**.
 - The one-time $19 Pro license is replaced by a subscription for Remote. Keep an optional one-time supporter license if you want it (it costs nothing to offer).
@@ -54,20 +54,20 @@ Suggested launch offers: 14-day Remote trial, first-6-months discount ($2.99), c
 | Competes with | Vendor desktop apps, JetBrains Air | Cursor, Windsurf, Copilot, Zed |
 | Time to first demo | Weeks | Months |
 
-**When a fork would make sense:** only if users clearly demand full editing inside FleetHUD, and you have a funded team. Not now.
+**When a fork would make sense:** only if users clearly demand full editing inside Gnomcode, and you have a funded team. Not now.
 
-**Cheap extra distribution later:** a small VS Code/Open VSX **companion extension** that shows FleetHUD state in the status bar and opens the console. It is days of work, not a fork.
+**Cheap extra distribution later:** a small VS Code/Open VSX **companion extension** that shows Gnomcode state in the status bar and opens the console. It is days of work, not a fork.
 
 ## 3. Console architecture
 
 ### 3.1 Principles
 
-1. **Official binaries only.** FleetHUD spawns `claude`, `codex`, `gemini` etc. The user logs in through the vendor. FleetHUD never extracts, stores or forwards subscription tokens.
+1. **Official binaries only.** Gnomcode spawns `claude`, `codex`, `gemini` etc. The user logs in through the vendor. Gnomcode never extracts, stores or forwards subscription tokens.
 2. **Two modes per session.** Chat mode (structured) and Terminal mode (raw PTY). Same session, switchable.
 3. **Observability never depends on the driver.** Every session, however launched, is still ingested from logs. A session started in your own terminal shows up the same way.
 4. **No second copy of conversations.** The chat view renders from the live event stream plus agent logs.
 5. **Permissions are never auto-escalated.** Same rule as Resume Queue (SPEC section 3.14).
-6. **Fail open.** If FleetHUD crashes, agent processes keep running and nothing is lost.
+6. **Fail open.** If Gnomcode crashes, agent processes keep running and nothing is lost.
 
 ### 3.2 Dual-mode sessions
 
@@ -130,15 +130,15 @@ enum ConsoleEvent {
 
 ### 3.6 Conversation storage and privacy
 
-- Default: **no persistence of message text by FleetHUD.** History view = re-parse the agent's own log through the existing adapter.
+- Default: **no persistence of message text by Gnomcode.** History view = re-parse the agent's own log through the existing adapter.
 - Optional setting: *Keep an encrypted local transcript cache* (off by default) for faster search.
 - Update SPEC section 1.6 and 3.15.D: content never uploads unless Remote is on, and then only as ciphertext the relay cannot read (section 6).
-- Keep `fleethud doctor --network` and extend it to list the relay endpoint.
+- Keep `gnomcode doctor --network` and extend it to list the relay endpoint.
 
 ### 3.7 Permissions
 
 - Chat view shows every agent permission request as a card: tool, arguments (redacted), risk level, and Approve / Deny / Approve for session.
-- FleetHUD never answers a permission request on its own. Resume and failover runs inherit the user's existing permission settings.
+- Gnomcode never answers a permission request on its own. Resume and failover runs inherit the user's existing permission settings.
 - Risk levels (computed locally): read-only, workspace write, shell, network, destructive (rm, force-push, outside workspace).
 - **Phone rule (default):** the phone can approve read-only and workspace-write only. Shell/network/destructive require the desktop, or a second confirmation with device biometrics. Teams admins cannot loosen this remotely.
 
@@ -164,7 +164,7 @@ Rules:
 
 ### 3.9 Handoff packet (zero extra tokens)
 
-Built by FleetHUD, not by an LLM, from data it already has:
+Built by Gnomcode, not by an LLM, from data it already has:
 
 - Goal: the user's first prompt of the task and the last two prompts.
 - Work done: ordered list of files changed (`git diff --stat`), commits made.
@@ -172,7 +172,7 @@ Built by FleetHUD, not by an LLM, from data it already has:
 - State: branch, `git status`, last failing command and exit code.
 - Instructions for the next agent: continue the exact next action; do not redo finished work; verify tests first.
 
-Written to `.fleethud/HANDOFF.md` in the worktree (existing Context Relay design) and passed as the first prompt to the new agent. Optional: at the safety-reserve threshold, ask the outgoing agent to refresh the file itself. Expect a quality dip and a cost spike on the first turn after a cross-vendor switch; say so in the UI.
+Written to `.gnomcode/HANDOFF.md` in the worktree (existing Context Relay design) and passed as the first prompt to the new agent. Optional: at the safety-reserve threshold, ask the outgoing agent to refresh the file itself. Expect a quality dip and a cost spike on the first turn after a cross-vendor switch; say so in the UI.
 
 ## 4. Console UI spec
 
@@ -295,7 +295,7 @@ Keep the M5 schema (organizations, members, devices, hourly usage sync, quota sy
 
 ## 8. Legal and terms guardrails
 
-- Re-read each vendor's current terms for third-party tools that use subscription login *(verify, they change)*. Design rule: FleetHUD launches the official client and never handles subscription tokens.
+- Re-read each vendor's current terms for third-party tools that use subscription login *(verify, they change)*. Design rule: Gnomcode launches the official client and never handles subscription tokens.
 - Your existing opt-in feature that reads Claude OAuth credentials for a usage endpoint (SPEC section 3.9) carries the same risk. Keep it opt-in and labeled experimental, or remove it.
 - Remote controls the user's own machine and own session; do not build account sharing or pooling features.
 - Have the EULA, privacy policy and refund policy reviewed before charging (open question 3 in SPEC).
@@ -318,8 +318,8 @@ Durations are guesses to help you plan, not commitments.
 ## 10. Growth built into the product
 
 - Shareable **Plan Value card** (ROI image with footer) and a monthly recap.
-- A **Saved by FleetHUD** notification with a one-click share when failover or resume rescues a session.
-- `npx fleethud` works without an account; winget, Scoop, Homebrew and AUR listings.
+- A **Saved by Gnomcode** notification with a one-click share when failover or resume rescues a session.
+- `npx gnomcode` works without an account; winget, Scoop, Homebrew and AUR listings.
 - Site pages answering real queries: how to check Claude Code usage, Codex 5-hour vs weekly limits, how to resume after a rate limit.
 - Weekly routine (3-4 hours): one release post, replies in two or three communities, fast issue replies, one metric (weekly active installs).
 

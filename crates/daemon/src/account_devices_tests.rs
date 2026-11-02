@@ -2,12 +2,12 @@ use super::*;
 
 #[tokio::test]
 async fn native_consent_grants_all_account_devices_across_desktops_and_survives_restart() {
-    // Run in a child so no test can redirect another test's real SPAWNT_HOME.
-    if std::env::var_os("SPAWNT_ACCOUNT_DEVICE_TEST").is_none() {
+    // Run in a child so no test can redirect another test's real GNOMCODE_HOME.
+    if std::env::var_os("GNOMCODE_ACCOUNT_DEVICE_TEST").is_none() {
         let home = tempfile::tempdir().expect("home");
         let result=std::process::Command::new(std::env::current_exe().expect("test executable"))
             .args(["account_devices::tests::native_consent_grants_all_account_devices_across_desktops_and_survives_restart","--exact","--nocapture"])
-            .env("SPAWNT_HOME",home.path()).env("SPAWNT_ACCOUNT_DEVICE_TEST","1").output().expect("child");
+            .env("GNOMCODE_HOME",home.path()).env("GNOMCODE_ACCOUNT_DEVICE_TEST","1").output().expect("child");
         assert!(
             result.status.success(),
             "{}{}",

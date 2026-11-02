@@ -9,7 +9,7 @@ function stagePlatform({ root, target, binary, eula, notices }) {
   const manifest = JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8'));
   const cargo = fs.readFileSync(path.join(root, 'Cargo.toml'), 'utf8');
   const version = cargo.match(/\[workspace\.package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/)?.[1];
-  if (manifest.name !== `@spawnt/cli-${target}` || !version || manifest.version !== version) throw new Error('Platform package name or version does not match the workspace.');
+  if (manifest.name !== `@gnomcode/cli-${target}` || !version || manifest.version !== version) throw new Error('Platform package name or version does not match the workspace.');
   for (const source of [binary, eula, notices]) {
     const stat = fs.statSync(source);
     if (!stat.isFile() || stat.size === 0) throw new Error('A required release input is not a non-empty file.');
@@ -17,7 +17,7 @@ function stagePlatform({ root, target, binary, eula, notices }) {
   if (/\bdraft\b/i.test(fs.readFileSync(eula, 'utf8'))) throw new Error('Approved EULA required.');
   const bin = path.join(folder, 'bin');
   fs.mkdirSync(bin, { recursive: true });
-  const targetBinary = path.join(bin, target.startsWith('win32-') ? 'spawnt.exe' : 'spawnt');
+  const targetBinary = path.join(bin, target.startsWith('win32-') ? 'gnomcode.exe' : 'gnomcode');
   fs.copyFileSync(binary, targetBinary);
   if (!target.startsWith('win32-')) fs.chmodSync(targetBinary, 0o755);
   fs.copyFileSync(eula, path.join(folder, 'EULA.txt'));

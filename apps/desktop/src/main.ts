@@ -2,25 +2,20 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell,
 import squirrelStartup from 'electron-squirrel-startup';
 import { spawn } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
-import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip, windowChrome } from './security';
-import { readDaemon } from './daemon-client';
+import { dataHome, readDaemon } from './daemon-client';
 
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let daemonPort = 0;
 
-function dataHome(): string {
-  return process.env.SPAWNT_HOME?.trim() || path.join(homedir(), '.spawnt');
-}
-
 async function connectDaemon(): Promise<string> {
   const running = await readDaemon(dataHome());
   if (running) return running;
   const extension = process.platform === 'win32' ? '.exe' : '';
-  const binary = app.isPackaged ? path.join(process.resourcesPath, 'bin', `spawnt${extension}`) : path.resolve(__dirname, '../../../target/debug', `spawnt${extension}`);
+  const binary = app.isPackaged ? path.join(process.resourcesPath, 'bin', `gnomcode${extension}`) : path.resolve(__dirname, '../../../target/debug', `gnomcode${extension}`);
   const child = spawn(binary, ['daemon'], { detached: true, stdio: 'ignore', windowsHide: true, env: daemonEnvironment(process.env) });
   child.on('error', () => {});
   child.unref();
@@ -50,7 +45,7 @@ async function refreshTray(url: string): Promise<void> {
   if (tray) {
     const badge = trayBadgeName(status);
     const resource = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../scripts');
-    tray.setImage(path.join(resource, badge === 'spawnt-tray.ico' ? badge : path.join('tray-badges', badge)));
+    tray.setImage(path.join(resource, badge === 'gnomcode-tray.ico' ? badge : path.join('tray-badges', badge)));
   }
 }
 function showWindow(): void {
@@ -63,13 +58,13 @@ function showWindow(): void {
 async function start(): Promise<void> {
   const url = await connectDaemon();
   daemonPort = Number(new URL(url).port || '80');
-  const isolatedSession = session.fromPartition('spawnt-local');
+  const isolatedSession = session.fromPartition('gnomcode-local');
   isolatedSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isAllowedResource(details.url, daemonPort) }));
   isolatedSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   Menu.setApplicationMenu(null);
   window = new BrowserWindow({
     ...windowChrome(process.platform, nativeTheme.shouldUseDarkColors),
-    title: 'Spawnt', width: 1280, height: 820, show: false,
+    title: 'Gnomcode', width: 1280, height: 820, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: !app.isPackaged, session: isolatedSession }
   });
   const current = window;
@@ -147,20 +142,20 @@ async function start(): Promise<void> {
       request.end();
     });
   });
-  const iconName = process.platform === 'win32' ? 'spawnt-tray.ico' : 'spawnt-64.png';
+  const iconName = process.platform === 'win32' ? 'gnomcode-tray.ico' : 'gnomcode-64.png';
   const icon = app.isPackaged ? path.join(process.resourcesPath, iconName) :
-    path.resolve(__dirname, process.platform === 'win32' ? '../../../scripts/spawnt-tray.ico' : '../../../web/public/icons/spawnt-64.png');
+    path.resolve(__dirname, process.platform === 'win32' ? '../../../scripts/gnomcode-tray.ico' : '../../../web/public/icons/gnomcode-64.png');
   try {
     tray = new Tray(icon);
-    tray.setToolTip('Spawnt');
-    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Spawnt', click: showWindow }, { label: 'Quit', click: () => { quitting = true; app.quit(); } }]));
+    tray.setToolTip('Gnomcode');
+    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Gnomcode', click: showWindow }, { label: 'Quit', click: () => { quitting = true; app.quit(); } }]));
     tray.on('double-click', showWindow);
   } catch {
     tray = null;
   }
   await current.loadURL(url);
   showWindow();
-  if (!tray) void dialog.showMessageBox(current, { type: 'info', message: 'System tray unavailable', detail: 'Keep this window open to use Spawnt. Closing it quits the desktop shell; the daemon keeps running.' });
+  if (!tray) void dialog.showMessageBox(current, { type: 'info', message: 'System tray unavailable', detail: 'Keep this window open to use Gnomcode. Closing it quits the desktop shell; the daemon keeps running.' });
   let connectedUrl = url;
   let checking = false;
   const checkDaemon = async (): Promise<void> => {
@@ -175,7 +170,7 @@ async function start(): Promise<void> {
       }
       await refreshTray(nextUrl);
     } catch {
-      tray?.setToolTip('Spawnt: daemon unavailable');
+      tray?.setToolTip('Gnomcode: daemon unavailable');
     } finally {
       checking = false;
     }
@@ -184,8 +179,8 @@ async function start(): Promise<void> {
   setInterval(() => { void checkDaemon(); }, 5000).unref();
 }
 
-app.setName('Spawnt');
-if (process.platform === 'win32') app.setAppUserModelId('app.spawnt.desktop');
+app.setName('Gnomcode');
+if (process.platform === 'win32') app.setAppUserModelId('app.gnomcode.desktop');
 
 if (squirrelStartup) app.quit();
 else if (!app.requestSingleInstanceLock()) app.quit();
@@ -194,7 +189,7 @@ else {
   app.on('before-quit', () => { quitting = true; });
   app.on('window-all-closed', () => { if (!tray) app.quit(); });
   app.whenReady().then(start).catch(() => {
-    dialog.showErrorBox('Spawnt could not start', 'Check that the local daemon is installed and try again.');
+    dialog.showErrorBox('Gnomcode could not start', 'Check that the local daemon is installed and try again.');
     app.exit(1);
   });
 }

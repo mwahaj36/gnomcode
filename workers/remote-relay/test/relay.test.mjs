@@ -58,7 +58,7 @@ test('relay closes the other peer when a device disconnects', async () => {
 });
 
 test('relay health endpoint returns ok', async () => {
-  const request = new Request('https://relay.spawnt.internal/health');
+  const request = new Request('https://relay.gnomcode.internal/health');
   assert.equal(request.method, 'GET');
   const url = new URL(request.url);
   assert.equal(url.pathname, '/health');
@@ -68,7 +68,7 @@ test('relay health endpoint returns ok', async () => {
 });
 
 test('relay rejects non-websocket request on room endpoint', async () => {
-  const request = new Request('https://relay.spawnt.internal/relay/test-room-123456?role=phone');
+  const request = new Request('https://relay.gnomcode.internal/relay/test-room-123456?role=phone');
   const match = new URL(request.url).pathname.match(/^\/relay\/([a-zA-Z0-9_-]{16,128})$/);
   assert.ok(match);
   assert.equal(match[1], 'test-room-123456');

@@ -5,9 +5,9 @@ import tarfile
 import tempfile
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent
-with tempfile.TemporaryDirectory(prefix='spawnt-package-check-') as tmp:
+with tempfile.TemporaryDirectory(prefix='gnomcode-package-check-') as tmp:
     tree=Path(tmp)
-    for name in ['scripts/package-artifacts.py','Cargo.toml','LICENSE','web/public/icons/spawnt.icns','web/public/icons/spawnt-256.png','web/public/fonts/Inter-LICENSE.txt']:
+    for name in ['scripts/package-artifacts.py','Cargo.toml','LICENSE','web/public/icons/gnomcode.icns','web/public/icons/gnomcode-256.png','web/public/fonts/Inter-LICENSE.txt']:
         target=tree/name; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes((root/name).read_bytes())
     out=tree/'web/public/downloads'; out.mkdir(parents=True)
     (out/'THIRD_PARTY_NOTICES.html').write_text('test notice '*150)
@@ -18,9 +18,9 @@ with tempfile.TemporaryDirectory(prefix='spawnt-package-check-') as tmp:
     archive=next(out.glob('*darwin-aarch64.tar.gz'))
     with tarfile.open(archive) as bundle:
         names=bundle.getnames()
-        assert 'spawnt.app/Contents/Info.plist' in names
-        assert 'spawnt.app/Contents/Resources/spawnt.icns' in names
-        assert bundle.getmember('spawnt.app/Contents/MacOS/spawnt').mode & 0o111
+        assert 'gnomcode.app/Contents/Info.plist' in names
+        assert 'gnomcode.app/Contents/Resources/gnomcode.icns' in names
+        assert bundle.getmember('gnomcode.app/Contents/MacOS/gnomcode').mode & 0o111
         assert 'fonts/Inter-LICENSE.txt' in names
     header[:4]=b'\x7fELF'; header[18:20]=(62).to_bytes(2,'little'); binary.write_bytes(header)
     assert run('--linux-x86-64').returncode==0

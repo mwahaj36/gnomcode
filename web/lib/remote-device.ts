@@ -5,7 +5,7 @@ export type SavedDevice = {offer:DeviceOffer; proofKey?:CryptoKey; enrollment?:A
 
 async function database() {
   return new Promise<IDBDatabase>((resolve,reject)=>{
-    const request=indexedDB.open('spawnt-remote-device',1);
+    const request=indexedDB.open('gnomcode-remote-device',1);
     request.onupgradeneeded=()=>request.result.createObjectStore('devices');
     request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
   });

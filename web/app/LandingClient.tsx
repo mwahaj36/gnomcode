@@ -123,7 +123,7 @@ export default function LandingPage() {
     <a className="sp-skip" href="#content">Skip to content</a>
     <header onKeyDown={event => { if (event.key === "Escape") { setMenuOpen(false); event.currentTarget.querySelector<HTMLButtonElement>(".sp-menu")?.focus(); } }} className="sp-header" ref={headerRef}>
       <div className="sp-nav sp-width">
-        <Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link>
+        <Link className="sp-brand" href="/"><Mark /><span>gnomcode</span></Link>
         <span className="sp-nav-slash" aria-hidden="true">/</span>
         <nav id="marketing-navigation" onClick={() => setMenuOpen(false)} className={menuOpen ? "sp-nav-links open" : "sp-nav-links"} aria-label="Main navigation">
           <a href="#features" onClick={() => setMenuOpen(false)}>Product</a>
@@ -160,7 +160,7 @@ export default function LandingPage() {
         <div className="sp-tour-panel" role="tabpanel" id="tour-panel" aria-labelledby={`tour-tab-${tab}`} tabIndex={0} key={tab}>
           <div className="sp-tour-copy"><span className="sp-label">{tours[tab].name.toUpperCase()} / CONSOLE</span><h3>{tours[tab].title}</h3><p>{tours[tab].detail}</p><Link href="/auth">Open console <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></div>
           <div className="sp-tour-screen" ref={tourScreenRef}>
-            <div className="sp-tour-screen-head"><span><Mark /> spawnt / {tours[tab].name.toLowerCase()}</span><span>RUN · LOCAL</span></div>
+            <div className="sp-tour-screen-head"><span><Mark /> gnomcode / {tours[tab].name.toLowerCase()}</span><span>RUN · LOCAL</span></div>
             <div className={tourVisible ? "sp-tour-screen-body visible" : "sp-tour-screen-body"} key={`${tab}-${tourVisible}`}>
               <small>{tours[tab].name.toUpperCase()} / ILLUSTRATIVE DATA</small><h4>{tours[tab].title}</h4>
               <ConsoleTourView kind={tours[tab].kind} visible={tourVisible} />
@@ -180,13 +180,13 @@ export default function LandingPage() {
     </main>
     <footer className="sp-footer" data-reveal>
       <div className="sp-width sp-footer-grid">
-        <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>spawnt</span></Link><h2>Keep your agents moving.</h2><p>Launch, switch and control AI coding agents. Local-first, with encrypted access from paired devices.</p></div>
+        <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>gnomcode</span></Link><h2>Keep your agents moving.</h2><p>Launch, switch and control AI coding agents. Local-first, with encrypted access from paired devices.</p></div>
         <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
         <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs/supported-agents">Supported agents</Link></div>
         <div><span>LEGAL</span><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>
       </div>
-      <div className="sp-width sp-footer-wordmark" aria-hidden="true">spawnt<span>.</span></div>
-      <div className="sp-width sp-footer-bottom"><span>© 2026 spawnt</span><span>LOCAL-FIRST SOFTWARE</span><a href="#content">Back to top <span aria-hidden="true">↑</span></a></div>
+      <div className="sp-width sp-footer-wordmark" aria-hidden="true">gnomcode<span>.</span></div>
+      <div className="sp-width sp-footer-bottom"><span>© 2026 gnomcode</span><span>LOCAL-FIRST SOFTWARE</span><a href="#content">Back to top <span aria-hidden="true">↑</span></a></div>
     </footer>
   </div>;
 }

@@ -30,7 +30,7 @@ public static class CheckInstallerOptions {
         Assert(integration != null, "Missing Explorer integration");
         MethodInfo validate = integration.GetMethod("ValidateInstallDirectory");
         Assert(validate != null, "Folder validation must recognize previous desktop installer layouts");
-        string files = Path.Combine(Path.GetTempPath(), "spawnt-installer-files-" + Guid.NewGuid().ToString("N"));
+        string files = Path.Combine(Path.GetTempPath(), "gnomcode-installer-files-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(files);
         try {
             validate.Invoke(null, new object[] { files });
@@ -38,12 +38,12 @@ public static class CheckInstallerOptions {
             bool rejected = false;
             try { validate.Invoke(null, new object[] { files }); } catch (TargetInvocationException) { rejected = true; }
             Assert(rejected, "Unrelated nonempty folders must still be rejected");
-            File.WriteAllText(Path.Combine(files, "spawnt-desktop.exe"), "legacy launcher");
+            File.WriteAllText(Path.Combine(files, "gnomcode-desktop.exe"), "legacy launcher");
             File.WriteAllText(Path.Combine(files, "Update.exe"), "legacy updater");
             validate.Invoke(null, new object[] { files });
-            File.Delete(Path.Combine(files, "spawnt-desktop.exe"));
+            File.Delete(Path.Combine(files, "gnomcode-desktop.exe"));
             File.Delete(Path.Combine(files, "Update.exe"));
-            File.WriteAllText(Path.Combine(files, "spawnt.exe"), "shipped payload");
+            File.WriteAllText(Path.Combine(files, "gnomcode.exe"), "shipped payload");
             File.WriteAllText(Path.Combine(files, "open-console.vbs"), "legacy native launcher");
             validate.Invoke(null, new object[] { files });
             File.WriteAllText(Path.Combine(files, "user-notes.txt"), "keep");
@@ -52,26 +52,26 @@ public static class CheckInstallerOptions {
             MethodInfo remove = integration.GetMethod("RemovePayloadFiles");
             Assert(remove != null, "Uninstall needs non-recursive payload cleanup");
             remove.Invoke(null, new object[] { setup, files });
-            Assert(!File.Exists(Path.Combine(files, "spawnt.exe")), "Uninstall must remove shipped files");
+            Assert(!File.Exists(Path.Combine(files, "gnomcode.exe")), "Uninstall must remove shipped files");
             Assert(File.ReadAllText(Path.Combine(files, "user-notes.txt")) == "keep", "Uninstall must preserve unrelated files");
             Assert(File.Exists(Path.Combine(files, "workspace", "code.txt")), "Uninstall must preserve subdirectories");
         } finally { Directory.Delete(files, true); }
-        string testKey = @"Software\SpawntInstallerTests\" + Guid.NewGuid().ToString("N");
+        string testKey = @"Software\GnomcodeInstallerTests\" + Guid.NewGuid().ToString("N");
         try {
             using (RegistryKey root = Registry.CurrentUser.CreateSubKey(testKey)) {
-                string dir = @"C:\Test folder & space\Spawnt";
+                string dir = @"C:\Test folder & space\Gnomcode";
                 var configure = integration.GetMethod("ConfigureExplorer");
                 configure.Invoke(null, new object[] { root, dir, true });
-                foreach (string verb in new[] { @"Software\Classes\Directory\shell\Spawnt", @"Software\Classes\Directory\Background\shell\Spawnt" }) {
+                foreach (string verb in new[] { @"Software\Classes\Directory\shell\Gnomcode", @"Software\Classes\Directory\Background\shell\Gnomcode" }) {
                     using (RegistryKey key = root.OpenSubKey(verb + @"\command")) {
                         Assert(key != null, "Missing folder/background command");
                         string command = (string)key.GetValue("");
-                        Assert(command.Contains("-File \"C:\\Test folder & space\\Spawnt\\open-folder.ps1\""), "Launcher path must be quoted");
+                        Assert(command.Contains("-File \"C:\\Test folder & space\\Gnomcode\\open-folder.ps1\""), "Launcher path must be quoted");
                         Assert(command.Contains(verb.Contains("Background") ? "\"%V\\.\"" : "\"%1\\.\""), "Explorer must pass the selected folder, including drive roots");
                     }
                 }
                 configure.Invoke(null, new object[] { root, dir, false });
-                Assert(root.OpenSubKey(@"Software\Classes\Directory\shell\Spawnt") == null, "Opt-out/uninstall must remove Explorer entry");
+                Assert(root.OpenSubKey(@"Software\Classes\Directory\shell\Gnomcode") == null, "Opt-out/uninstall must remove Explorer entry");
             }
         } finally { Registry.CurrentUser.DeleteSubKeyTree(testKey, false); }
         Console.WriteLine("PASS: setup waits for consent, exposes options, quotes/removes Explorer integration and preserves unrelated files on uninstall");

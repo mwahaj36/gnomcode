@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Local development relay server for Spawnt Remote companion.
+ * Local development relay server for Gnomcode Remote companion.
  * Bridges desktop and phone/browser WebSocket connections for a pairing room.
  */
 import http from 'node:http';
@@ -25,7 +25,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, service: 'spawnt-local-relay' }));
+    res.end(JSON.stringify({ ok: true, service: 'gnomcode-local-relay' }));
     return;
   }
   res.writeHead(404);
@@ -95,6 +95,6 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`[relay] Spawnt local relay running on ws://127.0.0.1:${PORT}/relay`);
-  console.log(`[relay] Set environment variable: SPAWNT_REMOTE_RELAY_URL=ws://127.0.0.1:${PORT}/relay`);
+  console.log(`[relay] Gnomcode local relay running on ws://127.0.0.1:${PORT}/relay`);
+  console.log(`[relay] Set environment variable: GNOMCODE_REMOTE_RELAY_URL=ws://127.0.0.1:${PORT}/relay`);
 });

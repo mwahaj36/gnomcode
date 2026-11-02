@@ -1,4 +1,4 @@
-# Spawnt Refund Policy — draft for review
+# Gnomcode Refund Policy — draft for review
 
 This draft is not an approved refund policy and must not be published. There are no existing customers. All local features are free; Remote and Teams are planned paid features, and their prices and purchase flows are not yet defined.
 

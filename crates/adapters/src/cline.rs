@@ -3,13 +3,13 @@
 
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
-use serde_json::Value;
-use spawnt_core::{
+use gnomcode_core::{
     ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
     Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::{redact_chat_content, redact_summary},
 };
+use serde_json::Value;
 use std::collections::HashSet;
 use std::path::Path;
 

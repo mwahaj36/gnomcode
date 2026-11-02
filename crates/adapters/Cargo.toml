@@ -1,5 +1,5 @@
 [package]
-name = "spawnt-adapters"
+name = "gnomcode-adapters"
 description = "Per-agent log parsers that turn raw bytes into normalized events. Pure and deterministic."
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-spawnt-core = { workspace = true }
+gnomcode-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

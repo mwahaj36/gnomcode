@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-02 â€” Gnomcode rename and PR 118 review](2026-11-02-gnomcode-rename-and-pr118-review.md)
 - [2026-11-02 — PR 118 repair retry](2026-11-02-pr118-repair-retry.md)
 
 One file per recorded session or follow-up. Historical entries retain their original wording, duplicate titles and verification claims; these are records of their time, not current product guarantees. The filename disambiguates repeated titles. Current truth lives in [SPEC](../SPEC.md), [PRODUCT](../../PRODUCT.md) and the [launch checklist](../LAUNCH_CHECKLIST.md).

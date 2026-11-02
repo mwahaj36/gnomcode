@@ -7,7 +7,7 @@ export function pageMetadata(path: string, title: string, description: string, i
   return {
     title: { absolute: title }, description,
     alternates: { canonical: url },
-    openGraph: { title, description, url, siteName: "Spawnt", type: "website", images },
+    openGraph: { title, description, url, siteName: "Gnomcode", type: "website", images },
     twitter: { card: "summary_large_image", title, description, images: images.map(image => image.url) },
     robots: { index, follow: index },
   };
