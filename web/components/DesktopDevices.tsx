@@ -31,7 +31,7 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
           supabase.from('spawnt_device_requests').select('desktop_id,id,name,state,revoked,offer').eq('user_id',owner!).abortSignal(AbortSignal.any([controller.signal,AbortSignal.timeout(10000)])),
         ]);
         if(hosts.error || clients.error)throw new Error('Directory unavailable');
-        if(active){setDesktops(hosts.data||[]);setRequests(clients.data||[]);setStatus(hosts.data?.length?'Select a desktop to open its conversations.':'Sign in to the native app to add your desktop.');}
+        if(active){setDesktops([...(hosts.data||[])].sort((a,b)=>Date.parse(b.last_seen_at)-Date.parse(a.last_seen_at)));setRequests(clients.data||[]);setStatus(hosts.data?.length?'Select a desktop to open its conversations.':'Sign in to the native app to add your desktop.');}
       }catch{if(active)setStatus('Your device list is unavailable. Check your connection; the list will retry automatically.');}
       finally{running=false;}
     }

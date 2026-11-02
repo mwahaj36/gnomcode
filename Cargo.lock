@@ -2228,6 +2228,7 @@ dependencies = [
  "chrono",
  "notify",
  "obfstr",
+ "serde_json",
  "spawnt-adapters",
  "spawnt-core",
  "spawnt-platform",

@@ -161,7 +161,11 @@ impl Database {
                     session_id: row.get(1)?,
                     turn_index: row.get(2)?,
                     role: ChatRole::parse_role(&role).unwrap_or(ChatRole::System),
-                    content: row.get(4)?,
+                    content: if role == "tool" {
+                        String::new()
+                    } else {
+                        spawnt_core::redact::redact_chat_content(&row.get::<_, String>(4)?)
+                    },
                     tool_name: row.get(5)?,
                     status: row.get(6)?,
                     created_at: DateTime::parse_from_rfc3339(&created)

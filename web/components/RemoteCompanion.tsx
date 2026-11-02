@@ -86,8 +86,6 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       const value=sessionStorage.getItem('spawnt-pairing-offer');sessionStorage.removeItem('spawnt-pairing-offer');
       const offer=value?JSON.parse(value):null;
       if(offer?.owner_id===session.user.id){if(active){autoConnect.current=true;setLink(offer);}return;}
-      const saved=await savedDevice(session.user.id);
-      if(active && saved?.offer.key){autoConnect.current=true;setLink(saved.offer);}
     }).catch(()=>{if(active)setError('Could not restore this device. Open Devices to try again.');});
     return () => {active=false;manualDisconnect.current=true;connectionEpoch.current++;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);if (poll.current) clearInterval(poll.current); socket.current?.close();};
   }, []);
@@ -222,6 +220,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   async function beginPaired() {
     const epoch=connectionEpoch.current;
     authenticated.current=true;retryStart.current=0;setError('');setPhase('paired');
+    try {sessionStorage.setItem('spawnt-pairing-offer',JSON.stringify(link));}catch{}
     await send({type:'sessions'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
@@ -315,7 +314,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if(epoch!==connectionEpoch.current)return;
       if(!session || session.user.id!==link.owner_id)throw new Error('Sign in to the desktop account.');
       accountOwner.current=session.user.id;connectedDesktop.current=link.desktop_id||'';
-      const saved=await savedDevice(session.user.id,link.desktop_id);
+      const saved=await savedDevice(session.user.id,link.desktop_id!);
       if(epoch!==connectionEpoch.current)return;
       if(!saved)throw new Error('This browser credential is missing. Open Devices to reconnect automatically through your account.');
       proofKey.current=saved.proofKey||null;
@@ -392,6 +391,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   }
 
   function disconnect() {
+    try {sessionStorage.removeItem('spawnt-pairing-offer');}catch{}
     modelRequest.current=false;setModelProviders([]);setModelsError('');setModelsLoading(false);
     authenticated.current=false;connectionEpoch.current++;
     manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice(accountOwner.current,connectedDesktop.current).catch(()=>{});

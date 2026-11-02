@@ -111,6 +111,7 @@ pub fn build_router(state: AppState) -> Router {
             }),
         )
         .route("/console-app.js", get(console_app_handler))
+        .route("/markdown-it.mjs", get(markdown_handler))
         .route("/spawnt-tokens.css", get(tokens_handler))
         .route("/spawnt-console.css", get(console_styles_handler))
         .route(
@@ -690,6 +691,13 @@ async fn console_presentation_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
         include_str!("../../../web/lib/console-presentation.js"),
+    )
+}
+
+async fn markdown_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../../../web/lib/markdown-it.mjs"),
     )
 }
 
@@ -2962,6 +2970,7 @@ mod tests {
             ("/", "text/html", "/console-app.js"),
             ("/theme-init.js", "text/javascript", "spawnt-theme"),
             ("/console-app.js", "text/javascript", "function setView"),
+            ("/markdown-it.mjs", "text/javascript", "markdown-it"),
             (
                 "/console-presentation.js",
                 "text/javascript",
