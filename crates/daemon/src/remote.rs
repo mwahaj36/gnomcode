@@ -938,8 +938,8 @@ pub(crate) fn conversation_chat(
         if event.role == gnomcode_core::ChatRole::User {
             if let Some((_, message)) = event
                 .content
-                .strip_prefix("<gnomcode_context>")
-                .and_then(|text| text.split_once("</gnomcode_context>"))
+                .strip_prefix("<spawnt_context>")
+                .and_then(|text| text.split_once("</spawnt_context>"))
             {
                 event.content = message.trim_start().to_owned();
             }
@@ -1815,7 +1815,7 @@ mod tests {
             turn_index: 1,
             role: gnomcode_core::ChatRole::User,
             content:
-                "<gnomcode_context>\nInternal continuation data\n</gnomcode_context>\n\nHello again"
+                "<spawnt_context>\nInternal continuation data\n</spawnt_context>\n\nHello again"
                     .into(),
             created_at: now,
             tool_name: None,

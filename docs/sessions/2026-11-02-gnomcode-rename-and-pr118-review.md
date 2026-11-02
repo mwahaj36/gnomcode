@@ -42,3 +42,7 @@ Verdict: fix 1 before claiming complete automatic repair. No usage replay or del
 - History fallback was tested red then green in both Rust and desktop.
 - Cross-platform source review: Rust uses `PathBuf`; history remains in place; listeners/auth validation remain intact. Native macOS/Linux execution, physical-phone acceptance and a real install/uninstall were not performed.
 - Live `gnomcode.vercel.app` returned HTTP 200 with the prior Spawnt title. Vercel identifies it as the existing `spawnt` project. No deployment, external repository rename or npm publication was performed; this PR is stacked on still-open PR 118.
+
+## Final recheck before merge
+
+The PR 118 repair finding is resolved in commit `5f7807b`, merged into this branch. A second regression reproduced older handoff context appearing in chat after the rename. Preserve the internal `<spawnt_context>` envelope as a compatibility identifier; observed the old-history regression fail, then pass after restoring the tag in the producer and reader. Both session-index entries are retained after the branch merge. Final combined Rust quality gate passed (format, clippy, workspace tests, dependency audit and core purity). Rechecked 20 web tests and production build, 19 desktop tests, four npm tests, six relay tests, synthetic cross-platform packaging, 19-route browser SEO/link/responsive checks and the native chat/workspace browser flow. Both regressions passed after observed failing runs. Existing React-hook lint warnings remain; native macOS/Linux and physical-phone acceptance were not run.
