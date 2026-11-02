@@ -93,16 +93,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: cargo build --locked --release -p spawnt
-      - run: ./target/release/spawnt --version
-      - run: python scripts/package-artifacts.py --${{ matrix.argument }} target/release/spawnt
+      - run: cargo build --locked --release -p gnomcode
+      - run: ./target/release/gnomcode --version
+      - run: python scripts/package-artifacts.py --${{ matrix.argument }} target/release/gnomcode
       - run: python scripts/check-unix-installer.py
       - name: Stage current target only
         shell: bash
         run: |
-          version=$(./target/release/spawnt --version | cut -d ' ' -f 2)
+          version=$(./target/release/gnomcode --version | cut -d ' ' -f 2)
           mkdir -p target/release-assets
-          cp web/public/downloads/spawnt-v${version}-*.tar.gz target/release-assets/
+          cp web/public/downloads/gnomcode-v${version}-*.tar.gz target/release-assets/
       - uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.target }}
@@ -162,5 +162,5 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-      - run: npm test --prefix npm/spawnt
+      - run: npm test --prefix npm/gnomcode
       - run: node scripts/sync-branding.mjs --check

@@ -11,8 +11,8 @@ pub mod cursor;
 pub mod gemini;
 pub mod titles;
 
+use gnomcode_core::{ActivityEvent, AgentId, Project, QuotaSnapshot, Session, UsageRecord};
 use serde::{Deserialize, Serialize};
-use spawnt_core::{ActivityEvent, AgentId, Project, QuotaSnapshot, Session, UsageRecord};
 
 /// How an agent writes its log files on disk (`SPEC §3.5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ pub struct ParsedBatch {
     /// Redacted tool/file/command activity summaries.
     pub activity_events: Vec<ActivityEvent>,
     /// Redacted user and assistant conversation events for local continuity.
-    pub chat_events: Vec<spawnt_core::ChatEvent>,
+    pub chat_events: Vec<gnomcode_core::ChatEvent>,
     /// Per-model quota pool snapshots.
     pub quota_snapshots: Vec<QuotaSnapshot>,
     /// Count of malformed or unparseable lines/records skipped cleanly.
@@ -63,7 +63,7 @@ pub trait SourceAdapter {
     /// The file write pattern used by this agent.
     fn file_kind(&self) -> FileKind;
 
-    /// Parses a raw byte chunk into normalized Spawnt records.
+    /// Parses a raw byte chunk into normalized Gnomcode records.
     ///
     /// Must never panic or fail on malformed, truncated, or unknown-schema input:
     /// skip bad lines, increment `parse_errors`, and continue (`AGENTS.md` §5).
@@ -125,14 +125,18 @@ mod tests {
                 .all(|event| !event.content.contains("environment_context")
                     && !event.content.contains("AGENTS.md"))
         );
-        assert!(batch.chat_events.iter().any(
-            |event| event.role == spawnt_core::ChatRole::User && event.content == "[REDACTED]"
-        ));
+        assert!(
+            batch
+                .chat_events
+                .iter()
+                .any(|event| event.role == gnomcode_core::ChatRole::User
+                    && event.content == "[REDACTED]")
+        );
         assert_eq!(
             batch
                 .chat_events
                 .iter()
-                .filter(|event| event.role == spawnt_core::ChatRole::User)
+                .filter(|event| event.role == gnomcode_core::ChatRole::User)
                 .count(),
             1
         );
@@ -140,7 +144,7 @@ mod tests {
 
     #[test]
     fn codex_legacy_context_cleanup_preserves_prompts_and_cursor_ids() {
-        use spawnt_core::{ChatEvent, ChatRole};
+        use gnomcode_core::{ChatEvent, ChatRole};
         let event = |id: &str, text: &str| ChatEvent {
             event_id: id.into(),
             session_id: "codex:legacy".into(),
@@ -208,8 +212,11 @@ mod tests {
         let second = CodexAdapter::new().parse(&context, bytes);
         assert_eq!(first.chat_events.len(), 2);
         assert_eq!(first.chat_events, second.chat_events);
-        assert_eq!(first.chat_events[0].role, spawnt_core::ChatRole::User);
-        assert_eq!(first.chat_events[1].role, spawnt_core::ChatRole::Assistant);
+        assert_eq!(first.chat_events[0].role, gnomcode_core::ChatRole::User);
+        assert_eq!(
+            first.chat_events[1].role,
+            gnomcode_core::ChatRole::Assistant
+        );
         let split = bytes.iter().position(|b| *b == b'\n').expect("newline") + 1;
         let mut adapter = CodexAdapter::new();
         let _ = adapter.parse(&context, &bytes[..split]);
@@ -250,8 +257,11 @@ mod tests {
         let bytes = include_bytes!("../../../fixtures/claude-code/v2.1/session_sample.jsonl");
         let batch = ClaudeAdapter::new().parse(&FileCtx::default(), bytes);
         assert_eq!(batch.chat_events.len(), 2);
-        assert_eq!(batch.chat_events[0].role, spawnt_core::ChatRole::User);
-        assert_eq!(batch.chat_events[1].role, spawnt_core::ChatRole::Assistant);
+        assert_eq!(batch.chat_events[0].role, gnomcode_core::ChatRole::User);
+        assert_eq!(
+            batch.chat_events[1].role,
+            gnomcode_core::ChatRole::Assistant
+        );
         assert!(
             batch
                 .chat_events
@@ -302,7 +312,7 @@ mod tests {
             "cursor pages must retain their original size"
         );
         assert_eq!(cleaned[0].content, "Question");
-        assert_eq!(cleaned[1].role, spawnt_core::ChatRole::Tool);
+        assert_eq!(cleaned[1].role, gnomcode_core::ChatRole::Tool);
         assert!(cleaned[1].content.is_empty());
     }
 
@@ -319,7 +329,7 @@ mod tests {
         };
         let batch = AntigravityAdapter::new().parse(&context, bytes);
         assert_eq!(batch.parse_errors, 0);
-        assert_eq!(batch.sessions[0].surface, spawnt_core::Surface::Cli);
+        assert_eq!(batch.sessions[0].surface, gnomcode_core::Surface::Cli);
         assert_eq!(batch.chat_events.len(), 1);
         assert_eq!(batch.chat_events[0].content, "[REDACTED]");
         insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {
@@ -351,7 +361,7 @@ mod tests {
         FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
         codex::CodexAdapter, gemini::GeminiAdapter,
     };
-    use spawnt_core::{AgentId, Surface, TrustLevel};
+    use gnomcode_core::{AgentId, Surface, TrustLevel};
     use std::fs;
     use std::path::PathBuf;
 
@@ -434,7 +444,7 @@ mod tests {
             "{\"timestamp\":\"2026-10-26T10:00:01Z\",\"type\":\"assistant\",\"sessionId\":\"s1\",\"cwd\":\"/workspace/test\",\"message\":{\"model\":\"claude-sonnet-5\",\"stop_reason\":\"end_turn\",\"content\":[]}}\n",
         );
         let batch = ClaudeAdapter::new().parse(&FileCtx::default(), lines.as_bytes());
-        assert_eq!(batch.sessions[0].state, spawnt_core::SessionState::Idle);
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
     }
 
     #[test]
@@ -488,7 +498,7 @@ mod tests {
         );
         let mut adapter = CodexAdapter::new();
         let batch = adapter.parse(&FileCtx::default(), lines.as_bytes());
-        assert_eq!(batch.sessions[0].state, spawnt_core::SessionState::Idle);
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
     }
 
     #[test]
@@ -512,7 +522,7 @@ mod tests {
             batch.sessions[0].model.as_deref(),
             Some("Gemini 4 Argon (Medium)")
         );
-        assert_eq!(batch.sessions[0].state, spawnt_core::SessionState::Idle);
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
     }
 
     #[test]
@@ -660,7 +670,7 @@ mod tests {
         assert_eq!(batch.sessions.len(), 1);
         assert_eq!(
             batch.sessions[0].state,
-            spawnt_core::SessionState::AwaitingApproval
+            gnomcode_core::SessionState::AwaitingApproval
         );
         assert_eq!(batch.usage_records.len(), 1);
         assert_eq!(batch.usage_records[0].input_tokens, 1000);
@@ -687,7 +697,10 @@ mod tests {
         let c_batch = cursor.parse(&c_ctx, c_sample);
         assert_eq!(c_batch.parse_errors, 0);
         assert_eq!(c_batch.sessions.len(), 1);
-        assert_eq!(c_batch.sessions[0].state, spawnt_core::SessionState::Ended);
+        assert_eq!(
+            c_batch.sessions[0].state,
+            gnomcode_core::SessionState::Ended
+        );
         assert_eq!(c_batch.usage_records.len(), 1);
 
         let mut aider = AiderAdapter::new();
@@ -699,7 +712,7 @@ mod tests {
         let a_batch = aider.parse(&a_ctx, a_sample);
         assert_eq!(a_batch.parse_errors, 0);
         assert_eq!(a_batch.sessions.len(), 1);
-        assert_eq!(a_batch.sessions[0].state, spawnt_core::SessionState::Idle);
+        assert_eq!(a_batch.sessions[0].state, gnomcode_core::SessionState::Idle);
         assert_eq!(a_batch.usage_records.len(), 1);
         assert_eq!(a_batch.usage_records[0].cost_usd, 0.005);
     }

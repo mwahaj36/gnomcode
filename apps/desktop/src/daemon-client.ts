@@ -1,7 +1,16 @@
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { get } from 'node:http';
 import * as path from 'node:path';
 import { daemonUrl } from './security';
+
+export function dataHome(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
+  const override = env.GNOMCODE_HOME?.trim() || env.SPAWNT_HOME?.trim();
+  if (override) return override;
+  const legacy = path.join(home, '.spawnt');
+  return existsSync(legacy) ? legacy : path.join(home, '.gnomcode');
+}
 
 export async function readDaemon(home: string): Promise<string | null> {
   try {

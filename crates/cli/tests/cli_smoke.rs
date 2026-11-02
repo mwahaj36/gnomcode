@@ -3,9 +3,9 @@
 use std::process::Command;
 
 #[test]
-fn spawnt_binary_shows_product_version() {
+fn gnomcode_binary_shows_product_version() {
     {
-        let binary = env!("CARGO_BIN_EXE_spawnt");
+        let binary = env!("CARGO_BIN_EXE_gnomcode");
         let output = Command::new(binary)
             .arg("--version")
             .output()
@@ -13,19 +13,19 @@ fn spawnt_binary_shows_product_version() {
         assert!(output.status.success());
         assert_eq!(
             String::from_utf8_lossy(&output.stdout).trim(),
-            format!("spawnt {}", env!("CARGO_PKG_VERSION"))
+            format!("gnomcode {}", env!("CARGO_PKG_VERSION"))
         );
     }
 }
 
 #[test]
-fn spawnt_cli_runs_offline_with_custom_home() {
+fn gnomcode_cli_runs_offline_with_custom_home() {
     let root = tempfile::tempdir().expect("root");
     {
-        let binary = env!("CARGO_BIN_EXE_spawnt");
+        let binary = env!("CARGO_BIN_EXE_gnomcode");
         let output = Command::new(binary)
             .arg("doctor")
-            .env("SPAWNT_HOME", root.path())
+            .env("GNOMCODE_HOME", root.path())
             .env("HOME", root.path())
             .env("USERPROFILE", root.path())
             .env("APPDATA", root.path())
@@ -46,9 +46,9 @@ fn spawnt_cli_runs_offline_with_custom_home() {
 #[test]
 fn doctor_network_discloses_opt_in_remote_and_pricing_without_connecting() {
     let root = tempfile::tempdir().expect("root");
-    let output = Command::new(env!("CARGO_BIN_EXE_spawnt"))
+    let output = Command::new(env!("CARGO_BIN_EXE_gnomcode"))
         .args(["doctor", "--network"])
-        .env("SPAWNT_HOME", root.path())
+        .env("GNOMCODE_HOME", root.path())
         .env("HOME", root.path())
         .env("USERPROFILE", root.path())
         .env("APPDATA", root.path())
@@ -72,10 +72,10 @@ fn aider_discovery_requires_the_explicit_log_override() {
     let log = aider_dir.join("analytics.jsonl");
     std::fs::write(&log, "{}\n").expect("log");
     let run = |enabled: bool| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_spawnt"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_gnomcode"));
         command
             .arg("doctor")
-            .env("SPAWNT_HOME", root.path())
+            .env("GNOMCODE_HOME", root.path())
             .env("HOME", root.path())
             .env("USERPROFILE", root.path())
             .env("APPDATA", root.path())

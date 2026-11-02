@@ -1,5 +1,5 @@
 {
-  "name": "@spawnt/cli-linux-arm64",
+  "name": "@gnomcode/cli-linux-arm64",
   "version": "0.9.0",
   "license": "SEE LICENSE IN EULA.txt",
   "os": [

@@ -18,4 +18,4 @@ removed, its login revoked and its credential file deleted. No Supabase admin
 credential is available here. To remove the retired backend tables and functions,
 run `crates/store/migrations/supabase_remove_cloud_sessions_v5.sql` in the same
 project’s SQL editor. This removes cloud-session/pairing data only and preserves
-`spawnt_sync_state`, desktop account sync and Supabase Auth.
+`gnomcode_sync_state`, desktop account sync and Supabase Auth.

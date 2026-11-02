@@ -1,12 +1,12 @@
-# Spawnt — Specification and delivery status
+# Gnomcode — Specification and delivery status
 
 | Field | Current value |
 | :--- | :--- |
-| Updated | 2026-11-01 |
+| Updated | 2026-11-02 |
 | Status | Prelaunch; local orchestrator implemented, Remote production gates open |
 | Version | 0.9.0 development builds; earlier unpublished 1.x artifacts retired |
 | Owner | Wahaj (@mwahaj36) |
-| Site | `https://spawntv.vercel.app` |
+| Site | `https://gnomcode.vercel.app` |
 | License | Proprietary, closed source; all local features free |
 
 This file owns product scope, architecture and delivery status. [PRODUCT](../PRODUCT.md) explains the product for discussion. [LAUNCH_CHECKLIST](LAUNCH_CHECKLIST.md) lists blockers and closure evidence. [Sessions](sessions/README.md) preserve engineering history. The [previous specification](history/SPEC-before-2026-10-29-refresh.md) is archived for detailed historical design, not normative status.
@@ -15,11 +15,13 @@ This file owns product scope, architecture and delivery status. [PRODUCT](../PRO
 
 ### 1.1 One-liner
 
-**Spawnt is the local-first runtime for AI coding agents:** launch official CLIs, work in one conversation workspace, switch models with a compact handoff and control supported sessions from a paired phone/browser.
+**Gnomcode is the local-first runtime for AI coding agents:** launch official CLIs, work in one conversation workspace, switch models with a compact handoff and control supported sessions from a paired phone/browser.
+
+Current identity: **Gnomcode**, command/package `gnomcode`, working site `https://gnomcode.vercel.app`. See [ADR 0026](adr/0026-gnomcode-rename.md). Data-home precedence: `GNOMCODE_HOME`, legacy `SPAWNT_HOME`, existing `~/.spawnt`, then `~/.gnomcode`; no automatic history move/deletion. Deployed repository/relay/database identifiers and Remote cryptographic labels remain stable compatibility exceptions. Historical records keep their original identities.
 
 ### 1.2 Problem and audience
 
-Developers run several agents across projects, lose continuity at limits and cannot direct sessions away from the desk. Spawnt coordinates those workflows and gives one view of state, usage, estimated API-equivalent cost and quota. Primary users already use Claude Code, Codex or Gemini CLI. Team aggregation is a later direction.
+Developers run several agents across projects, lose continuity at limits and cannot direct sessions away from the desk. Gnomcode coordinates those workflows and gives one view of state, usage, estimated API-equivalent cost and quota. Primary users already use Claude Code, Codex or Gemini CLI. Team aggregation is a later direction.
 
 ### 1.3 Positioning
 
@@ -29,8 +31,8 @@ Lead with orchestration, continuity and encrypted remote control. Monitoring and
 
 - Launch an installed official supported CLI in a selected folder; use chat for prompts and Terminal stream for native interaction/login/approval.
 - View imported history without assuming ownership of its process.
-- Change supported models in the existing official CLI session. Cross-provider changes keep the same Spawnt conversation, title and history, with bounded local context sent privately with the next user message.
-- Resume saved supported conversations after laptop sleep/restart from desktop or a paired phone while the laptop and Spawnt are online.
+- Change supported models in the existing official CLI session. Cross-provider changes keep the same Gnomcode conversation, title and history, with bounded local context sent privately with the next user message.
+- Resume saved supported conversations after laptop sleep/restart from desktop or a paired phone while the laptop and Gnomcode are online.
 - Pair a phone/browser and use encrypted history, prompting, supported CLI launch and bounded directory browsing.
 - Read usage/quota with provenance; configure free local guardrails, alerts, resume and routing policy.
 
@@ -40,7 +42,7 @@ All local features are free, with no account/license requirement: CLI, daemon, E
 
 ### 1.6 Boundaries
 
-Spawnt is not an AI API proxy and does not supply models, vendor subscriptions or provider quota. Official CLIs own credentials and permissions. No permission-escalation flags. Read-only observation is default; only explicit integration edits agent config, with backup/removal. Spawnt-owned redacted local chat is permitted for continuity, while agent histories are preserved. Unrelated file contents and raw tool output must not become persisted monitoring data or unencrypted cloud chat.
+Gnomcode is not an AI API proxy and does not supply models, vendor subscriptions or provider quota. Official CLIs own credentials and permissions. No permission-escalation flags. Read-only observation is default; only explicit integration edits agent config, with backup/removal. Gnomcode-owned redacted local chat is permitted for continuity, while agent histories are preserved. Unrelated file contents and raw tool output must not become persisted monitoring data or unencrypted cloud chat.
 
 ### 1.7 Success and evidence
 
@@ -98,7 +100,7 @@ Official CLIs run in independent PTY owners, outside Electron. Windows uses ConP
 
 See [AGENTS](../AGENTS.md) for crate responsibilities and engineering rules. `apps/desktop` is Electron; `web` is Next.js marketing/account/companion; `npm` stages platform shims; `fixtures` contains anonymized agent logs; `docs/adr` records decisions; `docs/sessions` has one file per engineering session.
 
-Windows setup is per-user and waits for an explicit Install action. Choose a dedicated local installation folder, desktop shortcut, Start menu shortcut, launch at Windows sign-in (off by default), and Explorer folder/background integration. Explorer's Open with Spawnt opens the local session launcher with the folder prefilled; the user still chooses and launches an agent. Classic Explorer verbs appear under Show more options on Windows 11. Uninstall uses its own installation directory and removes shipped files rather than recursively deleting a selected folder; local history under SPAWNT_HOME remains separate. macOS/Linux packaging retains its existing platform launchers.
+Windows setup is per-user and waits for an explicit Install action. Choose a dedicated local installation folder, desktop shortcut, Start menu shortcut, launch at Windows sign-in (off by default), and Explorer folder/background integration. Explorer's Open with Gnomcode opens the local session launcher with the folder prefilled; the user still chooses and launches an agent. Classic Explorer verbs appear under Show more options on Windows 11. Uninstall uses its own installation directory and removes shipped files rather than recursively deleting a selected folder; local history under GNOMCODE_HOME remains separate. macOS/Linux packaging retains its existing platform launchers.
 
 ### 3.5 Ingestion
 
@@ -114,11 +116,11 @@ Conversation redaction preserves original whitespace so Markdown reaches present
 
 Assistant replies render CommonMark headings, emphasis, quotes, nested lists, fenced code and safe links with a pinned Markdown renderer; tables, strikethrough and disabled task-list checkboxes are also supported. Raw HTML stays escaped and image markup does not automatically fetch remote content. The same renderer and responsive table/code styles ship in native and web chat. User text remains literal. A transport acknowledgment is not proof that a CLI accepted a turn: unmatched prompts retain their text and become visibly unconfirmed after fifteen seconds or a newer native turn, instead of an endless response spinner. Antigravity workspace-trust screens reject programmatic pasted prompts until the user confirms startup in the local Terminal; the draft remains available for retry.
 
-Default SQLite: `~/.spawnt/state.db`, or `SPAWNT_HOME/state.db`; CLI `--db` may select another database. Store sessions/projects, usage, quotas, source checkpoints, rules/queue/profile and redacted chat events. UTC storage, local conversion in presentation. Blocking SQLite runs off async execution paths. Migrations preserve existing data.
+Default SQLite: `~/.gnomcode/state.db`, or `GNOMCODE_HOME/state.db`; CLI `--db` may select another database. Store sessions/projects, usage, quotas, source checkpoints, rules/queue/profile and redacted chat events. UTC storage, local conversion in presentation. Blocking SQLite runs off async execution paths. Migrations preserve existing data.
 
 Schema v9 adds local-only conversation membership, ordered native/host bindings, requested model and launch metadata, and pending-context delivery state. These mappings contain no credentials and are excluded from metadata sync. Retain them across restarts and chat deletion so routing does not resurrect deleted chat. Chat deletion removes rows for every linked native/host identity; retention applies to all chat rows under the existing timestamp policy. Agent-owned logs remain untouched.
 
-Schema v10 records SHA-256 digests of deleted event IDs as local tombstones, atomically with manual deletion and retention pruning. Both direct chat insertion and source ingestion reject tombstoned IDs while accepting new IDs. Tombstones remain until the local database is reset, are excluded from account sync, and contain no raw identifier or chat content. Digests are unsalted and may reveal predictable identifiers; apply the same local access controls as the database. They protect stable event identities, not changed IDs, older backups, agent-owned history or a database reset. Migration preserves existing data and cannot reconstruct tombstones for past deletions. Older Spawnt binaries ignore tombstones; restart all Spawnt processes on the updated version.
+Schema v10 records SHA-256 digests of deleted event IDs as local tombstones, atomically with manual deletion and retention pruning. Both direct chat insertion and source ingestion reject tombstoned IDs while accepting new IDs. Tombstones remain until the local database is reset, are excluded from account sync, and contain no raw identifier or chat content. Digests are unsalted and may reveal predictable identifiers; apply the same local access controls as the database. They protect stable event identities, not changed IDs, older backups, agent-owned history or a database reset. Migration preserves existing data and cannot reconstruct tombstones for past deletions. Older Gnomcode binaries ignore tombstones; restart all Gnomcode processes on the updated version.
 
 Chat rows remain local and are excluded from metadata sync. History supports paging and session deletion; label metadata-only search and explain that deletion does not remove session titles, agent logs or backups and that changed source identifiers, restored backups or database resets can reimport deleted messages. Retention primitives compare timestamps as instants but are not automatically scheduled; configuration/scheduling and backup/WAL deletion guarantees require launch verification. Do not equate row deletion with forensic erasure. Browser drafts and pending bubbles are memory-only. File/diff inspection is read-only and repository-contained; Git diff and status output each have a 1 MiB limit and a ten-second timeout, with failures surfaced rather than empty success. Untracked files appear in status, not diff content. Directory browsing is bounded and not persisted.
 
@@ -176,17 +178,17 @@ Cross-provider changes attach a new official CLI to the same local conversation.
 
 Desktop Resume conversation, local `POST /api/v1/sessions/{id}/continue` and encrypted Remote `resume_session` reuse a live hosted agent or reopen the exact recorded native ID in its recorded workspace: `codex resume <id>`, `claude --resume <id>` or `gemini --resume <id>`. Strictly validate native IDs, preserve CLI permission/login controls and do not inject a task until the user sends a message. Desktop Send can also resume before delivery. Serialize resume, switch and prompt control to avoid duplicate hosts during concurrent local/Remote actions. Keep the conversation ID/history stable and replace only the dead host binding. A provider switch with no native history yet can restart its saved launch and retain pending context. Unsupported native resume remains read-only; do not silently replace a saved native session with an unrelated fresh one.
 
-The laptop must be awake, connected and running Spawnt for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy. No message queue or cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
+The laptop must be awake, connected and running Gnomcode for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy. No message queue or cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
 
 ### 3.15 Optional account sync and encrypted Remote
 
 These are separate data channels. Existing opt-in Supabase snapshot sync is owner-scoped and not end-to-end encrypted. Current `build_remote_snapshot` includes reports/timelines, explicitly selected session fields and quota. Project names, session IDs and model/activity metadata can be sensitive. Session titles, profile, relay records and chat events are excluded. HMAC project-key helpers do not make this live payload hash-only. Publish the true session total while the account list is limited to 200; the web view must identify that limit and filter only those published records. Disclose the snapshot contents and lack of end-to-end encryption before account connection. Verify historical cloud copies, consent and two-account RLS before launch.
 
-Remote uses the public Cloudflare Durable Object relay at `wss://spawnt-remote-relay.mwahaj25.workers.dev/relay`, overridable by `SPAWNT_REMOTE_RELAY_URL`. Outbound TLS carries E2EE frames; the daemon still listens only on loopback. Linking a native app requires a confirmation modal that explicitly grants its available conversation history and supported controls to every device signed in to the same account, including existing and future logins. The native link API requires `remote_access_confirmed: true` before authentication or persistence. Both password sign-in and browser-account transfer use this modal. Cancel sends no credentials and changes no account state. Existing linked native apps default to disabled until this broader scope is confirmed.
+Remote uses the public Cloudflare Durable Object relay at `wss://spawnt-remote-relay.mwahaj25.workers.dev/relay`, overridable by `GNOMCODE_REMOTE_RELAY_URL`. Outbound TLS carries E2EE frames; the daemon still listens only on loopback. Linking a native app requires a confirmation modal that explicitly grants its available conversation history and supported controls to every device signed in to the same account, including existing and future logins. The native link API requires `remote_access_confirmed: true` before authentication or persistence. Both password sign-in and browser-account transfer use this modal. Cancel sends no credentials and changes no account state. Existing linked native apps default to disabled until this broader scope is confirmed.
 
 After native consent, account authentication authorizes access across all linked native apps. Browsers establish encrypted connections automatically without OTPs, phone approval or per-desktop device approval. The owner-only cloud directory is deliberately trusted for authorization; possession of the account can grant Remote control. This replaces the narrower independent per-host approval model of ADR 0025. Each connection still pins its enrollment public key and requires encrypted challenge-bound proof on reconnect. No private connection key or conversation content enters the directory.
 
-Native consent persists outside installation directories under `SPAWNT_HOME/remote-devices/<owner>/`; updates and inactivity do not expire it. The directory's `remote_enabled` switch separately controls availability. Devices can disable an entire native app for all signed-in devices. Heartbeats never re-enable a disabled app, including after restart. Native sign-out clears local consent and suspends all its Remote connections. Enabling again requires explicit native confirmation. Metadata sync remains a separate transport under the same account link.
+Native consent persists outside installation directories under `GNOMCODE_HOME/remote-devices/<owner>/`; updates and inactivity do not expire it. The directory's `remote_enabled` switch separately controls availability. Devices can disable an entire native app for all signed-in devices. Heartbeats never re-enable a disabled app, including after restart. Native sign-out clears local consent and suspends all its Remote connections. Enabling again requires explicit native confirmation. Metadata sync remains a separate transport under the same account link.
 
 Fresh phone keys and a desktop challenge bind directional encryption on reconnect. Serialized cancellation and generation checks prevent stale operations restoring access. The browser checks authenticated desktop reachability after 15 seconds and stops automatic retries after 30 seconds, preserving the selected conversation and draft with disabled sending and explicit Try again. Initial connection discovery is also bounded. No automatic replay of an unacknowledged prompt. Account-side disable is applied on the next successful desktop directory poll; local disable suspends connections immediately. Legacy code-based enrollment endpoints remain removed.
 
@@ -231,7 +233,7 @@ v1.0 criteria are not met. See [LAUNCH_CHECKLIST](LAUNCH_CHECKLIST.md) for block
 
 ### 6.1 Repositories
 
-Source: `mwahaj36/spawnt`; releases: `mwahaj36/spawnt-releases`. Preserve privacy until owner authorizes public launch. Brand/config values originate in `web/branding.json` and generated outputs.
+Source: `mwahaj36/gnomcode`; releases: `mwahaj36/gnomcode-releases`. Preserve privacy until owner authorizes public launch. Brand/config values originate in `web/branding.json` and generated outputs.
 
 ### 6.2 Release artifacts
 
@@ -295,6 +297,8 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0023](./adr/0023-deleted-chat-replay-markers.md) | Local hashed markers prevent stable-ID replay after chat deletion or retention | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Withdrawn in v1.4.1 |
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
+
+| [0026](./adr/0026-gnomcode-rename.md) | Gnomcode identity, canonical site and non-destructive legacy history compatibility | Accepted |
 
 ## 10. Open decisions
 

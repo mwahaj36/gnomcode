@@ -5,7 +5,7 @@ const {chromium}=createRequire(import.meta.url)('playwright');
 const base=process.argv[2] || 'http://127.0.0.1:43904';
 const env=await readFile(new URL('../web/.env.local',import.meta.url),'utf8');
 const project=env.match(/NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?https:\/\/([^.]+)/)?.[1];
-const browser=await chromium.launch({headless:true,executablePath:process.env.SPAWNT_TEST_BROWSER});
+const browser=await chromium.launch({headless:true,executablePath:process.env.GNOMCODE_TEST_BROWSER});
 const findings=[];
 const root=new URL('../.tmp/interface-review/',import.meta.url);
 await mkdir(root,{recursive:true});
@@ -13,7 +13,7 @@ try {
  for(const width of [1440,390]) for(const theme of ['dark','light']) {
   const context=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});
   await context.addInitScript(({theme,project})=>{
-   localStorage.setItem('spawnt-theme',theme);
+   localStorage.setItem('gnomcode-theme',theme);
    const user={id:'00000000-0000-4000-8000-000000000001',aud:'authenticated',role:'authenticated',email:'preview@example.invalid'};
    if(location.pathname === '/auth') localStorage.removeItem(`sb-${project}-auth-token`);
    else localStorage.setItem(`sb-${project}-auth-token`,JSON.stringify({access_token:'preview-token',refresh_token:'preview-refresh',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}));

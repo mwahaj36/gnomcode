@@ -1,5 +1,5 @@
 [package]
-name = "spawnt-core"
+name = "gnomcode-core"
 description = "Domain types, pricing, quota, rules and redaction. Pure: no I/O, no async."
 version.workspace = true
 edition.workspace = true

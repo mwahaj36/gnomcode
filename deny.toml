@@ -25,7 +25,7 @@ allow = [
 ]
 confidence-threshold = 0.9
 
-# Spawnt is proprietary and all workspace crates have publish = false.
+# Gnomcode is proprietary and all workspace crates have publish = false.
 # Third-party dependency licenses are still checked against the allow-list above.
 [licenses.private]
 ignore = true

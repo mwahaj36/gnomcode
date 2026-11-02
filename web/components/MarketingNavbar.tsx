@@ -29,7 +29,7 @@ export default function MarketingNavbar({ showTheme = false }: { showTheme?: boo
 
   return <header onKeyDown={event => { if (event.key === "Escape") { setMenuOpen(false); event.currentTarget.querySelector<HTMLButtonElement>(".sp-site-menu")?.focus(); } }} className="sp-site-header" ref={header}>
     <div className="sp-site-nav">
-      <Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>spawnt</span></Link>
+      <Link className="sp-site-brand" href="/"><span className="sp-brand-mark" aria-hidden="true" /><span>gnomcode</span></Link>
       <span className="sp-site-divider" aria-hidden="true">/</span>
       <nav id="marketing-navigation" onClick={() => setMenuOpen(false)} className={menuOpen ? "sp-site-links open" : "sp-site-links"} aria-label="Main navigation">
         <Link href="/#features" onClick={() => setMenuOpen(false)}>Product</Link>

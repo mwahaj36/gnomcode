@@ -10,10 +10,10 @@ mod remote_trust;
 pub mod sync;
 
 use chrono::Utc;
+use gnomcode_ingest::ingest_all;
+use gnomcode_platform::gnomcode_home;
+use gnomcode_store::Database;
 use serde::{Deserialize, Serialize};
-use spawnt_ingest::ingest_all;
-use spawnt_platform::spawnt_home;
-use spawnt_store::Database;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,15 +25,15 @@ use tokio::task::JoinHandle;
 /// Daemon subsystem error type.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Another instance of Spawnt daemon is already running.
+    /// Another instance of Gnomcode daemon is already running.
     #[error("daemon is already running (locked by another process)")]
     AlreadyRunning,
     /// Store error.
     #[error("store error: {0}")]
-    Store(#[from] spawnt_store::Error),
+    Store(#[from] gnomcode_store::Error),
     /// Ingest error.
     #[error("ingest error: {0}")]
-    Ingest(#[from] spawnt_ingest::Error),
+    Ingest(#[from] gnomcode_ingest::Error),
     /// I/O error.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -47,10 +47,10 @@ pub enum HandoffError {
     MissingSession,
     /// The session store could not be read.
     #[error("store error: {0}")]
-    Store(#[from] spawnt_store::Error),
+    Store(#[from] gnomcode_store::Error),
     /// The repository could not be inspected.
     #[error("repository error: {0}")]
-    Platform(#[from] spawnt_platform::Error),
+    Platform(#[from] gnomcode_platform::Error),
     /// The target model does not belong to a supported interactive agent.
     #[error("unsupported target model or agent")]
     UnsupportedTarget,
@@ -115,7 +115,7 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
 mod switch_tests {
     #[test]
     fn provider_error_allows_handoff_but_active_generation_does_not() {
-        const CHILD: &str = "SPAWNT_TEST_ERROR_HANDOFF";
+        const CHILD: &str = "GNOMCODE_TEST_ERROR_HANDOFF";
         if std::env::var_os(CHILD).is_none() {
             let root = tempfile::tempdir().expect("root");
             let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
@@ -124,17 +124,18 @@ mod switch_tests {
                     "switch_tests::provider_error_allows_handoff_but_active_generation_does_not",
                 ])
                 .env(CHILD, "1")
-                .env("SPAWNT_HOME", root.path())
+                .env("GNOMCODE_HOME", root.path())
                 .status()
                 .expect("isolated test");
             assert!(status.success());
             return;
         }
         let repo = tempfile::tempdir().expect("repo");
-        let project = spawnt_core::Project::from_origin(None, &repo.path().to_string_lossy(), None);
+        let project =
+            gnomcode_core::Project::from_origin(None, &repo.path().to_string_lossy(), None);
         let now = chrono::Utc::now();
         let pid = std::process::id();
-        let record = spawnt_pty::SessionRecord {
+        let record = gnomcode_pty::SessionRecord {
             session_id: "test-host".into(),
             agent: "codex".into(),
             repo_path: repo.path().to_string_lossy().into_owned(),
@@ -145,22 +146,22 @@ mod switch_tests {
             token: "test".into(),
             started_at: now.to_rfc3339(),
         };
-        spawnt_pty::save_session_record(&record).expect("host fixture");
-        let mut db = spawnt_store::Database::open_in_memory().expect("db");
-        let mut session = spawnt_core::Session {
+        gnomcode_pty::save_session_record(&record).expect("host fixture");
+        let mut db = gnomcode_store::Database::open_in_memory().expect("db");
+        let mut session = gnomcode_core::Session {
             id: "codex:fixture".into(),
-            agent: spawnt_core::AgentId::Codex,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
             project_id: project.id.clone(),
             parent_session_id: None,
             model: None,
             title: None,
-            state: spawnt_core::SessionState::Error,
+            state: gnomcode_core::SessionState::Error,
             pid: Some(pid),
             started_at: now,
             last_event_at: now,
         };
-        let checkpoint = spawnt_store::SourceCheckpoint {
+        let checkpoint = gnomcode_store::SourceCheckpoint {
             file_path: "fixture".into(),
             last_read_offset: 0,
             file_size: 0,
@@ -168,10 +169,10 @@ mod switch_tests {
             last_ingested_at: now,
         };
         for (state, allowed) in [
-            (spawnt_core::SessionState::Error, true),
-            (spawnt_core::SessionState::Thinking, false),
-            (spawnt_core::SessionState::Tool, false),
-            (spawnt_core::SessionState::AwaitingApproval, false),
+            (gnomcode_core::SessionState::Error, true),
+            (gnomcode_core::SessionState::Thinking, false),
+            (gnomcode_core::SessionState::Tool, false),
+            (gnomcode_core::SessionState::AwaitingApproval, false),
         ] {
             session.state = state;
             db.commit_batch(
@@ -229,7 +230,7 @@ pub async fn switch_session(
     session_id: &str,
     target_model: &str,
     requested_agent: Option<&str>,
-) -> Result<spawnt_pty::SessionRecord, HandoffError> {
+) -> Result<gnomcode_pty::SessionRecord, HandoffError> {
     let _control = CONVERSATION_CONTROL.lock().await;
     let prepared = prepare_model_change(db, session_id, target_model, requested_agent).await?;
     let record = execute_switch(prepared).await?;
@@ -241,7 +242,7 @@ pub(crate) struct PreparedSwitch {
     agent: &'static str,
     repo: String,
     model: String,
-    native: Option<spawnt_pty::SessionRecord>,
+    native: Option<gnomcode_pty::SessionRecord>,
 }
 
 pub(crate) static CONVERSATION_CONTROL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -256,7 +257,7 @@ pub(crate) async fn prepare_model_change(
     let resume_same_agent = {
         let guard = db.lock().await;
         let sessions = guard.list_active_sessions(1000)?;
-        let hosted = spawnt_pty::list_active_sessions();
+        let hosted = gnomcode_pty::list_active_sessions();
         remote::sync_conversation_bindings(&guard, &sessions, &hosted)?;
         let native = remote::active_conversation_id(&guard, id, &sessions, &hosted)?;
         model != "@default"
@@ -275,7 +276,7 @@ pub(crate) async fn prepare_model_change(
 pub(crate) async fn resume_conversation(
     db: &Mutex<Database>,
     id: &str,
-) -> Result<spawnt_pty::SessionRecord, HandoffError> {
+) -> Result<gnomcode_pty::SessionRecord, HandoffError> {
     let _control = CONVERSATION_CONTROL.lock().await;
     ensure_conversation_running(db, id).await
 }
@@ -283,11 +284,11 @@ pub(crate) async fn resume_conversation(
 async fn ensure_conversation_running(
     db: &Mutex<Database>,
     id: &str,
-) -> Result<spawnt_pty::SessionRecord, HandoffError> {
+) -> Result<gnomcode_pty::SessionRecord, HandoffError> {
     let (native, agent, repo, model) = {
         let guard = db.lock().await;
         let sessions = guard.list_active_sessions(1000)?;
-        let hosted = spawnt_pty::list_active_sessions();
+        let hosted = gnomcode_pty::list_active_sessions();
         if let Some(record) = remote::conversation_host(&guard, id, &sessions, &hosted)? {
             if agent_for_model("@default", Some(&record.agent)).is_none() {
                 return Err(HandoffError::UnsupportedTarget);
@@ -328,9 +329,9 @@ async fn ensure_conversation_running(
         let raw = native
             .strip_prefix(&format!("{agent}:"))
             .ok_or(HandoffError::UnsupportedTarget)?;
-        spawnt_pty::resume_session(&host, &agent, Path::new(&repo), raw).await
+        gnomcode_pty::resume_session(&host, &agent, Path::new(&repo), raw).await
     } else {
-        spawnt_pty::launch_session(&host, &agent, Path::new(&repo), model.as_deref()).await
+        gnomcode_pty::launch_session(&host, &agent, Path::new(&repo), model.as_deref()).await
     }
     .map_err(|error| HandoffError::Launch(error.to_string()))?;
     let guard = db.lock().await;
@@ -349,7 +350,7 @@ pub(crate) async fn deliver_conversation_prompt(
     let (record, prompt, needs_context) = {
         let guard = db.lock().await;
         let sessions = guard.list_active_sessions(1000)?;
-        let hosted = spawnt_pty::list_active_sessions();
+        let hosted = gnomcode_pty::list_active_sessions();
         let record = remote::conversation_host(&guard, id, &sessions, &hosted)?
             .ok_or(HandoffError::MissingSession)?
             .clone();
@@ -358,7 +359,7 @@ pub(crate) async fn deliver_conversation_prompt(
             .iter()
             .find(|session| session.id == native)
             .is_some_and(|session| {
-                session.state != spawnt_core::SessionState::Idle
+                session.state != gnomcode_core::SessionState::Idle
                     && chrono::DateTime::parse_from_rfc3339(&record.started_at)
                         .is_ok_and(|started| session.last_event_at >= started)
             })
@@ -372,8 +373,8 @@ pub(crate) async fn deliver_conversation_prompt(
             .is_some_and(|(_, _, pending)| pending);
         let prompt = if needs_context {
             let events = remote::conversation_chat(&guard, id, &native, &sessions, Some(50), None)?;
-            let events = spawnt_adapters::codex::clean_stored_conversation(
-                spawnt_adapters::antigravity::clean_stored_conversation(events),
+            let events = gnomcode_adapters::codex::clean_stored_conversation(
+                gnomcode_adapters::antigravity::clean_stored_conversation(events),
             );
             continuation_prompt(&events, text)
         } else {
@@ -381,7 +382,7 @@ pub(crate) async fn deliver_conversation_prompt(
         };
         (record, prompt, needs_context)
     };
-    spawnt_pty::send_prompt(&record, &prompt)
+    gnomcode_pty::send_prompt(&record, &prompt)
         .await
         .map_err(|error| HandoffError::Launch(error.to_string()))?;
     if needs_context {
@@ -392,13 +393,13 @@ pub(crate) async fn deliver_conversation_prompt(
     Ok(())
 }
 
-fn continuation_prompt(events: &[spawnt_core::ChatEvent], text: &str) -> String {
+fn continuation_prompt(events: &[gnomcode_core::ChatEvent], text: &str) -> String {
     let mut remaining = 16000;
     let mut history = Vec::new();
     for event in events.iter().rev().filter(|event| {
         matches!(
             event.role,
-            spawnt_core::ChatRole::User | spawnt_core::ChatRole::Assistant
+            gnomcode_core::ChatRole::User | gnomcode_core::ChatRole::Assistant
         )
     }) {
         let content: String = event.content.chars().take(remaining.min(4000)).collect();
@@ -427,7 +428,7 @@ pub(crate) fn prepare_switch(
     let agent =
         agent_for_model(target_model, requested_agent).ok_or(HandoffError::UnsupportedTarget)?;
     let sessions = db.list_active_sessions(1000)?;
-    let hosted = spawnt_pty::list_active_sessions();
+    let hosted = gnomcode_pty::list_active_sessions();
     let current = remote::conversation_host(db, session_id, &sessions, &hosted)?;
     let native_id = remote::active_conversation_id(db, session_id, &sessions, &hosted)?;
     if sessions
@@ -436,9 +437,9 @@ pub(crate) fn prepare_switch(
         .is_some_and(|session| {
             matches!(
                 session.state,
-                spawnt_core::SessionState::Thinking
-                    | spawnt_core::SessionState::Tool
-                    | spawnt_core::SessionState::AwaitingApproval
+                gnomcode_core::SessionState::Thinking
+                    | gnomcode_core::SessionState::Tool
+                    | gnomcode_core::SessionState::AwaitingApproval
             ) && current.is_some_and(|record| {
                 chrono::DateTime::parse_from_rfc3339(&record.started_at)
                     .is_ok_and(|started| session.last_event_at >= started)
@@ -481,9 +482,9 @@ pub(crate) async fn execute_switch(
         model,
         native,
     }: PreparedSwitch,
-) -> Result<spawnt_pty::SessionRecord, HandoffError> {
+) -> Result<gnomcode_pty::SessionRecord, HandoffError> {
     if let Some(mut record) = native {
-        spawnt_pty::switch_model(&record, &model)
+        gnomcode_pty::switch_model(&record, &model)
             .await
             .map_err(|error| HandoffError::Launch(error.to_string()))?;
         record.model = Some(model);
@@ -492,7 +493,7 @@ pub(crate) async fn execute_switch(
     let mut random = [0u8; 8];
     getrandom::fill(&mut random).map_err(|e| HandoffError::Launch(e.to_string()))?;
     let new_id = format!("switch-{}", u64::from_be_bytes(random));
-    let record = spawnt_pty::launch_session(
+    let record = gnomcode_pty::launch_session(
         &new_id,
         agent,
         Path::new(&repo),
@@ -511,12 +512,12 @@ pub fn prepare_handoff(
     db: &Database,
     session_id: &str,
     target_model: &str,
-) -> Result<spawnt_core::HandoffPacket, HandoffError> {
+) -> Result<gnomcode_core::HandoffPacket, HandoffError> {
     let target = db
         .get_session_focus_target(session_id)?
         .ok_or(HandoffError::MissingSession)?;
     let repo = target.repo_root.ok_or(HandoffError::MissingSession)?;
-    let files = spawnt_platform::handoff_files(Path::new(&repo))?;
+    let files = gnomcode_platform::handoff_files(Path::new(&repo))?;
     db.prepare_handoff(session_id, target_model, files)?
         .ok_or(HandoffError::MissingSession)
 }
@@ -528,7 +529,7 @@ pub(crate) fn conversation_title(db: &Database, session_id: &str) -> Option<Stri
         .ok()?
         .into_iter()
         .find_map(|text| {
-            let clean = spawnt_core::redact::clean_user_text(&text);
+            let clean = gnomcode_core::redact::clean_user_text(&text);
             let clean = if clean
                 .trim_start()
                 .starts_with("# Files pasted by the user:")
@@ -549,7 +550,7 @@ pub(crate) fn conversation_title(db: &Database, session_id: &str) -> Option<Stri
         })
 }
 
-/// Metadata written to `~/.spawnt/daemon.json` for local API clients (`SPEC §3.1`).
+/// Metadata written to `~/.gnomcode/daemon.json` for local API clients (`SPEC §3.1`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DaemonInfo {
     /// Process ID of the running daemon.
@@ -562,10 +563,10 @@ pub struct DaemonInfo {
     pub started_at: String,
 }
 
-/// Reads `~/.spawnt/daemon.json` if present to connect to a running daemon.
+/// Reads `~/.gnomcode/daemon.json` if present to connect to a running daemon.
 #[must_use]
 pub fn read_daemon_info() -> Option<DaemonInfo> {
-    let path = spawnt_home().join("daemon.json");
+    let path = gnomcode_home().join("daemon.json");
     let bytes = fs::read(path).ok()?;
     serde_json::from_slice(&bytes).ok()
 }
@@ -577,19 +578,19 @@ pub struct DaemonLock {
 }
 
 impl DaemonLock {
-    /// Attempts to acquire an exclusive lock on `~/.spawnt/daemon.lock`
+    /// Attempts to acquire an exclusive lock on `~/.gnomcode/daemon.lock`
     /// and persists `daemon.json` with the generated bearer token.
     ///
     /// # Errors
     /// Returns [`Error::AlreadyRunning`] if another process holds the lock.
     pub fn acquire(port: u16) -> Result<(Self, DaemonInfo), Error> {
-        let home = spawnt_home();
+        let home = gnomcode_home();
         fs::create_dir_all(&home)?;
 
         let lock_path = home.join("daemon.lock");
         let info_path = home.join("daemon.json");
 
-        let file = match spawnt_platform::open_exclusive_lock(&lock_path) {
+        let file = match gnomcode_platform::open_exclusive_lock(&lock_path) {
             Ok(file) => file,
             Err(_) => return Err(Error::AlreadyRunning),
         };
@@ -603,7 +604,7 @@ impl DaemonLock {
         };
 
         let json_bytes = serde_json::to_vec_pretty(&info).map_err(std::io::Error::other)?;
-        spawnt_platform::write_private_file(&info_path, &json_bytes)
+        gnomcode_platform::write_private_file(&info_path, &json_bytes)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
 
         Ok((
@@ -678,7 +679,7 @@ impl DaemonOrchestrator {
                         if remote::sync_conversation_bindings(
                             &ingest_db,
                             &sessions,
-                            &spawnt_pty::list_active_sessions(),
+                            &gnomcode_pty::list_active_sessions(),
                         )
                         .is_err()
                         {
@@ -750,17 +751,17 @@ impl DaemonOrchestrator {
 mod tests {
     #[test]
     fn conversation_title_prefers_saved_native_label_over_pasted_prompt() {
-        use spawnt_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        use gnomcode_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let bytes = b"{\"type\":\"session_meta\",\"timestamp\":\"2026-10-26T12:00:00Z\",\"payload\":{\"id\":\"named\",\"cwd\":\"/workspace\",\"title\":\"Native app title\"}}\n{\"type\":\"event_msg\",\"timestamp\":\"2026-10-26T12:00:01Z\",\"payload\":{\"type\":\"user_message\",\"message\":\"# Files pasted by the user:\\nattachment metadata\\n## My request:\\nFix reconnect\"}}\n";
         let batch = CodexAdapter::new().parse(&FileCtx::default(), bytes);
-        let mut db = spawnt_store::Database::open_in_memory().expect("database");
+        let mut db = gnomcode_store::Database::open_in_memory().expect("database");
         db.commit_batch_with_chat(
             &batch.projects,
             &batch.sessions,
             &[],
             &[],
             &[],
-            &spawnt_store::SourceCheckpoint {
+            &gnomcode_store::SourceCheckpoint {
                 file_path: "fixture".into(),
                 last_read_offset: 0,
                 file_size: 0,
@@ -772,11 +773,11 @@ mod tests {
         .expect("fixture");
         let prompt =
             "# Files pasted by the user:\nattachment metadata\n## My request:\nFix reconnect";
-        let chat = |id: &str| spawnt_core::ChatEvent {
+        let chat = |id: &str| gnomcode_core::ChatEvent {
             event_id: format!("{id}:opening"),
             session_id: id.into(),
             turn_index: 0,
-            role: spawnt_core::ChatRole::User,
+            role: gnomcode_core::ChatRole::User,
             content: prompt.into(),
             tool_name: None,
             status: None,
@@ -805,7 +806,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &spawnt_store::SourceCheckpoint {
+            &gnomcode_store::SourceCheckpoint {
                 file_path: "fallback".into(),
                 last_read_offset: 0,
                 file_size: 0,
@@ -823,7 +824,9 @@ mod tests {
     }
     #[test]
     fn handoff_preparation_includes_repository_and_redacted_chat() {
-        use spawnt_core::{AgentId, ChatEvent, ChatRole, Project, Session, SessionState, Surface};
+        use gnomcode_core::{
+            AgentId, ChatEvent, ChatRole, Project, Session, SessionState, Surface,
+        };
         let repo = tempfile::tempdir().expect("repo");
         assert!(
             std::process::Command::new("git")
@@ -834,7 +837,7 @@ mod tests {
                 .success()
         );
         std::fs::write(repo.path().join("new file.txt"), "data").expect("file");
-        let mut db = spawnt_store::Database::open_in_memory().expect("database");
+        let mut db = gnomcode_store::Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, &repo.path().to_string_lossy(), None);
         let now = chrono::Utc::now();
         let session = Session {
@@ -850,7 +853,7 @@ mod tests {
             started_at: now,
             last_event_at: now,
         };
-        let checkpoint = spawnt_store::SourceCheckpoint {
+        let checkpoint = gnomcode_store::SourceCheckpoint {
             file_path: "fixture".into(),
             last_read_offset: 0,
             file_size: 0,
@@ -883,7 +886,7 @@ mod tests {
     }
     #[test]
     fn handoff_preparation_rejects_unknown_session() {
-        let db = spawnt_store::Database::open_in_memory().expect("database");
+        let db = gnomcode_store::Database::open_in_memory().expect("database");
         assert!(matches!(
             super::prepare_handoff(&db, "missing", "o3"),
             Err(super::HandoffError::MissingSession)
@@ -902,13 +905,13 @@ mod tests {
 
     #[tokio::test]
     async fn orchestrator_runs_ingest_periodically() {
-        const CHILD: &str = "SPAWNT_TEST_PERIODIC_INGEST";
+        const CHILD: &str = "GNOMCODE_TEST_PERIODIC_INGEST";
         if std::env::var_os(CHILD).is_none() {
             let root = tempdir().expect("root");
             let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
                 .args(["--exact", "tests::orchestrator_runs_ingest_periodically"])
                 .env(CHILD, root.path())
-                .env("SPAWNT_HOME", root.path())
+                .env("GNOMCODE_HOME", root.path())
                 .env("HOME", root.path())
                 .env("USERPROFILE", root.path())
                 .env("APPDATA", root.path())

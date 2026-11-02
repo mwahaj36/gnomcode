@@ -2,7 +2,7 @@ export type ThemeMode = "system" | "light" | "dark";
 
 export function readThemeMode(): ThemeMode {
   try {
-    const stored = localStorage.getItem("spawnt-theme");
+    const stored = localStorage.getItem("gnomcode-theme");
     return stored === "light" || stored === "dark" ? stored : "system";
   } catch {
     return "system";
@@ -14,8 +14,8 @@ export function applyThemeMode(mode: ThemeMode) {
   else document.documentElement.dataset.theme = mode;
 
   try {
-    if (mode === "system") localStorage.removeItem("spawnt-theme");
-    else localStorage.setItem("spawnt-theme", mode);
+    if (mode === "system") localStorage.removeItem("gnomcode-theme");
+    else localStorage.setItem("gnomcode-theme", mode);
   } catch {
     // Keep the current page theme even if browser storage is unavailable.
   }

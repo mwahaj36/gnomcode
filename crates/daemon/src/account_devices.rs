@@ -2,9 +2,9 @@
 
 use crate::remote::{RemoteError, RemoteManager};
 use crate::sync::CloudAuth;
+use gnomcode_store::Database;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use spawnt_store::Database;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -65,7 +65,7 @@ pub(crate) struct AccountDevices {
 }
 
 fn root(owner: &str) -> PathBuf {
-    spawnt_platform::spawnt_home()
+    gnomcode_platform::gnomcode_home()
         .join(obfstr::obfstr!("remote-devices"))
         .join(owner)
 }
@@ -73,7 +73,7 @@ fn root(owner: &str) -> PathBuf {
 async fn write_json(path: PathBuf, value: Value) -> Result<(), RemoteError> {
     tokio::task::spawn_blocking(move || {
         let bytes = serde_json::to_vec(&value).map_err(|_| RemoteError::Persistence)?;
-        spawnt_platform::write_private_file(&path, &bytes).map_err(|_| RemoteError::Persistence)
+        gnomcode_platform::write_private_file(&path, &bytes).map_err(|_| RemoteError::Persistence)
     })
     .await
     .map_err(|_| RemoteError::Persistence)?

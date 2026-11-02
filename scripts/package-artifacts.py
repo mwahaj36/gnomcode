@@ -33,15 +33,15 @@ if args.windows_exe:
     for path in (args.windows_exe, args.windows_setup):
         if path.read_bytes()[:2] != b'MZ':
             raise SystemExit(f'Not a Windows executable: {path}')
-    for source, name in [(args.windows_exe, 'spawnt.exe'), (args.windows_setup, 'Spawnt-Setup.exe')]:
+    for source, name in [(args.windows_exe, 'gnomcode.exe'), (args.windows_setup, 'Gnomcode-Setup.exe')]:
         if source.resolve() != (out / name).resolve():
             shutil.copyfile(source, out / name)
         assets.append(out / name)
-    archive = out / f'Spawnt-v{version}-windows-x64.zip'
+    archive = out / f'Gnomcode-v{version}-windows-x64.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
-        for name in ('spawnt.exe', 'Spawnt-Setup.exe', 'LICENSE', 'THIRD_PARTY_NOTICES.html'):
+        for name in ('gnomcode.exe', 'Gnomcode-Setup.exe', 'LICENSE', 'THIRD_PARTY_NOTICES.html'):
             bundle.write(out / name, name)
-        for name in ('spawnt.ico', 'spawnt-tray.ico', 'tray.ps1', 'run-tray.vbs', 'open-console.vbs', 'open-dashboard.vbs', 'open-folder.ps1'):
+        for name in ('gnomcode.ico', 'gnomcode-tray.ico', 'tray.ps1', 'run-tray.vbs', 'open-console.vbs', 'open-dashboard.vbs', 'open-folder.ps1'):
             bundle.write(root / 'scripts' / name, name)
     assets.append(archive)
 for os_name, arch, source in [
@@ -57,36 +57,36 @@ for os_name, arch, source in [
         valid = header[:4] == b'\xcf\xfa\xed\xfe' and int.from_bytes(header[4:8], 'little') == (0x1000007 if arch == 'x86_64' else 0x100000c)
     if not valid:
         raise SystemExit(f'Not a matching {os_name} {arch} executable: {source}')
-    archive = out / f'spawnt-v{version}-{os_name}-{arch}.tar.gz'
-    with tempfile.TemporaryDirectory(prefix='spawnt-package-') as temp:
+    archive = out / f'gnomcode-v{version}-{os_name}-{arch}.tar.gz'
+    with tempfile.TemporaryDirectory(prefix='gnomcode-package-') as temp:
         stage = Path(temp)
-        shutil.copyfile(source, stage / 'spawnt')
-        (stage / 'spawnt').chmod(0o755)
+        shutil.copyfile(source, stage / 'gnomcode')
+        (stage / 'gnomcode').chmod(0o755)
         shutil.copyfile(root / 'LICENSE', stage / 'LICENSE')
         shutil.copyfile(notices, stage / 'THIRD_PARTY_NOTICES.html')
         shutil.copytree(root / 'web/public/fonts', stage / 'fonts')
-        shutil.copyfile(root / 'web/public/icons/spawnt-256.png', stage / 'spawnt.png')
-        launcher = stage / 'Open spawnt.command'
-        launcher.write_text('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./spawnt console\n')
+        shutil.copyfile(root / 'web/public/icons/gnomcode-256.png', stage / 'gnomcode.png')
+        launcher = stage / 'Open gnomcode.command'
+        launcher.write_text('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./gnomcode console\n')
         launcher.chmod(0o755)
         if os_name == 'darwin':
-            contents = stage / 'spawnt.app/Contents'
+            contents = stage / 'gnomcode.app/Contents'
             (contents / 'MacOS').mkdir(parents=True)
             (contents / 'Resources').mkdir()
-            shutil.copyfile(stage / 'spawnt', contents / 'MacOS/spawnt')
-            (contents / 'MacOS/spawnt').chmod(0o755)
-            entry = contents / 'MacOS/spawnt'
-            entry.write_text('#!/bin/sh\nexec "$(dirname "$0")/spawnt" console\n')
+            shutil.copyfile(stage / 'gnomcode', contents / 'MacOS/gnomcode')
+            (contents / 'MacOS/gnomcode').chmod(0o755)
+            entry = contents / 'MacOS/gnomcode'
+            entry.write_text('#!/bin/sh\nexec "$(dirname "$0")/gnomcode" console\n')
             entry.chmod(0o755)
-            shutil.copyfile(root / 'web/public/icons/spawnt.icns', contents / 'Resources/spawnt.icns')
+            shutil.copyfile(root / 'web/public/icons/gnomcode.icns', contents / 'Resources/gnomcode.icns')
             (contents / 'Info.plist').write_bytes(plistlib.dumps({
-                'CFBundleName':'spawnt', 'CFBundleDisplayName':'spawnt', 'CFBundleIdentifier':'app.spawnt.console',
-                'CFBundleExecutable':'spawnt', 'CFBundlePackageType':'APPL', 'CFBundleIconFile':'spawnt.icns',
+                'CFBundleName':'gnomcode', 'CFBundleDisplayName':'gnomcode', 'CFBundleIdentifier':'app.gnomcode.console',
+                'CFBundleExecutable':'gnomcode', 'CFBundlePackageType':'APPL', 'CFBundleIconFile':'gnomcode.icns',
                 'CFBundleShortVersionString':version, 'CFBundleVersion':version, 'LSMinimumSystemVersion':'12.0',
             }))
         def archive_mode(info):
             if info.isfile():
-                info.mode = 0o755 if info.name.endswith(('/MacOS/spawnt', '/spawnt', '.command')) or info.name == 'spawnt' else 0o644
+                info.mode = 0o755 if info.name.endswith(('/MacOS/gnomcode', '/gnomcode', '.command')) or info.name == 'gnomcode' else 0o644
             return info
         with tarfile.open(archive, 'w:gz') as bundle:
             for entry in sorted(stage.iterdir()):
@@ -95,7 +95,7 @@ for os_name, arch, source in [
 if not assets:
     raise SystemExit('No built binaries supplied')
 # Preserve checksums from other targets built in the same release.
-assets = list({path.name: path for path in [*assets, *out.glob(f'spawnt-v{version}-*.tar.gz'), *out.glob(f'Spawnt-v{version}-*.zip')]}.values())
+assets = list({path.name: path for path in [*assets, *out.glob(f'gnomcode-v{version}-*.tar.gz'), *out.glob(f'Gnomcode-v{version}-*.zip')]}.values())
 manifest = ''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in sorted(assets))
 (out / f'SHA256SUMS-v{version}.txt').write_text(manifest)
 (out / 'SHA256SUMS').write_text(manifest)

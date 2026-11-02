@@ -12,10 +12,10 @@ use axum::{
     response::{IntoResponse, Json, Redirect},
     routing::{get, post},
 };
+use gnomcode_core::rules::GuardrailRule;
+use gnomcode_store::{Database, UserProfile};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use spawnt_core::rules::GuardrailRule;
-use spawnt_store::{Database, UserProfile};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -70,18 +70,18 @@ pub struct HealthResponse {
 }
 
 const CONSOLE_HTML: &str = include_str!("console.html");
-const SPAWNT_TOKENS: &str = include_str!("../../../web/app/spawnt-tokens.css");
-const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/spawnt.ico");
-const SPAWNT_MARK_SVG: &str = include_str!("../../../web/public/spawnt-mark.svg");
+const GNOMCODE_TOKENS: &str = include_str!("../../../web/app/gnomcode-tokens.css");
+const FAVICON_ICO: &[u8] = include_bytes!("../../../scripts/gnomcode.ico");
+const GNOMCODE_MARK_SVG: &str = include_str!("../../../web/public/gnomcode-mark.svg");
 
-/// Builds the axum router for Spawnt local API and embedded console.
+/// Builds the axum router for Gnomcode local API and embedded console.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(console_handler))
         .route("/console", get(console_handler))
         .route("/favicon.ico", get(favicon_handler))
-        .route("/spawnt.svg", get(svg_icon_handler))
-        .route("/spawnt-mark.svg", get(svg_icon_handler))
+        .route("/gnomcode.svg", get(svg_icon_handler))
+        .route("/gnomcode-mark.svg", get(svg_icon_handler))
         .route("/theme-init.js", get(theme_init_handler))
         .route(
             "/vendor/xterm.js",
@@ -112,8 +112,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/console-app.js", get(console_app_handler))
         .route("/markdown-it.mjs", get(markdown_handler))
-        .route("/spawnt-tokens.css", get(tokens_handler))
-        .route("/spawnt-console.css", get(console_styles_handler))
+        .route("/gnomcode-tokens.css", get(tokens_handler))
+        .route("/gnomcode-console.css", get(console_styles_handler))
         .route(
             "/console-presentation.js",
             get(console_presentation_handler),
@@ -356,7 +356,7 @@ async fn export_handler(
                 (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
                 (
                     header::CONTENT_DISPOSITION,
-                    "attachment; filename=spawnt-report.csv",
+                    "attachment; filename=gnomcode-report.csv",
                 ),
             ],
             csv,
@@ -368,7 +368,7 @@ async fn export_handler(
                 (header::CONTENT_TYPE, "application/json"),
                 (
                     header::CONTENT_DISPOSITION,
-                    "attachment; filename=spawnt-report.json",
+                    "attachment; filename=gnomcode-report.json",
                 ),
             ],
             Json(report),
@@ -450,13 +450,13 @@ async fn resume_queue_arm_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
     let agent = match payload.agent.as_str() {
-        "claude-code" => spawnt_core::AgentId::ClaudeCode,
-        "codex" => spawnt_core::AgentId::Codex,
-        "antigravity" => spawnt_core::AgentId::Antigravity,
-        "gemini-cli" => spawnt_core::AgentId::GeminiCli,
-        "cline" => spawnt_core::AgentId::Cline,
-        "cursor" => spawnt_core::AgentId::Cursor,
-        "aider" => spawnt_core::AgentId::Aider,
+        "claude-code" => gnomcode_core::AgentId::ClaudeCode,
+        "codex" => gnomcode_core::AgentId::Codex,
+        "antigravity" => gnomcode_core::AgentId::Antigravity,
+        "gemini-cli" => gnomcode_core::AgentId::GeminiCli,
+        "cline" => gnomcode_core::AgentId::Cline,
+        "cursor" => gnomcode_core::AgentId::Cursor,
+        "aider" => gnomcode_core::AgentId::Aider,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
     let eligible_after = payload
@@ -465,7 +465,7 @@ async fn resume_queue_arm_handler(
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(chrono::Utc::now);
 
-    let entry = spawnt_core::rules::ResumeQueueEntry {
+    let entry = gnomcode_core::rules::ResumeQueueEntry {
         session_id: payload.session_id,
         agent,
         cwd: payload.cwd.unwrap_or_else(|| ".".to_owned()),
@@ -593,7 +593,7 @@ async fn relay_execute_post_handler(
                         .map(|p| p.to_string_lossy().to_string())
                         .unwrap_or_else(|_| ".".to_owned())
                 });
-            let entry = spawnt_store::ContextRelayEntry {
+            let entry = gnomcode_store::ContextRelayEntry {
                 id: format!("relay-{}", s.id),
                 session_id: s.id.clone(),
                 source_agent: s.agent.clone(),
@@ -654,8 +654,8 @@ async fn console_handler() -> impl IntoResponse {
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
         )],
         axum::response::Html(CONSOLE_HTML.replace(
-            "__SPAWNT_BASE_URL__",
-            spawnt_core::branding::branding().map_or("", |branding| branding.base_url.as_str()),
+            "__GNOMCODE_BASE_URL__",
+            gnomcode_core::branding::branding().map_or("", |branding| branding.base_url.as_str()),
         )),
     )
 }
@@ -676,14 +676,14 @@ async fn console_app_handler() -> impl IntoResponse {
 async fn tokens_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        SPAWNT_TOKENS,
+        GNOMCODE_TOKENS,
     )
 }
 
 async fn console_styles_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        include_str!("../../../web/app/spawnt-console.css"),
+        include_str!("../../../web/app/gnomcode-console.css"),
     )
 }
 
@@ -720,7 +720,7 @@ async fn mono_font_handler() -> impl IntoResponse {
 }
 
 async fn svg_icon_handler() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "image/svg+xml")], SPAWNT_MARK_SVG)
+    ([(header::CONTENT_TYPE, "image/svg+xml")], GNOMCODE_MARK_SVG)
 }
 
 async fn auth_callback_handler() -> impl IntoResponse {
@@ -744,15 +744,15 @@ async fn focus_session_handler(
     };
     let repo_path = target.repo_root.clone();
     let (focused, destination) = tokio::task::spawn_blocking(move || {
-        if target.pid.is_some_and(spawnt_platform::bring_to_front) {
+        if target.pid.is_some_and(gnomcode_platform::bring_to_front) {
             return (true, "process");
         }
-        if spawnt_platform::focus_agent_application(&target.agent, &target.surface) {
+        if gnomcode_platform::focus_agent_application(&target.agent, &target.surface) {
             return (true, "application");
         }
         if matches!(target.agent.as_str(), "cline" | "roo") {
             if let Some(path) = target.repo_root {
-                if spawnt_platform::focus_project_in_editor(&path) {
+                if gnomcode_platform::focus_project_in_editor(&path) {
                     return (false, "project_requested");
                 }
             }
@@ -797,7 +797,7 @@ async fn launch_session_handler(
     if !repo.is_dir() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    match spawnt_pty::launch_session(&session_id, &payload.agent, repo, payload.model.as_deref())
+    match gnomcode_pty::launch_session(&session_id, &payload.agent, repo, payload.model.as_deref())
         .await
     {
         Ok(record) => Ok(Json(record)),
@@ -814,7 +814,7 @@ async fn workspace_terminal_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let _launch = WORKSPACE_TERMINAL_LAUNCH.lock().await;
-    let hosted = spawnt_pty::list_active_sessions();
+    let hosted = gnomcode_pty::list_active_sessions();
     let repo = if let Some(record) = hosted.iter().find(|record| record.session_id == id) {
         record.repo_path.clone()
     } else {
@@ -841,7 +841,7 @@ async fn workspace_terminal_handler(
         return Ok(Json(record));
     }
     let record =
-        spawnt_pty::launch_session(&session_id, "terminal", std::path::Path::new(&repo), None)
+        gnomcode_pty::launch_session(&session_id, "terminal", std::path::Path::new(&repo), None)
             .await
             .map_err(|_| StatusCode::BAD_GATEWAY)?;
     Ok(Json(record))
@@ -853,7 +853,7 @@ async fn stop_session_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    match spawnt_pty::stop_session(&id).await {
+    match gnomcode_pty::stop_session(&id).await {
         Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id }))),
         Err(_) => Err(StatusCode::NOT_FOUND),
     }
@@ -864,7 +864,7 @@ async fn list_hosted_sessions_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let hosted = spawnt_pty::list_active_sessions();
+    let hosted = gnomcode_pty::list_active_sessions();
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
     let bindings = crate::remote::session_bindings(&sessions, &hosted);
@@ -974,7 +974,7 @@ async fn pty_stream_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_pty_auth(&headers, query.token.as_deref(), &state.bearer_token)?;
 
-    let hosted = spawnt_pty::list_active_sessions();
+    let hosted = gnomcode_pty::list_active_sessions();
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
     let record = crate::remote::conversation_host(&db, &id, &sessions, &hosted)
@@ -1116,25 +1116,25 @@ async fn installed_agents_handler(
         json!({
             "id": "claude",
             "name": "Claude Code",
-            "installed": spawnt_platform::executables::executable_available("claude"),
+            "installed": gnomcode_platform::executables::executable_available("claude"),
             "install_command": "npm install -g @anthropic-ai/claude-code",
             "login_command": "claude auth login"
         }),
         json!({
             "id": "codex",
             "name": "OpenAI Codex",
-            "installed": spawnt_platform::executables::executable_available("codex"),
+            "installed": gnomcode_platform::executables::executable_available("codex"),
             "install_command": "npm install -g @openai/codex",
             "login_command": "codex login"
         }),
         json!({
             "id": "gemini",
             "name": "Gemini CLI",
-            "installed": spawnt_platform::executables::executable_available("gemini"),
+            "installed": gnomcode_platform::executables::executable_available("gemini"),
             "install_command": "npm install -g @google/gemini-cli",
             "login_command": "gemini"
         }),
-        json!({"id":"antigravity","name":"Antigravity CLI","installed":spawnt_platform::executables::executable_available("agy"),"install_command":"Install Antigravity CLI from antigravity.google","login_command":"agy"}),
+        json!({"id":"antigravity","name":"Antigravity CLI","installed":gnomcode_platform::executables::executable_available("agy"),"install_command":"Install Antigravity CLI from antigravity.google","login_command":"agy"}),
         json!({
             "id": "terminal",
             "name": "Terminal Shell",
@@ -1185,7 +1185,7 @@ fn codex_models_from_cache(
             {
                 return None;
             }
-            let pricing = spawnt_core::pricing::all_model_pricings()
+            let pricing = gnomcode_core::pricing::all_model_pricings()
                 .iter()
                 .find(|price| price.family.eq_ignore_ascii_case(model));
             Some(ModelCatalogItem {
@@ -1217,12 +1217,12 @@ fn codex_models_from_cache(
 #[must_use]
 pub fn available_models() -> Vec<ModelCatalogItem> {
     use std::io::Read as _;
-    if !spawnt_platform::executables::executable_available("codex") {
+    if !gnomcode_platform::executables::executable_available("codex") {
         return Vec::new();
     }
-    let cache = spawnt_platform::discover_agent_roots()
+    let cache = gnomcode_platform::discover_agent_roots()
         .into_iter()
-        .find(|root| root.agent == spawnt_core::AgentId::Codex)
+        .find(|root| root.agent == gnomcode_core::AgentId::Codex)
         .and_then(|root| {
             root.path
                 .parent()
@@ -1231,7 +1231,7 @@ pub fn available_models() -> Vec<ModelCatalogItem> {
     let Some(path) = cache else {
         return Vec::new();
     };
-    let Ok(file) = spawnt_platform::open_shared_read(&path) else {
+    let Ok(file) = gnomcode_platform::open_shared_read(&path) else {
         return Vec::new();
     };
     let mut bytes = Vec::new();
@@ -1286,8 +1286,11 @@ async fn chat_get_handler(
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
     let requested = id.clone();
-    let id =
-        crate::remote::conversation_session_id(&id, &sessions, &spawnt_pty::list_active_sessions());
+    let id = crate::remote::conversation_session_id(
+        &id,
+        &sessions,
+        &gnomcode_pty::list_active_sessions(),
+    );
     match crate::remote::conversation_chat(
         &db,
         &requested,
@@ -1296,8 +1299,8 @@ async fn chat_get_handler(
         query.limit,
         query.before.as_deref(),
     ) {
-        Ok(events) => Ok(Json(spawnt_adapters::codex::clean_stored_conversation(
-            spawnt_adapters::antigravity::clean_stored_conversation(events),
+        Ok(events) => Ok(Json(gnomcode_adapters::codex::clean_stored_conversation(
+            gnomcode_adapters::antigravity::clean_stored_conversation(events),
         ))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
@@ -1311,7 +1314,7 @@ async fn chat_delete_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
-    let hosted = spawnt_pty::list_active_sessions();
+    let hosted = gnomcode_pty::list_active_sessions();
     let native = crate::remote::active_conversation_id(&db, &id, &sessions, &hosted)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let host = sessions
@@ -1355,10 +1358,10 @@ async fn permissions_post_handler(
     let summary = payload
         .summary
         .unwrap_or_else(|| format!("User {}d action", action));
-    let redacted_content = spawnt_core::redact::redact_chat_content(&summary);
+    let redacted_content = gnomcode_core::redact::redact_chat_content(&summary);
 
     let db = state.db.lock().await;
-    let evt = spawnt_core::ChatEvent {
+    let evt = gnomcode_core::ChatEvent {
         event_id: format!(
             "perm-{}-{}",
             id,
@@ -1369,7 +1372,7 @@ async fn permissions_post_handler(
         ),
         session_id: id.clone(),
         turn_index: 0,
-        role: spawnt_core::ChatRole::System,
+        role: gnomcode_core::ChatRole::System,
         content: redacted_content,
         tool_name: payload.tool_call_id,
         status: Some(action.clone()),
@@ -1643,13 +1646,13 @@ async fn resume_session_handler(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
     let agent = match target.agent.as_str() {
-        "claude-code" => spawnt_core::AgentId::ClaudeCode,
-        "codex" => spawnt_core::AgentId::Codex,
+        "claude-code" => gnomcode_core::AgentId::ClaudeCode,
+        "codex" => gnomcode_core::AgentId::Codex,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
     let cwd = target.repo_root.ok_or(StatusCode::BAD_REQUEST)?;
     let prompt = payload.prompt.unwrap_or_else(|| "continue".to_owned());
-    let entry = spawnt_core::rules::ResumeQueueEntry {
+    let entry = gnomcode_core::rules::ResumeQueueEntry {
         session_id: id.clone(),
         agent,
         cwd,
@@ -1677,7 +1680,7 @@ async fn routing_policy_get_handler(
     let db = state.db.lock().await;
     let policy = db
         .get_routing_policy()
-        .unwrap_or(spawnt_core::RoutingPolicy::AskFirst);
+        .unwrap_or(gnomcode_core::RoutingPolicy::AskFirst);
     Ok(Json(json!({ "policy": policy.as_str() })))
 }
 
@@ -1694,7 +1697,7 @@ async fn routing_policy_post_handler(
     Json(payload): Json<UpdateRoutingPolicyRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let Some(policy) = spawnt_core::RoutingPolicy::parse_policy(&payload.policy) else {
+    let Some(policy) = gnomcode_core::RoutingPolicy::parse_policy(&payload.policy) else {
         return Err(StatusCode::BAD_REQUEST);
     };
 
@@ -1830,7 +1833,7 @@ async fn list_conversations_handler(
         .list_active_sessions(1000)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut rows =
-        crate::remote::conversation_sessions(&db, &sessions, &spawnt_pty::list_active_sessions())
+        crate::remote::conversation_sessions(&db, &sessions, &gnomcode_pty::list_active_sessions())
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     rows.retain(|row| {
         let id = row["id"].as_str().unwrap_or_default();
@@ -1875,7 +1878,7 @@ async fn list_sessions_handler(
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let host = spawnt_platform::hostname();
+    let host = gnomcode_platform::hostname();
     for s in &mut sessions {
         s.title = crate::conversation_title(&db, &s.id).or(s.title.take());
         if s.device_name.is_none() {
@@ -1895,7 +1898,7 @@ async fn list_sessions_handler(
 
     #[derive(Serialize)]
     struct PaginatedResponse {
-        sessions: Vec<spawnt_store::SessionListItem>,
+        sessions: Vec<gnomcode_store::SessionListItem>,
         total_count: usize,
         page: usize,
         limit: usize,
@@ -1931,7 +1934,7 @@ async fn report_handler(
     let to = params.to.clone();
     let (report, user_profile) = tokio::task::spawn_blocking(move || {
         let db = state.db.blocking_lock();
-        Ok::<_, spawnt_store::Error>((
+        Ok::<_, gnomcode_store::Error>((
             db.generate_usage_report_timeline(&query_range, from.as_deref(), to.as_deref())?,
             db.get_user_profile()?,
         ))
@@ -1953,7 +1956,7 @@ async fn report_handler(
 
     #[derive(Serialize)]
     struct EnhancedReport {
-        timeline: spawnt_store::TimelineReport,
+        timeline: gnomcode_store::TimelineReport,
         user_profile: UserProfile,
         roi_by_provider: Vec<PlanRoiInfo>,
         combined_roi: PlanRoiInfo,
@@ -2002,7 +2005,7 @@ async fn report_handler(
     if user_profile.claude_plan_usd > 0.0 && claude_spend > 0.0 {
         let eff_plan = user_profile.claude_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = spawnt_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
+        let roi = gnomcode_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "Claude Code".to_owned(),
             plan_usd: eff_plan,
@@ -2017,7 +2020,7 @@ async fn report_handler(
     if user_profile.openai_plan_usd > 0.0 && openai_spend > 0.0 {
         let eff_plan = user_profile.openai_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = spawnt_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
+        let roi = gnomcode_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "OpenAI Codex".to_owned(),
             plan_usd: eff_plan,
@@ -2032,7 +2035,7 @@ async fn report_handler(
     if user_profile.google_plan_usd > 0.0 && google_spend > 0.0 {
         let eff_plan = user_profile.google_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = spawnt_core::pricing::calculate_plan_roi(google_spend, eff_plan);
+        let roi = gnomcode_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(PlanRoiInfo {
             provider: "Google Antigravity".to_owned(),
             plan_usd: eff_plan,
@@ -2045,7 +2048,7 @@ async fn report_handler(
     }
 
     let combined_roi_calc =
-        spawnt_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
+        gnomcode_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
     let combined_roi = PlanRoiInfo {
         provider: "All Plans (Combined)".to_owned(),
         plan_usd: combined_plan,
@@ -2149,15 +2152,15 @@ async fn quota_handler(
 #[derive(Serialize)]
 pub(crate) struct QuotaPoolView {
     #[serde(flatten)]
-    snapshot: spawnt_core::QuotaSnapshot,
+    snapshot: gnomcode_core::QuotaSnapshot,
     remaining_pct: Option<f64>,
 }
 
-pub(crate) fn quota_views(snapshots: Vec<spawnt_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
+pub(crate) fn quota_views(snapshots: Vec<gnomcode_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
     snapshots
         .into_iter()
         .map(|snapshot| {
-            let remaining_pct = (snapshot.basis != spawnt_core::TrustLevel::Unknown
+            let remaining_pct = (snapshot.basis != gnomcode_core::TrustLevel::Unknown
                 && snapshot.used_pct.is_finite())
             .then(|| (100.0 - snapshot.used_pct).clamp(0.0, 100.0));
             QuotaPoolView {
@@ -2169,7 +2172,7 @@ pub(crate) fn quota_views(snapshots: Vec<spawnt_core::QuotaSnapshot>) -> Vec<Quo
 }
 
 pub(crate) fn conversation_quota(
-    snapshots: &[spawnt_core::QuotaSnapshot],
+    snapshots: &[gnomcode_core::QuotaSnapshot],
     agent: &str,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Vec<Value> {
@@ -2180,7 +2183,7 @@ pub(crate) fn conversation_quota(
         .map(|snapshot| snapshot.limit_id.as_str())
         .collect();
     quota_views(snapshots.iter().filter(|snapshot|snapshot.provider==provider).cloned().collect()).into_iter().map(|pool| {
-        let window = match pool.snapshot.window {spawnt_core::QuotaWindow::FiveHour=>"5h",spawnt_core::QuotaWindow::Weekly=>"Weekly",spawnt_core::QuotaWindow::Monthly=>"Monthly"};
+        let window = match pool.snapshot.window {gnomcode_core::QuotaWindow::FiveHour=>"5h",gnomcode_core::QuotaWindow::Weekly=>"Weekly",gnomcode_core::QuotaWindow::Monthly=>"Monthly"};
         let label = if pools.len()>1 {format!("{} {window}",pool.snapshot.limit_id.replace(['-','_']," "))}else{window.to_owned()};
         let expired = pool.snapshot.resets_at.is_some_and(|reset|reset<=now);
         let stale = expired || now.signed_duration_since(pool.snapshot.observed_at)>chrono::Duration::minutes(2);
@@ -2203,7 +2206,7 @@ async fn custom_pricing_get_handler(
 async fn custom_pricing_post_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
-    Json(pricing): Json<spawnt_store::CustomModelPricing>,
+    Json(pricing): Json<gnomcode_store::CustomModelPricing>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let mut db = state.db.lock().await;
@@ -2240,12 +2243,12 @@ async fn pricing_models_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let models = spawnt_core::pricing::all_model_pricings();
+    let models = gnomcode_core::pricing::all_model_pricings();
     let db = state.db.lock().await;
     let custom = db.get_custom_model_pricings().unwrap_or_default();
 
     Ok(Json(json!({
-        "version": spawnt_core::pricing::PRICING_VERSION,
+        "version": gnomcode_core::pricing::PRICING_VERSION,
         "source": "Official Provider Documentation & BerriAI/LiteLLM Open Source Pricing Registry",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "last_updated": "2026-10-26",
@@ -2298,7 +2301,7 @@ async fn pricing_refresh_handler(
                 let out_mtok = oc * 1_000_000.0;
                 let cache_read_mtok = cache_cost.map_or(in_mtok * 0.1, |c| c * 1_000_000.0);
 
-                let custom = spawnt_store::CustomModelPricing {
+                let custom = gnomcode_store::CustomModelPricing {
                     model_pattern: model_name.clone(),
                     input_per_mtok_usd: in_mtok,
                     output_per_mtok_usd: out_mtok,
@@ -2328,18 +2331,18 @@ async fn supabase_config_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let mut url = std::env::var("SPAWNT_SUPABASE_URL").unwrap_or_default();
-    let mut key = std::env::var("SPAWNT_SUPABASE_KEY").unwrap_or_default();
+    let mut url = std::env::var("GNOMCODE_SUPABASE_URL").unwrap_or_default();
+    let mut key = std::env::var("GNOMCODE_SUPABASE_KEY").unwrap_or_default();
 
     if url.is_empty() || key.is_empty() {
-        let home = spawnt_platform::user_home_dir();
-        let env_file = home.join(".spawnt").join("supabase.env");
+        let home = gnomcode_platform::user_home_dir();
+        let env_file = home.join(".gnomcode").join("supabase.env");
         if let Ok(content) = std::fs::read_to_string(env_file) {
             for line in content.lines() {
                 let trimmed = line.trim();
-                if let Some(rest) = trimmed.strip_prefix("SPAWNT_SUPABASE_URL=") {
+                if let Some(rest) = trimmed.strip_prefix("GNOMCODE_SUPABASE_URL=") {
                     url = rest.trim().to_owned();
-                } else if let Some(rest) = trimmed.strip_prefix("SPAWNT_SUPABASE_KEY=") {
+                } else if let Some(rest) = trimmed.strip_prefix("GNOMCODE_SUPABASE_KEY=") {
                     key = rest.trim().to_owned();
                 }
             }
@@ -2356,7 +2359,7 @@ async fn supabase_config_handler(
 }
 
 fn session_file_path() -> std::path::PathBuf {
-    spawnt_platform::spawnt_home().join("session.json")
+    gnomcode_platform::gnomcode_home().join("session.json")
 }
 
 async fn auth_session_get_handler(
@@ -2572,7 +2575,7 @@ async fn live_snapshot_handler(
         )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let host = spawnt_platform::hostname();
+    let host = gnomcode_platform::hostname();
     for s in &mut sessions {
         if s.device_name.is_none() {
             s.device_name = Some(host.clone());
@@ -2636,7 +2639,7 @@ async fn live_snapshot_handler(
     if user_profile.claude_plan_usd > 0.0 && claude_spend > 0.0 {
         let eff_plan = user_profile.claude_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = spawnt_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
+        let roi = gnomcode_core::pricing::calculate_plan_roi(claude_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "Claude Code",
             "plan_usd": eff_plan,
@@ -2651,7 +2654,7 @@ async fn live_snapshot_handler(
     if user_profile.openai_plan_usd > 0.0 && openai_spend > 0.0 {
         let eff_plan = user_profile.openai_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = spawnt_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
+        let roi = gnomcode_core::pricing::calculate_plan_roi(openai_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "OpenAI Codex",
             "plan_usd": eff_plan,
@@ -2666,7 +2669,7 @@ async fn live_snapshot_handler(
     if user_profile.google_plan_usd > 0.0 && google_spend > 0.0 {
         let eff_plan = user_profile.google_plan_usd * time_factor;
         combined_plan += eff_plan;
-        let roi = spawnt_core::pricing::calculate_plan_roi(google_spend, eff_plan);
+        let roi = gnomcode_core::pricing::calculate_plan_roi(google_spend, eff_plan);
         roi_by_provider.push(json!({
             "provider": "Google Antigravity",
             "plan_usd": eff_plan,
@@ -2679,7 +2682,7 @@ async fn live_snapshot_handler(
     }
 
     let combined_roi_calc =
-        spawnt_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
+        gnomcode_core::pricing::calculate_plan_roi(report.total_cost_usd, combined_plan);
     let combined_roi = json!({
         "provider": "All Plans (Combined)",
         "plan_usd": combined_plan,
@@ -2746,8 +2749,8 @@ mod tests {
     }
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
+    use gnomcode_store::Database;
     use serde_json::json;
-    use spawnt_store::Database;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
@@ -2950,9 +2953,9 @@ mod tests {
             .await
             .expect("body");
         let html = std::str::from_utf8(&body).expect("UTF-8");
-        let branding = spawnt_core::branding::branding().expect("branding");
+        let branding = gnomcode_core::branding::branding().expect("branding");
         assert!(html.contains(&format!("{}/docs", branding.base_url)));
-        assert!(!html.contains("__SPAWNT_BASE_URL__"));
+        assert!(!html.contains("__GNOMCODE_BASE_URL__"));
         assert!(!html.contains("<script>"));
         assert!(!html.contains(" onclick="));
         assert!(!html.contains(" onchange="));
@@ -2968,7 +2971,7 @@ mod tests {
         });
         for (path, content_type, marker) in [
             ("/", "text/html", "/console-app.js"),
-            ("/theme-init.js", "text/javascript", "spawnt-theme"),
+            ("/theme-init.js", "text/javascript", "gnomcode-theme"),
             ("/console-app.js", "text/javascript", "function setView"),
             ("/markdown-it.mjs", "text/javascript", "markdown-it"),
             (
@@ -2976,8 +2979,8 @@ mod tests {
                 "text/javascript",
                 "export function renderSummary",
             ),
-            ("/spawnt-console.css", "text/css", ".sp-console-workspace"),
-            ("/spawnt-tokens.css", "text/css", "--sp-bg"),
+            ("/gnomcode-console.css", "text/css", ".sp-console-workspace"),
+            ("/gnomcode-tokens.css", "text/css", "--sp-bg"),
         ] {
             let response = app
                 .clone()
@@ -3167,7 +3170,7 @@ mod tests {
 
     #[test]
     fn quota_view_preserves_unknown_capacity() {
-        let mut quota: spawnt_core::QuotaSnapshot = serde_json::from_value(json!({
+        let mut quota: gnomcode_core::QuotaSnapshot = serde_json::from_value(json!({
             "provider": "sample", "limit_id": "sample", "window": "weekly", "used_pct": 62.0,
             "resets_at": null, "plan": null, "basis": "estimated", "observed_at": "2026-10-28T00:00:00Z"
         })).expect("quota");
@@ -3175,21 +3178,21 @@ mod tests {
             quota_views(vec![quota.clone()])[0].remaining_pct,
             Some(38.0)
         );
-        quota.basis = spawnt_core::TrustLevel::Unknown;
+        quota.basis = gnomcode_core::TrustLevel::Unknown;
         assert_eq!(quota_views(vec![quota])[0].remaining_pct, None);
     }
 
     #[test]
     fn conversation_limits_follow_provider_observations_and_expire_after_reset() {
         let now = chrono::Utc::now();
-        let mut snapshot = spawnt_core::QuotaSnapshot {
+        let mut snapshot = gnomcode_core::QuotaSnapshot {
             provider: "codex".into(),
             limit_id: "codex".into(),
-            window: spawnt_core::QuotaWindow::FiveHour,
+            window: gnomcode_core::QuotaWindow::FiveHour,
             used_pct: 25.0,
             resets_at: Some(now + chrono::Duration::hours(1)),
             plan: None,
-            basis: spawnt_core::TrustLevel::Exact,
+            basis: gnomcode_core::TrustLevel::Exact,
             observed_at: now,
         };
         let views = super::conversation_quota(std::slice::from_ref(&snapshot), "codex", now);
@@ -3221,7 +3224,7 @@ mod tests {
             )[0]["remaining_pct"]
                 .is_null()
         );
-        snapshot.basis = spawnt_core::TrustLevel::Unknown;
+        snapshot.basis = gnomcode_core::TrustLevel::Unknown;
         assert!(super::conversation_quota(&[snapshot], "codex", now)[0]["remaining_pct"].is_null());
     }
 
@@ -3349,7 +3352,7 @@ mod tests {
 
     #[tokio::test]
     async fn unavailable_focus_returns_a_local_copy_path_without_claiming_success() {
-        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
+        use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/workspace/focus-test", None);
         let session = Session {
@@ -3365,7 +3368,7 @@ mod tests {
             started_at: chrono::Utc::now(),
             last_event_at: chrono::Utc::now(),
         };
-        let checkpoint = spawnt_store::SourceCheckpoint {
+        let checkpoint = gnomcode_store::SourceCheckpoint {
             file_path: "/fixture".to_owned(),
             last_read_offset: 0,
             file_size: 0,
@@ -3564,21 +3567,21 @@ mod tests {
     #[tokio::test]
     async fn chat_endpoints_retrieve_and_hard_delete_history() {
         let db = Database::open_in_memory().expect("database");
-        let project = spawnt_core::Project::from_origin(None, "C:\\repo", None);
-        let session = spawnt_core::Session {
+        let project = gnomcode_core::Project::from_origin(None, "C:\\repo", None);
+        let session = gnomcode_core::Session {
             id: "chat-test-session".to_owned(),
-            agent: spawnt_core::AgentId::ClaudeCode,
-            surface: spawnt_core::Surface::Cli,
+            agent: gnomcode_core::AgentId::ClaudeCode,
+            surface: gnomcode_core::Surface::Cli,
             project_id: project.id.clone(),
             parent_session_id: None,
             model: Some("claude-3-5-sonnet".to_owned()),
             title: None,
-            state: spawnt_core::SessionState::Idle,
+            state: gnomcode_core::SessionState::Idle,
             pid: Some(100),
             started_at: chrono::Utc::now(),
             last_event_at: chrono::Utc::now(),
         };
-        let cp = spawnt_store::SourceCheckpoint {
+        let cp = gnomcode_store::SourceCheckpoint {
             file_path: "/path/to/c.jsonl".to_owned(),
             last_read_offset: 0,
             file_size: 0,
@@ -3590,11 +3593,11 @@ mod tests {
             .commit_batch(&[project], &[session], &[], &[], &[], &cp)
             .expect("commit");
 
-        let evt = spawnt_core::ChatEvent {
+        let evt = gnomcode_core::ChatEvent {
             event_id: "evt-test-1".to_owned(),
             session_id: "chat-test-session".to_owned(),
             turn_index: 1,
-            role: spawnt_core::ChatRole::User,
+            role: gnomcode_core::ChatRole::User,
             content: "Please inspect tests".to_owned(),
             tool_name: None,
             status: None,
@@ -3642,7 +3645,7 @@ mod tests {
         let body = axum::body::to_bytes(res_get.into_body(), 16384)
             .await
             .expect("body");
-        let events: Vec<spawnt_core::ChatEvent> = serde_json::from_slice(&body).expect("json");
+        let events: Vec<gnomcode_core::ChatEvent> = serde_json::from_slice(&body).expect("json");
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].content, "Please inspect tests");
 
@@ -3671,7 +3674,7 @@ mod tests {
         let body_after = axum::body::to_bytes(res_get_after.into_body(), 16384)
             .await
             .expect("body");
-        let events_after: Vec<spawnt_core::ChatEvent> =
+        let events_after: Vec<gnomcode_core::ChatEvent> =
             serde_json::from_slice(&body_after).expect("json");
         assert!(events_after.is_empty());
     }
@@ -3817,7 +3820,7 @@ mod tests {
 
     #[tokio::test]
     async fn resume_session_uses_recorded_agent_and_repository() {
-        use spawnt_core::{AgentId, Project, Session, SessionState, Surface};
+        use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/workspace/resume", None);
         let session = Session {
@@ -3833,7 +3836,7 @@ mod tests {
             started_at: chrono::Utc::now(),
             last_event_at: chrono::Utc::now(),
         };
-        let checkpoint = spawnt_store::SourceCheckpoint {
+        let checkpoint = gnomcode_store::SourceCheckpoint {
             file_path: "/fixture".to_owned(),
             last_read_offset: 0,
             file_size: 0,
@@ -3913,7 +3916,7 @@ mod tests {
 
     #[tokio::test]
     async fn remote_pairing_status_and_revoke_endpoints() {
-        if std::env::var_os("SPAWNT_TEST_ISOLATED_REMOTE").is_none() {
+        if std::env::var_os("GNOMCODE_TEST_ISOLATED_REMOTE").is_none() {
             let home = tempfile::tempdir().expect("isolated home");
             let output =
                 std::process::Command::new(std::env::current_exe().expect("test executable"))
@@ -3921,8 +3924,8 @@ mod tests {
                         "--exact",
                         "api::tests::remote_pairing_status_and_revoke_endpoints",
                     ])
-                    .env("SPAWNT_HOME", home.path())
-                    .env("SPAWNT_TEST_ISOLATED_REMOTE", "1")
+                    .env("GNOMCODE_HOME", home.path())
+                    .env("GNOMCODE_TEST_ISOLATED_REMOTE", "1")
                     .output()
                     .expect("isolated test");
             assert!(

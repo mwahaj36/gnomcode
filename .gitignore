@@ -32,7 +32,8 @@ Thumbs.db
 *.pem
 *.key
 
-# Local Spawnt data (never commit real agent data)
+# Local Gnomcode data (never commit real agent data)
+.gnomcode/
 .spawnt/
 fixtures/**/raw/
 

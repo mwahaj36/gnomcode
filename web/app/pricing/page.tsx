@@ -1,7 +1,7 @@
 import { pageMetadata } from "../../lib/seo";
 import Link from "next/link";
 
-export const metadata = pageMetadata("/pricing", "Spawnt Pricing — Free Local, Paid Remote & Teams", "All local Spawnt features are free. Remote access and Teams are paid categories. Your agent provider bills inference separately.");
+export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local, Paid Remote & Teams", "All local Gnomcode features are free. Remote access and Teams are paid categories. Your agent provider bills inference separately.");
 
 const tiers = [
   {
@@ -26,11 +26,11 @@ const tiers = [
 
 const questions = [
   {
-    question: "Does spawnt store prompts, code, or tool output?",
-    answer: "Spawnt stores redacted local history for continuity. Account metadata sync excludes chat events; paired Remote carries conversations through E2EE.",
+    question: "Does gnomcode store prompts, code, or tool output?",
+    answer: "Gnomcode stores redacted local history for continuity. Account metadata sync excludes chat events; paired Remote carries conversations through E2EE.",
   },
   {
-    question: "Can I use spawnt without an account?",
+    question: "Can I use gnomcode without an account?",
     answer: "Yes. All local features run without an account. Existing cloud sync is optional and is not end-to-end encrypted.",
   },
   {

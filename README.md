@@ -1,8 +1,8 @@
-# spawnt
+# gnomcode
 
-Spawnt is a local-first orchestrator for AI coding agents: launch Claude Code, Codex, Gemini CLI and other supported official CLIs, switch models with a compact handoff, and use encrypted remote access from a paired phone/browser. Designed for Windows, macOS and Linux, it brings conversations, model switching, usage and quota into one workspace.
+Gnomcode is a local-first orchestrator for AI coding agents: launch Claude Code, Codex, Gemini CLI and other supported official CLIs, switch models with a compact handoff, and use encrypted remote access from a paired phone/browser. Designed for Windows, macOS and Linux, it brings conversations, model switching, usage and quota into one workspace.
 
-## Why Spawnt?
+## Why Gnomcode?
 
 - Launch agents across projects without juggling separate terminals.
 - Continue a task with another supported model using a locally compiled briefing.
@@ -15,16 +15,16 @@ Observation adapters cover Claude Code, OpenAI Codex (including discovered deskt
 
 ## Quick start
 
-Use an approved platform build from [Downloads](https://spawntv.vercel.app/downloads). Public 0.9.0 packages and non-Windows release acceptance remain launch gates. After approved npm publication, the standalone install command is:
+Use an approved platform build from [Downloads](https://gnomcode.vercel.app/downloads). Public 0.9.0 packages and non-Windows release acceptance remain launch gates. After approved npm publication, the standalone install command is:
 
 ```sh
-npm install -g spawnt
-spawnt console
-spawnt doctor
-spawnt launch codex --repo ./my-project
+npm install -g gnomcode
+gnomcode console
+gnomcode doctor
+gnomcode launch codex --repo ./my-project
 ```
 
-Install and authenticate the official CLI separately. Select a folder and agent in Workspace, complete native login/trust prompts in Terminal stream, then send a prompt. Local Spawnt needs no account; agent inference can still require its provider network.
+Install and authenticate the official CLI separately. Select a folder and agent in Workspace, complete native login/trust prompts in Terminal stream, then send a prompt. Local Gnomcode needs no account; agent inference can still require its provider network.
 
 ## Features
 
@@ -38,11 +38,11 @@ All local features are free. Remote and Teams are paid categories; commercial te
 
 ## Product and status
 
-- [Product brief](PRODUCT.md): what Spawnt is and questions for discussion.
+- [Product brief](PRODUCT.md): what Gnomcode is and questions for discussion.
 - [Launch checklist](docs/LAUNCH_CHECKLIST.md): blockers, causes, closure steps and evidence.
 - [Engineering sessions](docs/sessions/README.md): individual dated records.
 
-[![npm version](https://img.shields.io/npm/v/spawnt.svg)](https://www.npmjs.com/package/spawnt)
+[![npm version](https://img.shields.io/npm/v/gnomcode.svg)](https://www.npmjs.com/package/gnomcode)
 
 ---
 

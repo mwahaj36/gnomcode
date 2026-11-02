@@ -1,4 +1,4 @@
-# spawnt redesign: Implementation Plan
+# gnomcode redesign: Implementation Plan
 
 Audience: an implementing model that needs explicit instructions. Follow phases in order. One branch and one PR per phase (AGENTS.md section 8). Add a dated record under `docs/sessions/` and update its index every PR. Update `docs/SPEC.md` and `DESIGN.md` in the same change as the code they describe.
 
@@ -9,14 +9,14 @@ Audience: an implementing model that needs explicit instructions. Follow phases 
 | The web console is **one file**, `crates/daemon/src/console.html` (65 KB), embedded in the daemon and served at `/` and `/console` on `127.0.0.1`. | This is the key to "native and web look identical": **there is only one console UI**. The native app must render this same page in a webview. Never build a second console in PowerShell or Tauri UI code. |
 | `scripts/tray.ps1` (402 lines) is the current native tray. `apps/tray` (Tauri, SPEC M3) does not exist in the repo. | Build the Tauri tray as a thin shell. Retire `tray.ps1` and the `.vbs` launchers after parity. |
 | Marketing site is Next.js 15 + Tailwind 3 in `web/`. The Tailwind config and `globals.css` still use GitHub-dark colors, so the Daytona look lives in per-page styles and `daytona-preview.html`. | Centralise all tokens first (Phase 1). Delete `daytona-preview.html` (root and `web/public/`) at the end of Phase 4. |
-| `DESIGN.md` describes the Daytona look: green accent, dot matrix, zero pills, mono uppercase nav. | Rewrite it for spawnt in Phase 1. **Keep** the good parts: 1px hairlines, rectangular geometry, no emojis, plain-text status badges. |
+| `DESIGN.md` describes the Daytona look: green accent, dot matrix, zero pills, mono uppercase nav. | Rewrite it for gnomcode in Phase 1. **Keep** the good parts: 1px hairlines, rectangular geometry, no emojis, plain-text status badges. |
 | Existing data API: `/api/v1/sessions`, `report`, `quota`, `stats`, `live`, `alerts`, `export`, `resume-queue`, `pro/relay`, `guardrails/check`, `pricing/models`. | Pages below map to these. Anything missing (per-repo, per-day rollups) must be a **new Rust endpoint**. Business logic and aggregation stay in Rust (invariant 8). The UI only formats. |
-| `Desktop\fleethub.svg` is an L-bracket polyline plus a square, no fill. `Desktop\Untitled-13.svg` is unrelated Softec event artwork. | Use `fleethub.svg` as the spawnt mark (assumption, see section 12). It has no color, so recolor via `currentColor`. |
+| `Desktop\fleethub.svg` is an L-bracket polyline plus a square, no fill. `Desktop\Untitled-13.svg` is unrelated Softec event artwork. | Use `fleethub.svg` as the gnomcode mark (assumption, see section 12). It has no color, so recolor via `currentColor`. |
 
 ## 1. Brand and naming
 
-- Product name: **spawnt**. Always write it all lowercase: `spawnt`, everywhere (wordmark, nav, titles, copy, installers, CLI), including at the start of a sentence. Never `Spawnt` or `SPAWNT` in display text (env vars like `SPAWNT_HOME` are the only uppercase exception).
-- Domain: **do not change any URL yet.** Put the domain in one constant (`web/lib/brand.ts`: `SITE_URL`, `DOWNLOAD_BASE`) and keep the current values. Swapping to `spawnt.xyz` later becomes a one-line change.
+- Product name: **gnomcode**. Always write it all lowercase: `gnomcode`, everywhere (wordmark, nav, titles, copy, installers, CLI), including at the start of a sentence. Never `Gnomcode` or `GNOMCODE` in display text (env vars like `GNOMCODE_HOME` are the only uppercase exception).
+- Domain: **do not change any URL yet.** Put the domain in one constant (`web/lib/brand.ts`: `SITE_URL`, `DOWNLOAD_BASE`) and keep the current values. Swapping to `gnomcode.xyz` later becomes a one-line change.
 - Remove from all copy: "cockpit", "mission control", "fleet", "HUD". Use plain verbs: *see, track, limit, resume*.
 - Tagline (use everywhere, one version): **"See what your coding agents are doing."**
 - Sub-line: "Live status, cost and limits for your agents. Local-first. Nothing leaves your machine."
@@ -24,13 +24,13 @@ Audience: an implementing model that needs explicit instructions. Follow phases 
 ### Rename scope: split into two PRs
 
 1. **User-facing rename (Phase 1 to 6):** UI strings, window titles, tray labels, installer names, npm display name, docs, site copy, README.
-2. **Internal rename (Phase 7, separate PR, last):** crate names, binary `spawnt` to `spawnt`, env vars, data dir. This is breaking and risky. Requirements:
-   - Keep `spawnt` as a thin alias binary for at least one release.
-   - Accept both `SPAWNT_HOME` and `SPAWNT_HOME` (new wins), likewise for the other env overrides.
+2. **Internal rename (Phase 7, separate PR, last):** crate names, binary `gnomcode` to `gnomcode`, env vars, data dir. This is breaking and risky. Requirements:
+   - Keep `gnomcode` as a thin alias binary for at least one release.
+   - Accept both `GNOMCODE_HOME` and `GNOMCODE_HOME` (new wins), likewise for the other env overrides.
    - Migrate the data dir on first run: if the old dir exists and the new one does not, move it. Add a store/platform test for this. Never delete the old data.
    - Rewrite hook and integration entries that `integrate` wrote earlier (keep the backup-first and `--remove` guarantees).
-   - Add an ADR (`docs/adr/0004-rename-to-spawnt.md`) and a row in SPEC section 9.
-   - Update the `cut-release` skill scripts that hardcode `spawnt` paths.
+   - Add an ADR (`docs/adr/0004-rename-to-gnomcode.md`) and a row in SPEC section 9.
+   - Update the `cut-release` skill scripts that hardcode `gnomcode` paths.
 
 ## 2. Design tokens (Phase 1)
 
@@ -107,7 +107,7 @@ Status must not rely on red alone, since `primary` is red. Rules:
 
 Source: `C:\Users\Wahaj\Desktop\fleethub.svg`.
 
-1. Create `brand/spawnt-mark.svg`: viewBox `0 0 2048 2048`, two solid shapes with `fill="currentColor"` and **no stroke**: a right triangle (`points="290.67 1756.53 290.67 291.47 1755.73 291.47"`, the SVG's implicit fill closes the polyline) and a square (`x=799.39 y=789.88 width=957.95 height=957.95`). Your screenshot confirms this look: a solid mark with a diagonal cut and a square at the lower right. Do not treat it as an outlined bracket. Compare the render against your screenshot before moving on.
+1. Create `brand/gnomcode-mark.svg`: viewBox `0 0 2048 2048`, two solid shapes with `fill="currentColor"` and **no stroke**: a right triangle (`points="290.67 1756.53 290.67 291.47 1755.73 291.47"`, the SVG's implicit fill closes the polyline) and a square (`x=799.39 y=789.88 width=957.95 height=957.95`). Your screenshot confirms this look: a solid mark with a diagonal cut and a square at the lower right. Do not treat it as an outlined bracket. Compare the render against your screenshot before moving on.
 2. Color rules (confirmed by you):
    - **In-app marks** (navbar, sidebar, console top bar, splash, docs, installer UI): the mark is `light` (`#F6F7F8`, effectively white) on the dark theme and `dark` (`#0C1119`, effectively black) on the light theme, via `color: var(--text)` on `currentColor`. **No container, tile, rounded square or badge behind it.** The mark sits directly on the app background.
    - **Icons and favicons** (browser favicon, app icon, tray, `.ico`, `.icns`, Linux PNGs, apple-touch icon, OG image mark): the mark is `primary` (`#FF2544`). Ship two sets: red mark on a `dark` square background and red mark on a `light` square background (app icon tiles keep their square, since OS icons need a shape). Favicon uses `<link rel="icon" media="(prefers-color-scheme: dark)">` and a light twin so the tab matches the browser theme.
@@ -115,12 +115,12 @@ Source: `C:\Users\Wahaj\Desktop\fleethub.svg`.
 3. Export all from the one SVG with a script (`scripts/build-icons.mjs`, ImageMagick or `sharp`, dev-only):
    - `web/app/icon.svg`, `web/app/favicon.ico` (16, 32, 48)
    - `web/public/apple-touch-icon.png` (180, mark on `dark`, padded 20%)
-   - `scripts/spawnt.ico` (16, 24, 32, 48, 64, 128, 256) for the Windows installer and tray
+   - `scripts/gnomcode.ico` (16, 24, 32, 48, 64, 128, 256) for the Windows installer and tray
    - macOS `.icns` and Linux PNG set (16 to 512) for the Tauri bundle
    - Tray icons: monochrome template images (macOS needs a black-with-alpha template, 22px at 1x/2x; Windows 16/20/24 `primary`; Linux 22/24 `primary`). A status dot variant (`RUN`/`WAIT`/`LIMIT`) is drawn as a small badge in the corner.
-   - Open Graph image 1200x630: dark canvas, mark, wordmark `spawnt`, tagline.
-4. Wordmark: text `spawnt` set in Inter 600, lowercase tracking -1%. Lockup = mark + 12px gap + wordmark, mark height equals cap height x 1.3. Clear space equals the mark's width / 2. Minimum mark size 16px.
-5. Update the daemon's `/favicon.ico` and `/spawnt.svg` routes (rename route to `/spawnt.svg`, keep the old path as an alias).
+   - Open Graph image 1200x630: dark canvas, mark, wordmark `gnomcode`, tagline.
+4. Wordmark: text `gnomcode` set in Inter 600, lowercase tracking -1%. Lockup = mark + 12px gap + wordmark, mark height equals cap height x 1.3. Clear space equals the mark's width / 2. Minimum mark size 16px.
+5. Update the daemon's `/favicon.ico` and `/gnomcode.svg` routes (rename route to `/gnomcode.svg`, keep the old path as an alias).
 6. Document usage in `DESIGN.md` (do and don't: no recolor beyond `#FF2544`, `#0C1119`, `#F6F7F8`, no stretching, no effects).
 
 ## 4. Console information architecture (Phase 2 to 3)
@@ -179,7 +179,7 @@ Layout, top to bottom (max 5 blocks; resist adding more):
 - Status tabs above table with counts: `All`, `Running`, `Waiting`, `Limited`, `Done`.
 - Row click opens a **right-hand drawer** (480px; full-screen on narrow) with the session detail: timeline of state changes, token breakdown (input, output, cache read, cache write), cost breakdown, context usage, actions (`Focus window`, `Arm resume`, `Copy session id`). Deep link `#/sessions/<id>` opens the same drawer.
 - **Never display prompts, code or tool output** (invariant 1). Show only metadata and redacted activity summaries.
-- Empty: "No sessions yet. Start an agent in a terminal and it will appear here." plus the `spawnt doctor` command in a copy block.
+- Empty: "No sessions yet. Start an agent in a terminal and it will appear here." plus the `gnomcode doctor` command in a copy block.
 
 #### Usage (`#/usage`), the analytics page
 Tabs: `Overview | By agent | By model | By project | Daily`.
@@ -191,7 +191,7 @@ Tabs: `Overview | By agent | By model | By project | Daily`.
   - `Edit chart` opens a side drawer with: **Metric** (tokens in, tokens out, cache read, cache write, total tokens, cost, sessions, duration), **Group by** (none/collective, agent, model, project, day), **Chart type** (bar, stacked bar, line, area, horizontal bar, table), **Range** (inherit global or override: today, 7d, 30d, custom), **Interval** (hour, day, week), **Filters** (agent, model, project), **Compare** (previous period on or off), **Stack/Normalize** (absolute or 100%), **Title**.
   - `Add chart` button opens the same drawer with defaults. Cap at 12 charts per page.
   - Layout: charts live in a 12-column grid, each 4, 6, 8 or 12 wide; drag handle to reorder, resize control with those four sizes. Keyboard alternative to drag: move up/down buttons in the chart menu.
-  - Saved per user in `localStorage` (`spawnt.charts.v1`, schema-versioned, validated on load, falls back to defaults if invalid). `Reset to default` in the page menu. Optional export/import as JSON in Settings.
+  - Saved per user in `localStorage` (`gnomcode.charts.v1`, schema-versioned, validated on load, falls back to defaults if invalid). `Reset to default` in the page menu. Optional export/import as JSON in Settings.
   - All aggregation comes from `GET /api/v1/usage/daily` with `metric`, `group`, `interval`, `from`, `to`, and filters; the widget only stores the query, never computes totals. Each chart footnote shows trust level.
   - Constraints: the same chart config must render identically in the web and native console (it is the same bundle).
 - Footnote on every chart: how the number was computed and its trust level.
@@ -213,7 +213,7 @@ Tabs: `Overview | By agent | By model | By project | Daily`.
 Sections in a left sub-nav: `General` (theme, startup on login, language), `Notifications` (per event toggles), `Agents` (integration status per agent, `Integrate` / `Remove` buttons that call the CLI behavior with backup-first wording), `Data` (retention, `Export`, `Delete local data`), `Privacy` (a static statement plus the redaction summary, update-check opt-out), `Account & license`, `About` (version, links, diagnostics copy button).
 
 #### Cross-cutting states (every page)
-Loading: skeletons matching the final layout (no spinners except on buttons). Empty: one sentence, one action. Error: what happened, what to do, `Retry`. Offline/daemon down: full-width banner "spawnt is not running" with the start command. Stale data: dim and show "Updated X ago". Destructive actions: confirmation dialog naming the thing being changed.
+Loading: skeletons matching the final layout (no spinners except on buttons). Empty: one sentence, one action. Error: what happened, what to do, `Retry`. Offline/daemon down: full-width banner "gnomcode is not running" with the start command. Stale data: dim and show "Updated X ago". Destructive actions: confirmation dialog naming the thing being changed.
 
 ### 4.4 Backend work required (Rust, in `crates/store` and `crates/daemon`)
 
@@ -252,11 +252,11 @@ Stack stays Next.js 15. Replace the Tailwind theme with the token file (`tailwin
   - **Pop in and pop out:** the same transition on shell `padding` and island `max-width`, `border-radius`, `border-color`, `box-shadow`, `background-color`, all `0.32s cubic-bezier(0.16, 1, 0.3, 1)`. Keep a 1px border on all four sides (transparent at first) so border width never causes a reflow jump.
   - **Trigger:** `scroll` listener with `requestAnimationFrame` throttling and hysteresis: add `scrolled` above 45px, remove it below 15px. Use `{ passive: true }`. Also run the check once on mount so a reload mid-page starts in the correct state.
   - `prefers-reduced-motion`: keep the state change but set the transition to `0s`.
-  - Contents: lockup (mark plus `spawnt`), a `/` separator in `--text-3`, links `Product`, `Pricing`, `Docs`, `Downloads` (12px, 600, uppercase, 0.05em tracking, `--text-2`, hover `--text`, with a 2px `primary` underline on hover and on the active page), right side: theme toggle, `Sign in` (outline button), `Download` (primary button, 4px to 6px radius, no pill). Background is translucent `--bg` with `backdrop-filter: blur(16px)`.
+  - Contents: lockup (mark plus `gnomcode`), a `/` separator in `--text-3`, links `Product`, `Pricing`, `Docs`, `Downloads` (12px, 600, uppercase, 0.05em tracking, `--text-2`, hover `--text`, with a 2px `primary` underline on hover and on the active page), right side: theme toggle, `Sign in` (outline button), `Download` (primary button, 4px to 6px radius, no pill). Background is translucent `--bg` with `backdrop-filter: blur(16px)`.
   - Mobile (under 768px): same island behavior, links collapse into a menu button that opens a full-screen sheet with 48px rows.
   - The console (app shell) does **not** use this navbar. It keeps the sidebar and top bar from section 4.
 - **Home** (`/`), max 7 sections:
-  1. Hero: H1 "See what your coding agents are doing." Sub-line (section 1). Two buttons: `Download` (primary, detects OS and shows e.g. `Download for Windows`), `View docs` (secondary). Under it, one install line in a copy block (`npm i -g spawnt` placeholder until the package exists; confirm before publishing) and the line "Free for individuals. Local-first."
+  1. Hero: H1 "See what your coding agents are doing." Sub-line (section 1). Two buttons: `Download` (primary, detects OS and shows e.g. `Download for Windows`), `View docs` (secondary). Under it, one install line in a copy block (`npm i -g gnomcode` placeholder until the package exists; confirm before publishing) and the line "Free for individuals. Local-first."
   2. Product shot: a **real screenshot** (or live-rendered replica) of the console Overview in the user's theme. Generate it from the actual console build so it never drifts.
   3. Supported agents: a quiet row of six names with marks (monochrome, `text-2`).
   4. Three feature blocks, one per promise: **See it live** (sessions and status), **Know the cost** (tokens and spend, with trust levels), **Stay under limits** (quota and resume). Each: 1 headline, 2 lines of copy, 1 small visual.
@@ -268,7 +268,7 @@ Stack stays Next.js 15. Replace the Tailwind theme with the token file (`tailwin
 - **Docs** (`/docs`): left nav, search, content column max 720px. Sections: Quick start, Agents, Console guide (one subsection per page in 4.3), CLI reference, Privacy and security, Troubleshooting.
 - **Auth** (`/auth`), **Settings** (`/settings`), **Console** (`/console`, cloud multi-device view): reuse the console components so signed-in cloud views match the local console.
 - Footer: 4 columns (Product, Resources, Company, Legal), small print, theme toggle. No fake compliance seals.
-- SEO and meta: titles `Page | spawnt`, OG image, `sitemap.ts` and `robots.ts` updated, JSON-LD `SoftwareApplication`. Keep canonical URLs on the current domain until the new one is bought (via `SITE_URL`).
+- SEO and meta: titles `Page | gnomcode`, OG image, `sitemap.ts` and `robots.ts` updated, JSON-LD `SoftwareApplication`. Keep canonical URLs on the current domain until the new one is bought (via `SITE_URL`).
 - Performance targets: Lighthouse 95+ on all four, LCP under 2s, no layout shift from fonts (`font-display: swap` with metric-matched fallback), images with width/height, hero text is HTML not an image.
 - Accessibility: AA contrast, keyboard-complete nav and accordion, `lang`, landmarks, reduced motion.
 
@@ -305,8 +305,8 @@ The uncluttering rule: each page has one job. Move to a new tab anything that ne
 - KPI labels: `Spend`, `Tokens`, `Active sessions`, `Headroom`. Chart title: "This week". Chart toggles: `Tokens`, `Cost`, `By agent`, `By model`.
 - Statuses: `RUN` Running, `WAIT` Needs you, `IDLE` Idle, `LIMIT` Limit reached, `ERR` Error.
 - Empty states: Sessions "No sessions yet. Start an agent in a terminal and it will show up here." Projects "No projects yet. Repos appear after the first session." Filtered "No results for these filters." with `Clear filters`. Limits unknown "Limit unknown for this plan."
-- Errors: "Can't reach spawnt. Start it with `spawnt daemon`." with `Retry`.
-- Privacy line (Settings and footer): "spawnt reads local logs and stores metadata only. Prompts, code and output are never saved or sent."
+- Errors: "Can't reach gnomcode. Start it with `gnomcode daemon`." with `Retry`.
+- Privacy line (Settings and footer): "gnomcode reads local logs and stores metadata only. Prompts, code and output are never saved or sent."
 
 ### Marketing: section by section
 1. **Hero** (12 columns, text left 6, product shot right 6 on desktop; stacked on mobile). Eyebrow "Free for individuals" (12px uppercase). H1 "See what your coding agents are doing." (56px, 600, max 12 words). Sub (18px, `--text-2`): "Live status, cost and limits for your agents. Local-first." Buttons `Download for [OS]` and `View docs`. Below, small `--text-3`: "Windows, macOS and Linux."
@@ -318,7 +318,7 @@ The uncluttering rule: each page has one job. Move to a new tab anything that ne
 4. **Console tour** (12, tabbed): tabs `Overview`, `Sessions`, `Usage`, `Limits`, each showing one real screenshot with a one-sentence caption. This replaces the cluttered feature grid.
 5. **Privacy band** (4 columns): "Local only" / "Reads logs on your machine." "Metadata only" / "No prompts, code or output stored." "No telemetry" / "Nothing phones home." "Loopback" / "Only your machine can reach it."
 6. **Pricing teaser** (3 cards, 4 each): plan name, one-line promise, three bullets, button. Prices from SPEC 1.5.
-7. **Final CTA** (centered, 8 columns): "Start in a minute." / "Download spawnt and open your first session." Button `Download`.
+7. **Final CTA** (centered, 8 columns): "Start in a minute." / "Download gnomcode and open your first session." Button `Download`.
 8. **Footer** (12 columns: brand 4, then three link columns of 2.67): privacy line plus copyright.
 - Pricing page: header (H1 "Pricing", sub "Start free. Upgrade when you need more."), 3 cards (4 each), comparison table (12), FAQ (8 centered, 6 to 8 questions in `details`).
 - Downloads page: left 7 columns primary card (OS-detected, version, size, checksum, `Download`), right 5 columns "Other ways to install" list (npm, script, other OS).
@@ -328,14 +328,14 @@ The uncluttering rule: each page has one job. Move to a new tab anything that ne
 
 Rule: no page keeps its old layout or markup with new colors. Each page below is rebuilt from the Daytona patterns (hairline grid cells, mono uppercase labels, square badges, island navbar, `/` separators) using shared components. Page inventory in `web/app/`: `page.tsx` (landing), `pricing`, `downloads`, `docs`, `auth`, `settings`, `console`, plus `layout.tsx`, `globals.css`, `icon.svg`, `favicon.ico`, `sitemap.ts`, `robots.ts`. Plus the daemon's local console and error/404 pages. All must be done before Phase 4 closes; the PR checklist lists each one.
 
-- **Auth (`/auth`)**: full-height two-column hairline layout. Left (7 cols, hidden under 900px): mark, one line "Sign in to sync your usage across devices.", three short privacy facts in bordered cells. Right (5 cols): form cell with label `SIGN IN`, email field, `Continue` primary button, divider `OR`, OAuth buttons (outline, equal width), small print linking Terms and Privacy. Tabs `Sign in | Create account`. Inline validation under fields, button shows loading text not a spinner overlay, error banner above the form. Success: "Check your email." state. Local-only users see a note: "You don't need an account to use spawnt locally." with a link back. Handle the `/auth/callback` state with a minimal branded loading screen and a failure state with `Try again`.
+- **Auth (`/auth`)**: full-height two-column hairline layout. Left (7 cols, hidden under 900px): mark, one line "Sign in to sync your usage across devices.", three short privacy facts in bordered cells. Right (5 cols): form cell with label `SIGN IN`, email field, `Continue` primary button, divider `OR`, OAuth buttons (outline, equal width), small print linking Terms and Privacy. Tabs `Sign in | Create account`. Inline validation under fields, button shows loading text not a spinner overlay, error banner above the form. Success: "Check your email." state. Local-only users see a note: "You don't need an account to use gnomcode locally." with a link back. Handle the `/auth/callback` state with a minimal branded loading screen and a failure state with `Try again`.
 - **Settings (`/settings`, web account area)**: left sub-nav (3 cols) and content (9 cols, max 640px), same structure as the console Settings. Sections: `Profile`, `Devices` (table of linked machines with last seen and `Remove`), `Plan and billing` (current plan cell, usage cell, `Manage billing`), `Team` (members table, invite, roles; shown only on Team), `Notifications`, `Data` (export, delete account, with typed-confirmation dialog), `Security`. Each section is a hairline-bordered form cell with a header, helper text and a single save button; unsaved changes show a sticky save bar.
 - **Console (`/console`, cloud view)**: renders the same app shell and pages as the local console (section 4) from synced data, with a `Device` filter added to the global filters (All devices or one machine). Not-signed-in and no-devices states each get an empty state with the next step. Shares the component library; no separate implementation.
 - **Landing, Pricing, Downloads, Docs**: per sections 6 and 6.1.
 - **404 and error pages**: centered mark, mono label `404 / NOT FOUND`, one sentence, `Go home` button. The same pattern serves `500`.
 - **Legal pages (Terms, Privacy)**: add if missing (docs-layout, text column 720px).
 - **Footer and navbar**: shared by all marketing and auth pages; the island navbar from section 6 applies to every page except the console shell.
-- **Emails and notifications** (auth emails, update notices): plain text first, dark text on light, red `Confirm` link, lowercase `spawnt` sign-off.
+- **Emails and notifications** (auth emails, update notices): plain text first, dark text on light, red `Confirm` link, lowercase `gnomcode` sign-off.
 
 Acceptance for 6.2: open each route in dark and light at 1440, 1024 and 390px wide with no horizontal scroll, no old-theme remnants, keyboard navigable, and a screenshot of each attached to the Phase 4 PR.
 
@@ -348,9 +348,9 @@ Goal: pixel-identical console on Windows, macOS and Linux, by construction.
    - Auth: the daemon injects the token on serve. The webview needs no stored token.
    - Window: 1180x760 default, min 900x600, remember size and position, native title bar (do not draw a custom one on Linux). Mica/acrylic is **not** used: the UI is opaque so rendering matches everywhere.
    - Same URL opened in the browser must look the same. Differences are limited to the window chrome.
-2. **Tray popover** (small, the quick view): 340x440 webview loading `http://127.0.0.1:<port>/#/tray`, a compact route in the same console bundle (header with lockup, attention list, up to 5 live sessions with status badges, spend today, lowest limit headroom, buttons `Open spawnt`, `Settings`, `Quit`). Same tokens and components, so no divergence. Replaces the tray menu text list. Provide a plain native menu as a fallback for Linux desktops without a webview popover.
-3. Tray icon: states `idle`, `running`, `waiting`, `limited` (badge dot on the mark). macOS uses the template image. Tooltip: "spawnt: 2 running, 1 waiting".
-4. Notifications: native, text only, title `spawnt`, body one line. Click opens the relevant session (`#/sessions/<id>`).
+2. **Tray popover** (small, the quick view): 340x440 webview loading `http://127.0.0.1:<port>/#/tray`, a compact route in the same console bundle (header with lockup, attention list, up to 5 live sessions with status badges, spend today, lowest limit headroom, buttons `Open gnomcode`, `Settings`, `Quit`). Same tokens and components, so no divergence. Replaces the tray menu text list. Provide a plain native menu as a fallback for Linux desktops without a webview popover.
+3. Tray icon: states `idle`, `running`, `waiting`, `limited` (badge dot on the mark). macOS uses the template image. Tooltip: "gnomcode: 2 running, 1 waiting".
+4. Notifications: native, text only, title `gnomcode`, body one line. Click opens the relevant session (`#/sessions/<id>`).
 5. Autostart (via `crates/platform`), single instance, `Open` focuses the existing window.
 6. Release hardening (SPEC 6.8): `devtools` disabled, CSP restricted to loopback, no remote content, strings wrapped with `obfstr!` where sensitive.
 7. Retire `scripts/tray.ps1`, `open-console.vbs`, `open-dashboard.vbs`, `run-tray.vbs` only after the Tauri app reaches parity. Remove the references from installers.
@@ -358,29 +358,29 @@ Goal: pixel-identical console on Windows, macOS and Linux, by construction.
 
 ## 8. Installers (Phase 6)
 
-- **Windows** (`scripts/Setup.cs`, `Install-Spawnt.bat`, `install.ps1`): rename to `spawnt-Setup`, new icon, product name, window text, install dir `spawnt`, Start Menu shortcut `spawnt`, uninstaller entry. Installer UI uses the palette: dark canvas, mark, one primary button. Keep the old uninstall entry detectable so upgrades from Spawnt replace the old install and keep data.
+- **Windows** (`scripts/Setup.cs`, `Install-Gnomcode.bat`, `install.ps1`): rename to `gnomcode-Setup`, new icon, product name, window text, install dir `gnomcode`, Start Menu shortcut `gnomcode`, uninstaller entry. Installer UI uses the palette: dark canvas, mark, one primary button. Keep the old uninstall entry detectable so upgrades from Gnomcode replace the old install and keep data.
 - **macOS**: `.dmg` background in `dark` with the mark and an arrow to Applications; `.icns`. Note the un-notarized flow (SPEC 7.4) in the first-run help text.
-- **Linux**: `.deb`/`.AppImage` with desktop file (`Name=spawnt`, `Icon=spawnt`), icon set 16 to 512.
+- **Linux**: `.deb`/`.AppImage` with desktop file (`Name=gnomcode`, `Icon=gnomcode`), icon set 16 to 512.
 - `install.sh` / `install.ps1` / `npm/` shims: update printed text, name and ASCII banner (no emojis, no box art), keep URLs as they are today.
-- Installer copy: "Installing spawnt", "Done. spawnt is running in your tray." Nothing else.
+- Installer copy: "Installing gnomcode", "Done. gnomcode is running in your tray." Nothing else.
 
 ## 9. Phases, deliverables and acceptance
 
 | Phase | PR | Done when |
 | :--- | :--- | :--- |
-| 1 | `feat(design): spawnt tokens, logo and DESIGN.md` | `tokens.css`, brand SVG and generated icons exist, `DESIGN.md` rewritten, contrast table recorded, `brand.ts` with unchanged URLs |
+| 1 | `feat(design): gnomcode tokens, logo and DESIGN.md` | `tokens.css`, brand SVG and generated icons exist, `DESIGN.md` rewritten, contrast table recorded, `brand.ts` with unchanged URLs |
 | 2 | `feat(daemon): usage, projects and filter endpoints` | New endpoints plus tests, SPEC 3.11 updated |
 | 3 | `feat(console): new shell and pages` | All 7 pages from 4.3 work in light and dark with all states, filters, deep links, keyboard nav, zero axe-core violations, bundle embedded in daemon, `console.html` removed |
 | 4 | `feat(web): new marketing site and copy` | All pages in section 6 redesigned, Daytona assets deleted, `docs/COPY.md` added, Lighthouse targets met |
 | 5 | `feat(tray): tauri app loads console` | Parity test passes on all three OSes (CI matrix), `tray.ps1` and `.vbs` removed |
-| 6 | `feat(installers): spawnt branding` | Installers build on all three platforms, upgrade from Spawnt keeps data |
-| 7 | `refactor: rename internals to spawnt` | ADR 0004 merged, aliases and migration tested, `AGENTS.md` and `README.md` updated |
+| 6 | `feat(installers): gnomcode branding` | Installers build on all three platforms, upgrade from Gnomcode keeps data |
+| 7 | `refactor: rename internals to gnomcode` | ADR 0004 merged, aliases and migration tested, `AGENTS.md` and `README.md` updated |
 
 For each PR run the `rust-quality-gate` skill, and `cross-platform-review` for Phases 5 to 7. Use `impeccable` (critique, polish, audit) on Phases 3 and 4 before opening the PR. Use `verification-before-completion`: do not claim done without command output.
 
 ## 10. Definition of done (global)
 
-- No remaining user-facing "Spawnt", "cockpit", "mission control" strings (grep check in CI, allow-list only for the migration code and the changelog).
+- No remaining user-facing "Gnomcode", "cockpit", "mission control" strings (grep check in CI, allow-list only for the migration code and the changelog).
 - No emojis. No gradients. No leftover Daytona branding or green (`daytona`, `#2ecc71`, `#4ade80`) anywhere: grep check. The Daytona visual language (hairline grid, square badges, mono labels, island navbar) stays.
 - Every number shows a trust badge. Every status has text, not just color.
 - Light and dark both pass AA. Keyboard-only use covers every action. `prefers-reduced-motion` honored.
@@ -406,4 +406,4 @@ Resolved:
 5. Pricing comes from SPEC 1.5 and is current. Approved.
 
 Still open:
-4. **Package and CLI name:** check that `spawnt` is free on npm and crates.io before Phase 7.
+4. **Package and CLI name:** check that `gnomcode` is free on npm and crates.io before Phase 7.
