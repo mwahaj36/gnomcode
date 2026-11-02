@@ -130,7 +130,17 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     let roots = discover_agent_roots();
     let discovered = scan_log_files(&roots);
     let repair_chat_format = db.chat_format_needs_repair()?;
+    ingest_files(db, &roots, &discovered, repair_chat_format)
+}
+
+fn ingest_files(
+    db: &mut Database,
+    roots: &[AgentRoot],
+    discovered: &[DiscoveredFile],
+    repair_chat_format: bool,
+) -> Result<u64, Error> {
     let mut total_records_ingested = 0;
+    let mut repair_complete = true;
 
     let agy_fallback_model = read_antigravity_fallback_model();
 
@@ -140,6 +150,7 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             Ok(cp) => cp,
             Err(e) => {
                 tracing::warn!("skipping checkpoint lookup for {path_str}: {e}");
+                repair_complete = false;
                 continue;
             }
         };
@@ -173,6 +184,7 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
             start_offset
         };
         let Ok(read_result) = read_from_offset(&file.path, read_offset) else {
+            repair_complete = false;
             continue;
         };
         if read_result.bytes.is_empty() && read_offset == read_result.file_size {
@@ -264,11 +276,13 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
         import_native_titles(db, file.agent, &read_result.bytes[..parsed_len])?;
     }
 
-    db.finish_chat_format_repair()?;
     if repair_chat_format {
-        return ingest_all(db);
+        if repair_complete {
+            db.finish_chat_format_repair()?;
+        }
+        return ingest_files(db, roots, discovered, false);
     }
-    refresh_native_titles(db, &roots)?;
+    refresh_native_titles(db, roots)?;
 
     let detected_subs = detect_local_subscriptions();
     let _ = db.auto_populate_subscriptions(
@@ -368,6 +382,32 @@ mod tests {
         )
         .expect("legacy chat");
         let event_id = batch.chat_events[0].event_id.clone();
+        let fresh = directory.join("rollout-fresh.jsonl");
+        fs::write(
+            &fresh,
+            bytes.replace("\"id\":\"format\"", "\"id\":\"fresh\""),
+        )
+        .expect("new log");
+        let roots = discover_agent_roots();
+        let discovered = scan_log_files(&roots);
+        let unavailable = root.join("temporarily-unavailable.jsonl");
+        fs::rename(&path, &unavailable).expect("source disappears after discovery");
+        ingest_files(&mut db, &roots, &discovered, true)
+            .expect("continue despite unreadable source");
+        assert!(db.chat_format_needs_repair().expect("repair pending"));
+        assert_eq!(
+            db.get_session_chat("codex:fresh", None)
+                .expect("normal ingestion")
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.get_session_chat("codex:format", None)
+                .expect("legacy chat")[0]
+                .content,
+            batch.chat_events[0].content
+        );
+        fs::rename(unavailable, &path).expect("source becomes readable");
         ingest_all(&mut db).expect("repair");
         let chat = db.get_session_chat("codex:format", None).expect("chat");
         assert_eq!(chat[0].content, markdown);

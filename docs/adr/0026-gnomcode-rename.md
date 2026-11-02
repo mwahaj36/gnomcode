@@ -14,7 +14,7 @@ Use Gnomcode in UI, legal copy, current documentation, CLI, Rust crates, npm man
 
 Data-home precedence is a nonblank `GNOMCODE_HOME`, a nonblank legacy `SPAWNT_HOME`, an existing `~/.spawnt`, then `~/.gnomcode`. Reuse the old directory without moving or deleting history. The desktop shell and Windows launchers use the same order. The legacy directory wins over a new default directory to avoid silently hiding old history.
 
-Keep actual GitHub repository/release URLs, the existing deployed Cloudflare Worker name/address, deployed `spawnt_desktops` and `spawnt_device_requests` table identifiers, and Remote cryptographic domain labels stable. These are compatibility identifiers, not public branding. Do not rewrite applied database migrations. Historical session records and ADRs retain their original names and facts.
+Keep actual GitHub repository/release URLs, the existing deployed Cloudflare Worker name/address, deployed `spawnt_desktops` and `spawnt_device_requests` table identifiers, Remote cryptographic domain labels, and the hidden `<spawnt_context>` handoff envelope stable. These are compatibility identifiers, not public branding. Do not rewrite applied database migrations. Historical session records and ADRs retain their original names and facts.
 
 ## Consequences
 
