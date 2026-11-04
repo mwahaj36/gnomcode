@@ -8,6 +8,7 @@ pub mod presence;
 pub mod pricing;
 pub mod redact;
 pub mod remote_crypto;
+pub mod routing;
 pub mod rules;
 
 use chrono::{DateTime, Utc};

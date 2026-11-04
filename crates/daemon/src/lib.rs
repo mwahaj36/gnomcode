@@ -3,6 +3,7 @@
 
 mod account_devices;
 pub mod api;
+mod automation;
 pub mod model_catalog;
 pub mod pro;
 pub mod remote;
@@ -281,7 +282,7 @@ pub(crate) async fn resume_conversation(
     ensure_conversation_running(db, id).await
 }
 
-async fn ensure_conversation_running(
+pub(crate) async fn ensure_conversation_running(
     db: &Mutex<Database>,
     id: &str,
 ) -> Result<gnomcode_pty::SessionRecord, HandoffError> {
@@ -346,6 +347,14 @@ pub(crate) async fn deliver_conversation_prompt(
     text: &str,
 ) -> Result<(), HandoffError> {
     let _control = CONVERSATION_CONTROL.lock().await;
+    deliver_conversation_prompt_locked(db, id, text).await
+}
+
+pub(crate) async fn deliver_conversation_prompt_locked(
+    db: &Mutex<Database>,
+    id: &str,
+    text: &str,
+) -> Result<(), HandoffError> {
     let _ = ensure_conversation_running(db, id).await?;
     let (record, prompt, needs_context) = {
         let guard = db.lock().await;
@@ -360,6 +369,10 @@ pub(crate) async fn deliver_conversation_prompt(
             .find(|session| session.id == native)
             .is_some_and(|session| {
                 session.state != gnomcode_core::SessionState::Idle
+                    && !(session.state == gnomcode_core::SessionState::Error
+                        && guard
+                            .quota_reset_ready(&session.id, session.last_event_at)
+                            .unwrap_or(false))
                     && chrono::DateTime::parse_from_rfc3339(&record.started_at)
                         .is_ok_and(|started| session.last_event_at >= started)
             })
@@ -690,9 +703,6 @@ impl DaemonOrchestrator {
                     if let Err(error) = pro::run_guardrails(&ingest_db) {
                         tracing::warn!("guardrail evaluation failed: {error}");
                     }
-                    if let Err(error) = pro::run_resume_queue(&ingest_db) {
-                        tracing::warn!("resume queue evaluation failed: {error}");
-                    }
                     if let Err(error) = pro::run_context_relay(&ingest_db) {
                         tracing::warn!("context relay evaluation failed: {error}");
                     }
@@ -707,6 +717,28 @@ impl DaemonOrchestrator {
                 if let Err(error) = result {
                     tracing::warn!("ingestion pass failed: {error}");
                 }
+            }
+        })
+    }
+
+    /// Starts laptop-owned scheduling independently of slow ingestion passes.
+    pub fn spawn_automation(&self) -> JoinHandle<()> {
+        let db = self.db.clone();
+        tokio::spawn(async move {
+            let guard = db.clone().lock_owned().await;
+            if !matches!(
+                tokio::task::spawn_blocking(move || guard.recover_scheduled_messages()).await,
+                Ok(Ok(()))
+            ) {
+                tracing::error!("scheduled messages could not be recovered");
+                return;
+            }
+            let mut states = automation::Observations::default();
+            let mut ticker = tokio::time::interval(Duration::from_secs(1));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                ticker.tick().await;
+                automation::tick(&db, &mut states).await;
             }
         })
     }
@@ -732,9 +764,6 @@ impl DaemonOrchestrator {
             db.reconcile_antigravity_projects().map_err(Error::Store)?;
             if let Err(error) = pro::run_guardrails(&db) {
                 tracing::warn!("guardrail evaluation failed: {error}");
-            }
-            if let Err(error) = pro::run_resume_queue(&db) {
-                tracing::warn!("resume queue evaluation failed: {error}");
             }
             if let Err(error) = pro::run_context_relay(&db) {
                 tracing::warn!("context relay evaluation failed: {error}");
