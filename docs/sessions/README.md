@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-04 - Subagent identities, session tokens, and auto-compacting IDE relay bypass](2026-11-04-subagent-identities-session-tokens-and-auto-compacting-ides.md)
 - [2026-11-04 - Brag video plan](2026-11-04-brag-video-plan.md)
 - [2026-11-04 — VAPID Server Push Integration](2026-11-04-vapid-web-push.md)
 - [2026-11-04 — Progressive Web App, Route Distinction, AEO and Device Deletion](2026-11-04-pwa-marketing-routes-device-deletion.md)

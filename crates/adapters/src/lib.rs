@@ -204,6 +204,40 @@ mod tests {
         );
     }
     #[test]
+    fn codex_subagent_rollout_preserves_unique_id_and_parent_and_title() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let log = concat!(
+            "{\"timestamp\":\"2026-11-04T14:05:57.542Z\",\"ordinal\":0,\"type\":\"session_meta\",\"payload\":{",
+            "\"session_id\":\"01a1a67d-c0e4-7492-a427-923d843b7ed2\",",
+            "\"id\":\"01a1a6e1-7ada-7251-90a6-4b52ff6f50dc\",",
+            "\"parent_thread_id\":\"01a1a67d-c0e4-7492-a427-923d843b7ed2\",",
+            "\"agent_nickname\":\"Goodall\",",
+            "\"agent_path\":\"/root/control\",",
+            "\"base_instructions\":{\"text\":\"Codex subagent instructions\"}",
+            "}}\n",
+            "{\"timestamp\":\"2026-11-04T14:05:59.800Z\",\"ordinal\":9,\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-6-luna\"}}\n",
+        );
+        let ctx = FileCtx {
+            source_path: "rollout-2026-11-04T19-05-57-01a1a6e1-7ada-7251-90a6-4b52ff6f50dc.jsonl"
+                .into(),
+            ..FileCtx::default()
+        };
+        let mut adapter = CodexAdapter::new();
+        let batch = adapter.parse(&ctx, log.as_bytes());
+        assert_eq!(batch.sessions.len(), 1);
+        let session = &batch.sessions[0];
+        assert_eq!(session.id, "codex:01a1a6e1-7ada-7251-90a6-4b52ff6f50dc");
+        assert_eq!(
+            session.parent_session_id.as_deref(),
+            Some("codex:01a1a67d-c0e4-7492-a427-923d843b7ed2")
+        );
+        assert_eq!(session.model.as_deref(), Some("gpt-6-luna"));
+        assert_eq!(
+            session.title.as_deref(),
+            Some("Goodall (control) · Subagent")
+        );
+    }
+    #[test]
     fn codex_conversation_fixture_emits_only_user_and_assistant_messages() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");

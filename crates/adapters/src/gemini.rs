@@ -64,14 +64,30 @@ impl SourceAdapter for GeminiAdapter {
         let project = Project::from_origin(None, cwd, branch);
         batch.projects.push(project.clone());
 
+        let parent_sid = root
+            .get("parentSessionId")
+            .or_else(|| root.get("parentId"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map(|pid| Session::compose_id(AgentId::GeminiCli, pid));
+        let subagent_title = if parent_sid.is_some() {
+            root.get("subagentName")
+                .or_else(|| root.get("agentName"))
+                .and_then(Value::as_str)
+                .map(|name| format!("{name} · Subagent"))
+                .or_else(|| Some("Subagent".to_owned()))
+        } else {
+            None
+        };
+
         let mut session = Session {
             id: session_id.clone(),
             agent: AgentId::GeminiCli,
             surface: Surface::Cli,
             project_id: project.id,
-            parent_session_id: None,
+            parent_session_id: parent_sid,
             model: None,
-            title: None,
+            title: subagent_title,
             state: SessionState::Idle,
             pid: None,
             started_at: Utc::now(),
