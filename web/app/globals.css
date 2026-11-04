@@ -471,7 +471,7 @@ body {
 .sp-guide-page p, .sp-guide-page li { font-size: 15px; line-height: 1.75; color: var(--sp-text-2); overflow-wrap: anywhere; text-wrap: pretty; }
 .sp-guide-page section h2 { margin-top: 36px; }
 .sp-guide-page section h3 { margin-top: 24px; }
-.sp-guide-page a, .sp-docs-article section a { color: var(--sp-primary-text); text-underline-offset: 4px; }
+.sp-guide-page a, .sp-docs-article section a:not(.sp-download-action) { color: var(--sp-primary-text); text-underline-offset: 4px; }
 .sp-guide-page ul { padding-left: 20px; }
 .sp-guide-related { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
 .sp-guide-related a { display: inline-block; padding-block: 8px; }
@@ -483,3 +483,9 @@ body {
 .sp-site-actions > .sp-account-cta:hover { background: #ff4d66; color: var(--sp-on-primary); }
 .sp-site-mobile-download { display: none; }
 @media (max-width: 760px) { .sp-site-actions > .sp-site-download { display: none; } .sp-site-actions > .sp-account-cta { display: inline-flex; } .sp-site-links .sp-site-mobile-download { display: block; } }
+
+/* Keep release details and footer navigation readable across marketing pages. */
+.sp-platform-state, .sp-download-action small, .sp-site-footer-bottom, .sp-site-footer-bottom a { font-size: 11px; }
+.sp-global-skip { position: fixed; left: 16px; top: -80px; z-index: 200; padding: 12px; background: var(--sp-primary); color: var(--sp-on-primary); }
+.sp-global-skip:focus { top: 16px; }
+body:has(.sp-page) > .sp-global-skip { display: none; }

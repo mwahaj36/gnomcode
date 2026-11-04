@@ -3,7 +3,7 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", "Download Gnomcode — Windows, macOS, Linux", "Download the Gnomcode AI agent orchestrator for your platform. All local features are free, with no account required.");
+export const metadata = pageMetadata("/downloads", "Download Gnomcode — Windows, macOS, Linux", "Download the Windows development build of Gnomcode to launch and switch AI coding agents. Local features are free and require no account.");
 
 export default function DownloadsPage() {
   return (
@@ -11,7 +11,7 @@ export default function DownloadsPage() {
       <header className="sp-downloads-header">
         <div>
           <h1>Download gnomcode</h1>
-          <p>One place to launch, switch and control AI coding agents. Choose Windows, macOS or Linux.</p>
+          <p>Launch and switch supported AI coding agents in one local workspace. The unsigned Windows development build is available now; macOS and Linux builds are not yet available.</p>
         </div>
         <span className="sp-download-release">GNOMCODE · v{packageInfo.version}</span>
       </header>

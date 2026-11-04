@@ -1,7 +1,7 @@
 import { pageMetadata } from "../../lib/seo";
 import Link from "next/link";
 
-export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local, Paid Remote & Teams", "All local Gnomcode features are free. Remote access and Teams are paid categories. Your agent provider bills inference separately.");
+export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local AI Agent Tools", "All local Gnomcode features are free. Remote and Teams pricing is not finalized. Your agent provider bills inference separately.");
 
 const tiers = [
   {
@@ -11,15 +11,15 @@ const tiers = [
     action: "Download free", href: "/downloads",
   },
   {
-    name: "Remote", note: "PAID ACCESS", price: "Remote", cadence: "terms in documentation",
+    name: "Remote", note: "PROTOTYPE", price: "Remote", cadence: "pricing not finalized",
     description: "Access your own sessions from your phone.",
     features: ["End-to-end encrypted access", "Pair and revoke devices", "View sessions and respond to requests"],
     action: "Explore Remote", href: "/docs/remote-access",
   },
   {
-    name: "Teams", note: "PAID CATEGORY", price: "Teams", cadence: "product direction in docs",
-    description: "Shared visibility and controls for teams.",
-    features: ["Shared visibility is the Teams direction", "Scope and service terms in documentation"],
+    name: "Teams", note: "PLANNED", price: "Teams", cadence: "pricing not finalized",
+    description: "Shared visibility is a future product direction, not a complete service.",
+    features: ["Shared visibility is the Teams direction", "Pricing and scope to be determined"],
     action: "Read the FAQ", href: "/docs/faq",
   },
 ];
@@ -34,8 +34,8 @@ const questions = [
     answer: "Yes. All local features run without an account. Existing cloud sync is optional and is not end-to-end encrypted.",
   },
   {
-    question: "Where can I read service terms?",
-    answer: "Read the documentation for Remote and Teams service details. Your agent provider bills inference separately.",
+    question: "How much do Remote and Teams cost?",
+    answer: "Remote and Teams pricing and terms are not finalized. Your agent provider bills inference separately.",
   },
 ];
 
@@ -44,12 +44,12 @@ export default function PricingPage() {
     <div className="sp-console-shell sp-pricing-page mx-auto max-w-7xl px-6 py-16 font-sans">
       <header className="sp-pricing-intro">
         <h1>All local features are free.</h1>
-        <p>Use the CLI and local dashboard without an account. Remote access and Teams are paid categories. Provider inference is billed separately.</p>
+        <p>Use the CLI and local dashboard without an account. Remote is a prototype and Teams is a future direction; pricing and terms are not finalized. Provider inference is billed separately.</p>
       </header>
 
       <section className="sp-pricing-grid" aria-label="Plans">
         {tiers.map((tier, index) => (
-          <article className={index === 1 ? "sp-pricing-tier sp-pricing-featured" : "sp-pricing-tier"} key={tier.name}>
+          <article className={index === 0 ? "sp-pricing-tier sp-pricing-featured" : "sp-pricing-tier"} key={tier.name}>
             <div className="sp-pricing-tier-head">
               <h2>{tier.name}</h2>
               <span>{tier.note}</span>
@@ -60,7 +60,7 @@ export default function PricingPage() {
               {tier.features.map((feature) => <li key={feature}>{feature}</li>)}
             </ul>
             {tier.href ? (
-              <Link href={tier.href} className={index === 1 ? "sp-pricing-action sp-pricing-primary" : "sp-pricing-action"}>
+              <Link href={tier.href} className={index === 0 ? "sp-pricing-action sp-pricing-primary" : "sp-pricing-action"}>
                 {tier.action}<span aria-hidden="true">→</span>
               </Link>
             ) : (

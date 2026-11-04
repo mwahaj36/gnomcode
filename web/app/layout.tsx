@@ -27,8 +27,9 @@ export default function RootLayout({
 
       </head>
       <body className="bg-bg text-[var(--sp-text)] antialiased min-h-screen flex flex-col font-sans">
+        <a className="sp-global-skip" href="#main-content">Skip to content</a>
         <Navbar />
-        <main className="flex-1">{children}</main>
+        <main id="main-content" className="flex-1">{children}</main>
         <FooterWrapper />
       </body>
     </html>
