@@ -5,6 +5,7 @@
 - [2026-11-04 - Marketing and search improvements](2026-11-04-marketing-search.md)
 
 - [2026-11-04 - Landing handoff preview](2026-11-04-landing-handoff-preview.md)
+- [2026-11-04 - Dependabot updates](2026-11-04-dependabot-updates.md)
 
 - [2026-11-04 - Remote device approval matching](2026-11-04-device-approval-matching.md)
 
