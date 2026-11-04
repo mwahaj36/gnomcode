@@ -7,14 +7,27 @@ const root = new URL('../', import.meta.url);
 const source = await readFile(new URL('web/public/gnomcode-mark.svg', root));
 const directory = new URL('web/public/icons/', root);
 await mkdir(directory, { recursive: true });
-const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
+const sizes = [16, 24, 32, 48, 64, 128, 192, 256, 384, 512, 1024];
 const images = new Map();
 for (const size of sizes) {
   const png = await sharp(source).resize(size, size).png().toBuffer();
   images.set(size, png);
   await writeFile(new URL(`gnomcode-${size}.png`, directory), png);
 }
-const iconSizes = sizes.filter(size => size <= 256);
+for (const size of [192, 512]) {
+  const markSize = Math.round(size * 0.75);
+  const inset = Math.floor((size - markSize) / 2);
+  const maskable = await sharp(source)
+    .resize(markSize, markSize)
+    .extend({
+      top: inset, left: inset, bottom: size - markSize - inset, right: size - markSize - inset,
+      background: '#070708'
+    })
+    .png()
+    .toBuffer();
+  await writeFile(new URL(`gnomcode-maskable-${size}.png`, directory), maskable);
+}
+const iconSizes = [16, 24, 32, 48, 64, 128, 256];
 // Legacy Windows tray/GDI+ cannot draw PNG-compressed small ICO frames.
 // Keep the large frame compressed, and encode small frames as Windows DIBs.
 async function windowsIcon(scale) {

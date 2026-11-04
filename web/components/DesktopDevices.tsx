@@ -83,9 +83,25 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
     }catch{setStatus('Could not disable account access. Check your connection and retry.');}
     finally{setBusy(false);}
   }
+  async function removeRequest(req: Request) {
+    if (!owner || busy) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.from('spawnt_device_requests').delete().eq('user_id', owner).eq('id', req.id);
+      if (error) throw error;
+      await forgetDevice(owner, req.desktop_id);
+      setRequests(current => current.filter(r => r.id !== req.id));
+      setStatus(`Removed ${req.name}.`);
+    } catch {
+      setStatus('Could not remove device. Check your connection and retry.');
+    } finally {
+      setBusy(false);
+    }
+  }
   return <section className="web-profile-section" aria-label="Devices"><h2>Devices</h2><p role="status">{status}</p>
     {owner===null && <Link className="sp-console-action" href="/auth">Sign in</Link>}
     {desktops.map(desktop=><div className="sp-device-row" key={desktop.id}><div><strong>{desktop.name}</strong><p>{desktop.remote_enabled?'Available to signed-in devices':'Account access disabled'} · Last seen {new Date(desktop.last_seen_at).toLocaleString()}</p><button type="button" className="sp-console-action" disabled={busy||!desktop.remote_enabled} onClick={()=>void connect(desktop)}>Open desktop</button></div>{desktop.remote_enabled&&<button type="button" className="sp-console-action" disabled={busy} onClick={()=>setDisableTarget(desktop)}>Disable account access</button>}</div>)}
+    {requests.length > 0 && <div className="sp-saved-devices mt-4 pt-4 border-t border-[var(--sp-border)]"><h3 className="text-xs font-mono uppercase tracking-wider text-[var(--sp-muted)] mb-2">Connected Devices & Browsers</h3>{requests.map(req => <div className="sp-device-row" key={req.id}><div><strong>{req.name}</strong><p>{req.revoked ? 'Revoked' : req.state === 'approved' ? 'Approved' : 'Pending'} · ID {req.id.slice(0, 8)}</p></div><button type="button" className="sp-console-action text-red-500 hover:text-red-400" disabled={busy} onClick={() => void removeRequest(req)}>Remove</button></div>)}</div>}
     {disableTarget&&<dialog ref={disableDialog} className="remote-sheet sp-account-access-dialog" aria-labelledby="disable-account-heading" onClose={()=>setDisableTarget(null)}><h2 id="disable-account-heading">Disable account access?</h2><p>Every device signed in to your account will lose access to {disableTarget.name} when that desktop next reaches the account service. Local sessions keep running. You can enable access again in the native app.</p><div className="web-profile-actions"><button type="button" disabled={busy} onClick={()=>disableDialog.current?.close()}>Cancel</button><button type="button" disabled={busy} onClick={()=>void disableAccess(disableTarget)}>Disable account access</button></div></dialog>}
   </section>;
 }
