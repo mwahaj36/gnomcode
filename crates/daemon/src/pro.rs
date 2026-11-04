@@ -232,6 +232,13 @@ pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error 
     let existing_relays = db.list_context_relays()?;
 
     for s in active_sessions {
+        // Auto-compacting environments (IDEs like VS Code, Cursor, Windsurf, Antigravity IDE,
+        // or agents with native compaction like Antigravity, Cursor, Cline) manage and compact
+        // their context window automatically; bypass context relay handoff alerts and rotations.
+        if s.surface == "ide" || matches!(s.agent.as_str(), "antigravity" | "cursor" | "cline") {
+            continue;
+        }
+
         let Some(win) = s.context_window else {
             continue;
         };
@@ -412,5 +419,100 @@ mod remote_entitlement_tests {
         assert!(super::cloud_user_is_pro(
             &serde_json::json!({"email":"mwahaj25@gmail.com"})
         ));
+    }
+
+    #[test]
+    fn context_relay_skips_auto_compacting_ides_and_agents() {
+        let mut db = gnomcode_store::Database::open_in_memory().expect("db");
+        let project = gnomcode_core::Project::from_origin(None, "/tmp/test", None);
+
+        let now = chrono::Utc::now();
+        let ide_sess = gnomcode_core::Session {
+            id: "codex:ide-1".into(),
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Ide,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gpt-6-luna".into()),
+            title: None,
+            state: gnomcode_core::SessionState::Thinking,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let ide_usage = gnomcode_core::UsageRecord {
+            dedup_key: "usage-ide-1".into(),
+            session_id: ide_sess.id.clone(),
+            timestamp: now,
+            model: "gpt-6-luna".into(),
+            input_tokens: 95000,
+            output_tokens: 5000,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 95000,
+            context_window: Some(100000),
+            cost_usd: 0.1,
+            cache_savings_usd: 0.0,
+            cost_basis: gnomcode_core::TrustLevel::Exact,
+            pricing_version: "test".into(),
+        };
+
+        let agy_sess = gnomcode_core::Session {
+            id: "antigravity:cli-1".into(),
+            agent: gnomcode_core::AgentId::Antigravity,
+            surface: gnomcode_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gemini-3.8-flash".into()),
+            title: None,
+            state: gnomcode_core::SessionState::Thinking,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let agy_usage = gnomcode_core::UsageRecord {
+            dedup_key: "usage-agy-1".into(),
+            session_id: agy_sess.id.clone(),
+            timestamp: now,
+            model: "gemini-3.8-flash".into(),
+            input_tokens: 95000,
+            output_tokens: 5000,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 95000,
+            context_window: Some(100000),
+            cost_usd: 0.1,
+            cache_savings_usd: 0.0,
+            cost_basis: gnomcode_core::TrustLevel::Exact,
+            pricing_version: "test".into(),
+        };
+
+        let cp = gnomcode_store::SourceCheckpoint {
+            file_path: "/tmp/log.jsonl".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "test".into(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(
+            &[project],
+            &[ide_sess, agy_sess],
+            &[ide_usage, agy_usage],
+            &[],
+            &[],
+            &cp,
+        )
+        .expect("commit batch");
+
+        super::run_context_relay(&db).expect("run_context_relay");
+        let relays = db.list_context_relays().expect("list relays");
+        assert!(
+            relays.is_empty(),
+            "auto-compacting sessions must not generate context relays"
+        );
     }
 }

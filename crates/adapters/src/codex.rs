@@ -21,6 +21,8 @@ use std::collections::HashSet;
 pub struct CodexAdapter {
     seen_dedup_keys: HashSet<String>,
     raw_session_id: Option<String>,
+    parent_session_id: Option<String>,
+    subagent_title: Option<String>,
     active_model: Option<String>,
     last_turn_model: Option<String>,
 }
@@ -86,30 +88,111 @@ impl SourceAdapter for CodexAdapter {
                 continue;
             };
 
+            let path_id = codex_session_id_from_path(&ctx.source_path);
             if self.raw_session_id.is_none() {
-                if let Some(sid) = payload
-                    .get("session_id")
+                let sid = payload
+                    .get("id")
                     .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
-                {
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if !path_id.is_empty() {
+                            path_id
+                        } else {
+                            payload
+                                .get("session_id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown")
+                        }
+                    });
+                if !sid.is_empty() && sid != "unknown" {
                     self.raw_session_id = Some(sid.to_owned());
                 }
             }
 
             if line_type == "session_meta" {
                 let raw_sid = payload
-                    .get("session_id")
-                    .or_else(|| payload.get("id"))
+                    .get("id")
+                    .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
-                    .unwrap_or_else(|| codex_session_id_from_path(&ctx.source_path));
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if !path_id.is_empty() {
+                            path_id
+                        } else {
+                            payload
+                                .get("session_id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown")
+                        }
+                    });
                 self.raw_session_id = Some(raw_sid.to_owned());
+
+                let parent_sid = payload
+                    .get("parent_thread_id")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|pid| Session::compose_id(AgentId::Codex, pid));
+                if parent_sid.is_some() {
+                    self.parent_session_id.clone_from(&parent_sid);
+                }
+
+                let nickname = payload
+                    .get("agent_nickname")
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        payload
+                            .get("source")
+                            .and_then(|s| s.get("subagent"))
+                            .and_then(|sa| sa.get("thread_spawn"))
+                            .and_then(|ts| ts.get("agent_nickname"))
+                            .and_then(Value::as_str)
+                    });
+                let agent_path = payload
+                    .get("agent_path")
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        payload
+                            .get("source")
+                            .and_then(|s| s.get("subagent"))
+                            .and_then(|sa| sa.get("thread_spawn"))
+                            .and_then(|ts| ts.get("agent_path"))
+                            .and_then(Value::as_str)
+                    });
+                let agent_role = payload.get("agent_role").and_then(Value::as_str);
+
+                let subagent_title = if let Some(nick) = nickname {
+                    let role = agent_role.or_else(|| {
+                        agent_path
+                            .and_then(|p| p.strip_prefix("/root/").or_else(|| p.strip_prefix('/')))
+                            .filter(|s| !s.is_empty())
+                    });
+                    if let Some(r) = role {
+                        Some(format!("{nick} ({r}) · Subagent"))
+                    } else {
+                        Some(format!("{nick} · Subagent"))
+                    }
+                } else {
+                    agent_path.map(|p| format!("Subagent ({p})"))
+                };
+                if subagent_title.is_some() {
+                    self.subagent_title.clone_from(&subagent_title);
+                }
 
                 let model = payload
                     .get("base_instructions")
                     .and_then(|b| b.get("provenance"))
                     .and_then(|p| p.get("model"))
                     .and_then(Value::as_str)
-                    .or_else(|| payload.get("model").and_then(Value::as_str));
+                    .or_else(|| payload.get("model").and_then(Value::as_str))
+                    .or_else(|| {
+                        payload
+                            .get("source")
+                            .and_then(|s| s.get("subagent"))
+                            .and_then(|sa| sa.get("thread_spawn"))
+                            .and_then(|ts| ts.get("model"))
+                            .and_then(Value::as_str)
+                    });
                 if let Some(m) = model {
                     self.active_model = Some(m.to_owned());
                 }
@@ -151,9 +234,9 @@ impl SourceAdapter for CodexAdapter {
                     agent: AgentId::Codex,
                     surface,
                     project_id: project.id,
-                    parent_session_id: None,
+                    parent_session_id: self.parent_session_id.clone(),
                     model: self.active_model.clone(),
-                    title: None,
+                    title: self.subagent_title.clone(),
                     state: SessionState::Thinking,
                     pid: None,
                     started_at: ts,
@@ -163,7 +246,11 @@ impl SourceAdapter for CodexAdapter {
                 let raw_sid = self
                     .raw_session_id
                     .as_deref()
-                    .unwrap_or_else(|| codex_session_id_from_path(&ctx.source_path));
+                    .unwrap_or(if !path_id.is_empty() {
+                        path_id
+                    } else {
+                        "unknown"
+                    });
                 let session_id = Session::compose_id(AgentId::Codex, raw_sid);
 
                 if line_type == "response_item"
@@ -233,9 +320,9 @@ impl SourceAdapter for CodexAdapter {
                     agent: AgentId::Codex,
                     surface: Surface::DesktopApp,
                     project_id: default_project.id.clone(),
-                    parent_session_id: None,
+                    parent_session_id: self.parent_session_id.clone(),
                     model: self.active_model.clone(),
-                    title: None,
+                    title: self.subagent_title.clone(),
                     state: SessionState::Thinking,
                     pid: None,
                     started_at: ts,
@@ -243,6 +330,12 @@ impl SourceAdapter for CodexAdapter {
                 });
                 sess.last_event_at = ts;
                 sess.state = SessionState::Thinking;
+                if self.parent_session_id.is_some() && sess.parent_session_id.is_none() {
+                    sess.parent_session_id.clone_from(&self.parent_session_id);
+                }
+                if self.subagent_title.is_some() && sess.title.is_none() {
+                    sess.title.clone_from(&self.subagent_title);
+                }
                 if line_type == "event_msg"
                     && matches!(
                         payload.get("type").and_then(Value::as_str),
