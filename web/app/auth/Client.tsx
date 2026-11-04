@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
@@ -17,13 +17,19 @@ export default function AuthPage() {
   const [oauthLoading, setOauthLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [confirmationEmail,setConfirmationEmail]=useState('');
+  const busy=useRef(false);
 
   useEffect(() => {
+    const fragment=new URLSearchParams(window.location.hash.slice(1));
+    if(fragment.has('error')){setError('Your email link expired or could not be verified. Sign in or request a new confirmation below.');window.history.replaceState(null,'',window.location.pathname);}
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN' && session)router.replace('/console');});
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         router.push("/console");
       }
-    });
+    }).catch(()=>setError('Account status could not be loaded. Check your connection.'));
+    return ()=>subscription.unsubscribe();
   }, [router]);
 
   const handleOAuth = async (provider: "github" | "google") => {
@@ -47,6 +53,8 @@ export default function AuthPage() {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if(busy.current)return;
+    busy.current=true;
     setError("");
     setMessage("");
     setLoading(true);
@@ -54,10 +62,10 @@ export default function AuthPage() {
     try {
       if (mode === "signup") {
         const { error, data } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
-            emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/console` : undefined,
+            emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/auth` : undefined,
           },
         });
         if (error) {
@@ -65,17 +73,18 @@ export default function AuthPage() {
         } else if (data.session) {
           router.push("/console");
         } else {
-          setMessage("Confirmation link sent to your email! Please check your inbox to confirm your account.");
+          setConfirmationEmail(email.trim());
+          setMessage("Check your inbox for a confirmation link, then sign in. You can request another link below.");
         }
       } else if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password,
         });
-        if (error) setError(error.message);
+        if (error) {setError(error.message);if(error.code==='email_not_confirmed')setConfirmationEmail(email.trim());}
         else router.push("/console");
       } else if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: typeof window !== "undefined" ? `${window.location.origin}/settings` : undefined,
         });
         if (error) setError(error.message);
@@ -84,8 +93,19 @@ export default function AuthPage() {
     } catch {
       setError("Could not complete your request. Check your connection and try again.");
     } finally {
+      busy.current=false;
       setLoading(false);
     }
+  };
+
+  const resendConfirmation=async()=>{
+    if(busy.current || !confirmationEmail)return;
+    busy.current=true;setLoading(true);setError('');
+    try{
+      const {error}=await supabase.auth.resend({type:'signup',email:confirmationEmail,options:{emailRedirectTo:`${window.location.origin}/auth`}});
+      if(error)setError(error.message);else setMessage('Confirmation requested. Check your inbox and spam folder. Wait before requesting another link.');
+    }catch{setError('Confirmation could not be requested. Check your connection and try again.');}
+    finally{busy.current=false;setLoading(false);}
   };
 
   return (
@@ -153,6 +173,7 @@ export default function AuthPage() {
           </>
         )}
 
+        {confirmationEmail && <button type="button" className="sp-auth-oauth" disabled={loading || oauthLoading} onClick={()=>void resendConfirmation()}>Resend confirmation email</button>}
         <form onSubmit={handleEmailAuth} className="sp-auth-form">
           <div>
             <label htmlFor="auth-email">Email address</label>
@@ -187,6 +208,7 @@ export default function AuthPage() {
                 type={showPassword ? "text" : "password"}
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 required
+                minLength={mode==='signup'?6:undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="sp-auth-input"

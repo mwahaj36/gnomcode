@@ -2,10 +2,18 @@
 
 - [2026-11-04 - Dependabot updates](2026-11-04-dependabot-updates.md)
 
+- [2026-11-04 - Remote device approval matching](2026-11-04-device-approval-matching.md)
+
+- [2026-11-04 - Windows launch readiness acceptance](2026-11-04-windows-launch-readiness.md)
+
+- [2026-11-04 - Failover selection alias follow-up](2026-11-04-failover-alias-followup.md)
+
+- [2026-11-04 - Windows downloads, email signup and laptop automation](2026-11-04-scheduling-auth-routing.md)
+
 - [2026-11-02 - Case-sensitive rename follow-up](2026-11-02-rename-filename-followup.md)
 
 - [2026-11-02 — Gnomcode rename and PR 118 review](2026-11-02-gnomcode-rename-and-pr118-review.md)
-- [2026-11-02 � PR 118 repair retry](2026-11-02-pr118-repair-retry.md)
+- [2026-11-02 � PR 118 repair retry](2026-11-02-pr118-repair-retry.md)
 
 One file per recorded session or follow-up. Historical entries retain their original wording, duplicate titles and verification claims; these are records of their time, not current product guarantees. The filename disambiguates repeated titles. Current truth lives in [SPEC](../SPEC.md), [PRODUCT](../../PRODUCT.md) and the [launch checklist](../LAUNCH_CHECKLIST.md).
 
@@ -113,3 +121,5 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-10-26 — Session 3: Real-Time Active Agent Ingestion, Next.js Console & Unified Production App](2026-10-26-session-3-real-time-active-agent-ingestion-next-js-console-unified-production-app.md)
 - [2026-10-26 — Session 2: M1 Core Domain, Redaction, Pricing, Adapters, Store, Ingest & CLI](2026-10-26-session-2-m1-core-domain-redaction-pricing-adapters-store-ingest-cli.md)
 - [2026-10-26 — Session 1: Architecture Validation, Repo Initialization & M0 Foundation](2026-10-26-session-1-architecture-validation-repo-initialization-m0-foundation.md)
+
+- [2026-11-04 � Desktop onboarding](2026-11-04-desktop-onboarding.md)

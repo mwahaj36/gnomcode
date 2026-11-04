@@ -742,6 +742,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
         gnomcode_daemon::DaemonOrchestrator::new(db_path, std::time::Duration::from_secs(2))
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
+    let _automation_handle = orchestrator.spawn_automation();
     let remote = Arc::new(gnomcode_daemon::remote::RemoteManager::new());
     let restore_remote = remote.clone();
     let restore_db = orchestrator.db();
