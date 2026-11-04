@@ -238,6 +238,30 @@ mod tests {
         );
     }
     #[test]
+    fn codex_tool_calls_at_offset_do_not_create_phantom_sessions() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let log = concat!(
+            "{\"timestamp\":\"2026-11-04T12:17:12.314Z\",\"ordinal\":20,\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"id\":\"ctc_02cdd58d84ae694a016aeb223ec0d887d0b7b6297c5329f7f8\",\"status\":\"completed\",\"call_id\":\"call_ea03230f6e7f447587755c15c40bcb2a\",\"name\":\"exec\",\"input\":\"const r = 1;\"}}\n",
+            "{\"timestamp\":\"2026-11-04T12:17:15.314Z\",\"ordinal\":21,\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"id\":\"fc_068a987355b27ec4016aeb66cf091c87d0a66e72a48a18d122\",\"name\":\"shell\",\"arguments\":\"{}\"}}\n",
+        );
+        let ctx = FileCtx {
+            source_path: "rollout-2026-11-04T17-17-01-01a1a67d-c0e4-7492-a427-923d843b7ed2.jsonl"
+                .into(),
+            source_offset: 5000,
+            ..FileCtx::default()
+        };
+        let mut adapter = CodexAdapter::new();
+        let batch = adapter.parse(&ctx, log.as_bytes());
+        for sess in &batch.sessions {
+            assert!(
+                !sess.id.contains("ctc_") && !sess.id.contains("fc_"),
+                "Tool call ID must never be used as a session ID: {}",
+                sess.id
+            );
+            assert_eq!(sess.id, "codex:01a1a67d-c0e4-7492-a427-923d843b7ed2");
+        }
+    }
+    #[test]
     fn codex_conversation_fixture_emits_only_user_and_assistant_messages() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let bytes = include_bytes!("../../../fixtures/codex/v0.162/conversation_sample.jsonl");
