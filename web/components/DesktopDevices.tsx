@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import {supabase} from '../lib/supabase';
 import {enrollmentDevice,forgetDevice,type DeviceOffer} from '../lib/remote-device';
+import {approvedRequest} from '../lib/device-approval.mjs';
 
 type Desktop={id:string;name:string;last_seen_at:string;remote_enabled:boolean};
 type Request={desktop_id:string;id:string;name:string;state:string;revoked:boolean;offer:DeviceOffer|null};
@@ -14,7 +15,7 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
   const [requests,setRequests]=useState<Request[]>([]);
   const [status,setStatus]=useState('Checking your devices...');
   const [busy,setBusy]=useState(false);
-  const [waiting,setWaiting]=useState('');
+  const [waiting,setWaiting]=useState<{desktop:string;request:string}|null>(null);
   const autoStarted=useRef(false);
   const [disableTarget,setDisableTarget]=useState<Desktop|null>(null);
   const disableDialog=useRef<HTMLDialogElement|null>(null);
@@ -44,13 +45,13 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
   },[autoOpen,desktops,owner,busy]);
   useEffect(()=>{
     if(!waiting || busy)return;
-    const request=requests.find(row=>row.desktop_id===waiting && !row.revoked && row.state==='approved' && row.offer);
-    const desktop=desktops.find(row=>row.id===waiting);
-    if(request && desktop){setWaiting('');void connect(desktop);}
+    const request=approvedRequest(requests,waiting);
+    const desktop=desktops.find(row=>row.id===waiting.desktop);
+    if(request && desktop){setWaiting(null);void connect(desktop);}
   },[requests,desktops,waiting,busy]);
   useEffect(()=>{
     if(!waiting)return;
-    const timer=setTimeout(()=>{setWaiting('');setStatus('Your desktop is not responding. Keep it awake with Gnomcode running, then select Open desktop to retry.');},30000);
+    const timer=setTimeout(()=>{setWaiting(null);setStatus('Your desktop is not responding. Keep it awake with Gnomcode running, then select Open desktop to retry.');},30000);
     return()=>clearTimeout(timer);
   },[waiting]);
   async function connect(desktop:Desktop){
@@ -63,9 +64,9 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
         if(!saved.enrollment){await forgetDevice(owner,desktop.id);saved=await enrollmentDevice(owner,desktop.id);}
         const {error}=await supabase.from('spawnt_device_requests').insert({user_id:owner,desktop_id:desktop.id,id:saved.offer.request_id,public_key:saved.enrollment!.publicHex,name:`${matchMedia('(pointer:coarse)').matches?'Phone':'Desktop'} browser ${saved.offer.request_id!.slice(-4)}`});
         if(error)throw error;
-        setWaiting(desktop.id);setStatus('Connecting securely through your account...');return;
+        setWaiting({desktop:desktop.id,request:saved.offer.request_id!});setStatus('Connecting securely through your account...');return;
       }
-      if(!request.offer || request.state!=='approved'){setWaiting(desktop.id);setStatus('Waiting for your desktop to connect. Keep it awake with Gnomcode running.');return;}
+      if(!request.offer || request.state!=='approved'){setWaiting({desktop:desktop.id,request:saved.offer.request_id!});setStatus('Waiting for your desktop to connect. Keep it awake with Gnomcode running.');return;}
       const offer={...request.offer,owner_id:owner,desktop_id:desktop.id,request_id:request.id};
       if(onPair)onPair(offer);else{sessionStorage.setItem('gnomcode-pairing-offer',JSON.stringify(offer));window.location.assign('/remote');}
     }catch{setStatus('Could not connect this device. Check your connection and retry.');}
