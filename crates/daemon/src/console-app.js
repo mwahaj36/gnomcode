@@ -1,3 +1,47 @@
+// First-run guide
+    let onboardingStep = 0;
+    let onboardingReturnFocus = null;
+    function renderOnboarding() {
+      const pages = [...document.querySelectorAll('[data-onboarding-step]')];
+      pages.forEach((page, index) => { page.hidden = index !== onboardingStep; });
+      document.getElementById('onboarding-progress').textContent = `Step ${onboardingStep + 1} of ${pages.length}`;
+      document.getElementById('onboarding-back').disabled = onboardingStep === 0;
+      document.getElementById('onboarding-next').textContent = onboardingStep === pages.length - 1 ? 'Open session launcher' : 'Continue';
+      pages[onboardingStep].querySelector?.('h2')?.focus();
+    }
+    function startOnboarding() {
+      const dialog = document.getElementById('onboarding-dialog');
+      if (dialog.open) return;
+      onboardingReturnFocus = document.activeElement;
+      onboardingStep = 0;
+      dialog.showModal();
+      renderOnboarding();
+    }
+    function finishOnboarding(launch) {
+      try { localStorage.setItem('gnomcode-onboarding-v1', 'dismissed'); } catch (_) {}
+      document.getElementById('onboarding-dialog').close();
+      if (launch) {
+        setView('sessions');
+        showLauncher();
+        document.getElementById('launch-agent-select').focus();
+      } else onboardingReturnFocus?.focus();
+    }
+    function moveOnboarding(direction) {
+      const count = document.querySelectorAll('[data-onboarding-step]').length;
+      if (onboardingStep + direction >= count) { finishOnboarding(true); return; }
+      onboardingStep = Math.max(0, onboardingStep + direction);
+      renderOnboarding();
+    }
+    document.getElementById('onboarding-dialog').addEventListener('cancel', event => {
+      event.preventDefault();
+      finishOnboarding(false);
+    });
+    function offerOnboarding() {
+      try { if (localStorage.getItem('gnomcode-onboarding-v1')) return; } catch (_) {}
+      startOnboarding();
+    }
+    // End first-run guide
+
 function showNotice(message) {
       document.getElementById('app-notice-message').textContent = String(message);
       document.getElementById('app-notice').hidden = false;
@@ -1540,7 +1584,7 @@ function cycleTheme() {
       }
     }
 
-    const actions = { 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+    const actions = { 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
@@ -1592,6 +1636,7 @@ function cycleTheme() {
     if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(initialView)) setView(initialView, false);
     else setView('overview', false);
     openExplorerWorkspace();
+    offerOnboarding();
     pollLocalData();
     if (initialView === 'sessions') loadInstalledAgents();
     setInterval(() => {
