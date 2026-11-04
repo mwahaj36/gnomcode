@@ -2,12 +2,11 @@
 
 use gnomcode_core::AgentId;
 use gnomcode_core::license::{GNOMCODE_LICENSE_PUBKEY_HEX, LicenseFile, Tier, verify_license};
-use gnomcode_core::rules::{RuleAction, evaluate_guardrails, is_resume_eligible};
+use gnomcode_core::rules::{RuleAction, evaluate_guardrails};
 use gnomcode_platform::gnomcode_home;
 use gnomcode_store::Database;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::process::Command;
 use std::time::{Duration, SystemTime};
 
 /// Information about the current active license.
@@ -200,6 +199,7 @@ pub fn run_guardrails(db: &Database) -> Result<(), Box<dyn std::error::Error + S
                 };
                 let is_new = db.insert_alert_once(&session.id, &rule.id, action_name)?;
                 if is_new {
+                    db.automation_notice(&format!("guardrail:{}:{}",session.id,rule.id),&session.id,"A guardrail was triggered. Open Automations to review the rule and session.")?;
                     tracing::info!(
                         "Guardrail triggered for {}: rule {} ({})",
                         session.id,
@@ -216,72 +216,6 @@ pub fn run_guardrails(db: &Database) -> Result<(), Box<dyn std::error::Error + S
 
     // Persist blocked sessions list with fresh timestamp for fail-open safety
     fs::write(block_path, serde_json::to_vec(&blocked)?)?;
-    Ok(())
-}
-
-/// Evaluates armed Resume Queue entries and auto-resumes eligible sessions.
-pub fn run_resume_queue(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let entries = db.list_resume_queue()?;
-    if entries.is_empty() {
-        return Ok(());
-    }
-
-    let snapshots = db.get_latest_quota_snapshots()?;
-    let now = chrono::Utc::now();
-
-    for entry in entries {
-        let matching_quota = snapshots.iter().find(|q| match entry.agent {
-            AgentId::ClaudeCode => q.provider.eq_ignore_ascii_case("anthropic"),
-            AgentId::Codex => q.provider.eq_ignore_ascii_case("codex"),
-            AgentId::Antigravity => q.provider.eq_ignore_ascii_case("google"),
-            _ => false,
-        });
-
-        if is_resume_eligible(&entry, now, matching_quota) {
-            let native_id = entry
-                .session_id
-                .split_once(':')
-                .map_or(entry.session_id.as_str(), |(_, id)| id);
-
-            tracing::info!(
-                "Executing Resume Queue for session {} ({}) in {}",
-                entry.session_id,
-                entry.agent.as_str(),
-                entry.cwd
-            );
-
-            // Execute resume command in background without escalating permissions
-            let spawned = match entry.agent {
-                AgentId::ClaudeCode => Command::new("claude")
-                    .args(["--resume", native_id])
-                    .current_dir(&entry.cwd)
-                    .spawn(),
-                AgentId::Codex => Command::new("codex")
-                    .args(["resume", native_id])
-                    .current_dir(&entry.cwd)
-                    .spawn(),
-                _ => continue,
-            };
-
-            match spawned {
-                Ok(_) => {
-                    let next_runs = entry.runs_completed + 1;
-                    if next_runs >= entry.max_runs {
-                        let _ = db.disarm_resume_queue(&entry.session_id);
-                    } else {
-                        let _ = db.update_resume_runs(&entry.session_id, next_runs);
-                    }
-                }
-                Err(err) => {
-                    tracing::warn!(
-                        "Failed to spawn auto-resume for session {}: {err}",
-                        entry.session_id
-                    );
-                }
-            }
-        }
-    }
-
     Ok(())
 }
 

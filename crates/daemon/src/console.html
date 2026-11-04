@@ -7,6 +7,26 @@
   <script src="/theme-init.js"></script>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
+    #onboarding-dialog { margin:auto; box-sizing:border-box; font-weight:400; width:min(640px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); padding:0; color:var(--sp-text); background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:12px; }
+    #onboarding-dialog[open] { display:flex; flex-direction:column; overflow:hidden; }
+    #onboarding-dialog::backdrop { background:rgb(0 0 0 / .65); }
+    .onboarding-header, .onboarding-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px 24px; flex-shrink:0; }
+    .onboarding-header { border-bottom:1px solid var(--sp-border); }
+    #onboarding-progress { margin:20px 24px 0; color:var(--sp-text-2); font-size:13px; font-variant-numeric:tabular-nums; }
+    .onboarding-body { padding:16px 24px 8px; overflow-y:auto; min-height:0; }
+    .onboarding-body h2 { margin:0 0 16px; font-size:26px; line-height:1.25; letter-spacing:-.02em; }
+    .onboarding-body p, .onboarding-body li, .onboarding-body dd { font-size:14px; line-height:1.65; }
+    .onboarding-body p { margin:0 0 20px; }
+    .onboarding-body ol { padding-left:22px; margin:0 0 24px; }
+    .onboarding-body li + li { margin-top:10px; }
+    .onboarding-body dt { font-weight:600; margin-top:20px; }
+    .onboarding-body dd { margin:6px 0 20px; color:var(--sp-text-2); }
+    .onboarding-body blockquote { margin:0 0 20px; padding:16px; background:var(--sp-surface-2); border-radius:6px; line-height:1.65; }
+    .onboarding-body .onboarding-note { color:var(--sp-text-2); }
+    .onboarding-footer { border-top:1px solid var(--sp-border); }
+    #onboarding-dialog button { min-height:44px; }
+    @media(max-width:480px) { .onboarding-header, .onboarding-footer { padding:16px; } .onboarding-body { padding:16px; } #onboarding-progress { margin:16px 16px 0; } .onboarding-header strong { max-width:180px; } }
+
     @import url("/gnomcode-tokens.css");
     .ide-layout { display:grid; grid-template-columns:280px minmax(0,1fr); min-height:620px; border:1px solid var(--sp-border); }
     .ide-sidebar { padding:16px; border-right:1px solid var(--sp-border); min-width:0; }
@@ -529,6 +549,19 @@
             <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
             <small id="chat-prompt-help">Enter to send · Shift+Enter for a new line</small>
           </form>
+          <details class="profile-disclosure" id="chat-automation"><summary>Schedule and automation</summary>
+            <p>Saved on this laptop after confirmation. Keep it awake with Gnomcode running. Message text is redacted before storage.</p>
+            <label for="schedule-time">Delivery time (your local time)</label><input id="schedule-time" type="datetime-local" />
+            <button type="button" class="btn-control" data-action="schedule-message">Schedule current draft</button>
+            <div id="schedule-list" role="status"></div>
+            <label for="routing-policy">When an agent reaches a limit</label><select id="routing-policy"><option value="ask_first">Let me choose</option><option value="automatic">Automatically switch model or provider</option><option value="deny_cross_provider">Automatically switch within provider</option></select>
+            <button type="button" class="btn-control" data-action="save-routing">Save routing policy</button>
+            <p>Switching needs fresh known quota. Send your next message to continue; previous tasks are not replayed.</p>
+            <p id="reset-reconnect-status" role="status"></p>
+            <button type="button" class="btn-control" data-action="reconnect-reset">Reconnect after reset</button>
+            <button type="button" class="btn-control" data-action="cancel-reset">Cancel reset reconnection</button>
+            <div id="automation-notices" aria-label="Recent events"></div>
+          </details>
           <section id="workspace-terminal-pane" hidden aria-label="Workspace terminal"><div class="workspace-terminal-heading"><span id="workspace-terminal-path">Terminal</span><button type="button" class="btn-control" data-action="hide-workspace-terminal">Hide</button></div><div id="workspace-terminal-screen"></div></section>
           <p id="chat-delivery-status" role="status"></p>
           <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button></div>
@@ -543,7 +576,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <div class="sp-settings-resources"><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
+    <div class="sp-settings-resources"><button type="button" class="btn-control" data-action="onboarding-start">Getting started</button><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
     <section class="profile-devices" aria-labelledby="remote-heading">
       <h2 id="remote-heading">Devices</h2>
@@ -780,6 +813,17 @@
   </div></div>
   <p id="connection-status" role="alert" hidden class="local-view-message"></p>
   <div id="app-notice" class="app-notice" role="status" hidden><p id="app-notice-message"></p><button type="button" class="btn-control" data-action="dismiss-notice">Dismiss</button></div>
+  <dialog id="onboarding-dialog" aria-labelledby="onboarding-title" aria-describedby="onboarding-progress">
+    <div class="onboarding-header"><strong id="onboarding-title">Getting started with Gnomcode</strong><button type="button" class="btn-control" data-action="onboarding-skip">Skip guide</button></div>
+    <p id="onboarding-progress" role="status" aria-live="polite"></p>
+    <div class="onboarding-body">
+      <section data-onboarding-step><h2 tabindex="-1">Your agents. One workspace.</h2><p>Launch your coding agents, return to saved conversations and understand your usage from one place.</p><ol><li>Prepare an agent and sign in with its provider.</li><li>Choose a project folder and launch a session.</li><li>Send your first request and follow the work.</li></ol><p class="onboarding-note">Local features are free and do not require a Gnomcode account. You bring your own agent CLI and provider access.</p></section>
+      <section data-onboarding-step hidden><h2 tabindex="-1">Prepare your coding agent</h2><p>Install at least one supported official CLI: Claude Code, Codex, Gemini CLI or Antigravity CLI. Open it in your terminal and complete its sign-in or configuration first.</p><dl><dt>Already using an agent?</dt><dd>The session launcher checks installed CLIs and shows setup guidance. If you just installed one, restart Gnomcode so it can see the updated environment.</dd><dt>Using Cursor, Cline or Roo?</dt><dd>Supported local records can appear in history. These editor agents cannot be launched or controlled here.</dd></dl><p class="onboarding-note">Your agent manages its credentials and permissions. Gnomcode does not supply a model subscription or automatically approve agent actions.</p></section>
+      <section data-onboarding-step hidden><h2 tabindex="-1">Start with a real project</h2><p>In <strong>Workspace</strong>, choose <strong>New</strong>, then select your agent and the folder it should work in. Use the folder button in the desktop app, or enter the folder's full path.</p><ol><li>Keep the default model unless you need a specific one.</li><li>Select <strong>Launch Agent</strong>.</li><li>Open the session's terminal if the agent asks you to sign in, trust the folder or approve an action.</li></ol><p class="onboarding-note">Choose a folder you are comfortable letting your agent work in. Gnomcode preserves the agent's native permission checks.</p></section>
+      <section data-onboarding-step hidden><h2 tabindex="-1">Give your agent a first task</h2><p>Try a focused request in the conversation:</p><blockquote>Explain this project's structure and suggest where I should start. Ask before making changes.</blockquote><p>Press <strong>Enter</strong> to send; use <strong>Shift + Enter</strong> for a new line. Return to saved conversations from the Workspace list. Use the model selector beside the composer to request a supported model or provider change.</p><dl><dt>Understand your usage</dt><dd>Dashboard, Usage and Limits show recorded activity. Exact, estimated and unknown labels describe the evidence; estimated cost is not your provider's bill.</dd><dt>Connect another device later</dt><dd>Profile contains optional account and Devices setup. Remote needs this desktop online and explicit account-access confirmation. Local history stays on this machine by default; account setup explains optional metadata sync separately.</dd></dl><p class="onboarding-note">You can reopen this guide anytime from Profile.</p></section>
+    </div>
+    <div class="onboarding-footer"><button id="onboarding-back" type="button" class="btn-control" data-action="onboarding-back">Back</button><button id="onboarding-next" type="button" class="btn-primary" data-action="onboarding-next">Continue</button></div>
+  </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-heading" aria-describedby="confirm-message"><form method="dialog"><h2 id="confirm-heading">Confirm action</h2><p id="confirm-message"></p><div class="dialog-actions"><button class="btn-control" value="cancel" autofocus>Cancel</button><button class="btn-primary" id="confirm-accept" value="confirm">Continue</button></div></form></dialog>
   <script src="/vendor/xterm.js"></script>
   <script src="/vendor/xterm-addon-fit.js"></script>

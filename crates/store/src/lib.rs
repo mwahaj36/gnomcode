@@ -11,7 +11,9 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use thiserror::Error;
 
+mod automation;
 mod conversation;
+pub use automation::{AutomationNotice, ScheduledMessage};
 pub use conversation::ConversationLaunch;
 
 /// Storage layer error type.
@@ -800,6 +802,20 @@ impl Database {
             CREATE TABLE IF NOT EXISTS deleted_chat_event (event_id BLOB PRIMARY KEY);
             INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (10, datetime('now'));
         "#))?;
+        self.conn.execute_batch(obfstr::obfstr!(
+            r#"
+            CREATE TABLE IF NOT EXISTS scheduled_message (
+                id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, text TEXT NOT NULL,
+                due_at INTEGER NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, attempted_at INTEGER, finished_at INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_scheduled_due ON scheduled_message(status,due_at);
+            CREATE TABLE IF NOT EXISTS automation_notice (
+                id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, message TEXT NOT NULL,
+                created_at INTEGER NOT NULL, notified INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (12,datetime('now'));
+        "#
+        ))?;
         // Older Cursor parsing treated settings JSON as empty, freshly active sessions.
         self.conn.execute_batch(obfstr::obfstr!(r#"
             DELETE FROM session
@@ -1080,6 +1096,7 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] on SQLite deletion failure.
     pub fn delete_session_chat(&self, session_id: &str) -> Result<usize, Error> {
+        self.cancel_conversation_schedules(session_id)?;
         let tx = self.conn.unchecked_transaction()?;
         mark_deleted(
             &tx,
@@ -1106,6 +1123,8 @@ impl Database {
         if self.conversation_target(host_id)?.is_some() {
             return self.delete_conversation_chat(host_id);
         }
+        self.cancel_conversation_schedules(session_id)?;
+        self.cancel_conversation_schedules(host_id)?;
         let tx = self.conn.unchecked_transaction()?;
         let notice = format!("handoff:{host_id}:source");
         mark_deleted(
@@ -1267,10 +1286,8 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] on SQLite failure.
     pub fn disarm_resume_queue(&self, session_id: &str) -> Result<(), Error> {
-        self.conn.execute(
-            "DELETE FROM resume_queue WHERE session_id = ?1",
-            params![session_id],
-        )?;
+        let root = self.conversation_id(session_id)?;
+        self.conn.execute(obfstr::obfstr!("DELETE FROM resume_queue WHERE session_id=?1 OR session_id=?2 OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?2 UNION SELECT native_id FROM conversation_member WHERE conversation_id=?2)"),params![session_id,root])?;
         Ok(())
     }
 
