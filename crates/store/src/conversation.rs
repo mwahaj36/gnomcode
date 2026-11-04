@@ -184,6 +184,7 @@ impl Database {
     /// # Errors
     /// Returns an error if deletion fails.
     pub fn delete_conversation_chat(&self, id: &str) -> Result<usize, Error> {
+        self.cancel_conversation_schedules(id)?;
         let root = self.conversation_id(id)?;
         let tx = self.conn.unchecked_transaction()?;
         mark_deleted(
