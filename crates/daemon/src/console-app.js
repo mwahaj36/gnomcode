@@ -887,6 +887,47 @@ function cycleTheme() {
     }
     document.getElementById('chat-prompt-text').addEventListener('input', resizePrompt);
 
+    async function automationRequest(request) {
+      const result = await apiJson('/api/v1/automation', {method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(request),signal:AbortSignal.timeout(15000)});
+      if(result.type==='error')throw new Error(result.message);
+      return result;
+    }
+    async function refreshAutomation() {
+      const session=activeChatSession;
+      if(!session)return;
+      try {
+        const [schedules,routing,notices]=await Promise.all([automationRequest({type:'schedules',session_id:session}),automationRequest({type:'routing'}),automationRequest({type:'notices'})]);
+        if(session!==activeChatSession)return;
+        const list=document.getElementById('schedule-list');
+        const markup=schedules.messages.map(message=>`<p>${escapeHtml(new Date(message.due_at*1000).toLocaleString())} - ${escapeHtml(message.status)}${message.text?`<br>${escapeHtml(message.text.slice(0,120))}`:''}${message.status==='pending'?` <button type="button" class="btn-control" data-action="cancel-schedule" data-arg="${escapeHtml(message.id)}">Cancel</button>`:''}</p>`).join('') || '<p>No scheduled messages.</p>';
+        if(list.innerHTML!==markup)list.innerHTML=markup;
+        document.getElementById('reset-reconnect-status').textContent=schedules.reset_armed?'Reset reconnection armed. Waiting for fresh quota confirmation.':'Reset reconnection is not armed.';
+        const policy=document.getElementById('routing-policy');
+        if(document.activeElement!==policy && !policy.dataset.dirty)policy.value=routing.policy;
+        const feedback=notices.notices.filter(item=>(item.conversation_id===session || !item.conversation_id)).slice(0,8).map(item=>`<p>${escapeHtml(item.message)}</p>`).join('');
+        if(document.getElementById('automation-notices').innerHTML!==feedback)document.getElementById('automation-notices').innerHTML=feedback;
+      }catch(error){document.getElementById('schedule-list').textContent=`Schedule status unavailable. ${error.message}`;}
+    }
+    document.getElementById('routing-policy').addEventListener('change',event=>{event.target.dataset.dirty='true';});
+    let scheduling=false;
+    async function scheduleDraft() {
+      if(scheduling || !activeChatSession)return;
+      const input=document.getElementById('chat-prompt-text'),text=input.value.trim(),session=activeChatSession;
+      const date=new Date(document.getElementById('schedule-time').value);
+      if(!text || !Number.isFinite(date.getTime()) || date.getTime()<=Date.now()){showNotice('Enter a message and a future delivery time.');return;}
+      scheduling=true;
+      try {
+        await automationRequest({type:'schedule',session_id:session,id:crypto.randomUUID(),text,due_at:Math.floor(date.getTime()/1000)});
+        if(session===activeChatSession && input.value.trim()===text){input.value='';chatDrafts.delete(session);resizePrompt();}
+        showNotice('Schedule confirmed on your laptop. You can close your phone.');
+        await refreshAutomation();
+      } catch(error){showNotice(`Schedule not confirmed. Check saved messages before retrying. ${error.message}`);}
+      finally{scheduling=false;}
+    }
+    async function cancelSchedule(id) {try{await automationRequest({type:'cancel_schedule',session_id:activeChatSession,id});await refreshAutomation();}catch(error){showNotice(error.message);}}
+    async function saveRouting() {try{await automationRequest({type:'routing',policy:document.getElementById('routing-policy').value});delete document.getElementById('routing-policy').dataset.dirty;showNotice('Routing policy saved on this laptop.');}catch(error){showNotice(error.message);}}
+    async function reconnectReset(enabled) {try{await automationRequest({type:'resume_on_reset',session_id:activeChatSession,enabled});showNotice(enabled?'Reconnection armed. It waits for fresh quota confirmation after reset.':'Reset reconnection cancelled.');}catch(error){showNotice(error.message);}}
+
     async function sendPrompt(event) {
       if (event) event.preventDefault();
       const input = document.getElementById('chat-prompt-text');
@@ -1040,7 +1081,7 @@ function cycleTheme() {
       void showChatLimits();
       renderIdeSessions();
       showCurrentChatModel();
-      if (!silent) loadChatModels();
+      if (!silent) { loadChatModels(); void refreshAutomation(); }
       const panel = document.getElementById('session-chat-panel');
       const status = document.getElementById('chat-status');
       if (!silent && status) status.textContent = 'Loading conversation...';
@@ -1504,6 +1545,7 @@ function cycleTheme() {
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': showLauncher, 'new-session': showLauncher,
+      'schedule-message': scheduleDraft, 'cancel-schedule': cancelSchedule, 'save-routing': saveRouting, 'reconnect-reset': () => reconnectReset(true), 'cancel-reset': () => reconnectReset(false),
       'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat,
       'choose-workspace': chooseWorkspace,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
@@ -1555,6 +1597,7 @@ function cycleTheme() {
     setInterval(() => {
       pollLocalData();
       loadRemoteStatus();
+      void refreshAutomation();
       if (activeView === 'sessions' && !installedAgents.length) loadInstalledAgents();
       const chatPanel = document.getElementById('session-chat-panel');
       if (chatPanel && !chatPanel.hidden && activeChatSession) {

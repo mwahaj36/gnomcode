@@ -92,7 +92,7 @@ export function PlatformDownloads() {
             ))}
           </div>
         ) : <p className="sp-download-unavailable">Choose your installation path in the <a href="/docs/getting-started">getting started guide</a>.</p>}
-        <p className="sp-platform-note">{active.note}</p>
+        <p className="sp-platform-note">{active.note} {active.id==='windows' && <a href={`/downloads/SHA256SUMS-v${version}.txt`}>SHA-256 checksums</a>}</p>
       </article>
     </section>
   );
