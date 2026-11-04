@@ -57,6 +57,10 @@ impl SourceAdapter for CodexAdapter {
 
         let default_cwd = ctx.fallback_cwd.as_deref().unwrap_or("/unknown");
         let default_project = Project::from_origin(None, default_cwd, None);
+        let path_id = codex_session_id_from_path(&ctx.source_path);
+        if self.raw_session_id.is_none() && !path_id.is_empty() && path_id != "unknown" {
+            self.raw_session_id = Some(path_id.to_owned());
+        }
 
         let mut line_offset = ctx.source_offset;
         for raw_line in chunk.split_inclusive(|byte| *byte == b'\n') {
@@ -88,24 +92,13 @@ impl SourceAdapter for CodexAdapter {
                 continue;
             };
 
-            let path_id = codex_session_id_from_path(&ctx.source_path);
             if self.raw_session_id.is_none() {
-                let sid = payload
-                    .get("id")
+                if let Some(sid) = payload
+                    .get("session_id")
                     .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
                     .filter(|s| !s.trim().is_empty())
-                    .unwrap_or_else(|| {
-                        if !path_id.is_empty() {
-                            path_id
-                        } else {
-                            payload
-                                .get("session_id")
-                                .and_then(Value::as_str)
-                                .unwrap_or("unknown")
-                        }
-                    });
-                if !sid.is_empty() && sid != "unknown" {
+                {
                     self.raw_session_id = Some(sid.to_owned());
                 }
             }
@@ -115,9 +108,15 @@ impl SourceAdapter for CodexAdapter {
                     .get("id")
                     .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
-                    .filter(|s| !s.trim().is_empty())
+                    .filter(|s| {
+                        !s.trim().is_empty()
+                            && !s.starts_with("ctc_")
+                            && !s.starts_with("fc_")
+                            && !s.starts_with("ctco_")
+                            && !s.starts_with("call_")
+                    })
                     .unwrap_or_else(|| {
-                        if !path_id.is_empty() {
+                        if !path_id.is_empty() && path_id != "unknown" {
                             path_id
                         } else {
                             payload
@@ -243,14 +242,13 @@ impl SourceAdapter for CodexAdapter {
                     last_event_at: ts,
                 });
             } else {
-                let raw_sid = self
-                    .raw_session_id
-                    .as_deref()
-                    .unwrap_or(if !path_id.is_empty() {
+                let raw_sid = self.raw_session_id.as_deref().unwrap_or(
+                    if !path_id.is_empty() && path_id != "unknown" {
                         path_id
                     } else {
                         "unknown"
-                    });
+                    },
+                );
                 let session_id = Session::compose_id(AgentId::Codex, raw_sid);
 
                 if line_type == "response_item"

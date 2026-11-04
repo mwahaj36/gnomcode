@@ -32,6 +32,18 @@ $badgeIcon=$null
 Update-TrayIconBadge 1
 if (!$notifyIcon.Icon) {throw 'No generated badge'}
 $bitmap=$notifyIcon.Icon.ToBitmap(); $bitmap.Dispose()
+Update-TrayIconBadge 10
+if (!$notifyIcon.Icon) { throw 'No generated badge for count > 9' }
+$bitmap10 = $notifyIcon.Icon.ToBitmap()
+$hasPlus = $false
+for ($y = 17; $y -le 23; $y++) {
+    for ($x = 23; $x -le 27; $x++) {
+        $p = $bitmap10.GetPixel($x, $y)
+        if ($p.R -lt 50 -and $p.G -lt 50 -and $p.B -lt 50) { $hasPlus = $true }
+    }
+}
+$bitmap10.Dispose()
+if (-not $hasPlus) { throw 'Tray badge 9+ must visibly render the plus glyph' }
 Update-TrayIconBadge 0
 $notifyIcon.Dispose()
 $baseIcon.Dispose()
