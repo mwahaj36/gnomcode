@@ -30,7 +30,7 @@ impl Request {
     }
 }
 
-fn is_hex(value: &str, length: usize) -> bool {
+pub(crate) fn is_hex(value: &str, length: usize) -> bool {
     value.len() == length
         && value
             .bytes()
@@ -232,6 +232,35 @@ impl AccountDevices {
             state.remote_enabled = enabled;
             save_state(&state).await?;
         }
+        Ok(())
+    }
+
+    pub(crate) async fn remove_device(
+        &self,
+        client: &reqwest::Client,
+        auth: &CloudAuth,
+        device_id: &str,
+    ) -> Result<(), RemoteError> {
+        let mut state = self.state.lock().await;
+        if let Some(room) = state.rooms.remove(device_id) {
+            let _ = room.revoke().await;
+        }
+        state.approved.remove(device_id);
+        save_state(&state).await?;
+        let desktop = state.desktop.clone();
+        drop(state);
+
+        let _ = client
+            .delete(format!(
+                "{}/rest/v1/spawnt_device_requests?user_id=eq.{}&desktop_id=eq.{}&id=eq.{}",
+                auth.base_url, auth.user_id, desktop, device_id
+            ))
+            .header("apikey", &auth.public_key)
+            .bearer_auth(&auth.access_token)
+            .send()
+            .await;
+
+        self.changed.notify_one();
         Ok(())
     }
 

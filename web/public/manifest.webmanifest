@@ -1,0 +1,73 @@
+{
+  "name": "Gnomcode — The Runtime for AI Coding Agents",
+  "short_name": "Gnomcode",
+  "description": "Launch, switch, and remotely control AI coding agents. Work across Claude Code, Codex, and Gemini CLI from desktop or phone.",
+  "start_url": "/remote?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070708",
+  "theme_color": "#070708",
+  "lang": "en",
+  "categories": ["developer", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/gnomcode-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/gnomcode-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/gnomcode-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/gnomcode-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/gnomcode-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/gnomcode-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Remote Companion",
+      "short_name": "Remote",
+      "description": "Prompt and monitor agents from your phone or browser",
+      "url": "/remote?source=pwa-shortcut",
+      "icons": [{ "src": "/icons/gnomcode-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Console & Activity",
+      "short_name": "Console",
+      "description": "View live sessions, spend, and quota pools",
+      "url": "/console?source=pwa-shortcut",
+      "icons": [{ "src": "/icons/gnomcode-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Manage paired devices, notifications, and theme",
+      "url": "/settings?source=pwa-shortcut",
+      "icons": [{ "src": "/icons/gnomcode-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
