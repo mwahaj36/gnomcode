@@ -115,3 +115,5 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-10-26 — Session 3: Real-Time Active Agent Ingestion, Next.js Console & Unified Production App](2026-10-26-session-3-real-time-active-agent-ingestion-next-js-console-unified-production-app.md)
 - [2026-10-26 — Session 2: M1 Core Domain, Redaction, Pricing, Adapters, Store, Ingest & CLI](2026-10-26-session-2-m1-core-domain-redaction-pricing-adapters-store-ingest-cli.md)
 - [2026-10-26 — Session 1: Architecture Validation, Repo Initialization & M0 Foundation](2026-10-26-session-1-architecture-validation-repo-initialization-m0-foundation.md)
+
+- [2026-11-04 � Desktop onboarding](2026-11-04-desktop-onboarding.md)
