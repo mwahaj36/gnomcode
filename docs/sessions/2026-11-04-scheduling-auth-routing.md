@@ -36,3 +36,18 @@ Mailbox delivery and hosted Auth redirect allow-list/SMTP configuration are not 
 - [ADR 0027](../adr/0027-laptop-owned-scheduling-and-quota-recovery.md)
 - [Supabase password authentication](https://supabase.com/docs/guides/auth/passwords)
 - [Supabase confirmation resend](https://supabase.com/docs/reference/javascript/auth-resend)
+
+## Final local results
+
+- Full Rust quality gate passed: formatting, warnings-as-errors clippy, workspace tests, cargo-deny and core purity. Cargo-deny reports allowed duplicate-version warnings, with advisories/bans/licenses/sources passing.
+- Web suite: 20 passed; TypeScript, embedded console, navigation/recovery and tray checks passed. Existing Node module-type and React hook warnings remain.
+- Windows packaging and production Next.js build completed. Embedded installer payload/options and archive contents were verified; the standalone binary equals the built release binary.
+- Installer, ZIP, checksum manifest and auth page returned HTTP 200 locally. UI save/cancel and 390px header checks passed using synthetic data.
+
+Artifact SHA-256:
+
+```text
+4e84df3cbe30012ebd68be779c846c3e70b1f1f8c46010fd57a6c2dc625b3399  Gnomcode-Setup.exe
+31f259d82d15b1781d2163616d0609237e0feee41a2c27db422ea62878d373c5  Gnomcode-v0.9.0-windows-x64.zip
+d7d34c68bdcfef7f53c7cba8f3ed9d5cefc562dc2e5390c8de16889a1a277cf4  gnomcode.exe
+```
