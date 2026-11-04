@@ -353,9 +353,7 @@ $notifyIcon.Add_Click({
     }
 })
 
-$lastNotifiedApprovals = @{}
 $lastNotifiedSaturation = @{}
-$lastNotifiedQuotaResets = @{}
 
 # Polling timer for live status, sessions & badge update
 $timer = New-Object System.Windows.Forms.Timer
@@ -411,12 +409,6 @@ $timer.Add_Tick({
                     $sessionMenuItems[$i].Visible = $true
                     $sessionMenuItems[$i].Tag = @{ Id = $s.id; Agent = $s.agent; Surface = $s.surface; Project = $proj }
 
-                    # Trigger approval notification once
-                    if ($s.state -eq "awaiting_approval" -and -not $lastNotifiedApprovals.ContainsKey($s.id)) {
-                        $lastNotifiedApprovals[$s.id] = [DateTime]::UtcNow
-                        $notifyIcon.ShowBalloonTip(5000, "$($s.agent) needs approval", "Session in $proj is waiting for your approval to proceed.", [System.Windows.Forms.ToolTipIcon]::Warning)
-                    }
-
                     # Trigger context saturation notification once when >= 90%
                     if ($s.context_window -and $s.context_window -gt 0) {
                         $ctxPct = [Math]::Round(($s.context_tokens / $s.context_window) * 100)
@@ -431,18 +423,6 @@ $timer.Add_Tick({
             }
         }
 
-        # Check for quota resets
-        if ($live.quota) {
-            foreach ($q in $live.quota) {
-                $qKey = "$($q.provider):$($q.limit_id)"
-                if ($q.used_pct -ge 100) {
-                    $lastNotifiedQuotaResets[$qKey] = "limited"
-                } elseif ($lastNotifiedQuotaResets.ContainsKey($qKey) -and $lastNotifiedQuotaResets[$qKey] -eq "limited" -and $q.used_pct -lt 100) {
-                    $lastNotifiedQuotaResets[$qKey] = "reset"
-                    $notifyIcon.ShowBalloonTip(5000, "Quota pool reset", "$($q.provider) quota pool has reset. Rate-limited sessions can resume.", [System.Windows.Forms.ToolTipIcon]::Info)
-                }
-            }
-        }
     } catch {
         $notifyIcon.Text = "gnomcode: daemon unavailable - click to restart"
         $sessionsHeader.Text = "Local sessions unavailable"

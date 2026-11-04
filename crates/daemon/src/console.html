@@ -529,6 +529,19 @@
             <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
             <small id="chat-prompt-help">Enter to send · Shift+Enter for a new line</small>
           </form>
+          <details class="profile-disclosure" id="chat-automation"><summary>Schedule and automation</summary>
+            <p>Saved on this laptop after confirmation. Keep it awake with Gnomcode running. Message text is redacted before storage.</p>
+            <label for="schedule-time">Delivery time (your local time)</label><input id="schedule-time" type="datetime-local" />
+            <button type="button" class="btn-control" data-action="schedule-message">Schedule current draft</button>
+            <div id="schedule-list" role="status"></div>
+            <label for="routing-policy">When an agent reaches a limit</label><select id="routing-policy"><option value="ask_first">Let me choose</option><option value="automatic">Automatically switch model or provider</option><option value="deny_cross_provider">Automatically switch within provider</option></select>
+            <button type="button" class="btn-control" data-action="save-routing">Save routing policy</button>
+            <p>Switching needs fresh known quota. Send your next message to continue; previous tasks are not replayed.</p>
+            <p id="reset-reconnect-status" role="status"></p>
+            <button type="button" class="btn-control" data-action="reconnect-reset">Reconnect after reset</button>
+            <button type="button" class="btn-control" data-action="cancel-reset">Cancel reset reconnection</button>
+            <div id="automation-notices" aria-label="Recent events"></div>
+          </details>
           <section id="workspace-terminal-pane" hidden aria-label="Workspace terminal"><div class="workspace-terminal-heading"><span id="workspace-terminal-path">Terminal</span><button type="button" class="btn-control" data-action="hide-workspace-terminal">Hide</button></div><div id="workspace-terminal-screen"></div></section>
           <p id="chat-delivery-status" role="status"></p>
           <div class="ide-chat-controls"><button id="chat-earlier" type="button" class="btn-control" data-action="earlier-chat" hidden>Load earlier messages</button></div>

@@ -13,7 +13,9 @@ type Channel = Awaited<ReturnType<typeof createChannel>>;
 type Session = { id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean };
 type ChatEvent = { event_id: string; turn_index: number; created_at: string; role: string; content: string; status?: string | null };
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
-type Reply = { type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[] } & Partial<FolderListing>;
+type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
+type AutomationNotice = {id:string;conversation_id:string;message:string};
+type Reply = { reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[] } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false }: { embedded?: boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -30,6 +32,14 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const [newSession,setNewSession]=useState(false);
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [prompt, setPrompt] = useState('');
+  const [scheduleTime,setScheduleTime]=useState('');
+  const [resetArmed,setResetArmed]=useState(false);
+  const [schedules,setSchedules]=useState<ScheduledMessage[]>([]);
+  const [routing,setRouting]=useState('ask_first');
+  const [automationNotices,setAutomationNotices]=useState<AutomationNotice[]>([]);
+  const [schedulePending,setSchedulePending]=useState(false);
+  const pendingSchedule=useRef<{id:string;session:string;text:string}|null>(null);
+  const scheduleTimeout=useRef<ReturnType<typeof setTimeout>|null>(null);
   const [modelProviders,setModelProviders]=useState<ProviderCatalog[]>([]);
   const [modelsLoading,setModelsLoading]=useState(false);
   const [modelsError,setModelsError]=useState('');
@@ -87,7 +97,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       const offer=value?JSON.parse(value):null;
       if(offer?.owner_id===session.user.id){if(active){autoConnect.current=true;setLink(offer);}return;}
     }).catch(()=>{if(active)setError('Could not restore this device. Open Devices to try again.');});
-    return () => {active=false;manualDisconnect.current=true;connectionEpoch.current++;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);if (poll.current) clearInterval(poll.current); socket.current?.close();};
+    return () => {if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);active=false;manualDisconnect.current=true;connectionEpoch.current++;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);if (poll.current) clearInterval(poll.current); socket.current?.close();};
   }, []);
 
   useEffect(()=>{
@@ -195,6 +205,17 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     catch { setOptimistic(current=>({...current,[sourceSession]:(current[sourceSession] || []).filter(item=>item.id !== id)})); pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
   }
 
+  async function scheduleDraft() {
+    if(!authenticated.current || schedulePending || !selectedRef.current)return;
+    const text=promptRef.current.trim(),due=Math.floor(new Date(scheduleTime).getTime()/1000);
+    if(!text || !Number.isFinite(due) || due<=Date.now()/1000){setError('Enter a message and a future delivery time.');return;}
+    const id=crypto.randomUUID(),session=selectedRef.current;
+    pendingSchedule.current={id,session,text};setSchedulePending(true);setError('');setNotice('Saving on your laptop...');
+    scheduleTimeout.current=setTimeout(()=>{setSchedulePending(false);setNotice('');setError('Schedule not confirmed. Check saved messages before retrying. Your draft is kept.');},15000);
+    try{await send({type:'schedule',session_id:session,id,text,due_at:due});}catch{if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setError('Schedule could not be sent. Your draft is kept.');}
+  }
+  function requestAutomation(value:object) {void send(value).catch(()=>setError('Could not reach your laptop. Reconnect and check saved settings.'));}
+
   async function browseFolders(path?: string) {
     setFoldersLoading(true); setError('');
     try { await send({type:'workspaces',path}); }
@@ -222,17 +243,36 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     authenticated.current=true;retryStart.current=0;setError('');setPhase('paired');
     try {sessionStorage.setItem('gnomcode-pairing-offer',JSON.stringify(link));}catch{}
     await send({type:'sessions'});
+    await send({type:'routing'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
     poll.current = setInterval(() => {
       void send({type:'sessions'}).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN)setError('Session refresh failed. Check the desktop connection and reconnect.');});
       if (selectedRef.current && !loadingHistory.current) loadChat(selectedRef.current);
+      if(selectedRef.current)void send({type:'schedules',session_id:selectedRef.current}).catch(()=>{});
+      void send({type:'notices'}).catch(()=>{});
     }, 2000);
   }
 
   async function handle(reply: Reply, epoch:number) {
     if(epoch!==connectionEpoch.current)return;
-    if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
+    if (reply.type === 'schedules') { if(reply.session_id===selectedRef.current){setSchedules(reply.messages || []);setResetArmed(Boolean(reply.reset_armed));} }
+    else if(reply.type==='notices'){setAutomationNotices(reply.notices || []);}
+    else if(reply.type==='routing'){setRouting(reply.policy || 'ask_first');}
+    else if(reply.type==='schedule_ack') {
+      const pending=pendingSchedule.current;
+      if(pending && pending.id===reply.id){
+        if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);
+        setSchedulePending(false);pendingSchedule.current=null;
+        if(pending.session===selectedRef.current && promptRef.current.trim()===pending.text)changePrompt('');
+        if(drafts.current.get(pending.session)?.trim()===pending.text)drafts.current.delete(pending.session);
+        setNotice('Schedule confirmed on your laptop. You can close your phone.');
+        requestAutomation({type:'schedules',session_id:selectedRef.current});
+      }
+    }
+    else if(reply.type==='cancel_schedule_ack'){setNotice('Scheduled message cancelled.');requestAutomation({type:'schedules',session_id:selectedRef.current});}
+    else if(reply.type==='resume_on_reset_ack'){setNotice('Reset reconnection setting saved on your laptop.');}
+    else if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
       setFoldersLoading(false); setFolderBrowser({path:reply.path,parent:reply.parent || null,roots:reply.roots,folders:reply.folders,truncated:Boolean(reply.truncated)});
     } else if (reply.type === 'sessions') {
       setSessions(reply.sessions || []);
@@ -268,6 +308,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await send({ type: 'sessions' }); }
     else if (reply.type === 'error') {
+      if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
       if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
       if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
       if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
@@ -385,7 +426,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     if (selectedRef.current) drafts.current.set(selectedRef.current, promptRef.current);
     changePrompt(drafts.current.get(id) || '');
     setHasEarlier(false); historyAnchor.current = null;
-    selectedRef.current = id; setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
+    selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
   }
@@ -454,7 +495,18 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
           loadingHistory.current = true; setHistoryLoading(true); loadChat(selectedRef.current, events[0]?.event_id);
         }}>Load earlier messages</button>}
         <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" />
-        {readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Read-only history.'}</p>{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div> : <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
+        <details className="remote-automation"><summary>Schedule and automation</summary>
+          <p>Saved on your laptop after confirmation. Keep it awake with Gnomcode running. Message text is redacted before storage.</p>
+          <label htmlFor="remote-schedule-time">Delivery time (your local time)</label><input id="remote-schedule-time" type="datetime-local" value={scheduleTime} onChange={event=>setScheduleTime(event.target.value)} />
+          <button type="button" disabled={!connected || schedulePending || !prompt.trim()} onClick={()=>void scheduleDraft()}>{schedulePending?'Saving...':'Schedule current draft'}</button>
+          <button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'schedules',session_id:selected})}>Refresh saved messages</button>
+          <div aria-label="Scheduled messages">{schedules.map(message=><p key={message.id}>{new Date(message.due_at*1000).toLocaleString()} - {message.status} {message.text && <span>{message.text.slice(0,120)}</span>} {message.status==='pending' && <button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'cancel_schedule',session_id:selected,id:message.id})}>Cancel</button>}</p>)}</div>
+          <label htmlFor="remote-routing">When an agent reaches a limit</label><select id="remote-routing" value={routing} disabled={!connected} onChange={event=>{setRouting(event.target.value);requestAutomation({type:'routing',policy:event.target.value});}}><option value="ask_first">Let me choose</option><option value="automatic">Automatically switch model or provider</option><option value="deny_cross_provider">Automatically switch within provider</option></select>
+          <p>Switching needs fresh known quota. Send your next message to continue; previous tasks are not replayed.</p>
+          <p role="status">{resetArmed?'Reset reconnection armed. Waiting for fresh quota confirmation.':'Reset reconnection is not armed.'}</p>
+          <button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:true})}>Reconnect after reset</button><button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:false})}>Cancel reset reconnection</button>
+          <div aria-label="Recent events">{automationNotices.filter(item=>(item.conversation_id===selected || !item.conversation_id)).slice(0,8).map(item=><p key={item.id}>{item.message}</p>)}</div>
+        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Read-only history.'}</p>{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div> : <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
           <label htmlFor="remote-prompt">Message the agent</label>
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
           <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="submit" disabled={!connected || sending || !prompt.trim() || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
