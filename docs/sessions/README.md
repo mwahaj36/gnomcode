@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-04 - Dependabot updates](2026-11-04-dependabot-updates.md)
+
 - [2026-11-04 - Remote device approval matching](2026-11-04-device-approval-matching.md)
 
 - [2026-11-04 - Windows launch readiness acceptance](2026-11-04-windows-launch-readiness.md)

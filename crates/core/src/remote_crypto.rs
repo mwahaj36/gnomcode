@@ -149,7 +149,7 @@ impl RemoteChannel {
         let cipher = Aes256Gcm::new_from_slice(&self.send_key)
             .map_err(|_| RemoteCryptoError::KeyDerivation)?;
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), plaintext)
+            .encrypt(&Nonce::from(nonce), plaintext)
             .map_err(|_| RemoteCryptoError::InvalidFrame)?;
         self.send_seq = next;
         Ok(EncryptedRemoteFrame {
@@ -175,10 +175,7 @@ impl RemoteChannel {
         let cipher = Aes256Gcm::new_from_slice(&self.recv_key)
             .map_err(|_| RemoteCryptoError::KeyDerivation)?;
         let plaintext = cipher
-            .decrypt(
-                Nonce::from_slice(&sequence_nonce(next)),
-                ciphertext.as_slice(),
-            )
+            .decrypt(&Nonce::from(sequence_nonce(next)), ciphertext.as_slice())
             .map_err(|_| RemoteCryptoError::InvalidFrame)?;
         self.recv_seq = next;
         Ok(plaintext)
