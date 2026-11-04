@@ -71,14 +71,30 @@ impl SourceAdapter for CursorAdapter {
         let project = Project::from_origin(None, cwd, None);
         batch.projects.push(project.clone());
 
+        let parent_sid = val
+            .get("parentSessionId")
+            .or_else(|| val.get("parentId"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .map(|pid| Session::compose_id(AgentId::Cursor, pid));
+        let subagent_title = if parent_sid.is_some() {
+            val.get("subagentName")
+                .or_else(|| val.get("agentName"))
+                .and_then(Value::as_str)
+                .map(|name| format!("{name} · Subagent"))
+                .or_else(|| Some("Subagent".to_owned()))
+        } else {
+            None
+        };
+
         let mut session = Session {
             id: session_id.clone(),
             agent: AgentId::Cursor,
             surface: Surface::Ide,
             project_id: project.id,
-            parent_session_id: None,
+            parent_session_id: parent_sid,
             model: ctx.fallback_model.clone(),
-            title: None,
+            title: subagent_title,
             state: SessionState::Ended,
             pid: None,
             started_at,

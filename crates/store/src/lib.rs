@@ -194,6 +194,9 @@ pub struct SessionListItem {
     /// Session topic or title if known.
     #[serde(default)]
     pub title: Option<String>,
+    /// Parent session ID if this is a subagent session.
+    #[serde(default)]
+    pub parent_session_id: Option<String>,
     /// Originating device name (e.g. hostname or "local").
     #[serde(default)]
     pub device_name: Option<String>,
@@ -2393,7 +2396,8 @@ impl Database {
                 SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END),
                 COALESCE(SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END), 0),
-                (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1)
+                (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1),
+                s.parent_session_id
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -2488,6 +2492,7 @@ impl Database {
                     context_window: context_window.map(|w| w.max(0) as u64),
                     total_cost_usd,
                     title,
+                    parent_session_id: row.get(19)?,
                     device_name: None,
                     usage_available: true,
                     cost_basis: if usage_count == 0 || unknown_pricing.unwrap_or(0) > 0 {
