@@ -1725,14 +1725,6 @@ async fn remote_device_action_handler(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let enabled = match payload["type"].as_str() {
-        Some("enable_account_access") => true,
-        Some("disable_account_access") => false,
-        _ => return Err(StatusCode::BAD_REQUEST),
-    };
-    if enabled && payload["remote_access_confirmed"] != true {
-        return Err(StatusCode::PRECONDITION_REQUIRED);
-    }
     let client = reqwest::Client::builder()
         .https_only(true)
         .timeout(std::time::Duration::from_secs(10))
@@ -1742,12 +1734,41 @@ async fn remote_device_action_handler(
         .await
         .map_err(|_| StatusCode::UNAUTHORIZED)?
         .ok_or(StatusCode::UNAUTHORIZED)?;
-    state
-        .remote
-        .devices
-        .set_account_access(&client, &auth, enabled)
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    match payload["type"].as_str() {
+        Some("enable_account_access") => {
+            if payload["remote_access_confirmed"] != true {
+                return Err(StatusCode::PRECONDITION_REQUIRED);
+            }
+            state
+                .remote
+                .devices
+                .set_account_access(&client, &auth, true)
+                .await
+                .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        }
+        Some("disable_account_access") => {
+            state
+                .remote
+                .devices
+                .set_account_access(&client, &auth, false)
+                .await
+                .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        }
+        Some("remove_device") => {
+            let device_id = payload["device_id"]
+                .as_str()
+                .filter(|id| crate::account_devices::is_hex(id, 32))
+                .ok_or(StatusCode::BAD_REQUEST)?;
+            state
+                .remote
+                .devices
+                .remove_device(&client, &auth, device_id)
+                .await
+                .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        }
+        _ => return Err(StatusCode::BAD_REQUEST),
+    }
     Ok(Json(state.remote.devices.view().await))
 }
 

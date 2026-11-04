@@ -12,7 +12,13 @@ export const metadata: Metadata = {
   keywords: ["AI coding agents", "Claude Code", "OpenAI Codex", "Gemini CLI", "agent orchestrator", "switch AI models", "remote AI agent control", "AI developer tools", "multi-agent"],
   authors: [{ name: "Wahaj", url: "https://github.com/mwahaj36" }], creator: "Wahaj", publisher: "Gnomcode",
   robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
-  icons: { icon: "/gnomcode-mark.svg" },
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/gnomcode-mark.svg", apple: "/icons/gnomcode-192.png" },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Gnomcode",
+  },
 };
 
 export default function RootLayout({
@@ -23,8 +29,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <meta name="theme-color" content="#070708" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="apple-touch-icon" href="/icons/gnomcode-192.png" />
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('gnomcode-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(_){}})();` }} />
-
+        <script dangerouslySetInnerHTML={{ __html: `(function(){if(typeof window!=='undefined'&&'serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}})();` }} />
       </head>
       <body className="bg-bg text-[var(--sp-text)] antialiased min-h-screen flex flex-col font-sans">
         <a className="sp-global-skip" href="#main-content">Skip to content</a>

@@ -1548,9 +1548,21 @@ function cycleTheme() {
         remoteWasPaired=connected;
         document.getElementById('remote-status').textContent=result.directory_error?'Device discovery is unavailable. Check your connection.':!result.desktop_id?'Sign in to your account to make this desktop available.':!result.account_access?'Confirm account access to make this desktop available to signed-in devices.':!result.remote_enabled?'Account access is disabled for this desktop.':'This desktop is accessible from any device signed in to your account.';
         const accountAction=result.desktop_id?`<p><button type="button" class="btn-control" data-action="remote-device" data-device-operation="${result.account_access&&result.remote_enabled?'disable_account_access':'enable_account_access'}">${result.account_access&&result.remote_enabled?'Disable account access':'Enable account access'}</button></p>`:'';
-        const markup=accountAction+result.devices.map(device=>`<div class="sp-device-row"><div><strong>${escapeHtml(device.name)}</strong><p>${device.connected?'Connected':'Saved connection'}</p></div></div>`).join('');
+        const markup=accountAction+result.devices.map(device=>`<div class="sp-device-row"><div><strong>${escapeHtml(device.name)}</strong><p>${device.connected?'Connected':'Saved connection'}</p></div><button type="button" class="btn-control" style="color: var(--red);" data-action="remove-remote-device" data-device-id="${escapeHtml(device.id)}" data-device-name="${escapeHtml(device.name)}">Remove</button></div>`).join('');
         if(markup!==remoteDevicesMarkup){document.getElementById('remote-link').innerHTML=markup;remoteDevicesMarkup=markup;}
       }catch{document.getElementById('remote-status').textContent='Devices unavailable. Reload to try again.';}
+    }
+    async function removeRemoteDevice(target){
+      const id=target.dataset.deviceId;
+      const name=target.dataset.deviceName||'this device';
+      if(!id)return;
+      if(!await confirmAction(`Remove ${name}? It will be disconnected and cannot reconnect without pairing again.`,'Remove device'))return;
+      target.disabled=true;
+      try{
+        await apiJson('/api/v1/remote/devices',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({type:'remove_device',device_id:id})});
+        await loadRemoteStatus();
+      }catch{document.getElementById('remote-status').textContent='Could not remove device. Refresh Devices and retry.';}
+      finally{target.disabled=false;}
     }
     async function manageRemoteDevice(target){
       target.disabled=true;
@@ -1569,6 +1581,7 @@ function cycleTheme() {
       if (!target) return;
       const action = target.dataset.action;
       if(action==='remote-device'){void manageRemoteDevice(target);return;}
+      if(action==='remove-remote-device'){void removeRemoteDevice(target);return;}
       if (action.startsWith('view:')) { event.preventDefault(); switchTab(action.slice(5)); if (event.detail && matchMedia('(max-width:760px)').matches) document.querySelector('.view-content.active')?.focus({preventScroll:true}); return; }
       if (action.startsWith('export:')) { exportData(action.slice(7)); return; }
     async function handlePermissionAction(sessionId, action, toolCallId) {

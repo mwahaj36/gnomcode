@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
+import { getNotificationPermission, requestNotificationPermission, triggerTestNotification, type NotificationStatus } from "../lib/notifications";
 
 interface CustomModelPricing {
   model_pattern: string;
@@ -39,6 +40,19 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [notifStatus, setNotifStatus] = useState<NotificationStatus>("default");
+  useEffect(() => {
+    setNotifStatus(getNotificationPermission());
+  }, []);
+
+  const handleToggleNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    setNotifStatus(granted ? "granted" : "denied");
+  };
+
+  const handleTestNotification = async () => {
+    await triggerTestNotification();
+  };
   const loadBusy = useRef(false);
   const loadGeneration = useRef(0);
   const accountId = useRef<string | null>(null);
@@ -237,6 +251,35 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
             </form>
           </div>
         )}
+
+        <div className="sp-settings-notifications" style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid var(--sp-border)" }}>
+          <h3>Device & PWA Notifications</h3>
+          <p className="sp-settings-hint" style={{ marginTop: "4px", marginBottom: "16px" }}>
+            Alerts for agent completions, required approvals, and quota resets on this device. Status: <strong style={{ textTransform: "uppercase" }}>{notifStatus}</strong>
+          </p>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+            {notifStatus !== "granted" ? (
+              <button
+                type="button"
+                onClick={handleToggleNotifications}
+                className="sp-settings-action sp-settings-primary"
+              >
+                Enable Notifications
+              </button>
+            ) : (
+              <span className="sp-trust-exact" style={{ padding: "8px 12px", border: "1px solid var(--sp-border)", borderRadius: "4px" }}>
+                [NOTIFICATIONS ACTIVE]
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleTestNotification}
+              className="sp-settings-action"
+            >
+              Send Test Alert
+            </button>
+          </div>
+        </div>
       </section>
 
       {/* Monthly Subscription Plans */}
