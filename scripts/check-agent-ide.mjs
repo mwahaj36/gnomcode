@@ -69,6 +69,43 @@ try {
   await page.addInitScript(() => { window.gnomcodeDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?token=test#sessions`);
+  const guide = page.locator('#onboarding-dialog');
+  await guide.waitFor({state:'visible'});
+  assert.equal(await page.locator('#onboarding-progress').textContent(), 'Step 1 of 4');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.getByRole('button',{name:'Back',exact:true}).click();
+  for (let step=0; step<3; step++) await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.getByRole('button',{name:'Open session launcher',exact:true}).click();
+  await guide.waitFor({state:'hidden'});
+  assert.equal(await page.locator('#ide-launcher').isVisible(),true);
+  await page.reload();
+  assert.equal(await guide.isVisible(),false,'dismissal survives reload');
+  await page.getByRole('tab',{name:'Profile',exact:true}).click();
+  await page.getByRole('button',{name:'Getting started',exact:true}).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await guide.isVisible(),false,'Escape dismisses the guide');
+  await page.getByRole('tab',{name:'Workspace',exact:true}).click();
+  await page.locator('#ide-session-search').focus();
+  await page.mouse.move(800,400);
+  for (const theme of ['light','dark']) {
+    const narrow=await browser.newPage({viewport:{width:390,height:650},colorScheme:theme});
+    await narrow.goto(`http://127.0.0.1:${server.address().port}/?token=test`);
+    for (let step=0;step<4;step++) {
+      const dialog=narrow.locator('#onboarding-dialog');
+      await dialog.waitFor({state:'visible'});
+      assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth),'guide fits narrow viewport');
+      const bounds=await dialog.boundingBox();
+      const footer=await narrow.locator('.onboarding-footer').boundingBox();
+      assert.ok(bounds.y>=0 && bounds.x>=15 && footer.y+footer.height<=650,'header and actions remain in viewport');
+      assert.ok(await narrow.evaluate(()=>document.getElementById('onboarding-dialog').contains(document.activeElement)),'focus stays in guide');
+      if(step===3) await narrow.screenshot({path:`${process.env.TEMP}/gnomcode-onboarding-${theme}.png`});
+      else await narrow.getByRole('button',{name:'Continue',exact:true}).click();
+    }
+    await narrow.getByRole('button',{name:'Skip guide',exact:true}).click();
+    await narrow.reload();
+    assert.equal(await narrow.locator('#onboarding-dialog').isVisible(),false,'skip survives reload');
+    await narrow.close();
+  }
   assert.equal(await page.getByRole('button',{name:'Pin navigation',exact:true}).count(),0,'navigation has a single predictable toggle');
   await page.getByRole('button', {name:/Review authentication/}).click();
   await page.locator('#chat-stream').getByText('I will review the login flow.').waitFor();
