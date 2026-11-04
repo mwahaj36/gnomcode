@@ -7,6 +7,7 @@ import {
   getNotificationPermission,
   requestNotificationPermission,
   triggerTestNotification,
+  triggerServerPushTest,
   isStandalonePWA,
   type NotificationStatus
 } from "../../lib/notifications";
@@ -15,6 +16,7 @@ export default function AppLauncherClient() {
   const [notifStatus, setNotifStatus] = useState<NotificationStatus>("default");
   const [isStandalone, setIsStandalone] = useState(false);
   const [testSent, setTestSent] = useState(false);
+  const [serverPushMsg, setServerPushMsg] = useState("");
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [installed, setInstalled] = useState(false);
 
@@ -47,6 +49,13 @@ export default function AppLauncherClient() {
     setTestSent(true);
     await triggerTestNotification();
     setTimeout(() => setTestSent(false), 3000);
+  };
+
+  const handleServerPushTest = async () => {
+    setServerPushMsg("Testing...");
+    const res = await triggerServerPushTest();
+    setServerPushMsg(res.ok ? "Delivered" : "Not configured");
+    setTimeout(() => setServerPushMsg(""), 3500);
   };
 
   const handleInstallClick = async () => {
@@ -173,7 +182,15 @@ export default function AppLauncherClient() {
               onClick={handleTestNotif}
               className="px-3 py-1.5 text-xs font-mono font-semibold uppercase tracking-wider rounded border border-[var(--sp-border)] text-[var(--sp-text)] hover:bg-[var(--sp-card-hover)] transition-colors"
             >
-              {testSent ? "Alert Triggered" : "Test Notification"}
+              {testSent ? "Alert Triggered" : "Test Local Alert"}
+            </button>
+
+            <button
+              onClick={handleServerPushTest}
+              className="px-3 py-1.5 text-xs font-mono font-semibold uppercase tracking-wider rounded border border-[var(--sp-border)] text-[var(--sp-text)] hover:bg-[var(--sp-card-hover)] transition-colors"
+              title="Dispatches background server push via VAPID"
+            >
+              {serverPushMsg ? serverPushMsg : "Test Server Push"}
             </button>
 
             <Link

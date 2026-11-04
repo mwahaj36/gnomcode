@@ -156,3 +156,99 @@ export function registerPwaServiceWorker(): void {
     });
   });
 }
+
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const buffer = new ArrayBuffer(rawData.length);
+  const outputArray = new Uint8Array(buffer);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return buffer;
+}
+
+export interface PushSubscriptionResult {
+  ok: boolean;
+  subscription?: PushSubscription;
+  error?: string;
+}
+
+/** Subscribe mobile PWA or browser to VAPID Web Push server */
+export async function subscribeToPushServer(): Promise<PushSubscriptionResult> {
+  if (!isNotificationSupported() || !('serviceWorker' in navigator)) {
+    return { ok: false, error: 'Push notifications are not supported on this browser.' };
+  }
+
+  const permission = await requestNotificationPermission();
+  if (!permission) {
+    return { ok: false, error: 'Notification permission was denied.' };
+  }
+
+  try {
+    const keyRes = await fetch('/api/push/vapid-key');
+    const { configured, publicKey } = await keyRes.json();
+    if (!configured || !publicKey) {
+      return { ok: false, error: 'Server VAPID keys are not configured yet.' };
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+    }
+
+    try {
+      localStorage.setItem('gnomcode-push-sub', JSON.stringify(sub));
+    } catch {}
+
+    return { ok: true, subscription: sub };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Subscription failed';
+    return { ok: false, error: message };
+  }
+}
+
+/** Send a cold server-side Web Push test via VAPID */
+export async function triggerServerPushTest(title = 'Gnomcode Background Push', body = 'Server-delivered push notification verified.'): Promise<{ ok: boolean; message: string }> {
+  try {
+    let subJson = localStorage.getItem('gnomcode-push-sub');
+    let sub = subJson ? JSON.parse(subJson) : null;
+
+    if (!sub && 'serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      sub = await reg.pushManager.getSubscription();
+    }
+
+    if (!sub) {
+      const res = await subscribeToPushServer();
+      if (!res.ok || !res.subscription) {
+        return { ok: false, message: res.error || 'Could not obtain push subscription' };
+      }
+      sub = res.subscription;
+    }
+
+    const res = await fetch('/api/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: sub,
+        title,
+        body
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      return { ok: true, message: 'Server Web Push dispatched successfully.' };
+    }
+    return { ok: false, message: data.error || 'Push send rejected.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Server push failed';
+    return { ok: false, message };
+  }
+}
