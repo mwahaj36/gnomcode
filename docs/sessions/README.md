@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-04 - Windows downloads, email signup and laptop automation](2026-11-04-scheduling-auth-routing.md)
+
 - [2026-11-02 - Case-sensitive rename follow-up](2026-11-02-rename-filename-followup.md)
 
 - [2026-11-02 — Gnomcode rename and PR 118 review](2026-11-02-gnomcode-rename-and-pr118-review.md)
