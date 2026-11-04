@@ -8,6 +8,7 @@ import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoic
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
 import { reconcileChat, renderConversationLimits, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
+import { getNotificationPermission, requestNotificationPermission, sendAppNotification, triggerTestNotification } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
 type Session = { id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean };
@@ -54,6 +55,25 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const [hasEarlier, setHasEarlier] = useState(false);
   const [folderBrowser, setFolderBrowser] = useState<FolderListing | null>(null);
   const [foldersLoading, setFoldersLoading] = useState(false);
+  const [notifGranted, setNotifGranted] = useState(false);
+  useEffect(() => {
+    setNotifGranted(getNotificationPermission() === 'granted');
+  }, []);
+  async function toggleOrTestNotifications() {
+    if (getNotificationPermission() !== 'granted') {
+      const granted = await requestNotificationPermission();
+      setNotifGranted(granted);
+      if (granted) {
+        setNotice('Notifications enabled for agent events.');
+        void triggerTestNotification();
+      } else {
+        setError('Notification permission not granted.');
+      }
+    } else {
+      setNotice('Triggering test alert...');
+      await triggerTestNotification();
+    }
+  }
   const promptInput = useRef<HTMLTextAreaElement | null>(null);
   const chatContainer = useRef<HTMLDivElement | null>(null);
   const historyAnchor = useRef<{top:number; height:number} | null>(null);
@@ -282,6 +302,17 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       }
     } else if (reply.type === 'chat' && reply.session_id === selectedRef.current) {
       const page = reply.events || [];
+      if (typeof document !== 'undefined' && document.hidden && page.length > 0) {
+        const last = page[page.length - 1];
+        if (last && last.role === 'assistant') {
+          void sendAppNotification({
+            title: active?.title || 'Agent Response Ready',
+            body: last.content ? last.content.slice(0, 100) : 'Agent completed a turn.',
+            tag: 'agent-turn',
+            data: { url: '/remote' }
+          });
+        }
+      }
       setEvents(current => {
         const all = new Map(current.map(event => [event.event_id, event]));
         page.forEach(event => all.set(event.event_id, event));
@@ -453,6 +484,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       {workspace && <button ref={sidebarToggle} className="remote-sidebar-toggle" type="button" aria-label={showSessions ? "Close conversations" : "Open conversations"} aria-controls="remote-session-sidebar" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>}
       <div><Heading aria-live="polite">{workspace ? active?.title || 'Conversations' : 'Connect your desktop'}</Heading>{connected && <div className="sp-conversation-limits" aria-label="Remaining limits" dangerouslySetInnerHTML={{__html:renderConversationLimits(active?.limits || [])}} />}</div>
       {connected && <button type="button" className="remote-new" aria-label="New conversation" onClick={startNew}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>}
+      <button type="button" className="remote-notif-button" aria-label="Notifications" title={notifGranted ? "Notifications active (click to test)" : "Enable notifications"} onClick={() => void toggleOrTestNotifications()}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={notifGranted ? "var(--sp-accent)" : "currentColor"} strokeWidth="1.6" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9m4.3 13a2 2 0 0 0 3.4 0"/></svg></button>
       <button type="button" className="remote-desktop-button" aria-label="Desktop connection" onClick={()=>setDesktopPanel(true)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button>
     </header>
     {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Open any linked desktop through your signed-in account.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}

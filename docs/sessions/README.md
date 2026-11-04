@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-04 — Progressive Web App, Route Distinction, AEO and Device Deletion](2026-11-04-pwa-marketing-routes-device-deletion.md)
+
 - [2026-11-04 - Marketing site audit](2026-11-04-marketing-audit.md)
 
 - [2026-11-04 - Marketing and search improvements](2026-11-04-marketing-search.md)

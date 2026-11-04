@@ -180,3 +180,38 @@ fn device_request_rejects_paths_and_unbounded_labels() {
     assert!(!request.valid());
     assert!(!uuid_owner("../../not-an-account"));
 }
+
+#[tokio::test]
+async fn remove_device_deletes_approved_connection_and_persists() {
+    let owner = "30000000-0000-0000-0000-000000000003";
+    let devices = AccountDevices::default();
+    devices.enable_account_access(owner).await.expect("enable");
+    let device_id = "e".repeat(32);
+    let request = Request {
+        id: device_id.clone(),
+        public_key: "f".repeat(64),
+        name: "Phone browser 1234".into(),
+        revoked: false,
+        offer: None,
+        state: String::new(),
+    };
+    let mut state = load_state(owner).await.expect("load");
+    state.remote_enabled = true;
+    assert!(state.admit(&request));
+    save_state(&state).await.expect("save");
+
+    let auth = CloudAuth {
+        user_id: owner.into(),
+        access_token: "synthetic".into(),
+        public_key: "synthetic".into(),
+        base_url: "http://127.0.0.1:9".into(),
+    };
+    let client = reqwest::Client::new();
+    devices
+        .remove_device(&client, &auth, &device_id)
+        .await
+        .expect("remove device");
+
+    let updated = load_state(owner).await.expect("reload");
+    assert!(!updated.approved.contains_key(&device_id));
+}
