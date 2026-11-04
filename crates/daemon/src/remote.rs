@@ -570,7 +570,7 @@ async fn run_connection(
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
-                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces")) {room.activity().await;}
+                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
@@ -749,6 +749,10 @@ async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
                 Err(_) => json!({"type":"error","message":"Could not load chat"}),
             }
         }
+        Some(
+            "schedule" | "schedules" | "cancel_schedule" | "notices" | "routing"
+            | "resume_on_reset",
+        ) => crate::automation::command(db, request.clone()).await,
         Some("prompt") => {
             let Some(session_id) = request.get("session_id").and_then(Value::as_str) else {
                 return json!({"type":"error","message":"Missing session"});
@@ -830,6 +834,7 @@ pub(crate) fn record_model_change(
     let previous_native = db
         .conversation_target(source)?
         .and_then(|(_, native, _)| native);
+    db.disarm_resume_queue(source)?;
     let same_host = db
         .conversation_target(source)?
         .is_some_and(|(host, _, _)| host == target.session_id);
@@ -863,7 +868,13 @@ pub(crate) fn record_model_change(
         tool_name: None,
         status: Some("model_changed".into()),
     };
-    db.insert_chat_event(&event)
+    db.insert_chat_event(&event)?;
+    db.automation_notice(
+        &event.event_id,
+        &event.session_id,
+        "Model switch requested. Activation is pending agent confirmation.",
+    )?;
+    Ok(())
 }
 
 pub(crate) fn sync_conversation_bindings(
@@ -1033,6 +1044,10 @@ pub(crate) fn conversation_sessions(
         let can_prompt = host.is_some_and(|record| {
             observed.is_none_or(|session| {
                 session.state == gnomcode_core::SessionState::Idle
+                    || (session.state == gnomcode_core::SessionState::Error
+                        && db
+                            .quota_reset_ready(&session.id, session.last_event_at)
+                            .unwrap_or(false))
                     || chrono::DateTime::parse_from_rfc3339(&record.started_at)
                         .is_ok_and(|started| session.last_event_at < started)
             })

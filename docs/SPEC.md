@@ -178,7 +178,17 @@ Cross-provider changes attach a new official CLI to the same local conversation.
 
 Desktop Resume conversation, local `POST /api/v1/sessions/{id}/continue` and encrypted Remote `resume_session` reuse a live hosted agent or reopen the exact recorded native ID in its recorded workspace: `codex resume <id>`, `claude --resume <id>` or `gemini --resume <id>`. Strictly validate native IDs, preserve CLI permission/login controls and do not inject a task until the user sends a message. Desktop Send can also resume before delivery. Serialize resume, switch and prompt control to avoid duplicate hosts during concurrent local/Remote actions. Keep the conversation ID/history stable and replace only the dead host binding. A provider switch with no native history yet can restart its saved launch and retain pending context. Unsupported native resume remains read-only; do not silently replace a saved native session with an unrelated fresh one.
 
-The laptop must be awake, connected and running Gnomcode for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy. No message queue or cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
+The laptop must be awake, connected and running Gnomcode for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy. Scheduled messages acknowledged by the laptop persist locally and run when it is awake with Gnomcode running; the phone may disconnect afterward. No cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
+
+### 3.14.3 Laptop-owned scheduled messages and automatic failover
+
+Desktop and encrypted Remote may create, list and cancel scheduled conversation messages. Store UTC deadlines and redacted user text only in local SQLite, never metadata sync or the account directory. Show that redaction applies before scheduling. Retain pending messages until execution or cancellation; erase text immediately on cancellation, delivery or failure, and remove terminal records after 30 days. Deleting conversation history cancels its pending messages. Access uses existing loopback authentication or the authenticated encrypted Remote channel. A phone must wait for the laptop acknowledgment before claiming a schedule is saved.
+
+Process overdue messages after restart. Busy/approval-blocked agents wait; do not inject into an active turn or bypass approval. Claim a message durably before delivery. A crash after claiming is reported as uncertain and never automatically replayed. Native delivery acknowledgment means accepted by the terminal, not completed by the model. Unsupported or unavailable sessions fail visibly. Scheduling does not wake a sleeping laptop.
+
+Automatic routing remains opt-in under the existing routing policy. Only a recorded rate-limit event and fresh known quota can trigger failover, using a supported installed agent/model with positive headroom. Respect same-provider restrictions, idle/approval guards, bounded context and stable conversation identity. Do not replay a task after switching. Record one attempt per triggering event to prevent loops. Notify on switch requested or failed, without claiming observed activation. Desktop notifications contain generic lifecycle text, never message content; scheduling and switching status remain available in the UI when OS notifications are unavailable.
+
+Reset reconnection is armed explicitly per conversation, or by automatic routing when no eligible alternative exists. Require fresh known exhaustion before arming and fresh positive quota after the recorded eligibility time across every known provider window. Reuse the live host or reopen the exact recorded native conversation without submitting a task. Cancel old reset entries on model changes. The daemon owns approval/quota notifications; the legacy Windows tray retains context warnings without duplicating them. Email signup uses Supabase confirmation when enabled, supports immediate sessions when confirmation is disabled, and offers resend/expired-link recovery. Public project settings were verified with email signup and confirmation enabled; mailbox delivery remains an external acceptance check.
 
 ### 3.15 Optional account sync and encrypted Remote
 
@@ -219,11 +229,11 @@ Follow [AGENTS](../AGENTS.md), installed engineering skills and relevant ADRs. R
 | M0/M1 foundation, adapters, store and CLI | Present | Current real fixture/agent-version coverage |
 | M2 daemon, reports and local console | Present | Platform/resource release acceptance |
 | M3 desktop/tray/distribution | Electron shell and Windows development packages | Signed/approved public artifacts, macOS/Linux acceptance |
-| M4 local integration/automation | Local access free; rules/queue/relay present | Real native quota/resume and permission acceptance |
+| M4 local integration/automation | Local access free; rules/relay, laptop-owned scheduled messages and quota-confirmed hosted reconnection | Real native quota/resume and permission acceptance |
 | M5 account sync / Teams | Opt-in owner snapshot; schema foundations | Privacy minimization and complete team product |
 | M6 launcher/terminal | Independent owner, official CLI launch and local xterm | Real provider and cross-platform lifecycle checks |
 | M7 chat/file/diff | Redacted local history, safe chat and inspection | Retention/deletion acceptance |
-| M8 routing/handoff | Continuous conversations, native named-model controls, hidden cross-provider context and saved-session resume | Authenticated cross-model/provider outcome confirmation |
+| M8 routing/handoff | Continuous conversations, named-model controls, quota-based automatic failover, hidden cross-provider context and saved-session resume | Authenticated cross-model/provider outcome confirmation |
 | M9 encrypted Remote | Account-wide consent, automatic signed-in access, durable trust and bounded commands | Physical phone, independent security and owner production approval |
 | Marketing/documentation | Outcome-first positioning, guide/legal routes and SEO in this phase | Production crawl checks and legal approval |
 
@@ -299,6 +309,8 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0005](./adr/0005-browser-device-pairing.md) | Independent browser login, encrypted one-time transfer, private credential persistence | Pairing withdrawn in v1.4.1; generic credential protection retained |
 
 | [0026](./adr/0026-gnomcode-rename.md) | Gnomcode identity, canonical site and non-destructive legacy history compatibility | Accepted |
+
+| [0027](./adr/0027-laptop-owned-scheduling-and-quota-recovery.md) | Laptop-owned scheduling, conservative automatic failover and quota-confirmed hosted reconnection | Accepted |
 
 ## 10. Open decisions
 
