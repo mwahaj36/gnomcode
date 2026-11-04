@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-04 - Windows launch readiness acceptance](2026-11-04-windows-launch-readiness.md)
+
 - [2026-11-04 - Failover selection alias follow-up](2026-11-04-failover-alias-followup.md)
 
 - [2026-11-04 - Windows downloads, email signup and laptop automation](2026-11-04-scheduling-auth-routing.md)
