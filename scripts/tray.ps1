@@ -179,13 +179,15 @@ function Update-TrayIconBadge([int]$count) {
             $g.DrawRectangle($darkPen, $badgeRect)
 
             # High-visibility bold typography
-            $badgeFont = New-Object System.Drawing.Font("Arial", 9.5, [System.Drawing.FontStyle]::Bold)
+            $fontSize = if ($count -gt 9) { 7.5 } else { 9.5 }
+            $badgeFont = New-Object System.Drawing.Font("Arial", $fontSize, [System.Drawing.FontStyle]::Bold)
             $badgeTextBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(7, 7, 8))
             $sf = New-Object System.Drawing.StringFormat
             $sf.Alignment = [System.Drawing.StringAlignment]::Center
             $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
             $textStr = if ($count -gt 9) { "9+" } else { "$count" }
-            $g.DrawString($textStr, $badgeFont, $badgeTextBrush, (New-Object System.Drawing.RectangleF 13, 14, 18, 18), $sf)
+            $textY = if ($count -gt 9) { 13.5 } else { 14 }
+            $g.DrawString($textStr, $badgeFont, $badgeTextBrush, (New-Object System.Drawing.RectangleF 13, $textY, 18, 18), $sf)
 
             $badgeBrush.Dispose()
             $darkPen.Dispose()

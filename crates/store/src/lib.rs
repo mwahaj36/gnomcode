@@ -832,6 +832,16 @@ impl Database {
               AND NOT EXISTS (SELECT 1 FROM alert WHERE session_id=session.id)
               AND NOT EXISTS (SELECT 1 FROM context_relay WHERE session_id=session.id)
               AND NOT EXISTS (SELECT 1 FROM session child WHERE child.parent_session_id=session.id);
+
+            DELETE FROM usage_record
+            WHERE session_id IN (
+                SELECT id FROM session
+                WHERE agent = 'codex'
+                  AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%')
+            );
+            DELETE FROM session
+            WHERE agent = 'codex'
+              AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%');
         "#))?;
         Ok(())
     }
