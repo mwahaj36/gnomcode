@@ -180,6 +180,7 @@ pub fn build_router(state: AppState) -> Router {
                 .post(license_post_handler)
                 .delete(license_delete_handler),
         )
+        .route("/api/v1/automation", post(automation_handler))
         .route("/api/v1/resume-queue", get(resume_queue_get_handler))
         .route("/api/v1/resume-queue/arm", post(resume_queue_arm_handler))
         .route(
@@ -1312,6 +1313,7 @@ async fn chat_delete_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    let _control = crate::CONVERSATION_CONTROL.lock().await;
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(1000).unwrap_or_default();
     let hosted = gnomcode_pty::list_active_sessions();
@@ -1701,6 +1703,7 @@ async fn routing_policy_post_handler(
         return Err(StatusCode::BAD_REQUEST);
     };
 
+    let _control = crate::CONVERSATION_CONTROL.lock().await;
     let db = state.db.lock().await;
     db.save_routing_policy(policy)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -2714,6 +2717,15 @@ async fn live_snapshot_handler(
             "custom_pricing": custom_pricing,
         })),
     ))
+}
+
+async fn automation_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(request): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(crate::automation::command(&state.db, request).await))
 }
 
 #[cfg(test)]
