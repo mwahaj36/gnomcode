@@ -1,5 +1,11 @@
 # Engineering sessions
 
+- [2026-11-04 - Marketing site audit](2026-11-04-marketing-audit.md)
+
+- [2026-11-04 - Marketing and search improvements](2026-11-04-marketing-search.md)
+
+- [2026-11-04 - Landing handoff preview](2026-11-04-landing-handoff-preview.md)
+
 - [2026-11-04 - Remote device approval matching](2026-11-04-device-approval-matching.md)
 
 - [2026-11-04 - Windows launch readiness acceptance](2026-11-04-windows-launch-readiness.md)
