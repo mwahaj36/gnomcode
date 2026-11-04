@@ -69,6 +69,21 @@ assert.doesNotMatch(sharedCss,/var\(--(?:text(?:-\d)?|border|primary-text|surfac
 
 const recentIdle=renderOngoing([{id:'idle-grace',title:'Recent idle',is_active:false,is_ongoing:true,presence:'recently_idle',state:'idle',last_event_at:new Date().toISOString()}]);
 assert.match(recentIdle,/Recent idle/);assert.match(recentIdle,/<b>Idle<\/b>/);assert.match(recentIdle,/Last activity/);
+const ongoingWithTokens = renderOngoing([{
+  id: 'subagent-1',
+  title: 'Goodall (control) · Subagent',
+  agent: 'codex',
+  parent_session_id: 'parent-1',
+  is_active: true,
+  state: 'thinking',
+  total_tokens: 23177,
+  last_event_at: '2026-10-28T00:00:00Z',
+}]);
+assert.match(ongoingWithTokens, /Goodall \(control\) · Subagent/);
+assert.match(ongoingWithTokens, /23\.2K tokens/);
+assert.match(ongoingWithTokens, /Subagent/);
+assert.match(ongoingWithTokens, /23\.2K recorded/);
+assert.match(ongoingWithTokens, /parent-1/);
 const windows=renderQuota([{provider:'codex',window:'five_hour',used_pct:50,remaining_pct:50,basis:'exact'},{provider:'codex',window:'weekly',used_pct:8,remaining_pct:92,basis:'exact'}],new Date().toISOString());
 assert.equal((windows.match(/class="sp-limit-windows"/g)||[]).length,1,'one compact row groups both provider windows');
 assert.match(windows,/50.0%/);assert.match(windows,/8.0%/);

@@ -60,14 +60,39 @@ impl SourceAdapter for ClineAdapter {
         let project = Project::from_origin(None, cwd, None);
         batch.projects.push(project.clone());
 
+        let parent_sid = messages.iter().find_map(|msg| {
+            msg.get("parentTaskId")
+                .or_else(|| msg.get("parentSessionId"))
+                .or_else(|| msg.get("parentId"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .map(|pid| Session::compose_id(AgentId::Cline, pid))
+        });
+        let subagent_name = messages.iter().find_map(|msg| {
+            msg.get("subagentName")
+                .or_else(|| msg.get("agentName"))
+                .or_else(|| msg.get("mode"))
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+        });
+        let subagent_title = if parent_sid.is_some() {
+            if let Some(name) = subagent_name {
+                Some(format!("{name} · Subagent"))
+            } else {
+                Some("Subagent".to_owned())
+            }
+        } else {
+            None
+        };
+
         let mut session = Session {
             id: session_id.clone(),
             agent: AgentId::Cline,
             surface: Surface::Ide,
             project_id: project.id,
-            parent_session_id: None,
+            parent_session_id: parent_sid,
             model: ctx.fallback_model.clone(),
-            title: None,
+            title: subagent_title,
             state: SessionState::Idle,
             pid: None,
             started_at: Utc::now(),

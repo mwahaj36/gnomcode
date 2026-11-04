@@ -19,6 +19,8 @@ use std::collections::HashSet;
 #[derive(Debug, Default)]
 pub struct ClaudeAdapter {
     seen_dedup_keys: HashSet<String>,
+    parent_session_id: Option<String>,
+    subagent_title: Option<String>,
 }
 
 impl ClaudeAdapter {
@@ -99,20 +101,51 @@ impl SourceAdapter for ClaudeAdapter {
                 batch.projects.push(project.clone());
             }
 
+            if self.parent_session_id.is_none() {
+                let parent_sid = obj
+                    .get("parentSessionId")
+                    .or_else(|| obj.get("parentId"))
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|pid| Session::compose_id(AgentId::ClaudeCode, pid));
+                if parent_sid.is_some() {
+                    self.parent_session_id.clone_from(&parent_sid);
+                }
+            }
+            if self.subagent_title.is_none() {
+                let subagent_name = obj
+                    .get("subagentName")
+                    .or_else(|| obj.get("agentName"))
+                    .or_else(|| obj.get("agent_type"))
+                    .or_else(|| obj.get("agentRole"))
+                    .and_then(Value::as_str);
+                if let Some(name) = subagent_name {
+                    self.subagent_title = Some(format!("{name} · Subagent"));
+                } else if self.parent_session_id.is_some() {
+                    self.subagent_title = Some("Subagent".to_owned());
+                }
+            }
+
             let initial_ts = parsed_ts.unwrap_or_else(Utc::now);
             let sess = current_session.get_or_insert_with(|| Session {
                 id: session_id.clone(),
                 agent: AgentId::ClaudeCode,
                 surface,
                 project_id: project.id.clone(),
-                parent_session_id: None,
+                parent_session_id: self.parent_session_id.clone(),
                 model: None,
-                title: None,
+                title: self.subagent_title.clone(),
                 state: SessionState::Idle,
                 pid: None,
                 started_at: initial_ts,
                 last_event_at: initial_ts,
             });
+            if self.parent_session_id.is_some() && sess.parent_session_id.is_none() {
+                sess.parent_session_id.clone_from(&self.parent_session_id);
+            }
+            if self.subagent_title.is_some() && sess.title.is_none() {
+                sess.title.clone_from(&self.subagent_title);
+            }
             if let Some(valid_ts) = parsed_ts {
                 sess.last_event_at = valid_ts;
             }

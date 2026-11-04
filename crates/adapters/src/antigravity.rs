@@ -23,6 +23,8 @@ use std::collections::HashSet;
 pub struct AntigravityAdapter {
     seen_dedup_keys: HashSet<String>,
     active_model: Option<String>,
+    parent_session_id: Option<String>,
+    subagent_title: Option<String>,
 }
 
 impl AntigravityAdapter {
@@ -81,6 +83,24 @@ impl SourceAdapter for AntigravityAdapter {
             let step_type = obj.get("type").and_then(Value::as_str).unwrap_or("");
             let source = obj.get("source").and_then(Value::as_str).unwrap_or("");
             if let Some(raw_content) = obj.get("content").and_then(Value::as_str) {
+                if self.parent_session_id.is_none()
+                    && (source == "SYSTEM" || step_type == "SYSTEM_MESSAGE")
+                {
+                    if let Some(pos) = raw_content.find("sender=") {
+                        let after = &raw_content[pos + 7..];
+                        let sender: String = after
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                            .collect();
+                        if sender.len() >= 32 {
+                            self.parent_session_id =
+                                Some(Session::compose_id(AgentId::Antigravity, &sender));
+                            if self.subagent_title.is_none() {
+                                self.subagent_title = Some("Subagent".to_owned());
+                            }
+                        }
+                    }
+                }
                 let clean = if step_type == "USER_INPUT" {
                     extract_antigravity_user_prompt(raw_content)
                 } else if source == "MODEL" && matches!(step_type, "GENERIC" | "PLANNER_RESPONSE") {
@@ -131,15 +151,21 @@ impl SourceAdapter for AntigravityAdapter {
                     Surface::Ide
                 },
                 project_id: project.id.clone(),
-                parent_session_id: None,
+                parent_session_id: self.parent_session_id.clone(),
                 model: self.active_model.clone(),
-                title: None,
+                title: self.subagent_title.clone(),
                 state: SessionState::Thinking,
                 pid: None,
                 started_at: ts,
                 last_event_at: ts,
             });
             sess.last_event_at = ts;
+            if self.parent_session_id.is_some() && sess.parent_session_id.is_none() {
+                sess.parent_session_id.clone_from(&self.parent_session_id);
+            }
+            if self.subagent_title.is_some() && sess.title.is_none() {
+                sess.title.clone_from(&self.subagent_title);
+            }
 
             if step_type == "USER_INPUT" {
                 sess.state = SessionState::Thinking;
