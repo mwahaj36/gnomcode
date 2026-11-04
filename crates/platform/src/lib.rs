@@ -703,12 +703,14 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
              $n = New-Object System.Windows.Forms.NotifyIcon; \
              $n.Icon = [System.Drawing.SystemIcons]::Information; \
              $n.Visible = $true; \
-             $n.ShowBalloonTip(5000, '{escaped_title}', '{escaped_body}', [System.Windows.Forms.ToolTipIcon]::Info)"
+             $n.ShowBalloonTip(5000, '{escaped_title}', '{escaped_body}', [System.Windows.Forms.ToolTipIcon]::Info); Start-Sleep -Seconds 6; $n.Dispose()"
         );
-        let _ = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
-            .spawn();
-        true
+        use std::os::windows::process::CommandExt as _;
+        std::process::Command::new("powershell")
+            .creation_flags(0x0800_0000)
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+            .spawn()
+            .is_ok()
     }
     #[cfg(target_os = "macos")]
     {
