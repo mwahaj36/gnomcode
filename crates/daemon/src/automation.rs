@@ -507,6 +507,31 @@ async fn resume_due(db: &Arc<Mutex<Database>>) {
     }
 }
 
+fn automatic_switch_allowed(
+    db: &Database,
+    id: &str,
+    expected_selection: Option<&str>,
+    source: &str,
+    target: &str,
+) -> Result<bool, gnomcode_store::Error> {
+    let sessions = db.list_active_sessions(1000)?;
+    let hosted = gnomcode_pty::list_active_sessions();
+    if crate::remote::active_conversation_id(db, id, &sessions, &hosted)? != id {
+        return Ok(false);
+    }
+    if db
+        .conversation_launch(id)?
+        .and_then(|launch| launch.model)
+        .as_deref()
+        != expected_selection
+    {
+        return Ok(false);
+    }
+    Ok(db
+        .get_routing_policy()?
+        .allows_automatic(Some(provider(source)), Some(provider(target))))
+}
+
 async fn route_limited(db: &Arc<Mutex<Database>>) {
     let Ok((events, policy, mut quotas)) = store(db, |db| {
         Ok((
@@ -588,6 +613,8 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
             Ok(Some((
                 record.agent.clone(),
                 session.model.clone().unwrap_or_default(),
+                db.conversation_launch(&source_id)?
+                    .and_then(|launch| launch.model),
             )))
         })
         .await
@@ -632,26 +659,12 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
             let choice = choices[index];
             let _control = crate::CONVERSATION_CONTROL.lock().await;
             let allowed = store(db, {
-                let source_model = source.1.clone();
+                let source_selection = source.2.clone();
                 let source = source.0.clone();
                 let target = choice.agent.clone();
                 let id = id.clone();
                 move |db| {
-                    let sessions = db.list_active_sessions(1000)?;
-                    let hosted = gnomcode_pty::list_active_sessions();
-                    if crate::remote::active_conversation_id(db, &id, &sessions, &hosted)? != id {
-                        return Ok(false);
-                    }
-                    if db
-                        .conversation_launch(&id)?
-                        .and_then(|launch| launch.model)
-                        .is_some_and(|model| model != source_model)
-                    {
-                        return Ok(false);
-                    }
-                    Ok(db
-                        .get_routing_policy()?
-                        .allows_automatic(Some(provider(&source)), Some(provider(&target))))
+                    automatic_switch_allowed(db, &id, source_selection.as_deref(), &source, &target)
                 }
             })
             .await;
@@ -805,6 +818,45 @@ mod tests {
         database
             .bind_conversation_host("test-host", &session.id)
             .expect("bind");
+        database
+            .save_conversation_launch(
+                "test-host",
+                "codex",
+                &repo.path().to_string_lossy(),
+                Some("catalog-alias"),
+            )
+            .expect("saved selection");
+        database
+            .save_routing_policy(gnomcode_core::RoutingPolicy::Automatic)
+            .expect("automatic policy");
+        assert!(
+            automatic_switch_allowed(
+                &database,
+                &session.id,
+                Some("catalog-alias"),
+                "codex",
+                "claude-code"
+            )
+            .expect("unchanged alias is eligible even when native model IDs differ")
+        );
+        database
+            .save_conversation_launch(
+                "test-host",
+                "codex",
+                &repo.path().to_string_lossy(),
+                Some("replacement"),
+            )
+            .expect("user changed model");
+        assert!(
+            !automatic_switch_allowed(
+                &database,
+                &session.id,
+                Some("catalog-alias"),
+                "codex",
+                "claude-code"
+            )
+            .expect("changed selection invalidates the pending automatic switch")
+        );
         database
             .schedule_message("one", &session.id, "first", now.timestamp())
             .expect("save");
