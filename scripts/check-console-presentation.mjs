@@ -9,6 +9,7 @@ assert.match(renderConversationLimits([]),/Limits unavailable/);
 assert.doesNotMatch(renderConversationLimits([{label:'<script>',remaining_pct:null,basis:'unknown'}]),/<script>|0%/);
 assert.match(renderSummary({ report: { cost_basis: 'unknown', total_cost_usd: 0 } }), /Unknown/);
 assert.doesNotMatch(renderSummary({ report: { cost_basis: 'unknown', total_cost_usd: 0 } }), /\$0\.00/);
+assert.match(renderSummary({activeCount:3}), /EST · Inferred/);
 assert.match(renderActivity(null), /unavailable/);
 assert.match(renderActivity({ daily: [] }), /No recorded usage/);
 const activity = renderActivity({ total_tokens: 100, daily: [{ date: '2026-10-28', total_tokens: 100, chart_pct: 100, cost_basis: 'unknown', cost_usd: 0, turns: 1 }] });
@@ -57,6 +58,10 @@ assert.match(hourly,/Today, by hour/);assert.match(hourly,/Since local midnight/
 assert.doesNotMatch(hourly.split('class="sp-activity-bars"')[0], /\$12\.00|Partial estimate/, 'activity header must not duplicate the spend summary');
 assert.match(hourly, /\$12\.00/, 'expanded interval details retain their own cost');
 const {renderOngoing}=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
+const inferredSession=renderOngoing([{id:'unknown',title:'unknown',project_name:'unknown',agent:'codex',is_ongoing:true,state:'thinking',last_event_at:new Date().toISOString()}]);
+assert.match(inferredSession, /Inferred from recorded activity/);
+assert.match(inferredSession, /<b>Possibly running<\/b>/);
+assert.match(inferredSession, /Private session/);
 assert.match(renderOngoing([{id:'active-1',title:'Current session',agent:'codex',is_active:true,state:'thinking',last_event_at:'2026-10-28T00:00:00Z'},{id:'idle-1',title:'Old session',is_active:false}]),/Current session/);
 assert.doesNotMatch(renderOngoing([{id:'idle-1',title:'Old session',is_active:false}]),/Old session/);
 console.log('PASS: partial pricing, independent provider coverage, local hourly labels and ongoing session identity');

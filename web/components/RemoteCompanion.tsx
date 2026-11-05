@@ -380,7 +380,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
       if(!proofKey.current){selectedRef.current = ''; setSelected(''); setSessions([]); setEvents([]);}
       pendingPrompt.current = null; setSending(false); loadingHistory.current = false; setHistoryLoading(false);
       setFolderBrowser(null); setFoldersLoading(false); if(!proofKey.current){changePrompt('');drafts.current.clear();}
-      setPhase('connecting');
+      setPhase(proofKey.current ? 'reconnecting' : 'connecting');
       chunks.current='';outgoing.current=Promise.resolve();incoming.current=Promise.resolve();
       const {data:{session}}=await supabase.auth.getSession();
       if(epoch!==connectionEpoch.current)return;
