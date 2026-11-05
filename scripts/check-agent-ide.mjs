@@ -20,7 +20,8 @@ const server = createServer(async (request, response) => {
   let body = ''; for await (const chunk of request) body += chunk;
   if (request.method === 'POST') writes.push({ path:url.pathname, body:body ? JSON.parse(body) : null });
   let value = {};
-  if (url.pathname === '/api/v1/auth/session') value = {paired:false};
+  if (url.pathname === '/api/v1/workspaces') value = {type:'workspaces',path:JSON.parse(body).path || 'C:\\workspace',parent:null,roots:['C:\\'],folders:[{name:'picked',path:'C:\\workspace\\picked'}],truncated:false};
+  else if (url.pathname === '/api/v1/auth/session') value = {paired:false};
   else if (url.pathname === '/api/v1/sync/status') value = {message:'This desktop is local only.',last_success_at:null};
   else if (url.pathname === '/api/v1/user') value = {display_name:'Developer',openai_plan_usd:20,claude_plan_usd:20,google_plan_usd:0};
   else if (url.pathname === '/api/v1/stats') value = {total_turns:42,total_projects:3,db_size_bytes:1048576};
@@ -194,6 +195,14 @@ try {
   await page.locator('#launch-agent-select').selectOption('terminal');
   assert.equal(await page.locator('#launch-model-input').isDisabled(), true);
   await page.locator('#launch-agent-select').selectOption('codex');
+  await page.evaluate(() => { delete window.gnomcodeDesktop; });
+  await page.getByRole('button', {name:'Choose folder',exact:true}).click();
+  await mkdir(new URL('../.tmp/ide-verification/', import.meta.url), {recursive:true});
+  await page.screenshot({path:'.tmp/ide-verification/workspace-picker.png'});
+  await page.getByRole('dialog', {name:'Choose workspace folder'}).getByRole('button', {name:'picked'}).click();
+  await page.getByRole('button', {name:'Use this folder'}).click();
+  assert.equal(await page.locator('#launch-repo-input').inputValue(),'C:\\workspace\\picked');
+  await page.evaluate(() => { window.gnomcodeDesktop = {chooseWorkspace:async () => 'C:\\workspace\\picked'}; });
   await page.getByRole('button', {name:'Choose folder',exact:true}).click();
   assert.equal(await page.locator('#launch-repo-input').inputValue(),'C:\\workspace\\picked');
   await page.evaluate(() => {window.gnomcodeDesktop.chooseWorkspace = async () => null;});
