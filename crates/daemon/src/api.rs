@@ -1,4 +1,4 @@
-//! Local loopback axum HTTP & WebSocket API (`SPEC §3.1`, `§4.4`).
+//! Local loopback axum HTTP & WebSocket API (`SPEC Ã‚Â§3.1`, `Ã‚Â§4.4`).
 //!
 //! Enforces:
 //! 1. Strict loopback binding (`127.0.0.1`).
@@ -135,6 +135,7 @@ pub fn build_router(state: AppState) -> Router {
             post(workspace_terminal_handler),
         )
         .route("/api/v1/sessions/{id}/focus", post(focus_session_handler))
+        .route("/api/v1/workspaces", post(workspaces_handler))
         .route("/api/v1/agents/installed", get(installed_agents_handler))
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/model-catalog", get(model_catalog_handler))
@@ -2740,6 +2741,19 @@ async fn live_snapshot_handler(
     ))
 }
 
+async fn workspaces_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(mut request): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    if !request.is_object() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    request["type"] = json!("workspaces");
+    Ok(Json(crate::remote::dispatch(&state.db, request).await))
+}
+
 async fn automation_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -2787,6 +2801,47 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn workspace_browser_requires_auth_and_lists_directories() {
+        let dir = tempfile::tempdir().expect("workspace");
+        std::fs::create_dir(dir.path().join("project")).expect("directory");
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let body = json!({"path": dir.path().to_string_lossy()}).to_string();
+        let request = |auth: &str| {
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/workspaces")
+                .header("host", "127.0.0.1:41738")
+                .header("authorization", auth)
+                .header("content-type", "application/json")
+                .body(Body::from(body.clone()))
+                .expect("request")
+        };
+        assert_eq!(
+            app.clone()
+                .oneshot(request("Bearer wrong"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let response = app
+            .oneshot(request("Bearer local-test-token"))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 100_000)
+            .await
+            .expect("body");
+        let listing: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(listing["folders"][0]["name"], "project");
+    }
 
     #[tokio::test]
     async fn git_output_reports_changes_and_untracked_files() {

@@ -599,7 +599,7 @@ fn chunk_response(value: &Value) -> Result<Vec<Value>, serde_json::Error> {
     Ok(parts)
 }
 
-async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
+pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     match request.get("type").and_then(Value::as_str) {
         Some("models") => {
             json!({"type":"models","providers":crate::model_catalog::discover().await})
