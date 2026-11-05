@@ -81,11 +81,19 @@ try {
   assert.equal(await page.locator('#ide-launcher').isVisible(),true);
   await page.reload();
   assert.equal(await guide.isVisible(),false,'dismissal survives reload');
+  await page.getByRole('tab',{name:'Dashboard',exact:true}).click();
+  assert.equal(await page.locator('#chat-list-toggle').isVisible(),false,'conversation toggle is only visible in Workspace');
+  assert.equal(await page.getByRole('button',{name:'Sign in to connect your desktop'}).isVisible(),true,'dashboard exposes sign-in without expanding the rail');
+  await page.getByRole('button',{name:'Sign in to Gnomcode'}).click();
+  assert.equal(await page.getByRole('heading',{name:'Sign in on this desktop'}).isVisible(),true,'sign-in is reachable directly from the rail');
   await page.getByRole('tab',{name:'Profile',exact:true}).click();
   await page.getByRole('button',{name:'Getting started',exact:true}).click();
   await page.keyboard.press('Escape');
   assert.equal(await guide.isVisible(),false,'Escape dismisses the guide');
   await page.getByRole('tab',{name:'Workspace',exact:true}).click();
+  const toggleBox=await page.locator('#chat-list-toggle').boundingBox();
+  const titleBox=await page.locator('#console-title').boundingBox();
+  assert.ok(toggleBox.x<titleBox.x,'conversation toggle stays beside the left navigation');
   await page.locator('#ide-session-search').focus();
   await page.mouse.move(800,400);
   for (const theme of ['light','dark']) {
