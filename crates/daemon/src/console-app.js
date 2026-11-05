@@ -916,13 +916,48 @@ function cycleTheme() {
       }
     }
 
-    document.getElementById('launch-workspace-browse').hidden = !window.gnomcodeDesktop?.chooseWorkspace;
+    const workspaceBrowser = document.getElementById('workspace-browser');
+    let workspacePath = '';
+    let workspaceRequest = 0;
+    async function browseWorkspace(path) {
+      const request = ++workspaceRequest;
+      workspacePath = '';
+      document.getElementById('workspace-browser-select').disabled = true;
+      const status = document.getElementById('workspace-browser-status');
+      status.textContent = 'Loading folders...';
+      try {
+        const data = await apiJson('/api/v1/workspaces', {method:'POST', headers:{...headers,'Content-Type':'application/json'}, body:JSON.stringify({path})});
+        if (request !== workspaceRequest) return;
+        if (data.type === 'error') throw new Error(data.message);
+        workspacePath = data.path;
+        document.getElementById('workspace-browser-select').disabled = false;
+        document.getElementById('workspace-browser-path').textContent = data.path;
+        const roots = document.getElementById('workspace-browser-roots');
+        const list = document.getElementById('workspace-browser-list');
+        roots.replaceChildren(); list.replaceChildren();
+        function add(container, label, target) {
+          const button = document.createElement('button'); button.type = 'button';
+          button.className = 'btn-control'; button.textContent = label;
+          button.addEventListener('click', () => void browseWorkspace(target)); container.append(button);
+        }
+        for (const root of data.roots) add(roots, root, root);
+        if (data.parent) add(list, 'Up one folder', data.parent);
+        for (const folder of data.folders) add(list, folder.name, folder.path);
+        status.textContent = data.truncated ? 'More folders exist. Enter a full path if needed.' : data.folders.length ? '' : 'No subfolders.';
+      } catch (error) { if (request === workspaceRequest) status.textContent = error.message || 'Cannot open this folder.'; }
+    }
     async function chooseWorkspace() {
       try {
-        const folder = await window.gnomcodeDesktop?.chooseWorkspace();
-        if (folder) document.getElementById('launch-repo-input').value = folder;
+        if (window.gnomcodeDesktop?.chooseWorkspace) {
+          const folder = await window.gnomcodeDesktop.chooseWorkspace();
+          if (folder) document.getElementById('launch-repo-input').value = folder;
+        } else { workspaceBrowser.showModal(); await browseWorkspace(); }
       } catch { document.getElementById('launch-status').textContent = 'Folder picker unavailable. Enter the workspace path and retry.'; }
     }
+    document.getElementById('workspace-browser-cancel').addEventListener('click', () => workspaceBrowser.close());
+    document.getElementById('workspace-browser-select').addEventListener('click', () => {
+      if (workspacePath) { document.getElementById('launch-repo-input').value = workspacePath; workspaceBrowser.close(); }
+    });
 
     function resizePrompt() {
       const input = document.getElementById('chat-prompt-text');
