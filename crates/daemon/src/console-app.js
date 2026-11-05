@@ -1392,6 +1392,8 @@ function cycleTheme() {
         document.getElementById('auth-publication-status').textContent = publicationText;
         document.getElementById('cloud-sync-status').textContent = publicationText;
         document.getElementById('auth-cloud-status').textContent = res.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.';
+        document.getElementById('account-entry').hidden = Boolean(res.paired);
+        document.getElementById('dashboard-signin').hidden = Boolean(res.paired);
         document.getElementById('auth-paired-card').hidden = !res.paired;
         document.getElementById('auth-unpaired-card').hidden = Boolean(res.paired);
         document.getElementById('auth-paired-email').textContent = res.email || 'Connected account';
@@ -1400,6 +1402,8 @@ function cycleTheme() {
         document.getElementById('auth-cloud-status').textContent = 'Account connection unavailable. Retry Reload view.';
         document.getElementById('auth-publication-status').textContent = 'Local monitoring does not require an account connection.';
         document.getElementById('cloud-sync-status').textContent = 'Account status unavailable. Retry Reload view.';
+        document.getElementById('account-entry').hidden = true;
+        document.getElementById('dashboard-signin').hidden = true;
         document.getElementById('auth-paired-card').hidden = true;
         document.getElementById('auth-unpaired-card').hidden = true;
         return false;
@@ -1685,6 +1689,7 @@ function cycleTheme() {
     else setView('overview', false);
     openExplorerWorkspace();
     offerOnboarding();
+    void checkAuthSession();
     pollLocalData();
     if (initialView === 'sessions') loadInstalledAgents();
     setInterval(() => {

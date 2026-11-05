@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-05 - Console activity clarity](2026-11-05-console-activity-clarity.md)
+
 - [2026-11-05 - Codex hook review and browser folder picker](2026-11-05-codex-hook-review-folder-picker.md)
 
 - [2026-11-04 - Fix Codex tool-call session splitting and tray badge clipping](2026-11-04-fix-tool-call-session-splitting-and-tray-badge.md)
