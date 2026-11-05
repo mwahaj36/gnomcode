@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-05 - Codex hook review and browser folder picker](2026-11-05-codex-hook-review-folder-picker.md)
+
 - [2026-11-04 - Fix Codex tool-call session splitting and tray badge clipping](2026-11-04-fix-tool-call-session-splitting-and-tray-badge.md)
 - [2026-11-04 - Rebuild Windows installer and release artifacts](2026-11-04-rebuild-windows-installer.md)
 - [2026-11-04 - Subagent identities, session tokens, and auto-compacting IDE relay bypass](2026-11-04-subagent-identities-session-tokens-and-auto-compacting-ides.md)
