@@ -7,6 +7,12 @@
   <script src="/theme-init.js"></script>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
+    #workspace-browser { margin:auto; width:min(560px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow:auto; color:var(--sp-text); background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:8px; padding:20px; }
+    #workspace-browser::backdrop { background:rgb(0 0 0 / .65); }
+    #workspace-browser-path { overflow-wrap:anywhere; }
+    #workspace-browser-list { display:grid; gap:4px; max-height:45vh; overflow:auto; margin:12px 0; }
+    #workspace-browser-list button { text-align:left; }
+    #workspace-browser-roots { display:flex; gap:4px; flex-wrap:wrap; }
     #onboarding-dialog { margin:auto; box-sizing:border-box; font-weight:400; width:min(640px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); padding:0; color:var(--sp-text); background:var(--sp-surface); border:1px solid var(--sp-border); border-radius:12px; }
     #onboarding-dialog[open] { display:flex; flex-direction:column; overflow:hidden; }
     #onboarding-dialog::backdrop { background:rgb(0 0 0 / .65); }
@@ -531,11 +537,18 @@
           <p>Choose an agent and workspace to begin. Use the terminal shell to install a CLI or sign in with your provider.</p>
           <form id="launch-agent-form" data-submit="launch-agent">
             <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="terminal">Terminal Shell</option></select></div>
-            <div><label for="launch-repo-input">Workspace directory</label><div class="workspace-field"><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" aria-label="Choose folder" title="Choose folder" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg></button></div></div>
+            <div><label for="launch-repo-input">Workspace directory</label><div class="workspace-field"><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" aria-label="Choose folder" title="Choose folder"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg></button></div></div>
             <div><label for="launch-model-input">Model (optional)</label><input id="launch-model-input" type="text" placeholder="Use the agent default" maxlength="128" /></div>
             <p id="launch-agent-hint" role="status">Checking installed agents...</p>
             <button type="submit" class="btn-primary" id="launch-agent-btn">Launch Agent</button>
           </form>
+          <dialog id="workspace-browser" aria-labelledby="workspace-browser-title">
+            <h2 id="workspace-browser-title">Choose workspace folder</h2>
+            <p id="workspace-browser-path"></p><div id="workspace-browser-roots"></div>
+            <div id="workspace-browser-list"></div><p id="workspace-browser-status" role="status"></p>
+            <button type="button" class="btn-control" id="workspace-browser-cancel">Cancel</button>
+            <button type="button" class="btn-primary" id="workspace-browser-select">Use this folder</button>
+          </dialog>
           <p id="launch-status" role="status"></p>
         </section>
         <section id="session-chat-panel" aria-labelledby="session-chat-heading" hidden>

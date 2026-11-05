@@ -586,7 +586,7 @@ async fn host_health_handler(
     .into_response()
 }
 
-fn antigravity_needs_setup(bytes: &[u8]) -> bool {
+fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
     let raw = String::from_utf8_lossy(bytes);
     let mut characters = raw.chars();
     let mut text = String::new();
@@ -604,7 +604,12 @@ fn antigravity_needs_setup(bytes: &[u8]) -> bool {
         }
     }
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let Some(question) = text.rfind("Do you trust the contents of this project?") else {
+    let question = if agent == "codex" {
+        text.rfind("hooks are new or changed")
+    } else {
+        text.rfind("Do you trust the contents of this project?")
+    };
+    let Some(question) = question else {
         return false;
     };
     text.rfind("? for shortcuts")
@@ -629,12 +634,12 @@ async fn host_input_handler(
     if body.is_empty() {
         return StatusCode::BAD_REQUEST;
     }
-    if matches!(state.agent.as_str(), "antigravity" | "agy")
+    if matches!(state.agent.as_str(), "antigravity" | "agy" | "codex")
         && body.starts_with(b"\x1b[200~")
         && state
             .scrollback
             .lock()
-            .is_ok_and(|output| antigravity_needs_setup(&output.bytes()))
+            .is_ok_and(|output| startup_needs_setup(&state.agent, &output.bytes()))
     {
         return StatusCode::CONFLICT;
     }
@@ -937,19 +942,20 @@ mod tests {
     #[test]
     fn antigravity_startup_requires_explicit_terminal_trust_before_chat_input() {
         let waiting=b"\x1b[1mDo you trust the contents of this project?\x1b[0m\r\n> Yes, I trust this folder\r\n  No, exit";
-        assert!(antigravity_needs_setup(waiting));
-        assert!(antigravity_needs_setup(
+        assert!(startup_needs_setup("antigravity", waiting));
+        assert!(startup_needs_setup(
+            "antigravity",
             b"Do you trust the contents of\r\nthis project?"
         ));
         let mut ready = waiting.to_vec();
         ready.extend_from_slice(b"\x1b[2J\x1b[H>\r\n? for shortcuts");
         assert!(
-            !antigravity_needs_setup(&ready),
+            !startup_needs_setup("antigravity", &ready),
             "an old trust prompt in scrollback must not block a ready CLI"
         );
         ready.extend_from_slice(waiting);
         assert!(
-            antigravity_needs_setup(&ready),
+            startup_needs_setup("antigravity", &ready),
             "a new workspace trust prompt requires desktop confirmation"
         );
     }
@@ -987,6 +993,50 @@ mod tests {
         assert!(
             input_rx.try_recv().is_err(),
             "a chat message must not type into a trust dialog"
+        );
+    }
+
+    #[test]
+    fn codex_hook_review_stops_blocking_after_prompt_returns() {
+        let blocked = b"? for shortcuts\r\n2 hooks are new or changed.\r\nReview hooks";
+        assert!(startup_needs_setup("codex", blocked));
+        let mut ready = blocked.to_vec();
+        ready.extend_from_slice(b"\x1b[2J\r\n? for shortcuts");
+        assert!(!startup_needs_setup("codex", &ready));
+    }
+
+    #[tokio::test]
+    async fn chat_input_cannot_operate_codex_hook_review() {
+        let (input_tx, input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let mut scrollback = Scrollback::new(4096);
+        scrollback.append(b"? for shortcuts\r\nHooks need review\r\n2 hooks are new or changed.\r\n1. Review hooks\r\n2. Trust all and continue\r\n3. Continue without trusting");
+        let state = Arc::new(HostState {
+            agent: "codex".into(),
+            token: "setup-test".into(),
+            session_id: "setup-test".into(),
+            child_pid: 0,
+            scrollback: Arc::new(Mutex::new(scrollback)),
+            output_tx,
+            input_tx,
+            stopping: Arc::new(AtomicBool::new(false)),
+            resize: Arc::new(|_, _| {}),
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+        headers.insert("authorization", "Bearer setup-test".parse().expect("token"));
+        assert_eq!(
+            host_input_handler(
+                headers,
+                State(state),
+                axum::body::Bytes::from_static(b"\x1b[200~hello\x1b[201~")
+            )
+            .await,
+            StatusCode::CONFLICT
+        );
+        assert!(
+            input_rx.try_recv().is_err(),
+            "chat must not interact with hook approval"
         );
     }
 
