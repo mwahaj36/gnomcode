@@ -55,7 +55,7 @@ try {
   const owner='10000000-0000-0000-0000-000000000001',desktopId='d'.repeat(32);
   const env=await readFile(new URL('../web/.env.local',import.meta.url),'utf8');
   const project=env.match(/NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?https:\/\/([^.]+)/)?.[1];
-  let deviceRequest=null,approved=false,failDiscoveryOnce=false;
+  let deviceRequest=null,approved=false,failDiscoveryOnce=false,holdDiscovery=false,discoveryStarted=false;
   const offer=()=>({room,key:keys.publicHex,relay,protocol_version:3,owner_id:owner,desktop_id:deviceRequest?.desktop_id||desktopId,request_id:room});
   await page.route('**/rest/v1/spawnt_device_requests**',async route=>{
     if(route.request().method()==='POST'){
@@ -64,6 +64,7 @@ try {
       return route.fulfill({status:201,contentType:'application/json',body:''});
     }
     const singular=new URL(route.request().url()).searchParams.get('select')==='offer,revoked,state';
+    if(singular && holdDiscovery){discoveryStarted=true;await new Promise(resolve=>setTimeout(resolve,3000));holdDiscovery=false;}
     if(singular && failDiscoveryOnce){failDiscoveryOnce=false;await new Promise(resolve=>setTimeout(resolve,11000));return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'Temporary directory outage'})}).catch(()=>{});}
     const value=deviceRequest?{...deviceRequest,offer:approved?offer():null,state:approved?'approved':'pending',revoked:false}:null;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(singular?value:value?[value]:[])});
@@ -84,6 +85,13 @@ try {
 
   assert.equal(await page.getByRole('button',{name:'Codes match'}).count(),0,'no code confirmation exists');
   await page.getByText('The login flow is ready for review.').waitFor();
+  holdDiscovery=true;
+  await page.evaluate(()=>window.testSockets.at(-1).close());
+  await page.waitForFunction(()=>document.querySelector('.remote-reconnect'));
+  await new Promise((resolve,reject)=>{const started=Date.now();const timer=setInterval(()=>{if(discoveryStarted){clearInterval(timer);resolve();}else if(Date.now()-started>15000){clearInterval(timer);reject(new Error('Reconnect discovery did not start'));}},25);});
+  assert.equal(await page.locator('.remote-workspace').isVisible(),true,'conversation stays visible while reconnect discovery is pending');
+  assert.equal(await page.getByText('The login flow is ready for review.').isVisible(),true);
+  await page.locator('.sp-remote.is-paired').waitFor();
   await page.evaluate(owner=>new Promise((resolve,reject)=>{
     const request=indexedDB.open('gnomcode-remote-device',1);
     request.onsuccess=()=>{const db=request.result;const tx=db.transaction('devices','readwrite'),store=tx.objectStore('devices');const get=store.getAll();get.onsuccess=()=>{const saved=get.result.find(value=>value.offer.owner_id===owner);const old='0'.repeat(32);store.put({...saved,offer:{...saved.offer,desktop_id:old,room:old,request_id:old}},`${owner}:${old}`);};tx.oncomplete=()=>{db.close();resolve();};tx.onerror=reject;};request.onerror=reject;
@@ -201,6 +209,7 @@ try {
   await page.locator('#remote-prompt').focus();
   await page.waitForFunction(()=>document.querySelector('.sp-remote').getBoundingClientRect().height<=innerHeight+1);
   const reconnectSend=await page.getByRole('button',{name:'Send',exact:true}).boundingBox();
+  if(!(reconnectSend && reconnectSend.y>=0 && reconnectSend.y+reconnectSend.height<=350)) console.log('Reconnect layout:', await page.locator('.sp-remote, .remote-heading, .remote-reconnect, .remote-workspace, .remote-conversation, .remote-composer').evaluateAll(nodes=>nodes.map(n=>({name:n.className,top:n.getBoundingClientRect().top,bottom:n.getBoundingClientRect().bottom,height:n.getBoundingClientRect().height}))));
   assert.ok(reconnectSend && reconnectSend.y>=0 && reconnectSend.y+reconnectSend.height<=350,'Send stays visible under a short reconnect keyboard');
   await page.screenshot({path:new URL('../.tmp/remote-verification/reconnecting-chat.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
   await page.setViewportSize({width:390,height:844});
