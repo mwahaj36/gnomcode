@@ -1612,7 +1612,7 @@ impl Database {
 
         // 2. Upsert sessions
         {
-            let mut stmt = tx.prepare_cached(
+            let mut stmt = tx.prepare_cached(obfstr::obfstr!(
                 r#"
                 INSERT INTO session (
                     id, agent, surface, project_id, parent_session_id,
@@ -1627,8 +1627,8 @@ impl Database {
                     state = excluded.state,
                     pid = coalesce(excluded.pid, session.pid),
                     last_event_at = excluded.last_event_at
-                "#,
-            )?;
+                "#
+            ))?;
             for s in sessions {
                 stmt.execute(params![
                     s.id,
