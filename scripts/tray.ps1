@@ -82,6 +82,11 @@ function Find-GnomcodeWindow {
 }
 
 function Open-Console {
+    $desktop = Join-Path $ScriptDir "desktop/gnomcode-desktop.exe"
+    if(Test-Path -LiteralPath $desktop) {
+        Start-Process -FilePath $desktop -WindowStyle Hidden
+        return
+    }
     try {
         $engine = Join-Path $ScriptDir "gnomcode.exe"
         Start-Process -FilePath $engine -ArgumentList "daemon" -WindowStyle Hidden -ErrorAction Stop

@@ -1176,6 +1176,8 @@ pub(crate) fn conversation_sessions(
         row["hosted"] = json!(host.is_some());
         row["can_prompt"] = json!(can_prompt);
         row["can_resume"] = json!(can_resume);
+        row["can_reset"] =
+            json!(managed && matches!(agent, "codex" | "claude-code" | "gemini-cli"));
         row["limits"] = json!(limits);
         if host.is_some_and(|record| {
             observed.is_none_or(|session| {

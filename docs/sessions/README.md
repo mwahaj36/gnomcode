@@ -141,3 +141,5 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-10-26 — Session 1: Architecture Validation, Repo Initialization & M0 Foundation](2026-10-26-session-1-architecture-validation-repo-initialization-m0-foundation.md)
 
 - [2026-11-04 � Desktop onboarding](2026-11-04-desktop-onboarding.md)
+
+- [2026-11-06 — Live audit fixes](2026-11-06-live-audit-fixes.md)

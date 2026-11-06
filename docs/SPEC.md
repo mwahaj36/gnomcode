@@ -186,9 +186,17 @@ Desktop and encrypted Remote may create, list and cancel scheduled conversation 
 
 Process overdue messages after restart. Busy/approval-blocked agents wait; do not inject into an active turn or bypass approval. Claim a message durably before delivery. A crash after claiming is reported as uncertain and never automatically replayed. Native delivery acknowledgment means accepted by the terminal, not completed by the model. Unsupported or unavailable sessions fail visibly. Scheduling does not wake a sleeping laptop.
 
+Only conversations launched by Gnomcode expose sending, model switches, reconnection or schedules. Persist launch ownership when a host starts; keep imported provider sessions view-only. Default conversation lists to Gnomcode conversations, with an explicit imported-history filter and optional subagent inclusion. Legacy Codex tool-call identifiers are not sessions and must not enter lists or counts. Recover missing workspace and parent metadata from native logs without replaying usage or restoring deleted chat.
+
+Providers own context compaction. Do not suggest or automatically execute context rotations based on estimated fill for current supported providers. Retire existing pending rotations and retain prior records behind collapsed history. Explicit model/provider switches remain available in owned conversations.
+
+Completion alerts require a provider turn-completion signal; progress messages and token-count updates do not complete a turn. User-question and approval requests have their own attention state. Windows notifications are attributed to the packaged Electron app, which uses a single instance for tray clicks, shortcuts and notification activation. Installers ship the Electron shell with the Rust engine; browser mode is a fallback when the shell is unavailable.
+
+Background phone notifications require explicit browser permission and authenticated subscription registration. The native app must have account Remote access enabled and remain online. The daemon retries recent generic lifecycle event IDs until the account-authenticated push endpoint acknowledges them. The service sends fixed generic notices without chat text, tool output, paths or credentials. Destination endpoints are restricted to supported browser push vendors, stored under account-owner RLS, and validated again before sending. Event IDs deduplicate retries. Devices may revoke their subscription. This is opt-in Remote notification traffic, separate from metadata sync. Usage snapshots are stored per desktop in the existing owner-protected device directory; selecting a desktop selects its Rust-computed usage and ROI. No cross-machine overwrite or implicit aggregation.
+
 Automatic routing remains opt-in under the existing routing policy. Only a recorded rate-limit event and fresh known quota can trigger failover, using a supported installed agent/model with positive headroom. Respect same-provider restrictions, idle/approval guards, bounded context and stable conversation identity. Do not replay a task after switching. Record one attempt per triggering event to prevent loops. Notify on switch requested or failed, without claiming observed activation. Desktop notifications contain generic lifecycle text, never message content; scheduling and switching status remain available in the UI when OS notifications are unavailable.
 
-Reset reconnection is armed explicitly per conversation, or by automatic routing when no eligible alternative exists. Require fresh known exhaustion before arming and fresh positive quota after the recorded eligibility time across every known provider window. Reuse the live host or reopen the exact recorded native conversation without submitting a task. Cancel old reset entries on model changes. The daemon owns approval/quota notifications; the legacy Windows tray retains context warnings without duplicating them. Email signup uses Supabase confirmation when enabled, supports immediate sessions when confirmation is disabled, and offers resend/expired-link recovery. Public project settings were verified with email signup and confirmation enabled; mailbox delivery remains an external acceptance check.
+Reset reconnection is armed explicitly per conversation, or by automatic routing when no eligible alternative exists. Require fresh known exhaustion before arming and fresh positive quota after the recorded eligibility time across every known provider window. Reuse the live host or reopen the exact recorded native conversation without submitting a task. Cancel old reset entries on model changes. The daemon owns lifecycle and quota notification decisions; the desktop shell displays native notifications. The legacy tray does not add context-rotation warnings. Email signup uses Supabase confirmation when enabled, supports immediate sessions when confirmation is disabled, and offers resend/expired-link recovery. Public project settings were verified with email signup and confirmation enabled; mailbox delivery remains an external acceptance check.
 
 ### 3.15 Optional account sync and encrypted Remote
 
@@ -249,7 +257,7 @@ Source: `mwahaj36/gnomcode`; releases: `mwahaj36/gnomcode-releases`. Preserve pr
 
 ### 6.2 Release artifacts
 
-CLI, Electron packages and notices/EULA/hashes per approved platform. Target npm shim plus seven platform packages: Windows/macOS x64+arm64, Linux x64+arm64 and Linux x64 musl. Targets are not claims of publication. Download links follow actual approved assets.
+CLI, Electron packages and notices/EULA/hashes per approved platform. Target npm shim plus seven platform packages: Windows/macOS x64+arm64, Linux x64+arm64 and Linux x64 musl. Targets are not claims of publication. Download links follow actual approved assets. Windows Electron installers and checksums are published to the public binary-only `mwahaj36/gnomcode-releases` repository; private source remains separate. Website download routes redirect only an explicit asset allow-list to the current release.
 
 ### 6.3 Versioning
 
@@ -313,6 +321,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0026](./adr/0026-gnomcode-rename.md) | Gnomcode identity, canonical site and non-destructive legacy history compatibility | Accepted |
 
 | [0027](./adr/0027-laptop-owned-scheduling-and-quota-recovery.md) | Laptop-owned scheduling, conservative automatic failover and quota-confirmed hosted reconnection | Accepted |
+| [0028](./adr/0028-managed-conversations-and-device-notifications.md) | Managed chat ownership, native compaction, per-desktop snapshots and opt-in generic background notifications | Accepted |
 
 ## 10. Open decisions
 

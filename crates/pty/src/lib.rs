@@ -640,8 +640,8 @@ async fn host_input_handler(
         return StatusCode::BAD_REQUEST;
     }
     if matches!(state.agent.as_str(), "antigravity" | "agy" | "codex")
-        && body.starts_with(b"\x1b[200~")
-        && state.scrollback.lock().is_ok_and(|output| {
+        && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
+        && state.scrollback.lock().map_or(true, |output| {
             let bytes = output.bytes();
             startup_needs_setup(&state.agent, &bytes)
                 || (state.agent == "codex" && !codex_prompt_ready(&bytes))
@@ -985,15 +985,22 @@ mod tests {
             "authorization",
             "Bearer startup-test".parse().expect("token"),
         );
-        assert_eq!(
-            host_input_handler(
-                headers,
-                State(state),
-                axum::body::Bytes::from_static(b"\x1b[200~complete prompt\x1b[201~")
+        for bytes in [
+            b"\x1b[200~complete prompt\x1b[201~".as_slice(),
+            b"/model gpt-6-luna".as_slice(),
+        ] {
+            let status = tokio::time::timeout(
+                Duration::from_millis(50),
+                host_input_handler(
+                    headers.clone(),
+                    State(state.clone()),
+                    axum::body::Bytes::copy_from_slice(bytes),
+                ),
             )
-            .await,
-            StatusCode::CONFLICT
-        );
+            .await
+            .expect("cold input must be rejected without waiting for a PTY write");
+            assert_eq!(status, StatusCode::CONFLICT);
+        }
         assert!(input_rx.try_recv().is_err());
     }
 

@@ -49,3 +49,8 @@ apps/desktop/staging/
 
 .vercel
 .env*
+
+# Release binaries are published to the binary-only releases repository.
+web/public/downloads/*.exe
+web/public/downloads/*.zip
+supabase/.temp/

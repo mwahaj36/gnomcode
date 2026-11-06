@@ -94,3 +94,17 @@ test('desktop chrome uses themed native window controls on each platform', () =>
  }
  assert.equal(windowChrome('darwin',true).titleBarStyle,'hiddenInset');
 });
+
+test('native notifications require explicit bounded arguments', () => {
+  const { desktopNotification } = require('../dist/security.js');
+  assert.deepEqual(desktopNotification(['app','--gnomcode-notification','Response ready']),{title:'Gnomcode',body:'Response ready'});
+  assert.equal(desktopNotification(['app','--gnomcode-notification']),null);
+  assert.equal(desktopNotification(['app','--gnomcode-notification','x'.repeat(513)]),null);
+  assert.equal(desktopNotification(['app','ordinary launch']),null);
+});
+
+test('workspace activation accepts only the local conversation route',()=>{
+ const {workspaceLaunchHash}=require('../dist/security.js');
+ assert.equal(workspaceLaunchHash(['app','--gnomcode-open-hash','#sessions?folder=C%3A%5Cproject']),'#sessions?folder=C%3A%5Cproject');
+ for(const value of ['javascript:alert(1)','#auth','#sessions?token=secret','https://example.com'])assert.equal(workspaceLaunchHash(['app','--gnomcode-open-hash',value]),null);
+});

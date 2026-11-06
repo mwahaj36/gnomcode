@@ -129,11 +129,15 @@ async fn save_state(state: &State) -> Result<(), RemoteError> {
 
 impl AccountDevices {
     pub(crate) async fn snapshot_desktop_id(&self, owner: &str) -> Result<String, RemoteError> {
-        let mut state = self.state.lock().await;
-        if state.owner != owner {
-            *state = load_state(owner).await?;
+        if !uuid_owner(owner) {
+            return Err(RemoteError::NotPaired);
         }
-        Ok(state.desktop.clone())
+        let state = self.state.lock().await;
+        if state.owner == owner {
+            return Ok(state.desktop.clone());
+        }
+        drop(state);
+        Ok(load_state(owner).await?.desktop)
     }
 
     pub(crate) async fn enable_account_access(&self, owner: &str) -> Result<(), RemoteError> {
