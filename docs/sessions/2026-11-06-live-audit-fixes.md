@@ -28,3 +28,12 @@ Rust filesystem work still uses platform paths and existing shared-read ingestio
 ## Distribution
 
 Created the public binary-only `mwahaj36/gnomcode-releases` repository because the Electron installer exceeds the website's static-asset limit. Private source is not published there. Website redirects allow only the current named release assets; binaries are no longer tracked in the source checkout. Version is synchronized to 0.9.1.
+
+## Deployed acceptance — 2026-11-07 local time
+
+- Published the binary-only 0.9.1 development release and promoted Vercel deployment `dpl_EYRmH3qfuJWtxX5wcS2sDAHSWwrD` to `https://gnomcode.vercel.app`.
+- Downloaded the installer through the deployed website URL. Its 182,401,536 bytes matched SHA-256 `67f008b149e0a2227045156ed7173e2f4ec6643689ee17d0c3de7f456948f340`, matching both the website manifest and GitHub asset digest.
+- Production push endpoints reject unauthenticated requests (401), arbitrary send destinations (400) and unsupported registration destinations (400). Authenticated generic send returns 200 with zero devices: there is no registered phone destination yet. Configuration exists; notification display has not been verified.
+- Saved a consistent SQLite backup in ignored local acceptance artifacts before installing. No real history was deleted.
+- The installer was opened in its normal installation flow. `--quiet` applies only to uninstall and did not initiate an installation; that idle attempt was stopped. The verified installer is waiting for Install.
+- Native acceptance is blocked by the Windows lock screen. Computer Use input stopped and the user was asked to unlock. The running installed engine remains 0.9.0; do not claim installation, tray/window reuse or Gnomcode toast attribution has been accepted yet. PR #140 remains a draft until this acceptance is completed.
