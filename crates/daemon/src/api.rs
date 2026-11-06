@@ -45,6 +45,12 @@ pub struct SessionQueryParams {
     pub agent: Option<String>,
     /// Status filter (`active`, `idle`, or `all`).
     pub status: Option<String>,
+    /// Conversation metadata search, applied before pagination.
+    pub search: Option<String>,
+    /// Managed Gnomcode conversations or imported view-only sessions.
+    pub source: Option<String>,
+    /// Include child agent conversations (off by default).
+    pub include_subagents: Option<bool>,
 }
 
 /// Query parameters for reports.
@@ -65,6 +71,8 @@ pub struct ReportQueryParams {
 pub struct HealthResponse {
     /// Server health status.
     pub status: &'static str,
+    /// Version of the running Rust engine.
+    pub version: &'static str,
     /// Current UTC timestamp.
     pub timestamp: String,
 }
@@ -428,11 +436,7 @@ async fn resume_queue_get_handler(
 #[derive(Debug, Deserialize)]
 pub(crate) struct ArmResumeQueueRequest {
     pub(crate) session_id: String,
-    pub(crate) agent: String,
-    pub(crate) cwd: Option<String>,
     pub(crate) resume_prompt: Option<String>,
-    pub(crate) max_runs: Option<u32>,
-    pub(crate) eligible_after: Option<String>,
 }
 
 async fn resume_queue_arm_handler(
@@ -451,37 +455,15 @@ async fn resume_queue_arm_handler(
     if payload.session_id.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let agent = match payload.agent.as_str() {
-        "claude-code" => gnomcode_core::AgentId::ClaudeCode,
-        "codex" => gnomcode_core::AgentId::Codex,
-        "antigravity" => gnomcode_core::AgentId::Antigravity,
-        "gemini-cli" => gnomcode_core::AgentId::GeminiCli,
-        "cline" => gnomcode_core::AgentId::Cline,
-        "cursor" => gnomcode_core::AgentId::Cursor,
-        "aider" => gnomcode_core::AgentId::Aider,
-        _ => return Err(StatusCode::BAD_REQUEST),
-    };
-    let eligible_after = payload
-        .eligible_after
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&chrono::Utc))
-        .unwrap_or_else(chrono::Utc::now);
-
-    let entry = gnomcode_core::rules::ResumeQueueEntry {
-        session_id: payload.session_id,
-        agent,
-        cwd: payload.cwd.unwrap_or_else(|| ".".to_owned()),
-        resume_prompt: payload
-            .resume_prompt
-            .unwrap_or_else(|| "continue".to_owned()),
-        max_runs: payload.max_runs.unwrap_or(1).max(1),
-        runs_completed: 0,
-        eligible_after,
-    };
-    let db = state.db.lock().await;
-    db.arm_resume_queue(&entry)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "success": true, "entry": entry })))
+    let reply = crate::automation::command(
+        &state.db,
+        json!({"type":"resume_on_reset","session_id":payload.session_id,"enabled":true}),
+    )
+    .await;
+    if reply["type"] == "error" {
+        return Err(StatusCode::CONFLICT);
+    }
+    Ok(Json(reply))
 }
 
 #[derive(Debug, Deserialize)]
@@ -802,7 +784,20 @@ async fn launch_session_handler(
     match gnomcode_pty::launch_session(&session_id, &payload.agent, repo, payload.model.as_deref())
         .await
     {
-        Ok(record) => Ok(Json(record)),
+        Ok(record) => {
+            state
+                .db
+                .lock()
+                .await
+                .save_conversation_launch(
+                    &record.session_id,
+                    &record.agent,
+                    &record.repo_path,
+                    record.model.as_deref(),
+                )
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            Ok(Json(record))
+        }
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -868,7 +863,7 @@ async fn list_hosted_sessions_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let hosted = gnomcode_pty::list_active_sessions();
     let db = state.db.lock().await;
-    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
     let bindings = crate::remote::session_bindings(&sessions, &hosted);
     crate::remote::sync_conversation_bindings(&db, &sessions, &hosted)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -940,23 +935,22 @@ async fn prompt_session_handler(
     Path(id): Path<String>,
     State(state): State<AppState>,
     Json(payload): Json<PromptSessionRequest>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<axum::response::Response, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let text = payload.text.trim();
     if text.is_empty()
-        || text.len() > 4000
+        || text.encode_utf16().count() > 4000
         || text
             .chars()
             .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
         || text.starts_with('/')
     {
-        return Err(StatusCode::BAD_REQUEST);
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"message":"Use a nonempty message up to 4000 characters without native slash commands or control characters."}))).into_response());
     }
 
     match crate::deliver_conversation_prompt(&state.db, &id, text).await {
-        Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id }))),
-        Err(crate::HandoffError::MissingSession) => Err(StatusCode::NOT_FOUND),
-        Err(_) => Err(StatusCode::BAD_GATEWAY),
+        Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id })).into_response()),
+        Err(error) => Ok(handoff_error_response(error)),
     }
 }
 
@@ -978,7 +972,7 @@ async fn pty_stream_handler(
 
     let hosted = gnomcode_pty::list_active_sessions();
     let db = state.db.lock().await;
-    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
     let record = crate::remote::conversation_host(&db, &id, &sessions, &hosted)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -1286,7 +1280,7 @@ async fn chat_get_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
-    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
     let requested = id.clone();
     let id = crate::remote::conversation_session_id(
         &id,
@@ -1316,7 +1310,7 @@ async fn chat_delete_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let _control = crate::CONVERSATION_CONTROL.lock().await;
     let db = state.db.lock().await;
-    let sessions = db.list_active_sessions(1000).unwrap_or_default();
+    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
     let hosted = gnomcode_pty::list_active_sessions();
     let native = crate::remote::active_conversation_id(&db, &id, &sessions, &hosted)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1582,6 +1576,18 @@ async fn switch_session_handler(
 
 fn handoff_error_response(error: crate::HandoffError) -> axum::response::Response {
     let (status, message) = match error {
+        crate::HandoffError::ImportedSession => (
+            StatusCode::FORBIDDEN,
+            "This provider session is view-only. Start a Gnomcode conversation to send messages or switch models.",
+        ),
+        crate::HandoffError::Busy => (
+            StatusCode::CONFLICT,
+            "Wait for the current response or approval to finish before sending or changing models.",
+        ),
+        crate::HandoffError::NotReady => (
+            StatusCode::CONFLICT,
+            "The agent is starting or needs native approval. Open Agent terminal, finish setup, then retry. Your draft is preserved.",
+        ),
         crate::HandoffError::MissingSession => (
             StatusCode::NOT_FOUND,
             "The source session or workspace is no longer available. Reload conversations and retry.",
@@ -1648,31 +1654,24 @@ async fn resume_session_handler(
         .get_session_focus_target(&id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
-    let agent = match target.agent.as_str() {
-        "claude-code" => gnomcode_core::AgentId::ClaudeCode,
-        "codex" => gnomcode_core::AgentId::Codex,
-        _ => return Err(StatusCode::BAD_REQUEST),
-    };
-    let cwd = target.repo_root.ok_or(StatusCode::BAD_REQUEST)?;
-    let prompt = payload.prompt.unwrap_or_else(|| "continue".to_owned());
-    let entry = gnomcode_core::rules::ResumeQueueEntry {
-        session_id: id.clone(),
-        agent,
-        cwd,
-        resume_prompt: prompt,
-        max_runs: payload.max_runs.unwrap_or(1),
-        runs_completed: 0,
-        eligible_after: chrono::Utc::now(),
-    };
-
-    db.arm_resume_queue(&entry)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(Json(json!({
-        "ok": true,
-        "session_id": id,
-        "status": "armed"
-    })))
+    if db
+        .conversation_launch(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .is_none()
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    drop(target);
+    drop(db);
+    let reply = crate::automation::command(
+        &state.db,
+        json!({"type":"resume_on_reset","session_id":id,"enabled":true}),
+    )
+    .await;
+    if reply["type"] == "error" {
+        return Err(StatusCode::CONFLICT);
+    }
+    Ok(Json(reply))
 }
 
 async fn routing_policy_get_handler(
@@ -1843,6 +1842,7 @@ async fn health_handler(
     validate_auth(&headers, &state.bearer_token)?;
     Ok(Json(HealthResponse {
         status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
         timestamp: chrono::Utc::now().to_rfc3339(),
     }))
 }
@@ -1855,31 +1855,20 @@ async fn list_conversations_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let db = state.db.lock().await;
     let sessions = db
-        .list_active_sessions(1000)
+        .list_active_sessions(usize::MAX)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let mut rows =
+    let rows =
         crate::remote::conversation_sessions(&db, &sessions, &gnomcode_pty::list_active_sessions())
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    rows.retain(|row| {
-        let id = row["id"].as_str().unwrap_or_default();
-        let source = db.conversation_source(id).unwrap_or_else(|_| id.to_owned());
-        let project_matches = params
-            .project
-            .as_deref()
-            .filter(|value| !value.is_empty())
-            .is_none_or(|project| {
-                sessions
-                    .iter()
-                    .any(|session| session.id == source && session.project_id == project)
-            });
-        let agent_matches = params
-            .agent
-            .as_deref()
-            .filter(|value| !value.is_empty() && *value != "all")
-            .is_none_or(|agent| row["agent"] == agent);
-        project_matches && agent_matches
-    });
-    Ok(Json(rows))
+    let page = crate::remote::conversation_page(
+        rows,
+        &json!({"page":params.page,"limit":params.limit,"agent":params.agent,"status":params.status,"project":params.project,"search":params.search,"source":params.source,"include_subagents":params.include_subagents}),
+    );
+    if params.page.is_none() {
+        Ok(Json(page["sessions"].clone()))
+    } else {
+        Ok(Json(page))
+    }
 }
 
 async fn list_sessions_handler(
@@ -1968,6 +1957,17 @@ async fn report_handler(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let roi = report_roi(&report, &user_profile, range);
+    Ok(Json(
+        json!({"timeline":report,"user_profile":user_profile,"roi_by_provider":roi["roi_by_provider"],"combined_roi":roi["combined_roi"]}),
+    ))
+}
+
+pub(crate) fn report_roi(
+    report: &gnomcode_store::TimelineReport,
+    user_profile: &UserProfile,
+    range: &str,
+) -> Value {
     #[derive(Serialize)]
     struct PlanRoiInfo {
         provider: String,
@@ -1977,14 +1977,6 @@ async fn report_handler(
         multiplier: f64,
         net_savings_usd: f64,
         period_label: String,
-    }
-
-    #[derive(Serialize)]
-    struct EnhancedReport {
-        timeline: gnomcode_store::TimelineReport,
-        user_profile: UserProfile,
-        roi_by_provider: Vec<PlanRoiInfo>,
-        combined_roi: PlanRoiInfo,
     }
 
     let (time_factor, period_label): (f64, &str) = match range {
@@ -2086,12 +2078,7 @@ async fn report_handler(
         period_label: period_label.to_owned(),
     };
 
-    Ok(Json(EnhancedReport {
-        timeline: report,
-        user_profile,
-        roi_by_provider,
-        combined_roi,
-    }))
+    json!({"roi_by_provider":roi_by_provider,"combined_roi":combined_roi})
 }
 
 async fn projects_handler(
@@ -3907,7 +3894,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resume_session_uses_recorded_agent_and_repository() {
+    async fn imported_session_cannot_be_armed_through_the_legacy_resume_endpoint() {
         use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
         let mut db = Database::open_in_memory().expect("database");
         let project = Project::from_origin(None, "/workspace/resume", None);
@@ -3950,12 +3937,11 @@ mod tests {
             .expect("request");
         assert_eq!(
             app.oneshot(req).await.expect("response").status(),
-            StatusCode::OK
+            StatusCode::FORBIDDEN
         );
         let db = db.lock().await;
         let queue = db.list_resume_queue().expect("queue");
-        assert_eq!(queue[0].agent, AgentId::Codex);
-        assert_eq!(queue[0].cwd, "/workspace/resume");
+        assert!(queue.is_empty());
     }
 
     #[tokio::test]

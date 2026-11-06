@@ -22,6 +22,11 @@ use tokio::sync::broadcast;
 /// Error type for PTY operations.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// Native startup or approval must finish before accepting chat input.
+    #[error(
+        "The agent is starting or needs native approval. Open Agent terminal, finish setup, then retry. Your draft is preserved."
+    )]
+    NotReady,
     /// Workspace does not exist.
     #[error("workspace directory does not exist: {0}")]
     WorkspaceNotFound(String),
@@ -636,10 +641,11 @@ async fn host_input_handler(
     }
     if matches!(state.agent.as_str(), "antigravity" | "agy" | "codex")
         && body.starts_with(b"\x1b[200~")
-        && state
-            .scrollback
-            .lock()
-            .is_ok_and(|output| startup_needs_setup(&state.agent, &output.bytes()))
+        && state.scrollback.lock().is_ok_and(|output| {
+            let bytes = output.bytes();
+            startup_needs_setup(&state.agent, &bytes)
+                || (state.agent == "codex" && !codex_prompt_ready(&bytes))
+        })
     {
         return StatusCode::CONFLICT;
     }
@@ -659,6 +665,20 @@ async fn host_input_handler(
         Ok(_) => StatusCode::GONE,
         Err(_) => StatusCode::GATEWAY_TIMEOUT,
     }
+}
+
+fn codex_prompt_ready(bytes: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(bytes);
+    let idle = text
+        .rfind("state=idle:app=codex")
+        .into_iter()
+        .chain(text.rfind("state=done:app=codex"))
+        .max();
+    let working = text.rfind("state=working:app=codex");
+    if let Some(idle) = idle {
+        return working.is_none_or(|working| idle > working);
+    }
+    text.contains("? for shortcuts") && !text.trim_end().ends_with("loading")
 }
 
 async fn host_stop_handler(
@@ -921,7 +941,7 @@ pub async fn switch_model(record: &SessionRecord, model: &str) -> Result<(), Err
 /// # Errors
 /// Returns [`Error`] if the host cannot acknowledge the input.
 pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Error> {
-    reqwest::Client::builder()
+    let response = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
         .map_err(|error| Error::Process(error.to_string()))?
@@ -930,7 +950,12 @@ pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Erro
         .body(input.to_vec())
         .send()
         .await
-        .and_then(reqwest::Response::error_for_status)
+        .map_err(|error| Error::Process(error.to_string()))?;
+    if response.status() == reqwest::StatusCode::CONFLICT {
+        return Err(Error::NotReady);
+    }
+    response
+        .error_for_status()
         .map_err(|error| Error::Process(error.to_string()))?;
     Ok(())
 }
@@ -938,6 +963,39 @@ pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn cold_codex_does_not_accept_or_queue_a_chat_prompt() {
+        let (input_tx, input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let state = Arc::new(HostState {
+            agent: "codex".into(),
+            token: "startup-test".into(),
+            session_id: "startup-test".into(),
+            child_pid: 0,
+            scrollback: Arc::new(Mutex::new(Scrollback::new(1024))),
+            output_tx,
+            input_tx,
+            stopping: Arc::new(AtomicBool::new(false)),
+            resize: Arc::new(|_, _| {}),
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+        headers.insert(
+            "authorization",
+            "Bearer startup-test".parse().expect("token"),
+        );
+        assert_eq!(
+            host_input_handler(
+                headers,
+                State(state),
+                axum::body::Bytes::from_static(b"\x1b[200~complete prompt\x1b[201~")
+            )
+            .await,
+            StatusCode::CONFLICT
+        );
+        assert!(input_rx.try_recv().is_err());
+    }
 
     #[test]
     fn antigravity_startup_requires_explicit_terminal_trust_before_chat_input() {
@@ -1082,6 +1140,11 @@ mod tests {
             stopping: Arc::new(AtomicBool::new(false)),
             resize: Arc::new(|_, _| {}),
         });
+        state
+            .scrollback
+            .lock()
+            .expect("scrollback")
+            .append(b"? for shortcuts");
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("listener");

@@ -43,6 +43,21 @@ pub enum Error {
 /// Failure while preparing a model handoff.
 #[derive(Debug, Error)]
 pub enum HandoffError {
+    /// Imported provider sessions are available for viewing only.
+    #[error(
+        "This session was started outside Gnomcode and is view-only. Start a new Gnomcode conversation to send messages or switch models."
+    )]
+    ImportedSession,
+    /// A live turn or approval is still in progress.
+    #[error(
+        "Wait for the current response or approval to finish before sending or changing models."
+    )]
+    Busy,
+    /// Native startup needs attention; no prompt was submitted.
+    #[error(
+        "The agent is starting or needs native approval. Open Agent terminal, finish setup, then retry. Your draft is preserved."
+    )]
+    NotReady,
     /// The source session or its repository is unavailable.
     #[error("session or repository not found")]
     MissingSession,
@@ -257,7 +272,7 @@ pub(crate) async fn prepare_model_change(
     let agent = agent_for_model(model, requested_agent).ok_or(HandoffError::UnsupportedTarget)?;
     let resume_same_agent = {
         let guard = db.lock().await;
-        let sessions = guard.list_active_sessions(1000)?;
+        let sessions = guard.list_active_sessions(usize::MAX)?;
         let hosted = gnomcode_pty::list_active_sessions();
         remote::sync_conversation_bindings(&guard, &sessions, &hosted)?;
         let native = remote::active_conversation_id(&guard, id, &sessions, &hosted)?;
@@ -288,13 +303,20 @@ pub(crate) async fn ensure_conversation_running(
 ) -> Result<gnomcode_pty::SessionRecord, HandoffError> {
     let (native, agent, repo, model) = {
         let guard = db.lock().await;
-        let sessions = guard.list_active_sessions(1000)?;
+        let sessions = guard.list_active_sessions(usize::MAX)?;
         let hosted = gnomcode_pty::list_active_sessions();
         if let Some(record) = remote::conversation_host(&guard, id, &sessions, &hosted)? {
             if agent_for_model("@default", Some(&record.agent)).is_none() {
                 return Err(HandoffError::UnsupportedTarget);
             }
             return Ok(record.clone());
+        }
+        if guard.conversation_launch(id)?.is_none() {
+            return Err(if guard.get_session_focus_target(id)?.is_some() {
+                HandoffError::ImportedSession
+            } else {
+                HandoffError::MissingSession
+            });
         }
         let mapping = guard.conversation_target(id)?;
         let native = mapping
@@ -358,7 +380,7 @@ pub(crate) async fn deliver_conversation_prompt_locked(
     let _ = ensure_conversation_running(db, id).await?;
     let (record, prompt, needs_context) = {
         let guard = db.lock().await;
-        let sessions = guard.list_active_sessions(1000)?;
+        let sessions = guard.list_active_sessions(usize::MAX)?;
         let hosted = gnomcode_pty::list_active_sessions();
         let record = remote::conversation_host(&guard, id, &sessions, &hosted)?
             .ok_or(HandoffError::MissingSession)?
@@ -377,9 +399,7 @@ pub(crate) async fn deliver_conversation_prompt_locked(
                         .is_ok_and(|started| session.last_event_at >= started)
             })
         {
-            return Err(HandoffError::Launch(
-                "wait for the current response to finish".into(),
-            ));
+            return Err(HandoffError::Busy);
         }
         let needs_context = guard
             .conversation_target(id)?
@@ -397,7 +417,10 @@ pub(crate) async fn deliver_conversation_prompt_locked(
     };
     gnomcode_pty::send_prompt(&record, &prompt)
         .await
-        .map_err(|error| HandoffError::Launch(error.to_string()))?;
+        .map_err(|error| match error {
+            gnomcode_pty::Error::NotReady => HandoffError::NotReady,
+            other => HandoffError::Launch(other.to_string()),
+        })?;
     if needs_context {
         db.lock()
             .await
@@ -440,9 +463,16 @@ pub(crate) fn prepare_switch(
 ) -> Result<PreparedSwitch, HandoffError> {
     let agent =
         agent_for_model(target_model, requested_agent).ok_or(HandoffError::UnsupportedTarget)?;
-    let sessions = db.list_active_sessions(1000)?;
+    let sessions = db.list_active_sessions(usize::MAX)?;
     let hosted = gnomcode_pty::list_active_sessions();
     let current = remote::conversation_host(db, session_id, &sessions, &hosted)?;
+    if current.is_none() && db.conversation_launch(session_id)?.is_none() {
+        return Err(if db.get_session_focus_target(session_id)?.is_some() {
+            HandoffError::ImportedSession
+        } else {
+            HandoffError::MissingSession
+        });
+    }
     let native_id = remote::active_conversation_id(db, session_id, &sessions, &hosted)?;
     if sessions
         .iter()
@@ -459,9 +489,7 @@ pub(crate) fn prepare_switch(
             })
         })
     {
-        return Err(HandoffError::Launch(
-            "wait for the current response to finish".to_owned(),
-        ));
+        return Err(HandoffError::Busy);
     }
     let source_id = db.conversation_source(session_id)?;
     let history_id = if db.get_session_focus_target(&native_id)?.is_some() {
@@ -543,6 +571,12 @@ pub(crate) fn conversation_title(db: &Database, session_id: &str) -> Option<Stri
         .into_iter()
         .find_map(|text| {
             let clean = gnomcode_core::redact::clean_user_text(&text);
+            if matches!(
+                clean.trim().to_ascii_lowercase().as_str(),
+                "unknown" | "untitled session"
+            ) {
+                return None;
+            }
             let clean = if clean
                 .trim_start()
                 .starts_with("# Files pasted by the user:")
@@ -688,7 +722,7 @@ impl DaemonOrchestrator {
                 ticker.tick().await;
                 let Ok((db, result)) = tokio::task::spawn_blocking(move || {
                     let result = ingest_all(&mut ingest_db);
-                    if let Ok(sessions) = ingest_db.list_active_sessions(1000) {
+                    if let Ok(sessions) = ingest_db.list_active_sessions(usize::MAX) {
                         if remote::sync_conversation_bindings(
                             &ingest_db,
                             &sessions,
@@ -908,6 +942,19 @@ mod tests {
         assert!(packet.prompt_summary.contains("Fix tests"));
         assert!(!packet.prompt_summary.contains("secret-value"));
         std::fs::remove_dir_all(repo.path().join(".git")).expect("remove fixture git metadata");
+        assert!(matches!(
+            super::prepare_switch(&db, "codex:test", "gpt-5.6-luna", Some("codex")),
+            Err(super::HandoffError::ImportedSession)
+        ));
+        db.bind_conversation_host("test-owned-host", "codex:test")
+            .expect("owned binding");
+        db.save_conversation_launch(
+            "test-owned-host",
+            "codex",
+            &repo.path().to_string_lossy(),
+            None,
+        )
+        .expect("owned launch");
         let prepared = super::prepare_switch(&db, "codex:test", "gpt-5.6-luna", Some("codex"))
             .expect("non-Git workspace handoff");
         assert_eq!(prepared.agent, "codex");

@@ -98,6 +98,14 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, gnomcode_store::Error> 
     let month = db.generate_usage_report_timeline("30d", None, None)?;
     let calendar_month = db.generate_usage_report_timeline("month", None, None)?;
     let all = db.generate_usage_report_timeline("all", None, None)?;
+    let profile = db.get_user_profile()?;
+    let roi_by_timeline = json!({
+        "today":crate::api::report_roi(&today,&profile,"today"),
+        "7d":crate::api::report_roi(&week,&profile,"7d"),
+        "30d":crate::api::report_roi(&month,&profile,"30d"),
+        "month":crate::api::report_roi(&calendar_month,&profile,"month"),
+        "all":crate::api::report_roi(&all,&profile,"all"),
+    });
     let (sessions, count) = db.list_sessions_paginated(None, None, 0, 200)?;
     let sessions: Vec<_> = sessions
         .into_iter()
@@ -121,6 +129,7 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, gnomcode_store::Error> 
     Ok(json!({
         "generated_at": Utc::now().to_rfc3339(),
         "timeline": today,
+        "roi_by_timeline":roi_by_timeline,
         "timelines": { "today": today, "7d": week, "30d": month, "month": calendar_month, "all": all },
         "sessions": sessions,
         "quota": crate::api::quota_views(db.get_latest_quota_snapshots()?),
@@ -165,7 +174,7 @@ pub fn spawn_cloud_sync(
                 status.last_attempt_at = Some(Utc::now().to_rfc3339());
                 status.message = "Publishing the latest metadata snapshot.";
             }
-            let result = push_snapshot(&client, &db).await;
+            let result = push_snapshot(&client, &db, &remote).await;
             let mut status = SYNC_STATUS.lock().await;
             match result {
                 Ok(true) => {
@@ -195,8 +204,42 @@ async fn poll_devices(
     let path = gnomcode_platform::gnomcode_home().join("session.json");
     if let Some(auth) = read_cloud_auth(client, &path).await? {
         remote.devices.poll(client, &auth, db.clone()).await?;
+        let devices = remote.devices.view().await;
+        if devices["account_access"] == true && devices["remote_enabled"] == true {
+            push_notifications(client, db, &auth).await?;
+        }
     } else {
         remote.devices.disconnect().await?;
+    }
+    Ok(())
+}
+
+async fn push_notifications(
+    client: &reqwest::Client,
+    db: &Arc<Mutex<Database>>,
+    auth: &CloudAuth,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let Some(brand) = gnomcode_core::branding::branding() else {
+        return Ok(());
+    };
+    let shared = db.clone();
+    let pending =
+        tokio::task::spawn_blocking(move || shared.blocking_lock().pending_push_notices())
+            .await??;
+    for id in pending {
+        let response = client
+            .post(format!("{}/api/push/send", brand.base_url))
+            .bearer_auth(&auth.access_token)
+            .json(&json!({"event_id":id,"kind":"agent_event"}))
+            .send()
+            .await?
+            .error_for_status()?;
+        let accepted: Value = response.json().await?;
+        if accepted["ok"] == true {
+            let shared = db.clone();
+            tokio::task::spawn_blocking(move || shared.blocking_lock().mark_notice_pushed(&id))
+                .await??;
+        }
     }
     Ok(())
 }
@@ -204,6 +247,7 @@ async fn poll_devices(
 async fn push_snapshot(
     client: &reqwest::Client,
     db: &Arc<Mutex<Database>>,
+    remote: &crate::remote::RemoteManager,
 ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let session_path = gnomcode_platform::gnomcode_home().join("session.json");
     let Some(CloudAuth {
@@ -216,6 +260,7 @@ async fn push_snapshot(
         return Ok(false);
     };
 
+    let desktop = remote.devices.snapshot_desktop_id(&user_id).await?;
     let db = Arc::clone(db);
     let mut snapshot = tokio::task::spawn_blocking(move || {
         let guard = db.blocking_lock();
@@ -224,16 +269,14 @@ async fn push_snapshot(
     .await??;
     snapshot["remote_offer"] = Value::Null;
     client
-        .post(format!(
-            "{base_url}/rest/v1/gnomcode_sync_state?on_conflict=user_id"
+        .patch(format!(
+            "{base_url}/rest/v1/spawnt_desktops?user_id=eq.{user_id}&id=eq.{desktop}"
         ))
         .header("apikey", &public_key)
         .bearer_auth(&access_token)
         .header("Prefer", "resolution=merge-duplicates,return=minimal")
         .json(&json!({
-            "user_id": user_id,
             "live_snapshot": snapshot,
-            "updated_at": chrono::Utc::now().to_rfc3339(),
         }))
         .send()
         .await?
@@ -483,6 +526,10 @@ mod tests {
         db.commit_batch(&[project], &sessions, &[], &[], &[], &checkpoint)
             .expect("commit");
         let snapshot = super::build_remote_snapshot(&db).expect("snapshot");
+        assert!(
+            snapshot["roi_by_timeline"]["all"]["roi_by_provider"].is_array(),
+            "cloud reports need Rust-computed ROI for each timeline"
+        );
         assert_eq!(
             snapshot["sessions"].as_array().expect("sessions").len(),
             200
@@ -547,6 +594,7 @@ mod tests {
                 "generated_at",
                 "ongoing_count",
                 "quota",
+                "roi_by_timeline",
                 "sessions",
                 "timeline",
                 "timelines",

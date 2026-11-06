@@ -510,6 +510,29 @@ pub struct SessionFocusTarget {
 }
 
 impl Database {
+    /// Reads the last observed activity for incremental parsing.
+    ///
+    /// # Errors
+    /// Returns an error if the state cannot be read.
+    pub fn session_state(&self, id: &str) -> Result<Option<SessionState>, Error> {
+        let state: Option<String> = self
+            .conn
+            .query_row(
+                obfstr::obfstr!("SELECT state FROM session WHERE id=?1"),
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(state.and_then(|state| match state.as_str() {
+            "idle" => Some(SessionState::Idle),
+            "thinking" => Some(SessionState::Thinking),
+            "tool" => Some(SessionState::Tool),
+            "awaiting_approval" => Some(SessionState::AwaitingApproval),
+            "error" => Some(SessionState::Error),
+            "ended" => Some(SessionState::Ended),
+            _ => None,
+        }))
+    }
     /// Opens or creates the SQLite database at `path` and runs schema migrations.
     /// Configures WAL mode, normal synchronous, and 5-second busy timeout (`SPEC §4.3`).
     ///
@@ -819,6 +842,14 @@ impl Database {
             INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (12,datetime('now'));
         "#
         ))?;
+        let push_column_exists: bool = self.conn.query_row(
+            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=14)"),
+            [],
+            |row| row.get(0),
+        )?;
+        if !push_column_exists {
+            self.conn.execute_batch(obfstr::obfstr!("BEGIN; ALTER TABLE automation_notice ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0; INSERT INTO schema_migrations(version,applied_at) VALUES (14,datetime('now')); COMMIT;"))?;
+        }
         // Older Cursor parsing treated settings JSON as empty, freshly active sessions.
         self.conn.execute_batch(obfstr::obfstr!(r#"
             DELETE FROM session
@@ -851,7 +882,27 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if the maintenance marker cannot be read.
     pub fn chat_format_needs_repair(&self) -> Result<bool, Error> {
-        Ok(self.conn.query_row(obfstr::obfstr!("SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=11) AND EXISTS(SELECT 1 FROM chat_event)"), [], |row| row.get(0))?)
+        Ok(self.conn.query_row(obfstr::obfstr!("SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=13) AND EXISTS(SELECT 1 FROM session)"), [], |row| row.get(0))?)
+    }
+
+    /// Repairs existing session metadata from native logs without replaying usage or deleted chats.
+    ///
+    /// # Errors
+    /// Returns an error if metadata cannot be updated atomically.
+    pub fn repair_session_metadata(
+        &self,
+        projects: &[Project],
+        sessions: &[Session],
+    ) -> Result<(), Error> {
+        let tx = self.conn.unchecked_transaction()?;
+        for project in projects {
+            tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO project(id,canonical_key,repo_root,name,git_branch) VALUES (?1,?2,?3,?4,?5)"),params![project.id,project.canonical_key,project.repo_root,project.name,project.git_branch])?;
+        }
+        for session in sessions {
+            tx.execute(obfstr::obfstr!("UPDATE session SET project_id=?2,parent_session_id=coalesce(?3,parent_session_id),surface=?4 WHERE id=?1"),params![session.id,session.project_id,session.parent_session_id,session.surface.as_str()])?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Restores content for an existing event without inserting deleted history.
@@ -905,7 +956,7 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if the maintenance marker cannot be saved.
     pub fn finish_chat_format_repair(&self) -> Result<(), Error> {
-        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (11,datetime('now'))"), [])?;
+        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (11,datetime('now')),(13,datetime('now'))"), [])?;
         Ok(())
     }
 
@@ -1569,6 +1620,8 @@ impl Database {
                 )
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                 ON CONFLICT(id) DO UPDATE SET
+                    parent_session_id = coalesce(excluded.parent_session_id,session.parent_session_id),
+                    project_id = CASE WHEN (SELECT name FROM project WHERE id=session.project_id)='unknown' AND (SELECT name FROM project WHERE id=excluded.project_id)!='unknown' THEN excluded.project_id ELSE session.project_id END,
                     model = coalesce(excluded.model, session.model),
                     title = coalesce(excluded.title, session.title),
                     state = excluded.state,
@@ -1767,7 +1820,7 @@ impl Database {
             r#"
             SELECT id, agent, surface, project_id, parent_session_id, model, title, state, pid, started_at, last_event_at
             FROM session
-            WHERE surface <> 'cloud'
+            WHERE surface <> 'cloud' AND id NOT GLOB 'codex:ctc_*' AND id NOT GLOB 'codex:ctco_*' AND id NOT GLOB 'codex:fc_*' AND id NOT GLOB 'codex:call_*'
             ORDER BY last_event_at DESC
             LIMIT ?1
             "#,
@@ -2359,7 +2412,7 @@ impl Database {
             .unwrap_or("all");
         let total_count: i64 = self.conn.query_row(
             r#"SELECT COUNT(*) FROM session s
-               WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
+               WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
@@ -2375,7 +2428,7 @@ impl Database {
                 SELECT s.*, p.name AS project_name,
                     CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
-                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND (?1 = 'all' OR s.agent = ?1)
+                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
