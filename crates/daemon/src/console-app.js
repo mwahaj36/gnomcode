@@ -339,7 +339,7 @@ function cycleTheme() {
           const queue = await qRes.json();
           const qTable = document.getElementById('resume-queue-table');
           if (!queue || queue.length === 0) {
-            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections armed. Open a Gnomcode conversation, expand Schedule and automation, then choose Reconnect after reset after a confirmed limit.</td></tr>';
+            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections scheduled.</td></tr>';
           } else {
             qTable.innerHTML = queue.map(e => `
               <tr>
@@ -347,8 +347,8 @@ function cycleTheme() {
                 <td><span class="badge">${escapeHtml(e.agent)}</span></td>
                 <td style="color: var(--text-muted); font-size: 11px;">${escapeHtml(e.cwd)}</td>
                 <td>${escapeHtml(e.resume_prompt)}</td>
-                <td>${e.max_runs} <span class="trust-mark">EXACT</span></td>
-                <td>${e.runs_completed} <span class="trust-mark">EXACT</span></td>
+                <td>${e.max_runs}</td>
+                <td>${e.runs_completed}</td>
                 <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(e.eligible_after)}</td>
                 <td><button class="btn-control" data-action="disarm" data-arg="${escapeHtml(e.session_id)}">Disarm</button></td>
               </tr>
@@ -361,14 +361,14 @@ function cycleTheme() {
           const rules = await rulesRes.json();
           const rTable = document.getElementById('rules-table');
           if (!rules || rules.length === 0) {
-            rTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No guardrail rules yet. Add a rule to set a local budget or loop alert.</td></tr>';
+            rTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No usage rules yet.</td></tr>';
           } else {
             rTable.innerHTML = rules.map(r => `
               <tr>
                 <td style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">${escapeHtml(r.id)}</td>
                 <td>${escapeHtml(r.agent || 'All Agents')}</td>
-                <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) + ' EXACT' : 'None'}</td>
-                <td>${r.max_turns ? r.max_turns + ' EXACT' : 'None'}</td>
+                <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) : 'None'}</td>
+                <td>${r.max_turns ? r.max_turns : 'None'}</td>
                 <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${r.action === 'HardStop' ? 'Claude hook stop; other agents alert' : escapeHtml(r.action)}</span></td>
                 <td><button class="btn-control" data-action="delete-rule" data-arg="${escapeHtml(r.id)}">Delete</button></td>
               </tr>
@@ -381,7 +381,7 @@ function cycleTheme() {
           const alerts = await alertsRes.json();
           const aTable = document.getElementById('alerts-table');
           if (!alerts || alerts.length === 0) {
-            aTable.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded. Configure a rule to monitor supported sessions.</td></tr>';
+            aTable.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No alerts yet.</td></tr>';
           } else {
             aTable.innerHTML = alerts.map(a => `
               <tr>
@@ -644,19 +644,17 @@ function cycleTheme() {
         }
         document.getElementById('timeline-label').textContent = dateStr;
 
-// Render ROI cards
+// Render subscription comparisons with one section-level estimate label.
         const activeRoi = (res.roi_by_provider || []).filter(r => r.spend_usd > 0);
         const roiContainer = document.getElementById('roi-cards-container');
         roiContainer.innerHTML = activeRoi.map(r => `
-          <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px; font-family: var(--font-mono);">
-            <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">${escapeHtml(r.provider)}</div>
-            <div style="font-size: 18px; font-weight: 600; margin: 4px 0;">${r.multiplier.toFixed(1)}x Return <span class="trust-mark">EST</span></div>
-            <div style="font-size: 11px; color: ${r.net_savings_usd >= 0 ? 'var(--green)' : 'var(--red)'};">
-              ${r.net_savings_usd >= 0 ? '+' : ''}$${r.net_savings_usd.toFixed(2)} <span class="trust-mark">EST</span>
-            </div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px;">Paid: $${r.plan_usd.toFixed(2)}/${r.period_label || 'period'} <span class="trust-mark">EXACT</span> | Value: $${r.spend_usd.toFixed(2)} <span class="trust-mark">EST</span></div>
+          <div class="sp-roi-item">
+            <h3>${escapeHtml(r.provider)}</h3>
+            <strong>${r.multiplier.toFixed(1)}x estimated return</strong>
+            <p>${r.net_savings_usd >= 0 ? '+' : ''}$${r.net_savings_usd.toFixed(2)} compared with API pricing</p>
+            <details><summary>Details</summary><p>Recorded plan: $${r.plan_usd.toFixed(2)} / ${escapeHtml(r.period_label || 'period')}<br>Estimated API equivalent: $${r.spend_usd.toFixed(2)}</p></details>
           </div>
-        `).join('') || '<div style="color: var(--text-muted); font-size: 12px;">No active subscription usage for this timeframe.</div>';
+        `).join('') || '<p>No subscription usage in this period.</p>';
 
         // Render the shared provider breakdown.
         presentation.updateProviders(document.getElementById('providers-container'), tl);

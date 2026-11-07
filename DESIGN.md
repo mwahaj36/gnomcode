@@ -26,38 +26,38 @@ colors:
   on-primary: "#0c1119"
 typography:
   display:
-    fontFamily: "Inter, Arial, sans-serif"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "clamp(40px, 4.3vw, 56px)"
     fontWeight: 600
     lineHeight: 1.07
     letterSpacing: "-0.03em"
   title:
-    fontFamily: "Inter, Arial, sans-serif"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "18px"
     fontWeight: 600
     lineHeight: 1.4
   section:
-    fontFamily: "Inter, Arial, sans-serif"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "20px"
     fontWeight: 600
     lineHeight: 1.4
   body:
-    fontFamily: "Inter, Arial, sans-serif"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.6
   conversation:
-    fontFamily: "Inter, Arial, sans-serif"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.75
   control:
-    fontFamily: "Inter, Arial, sans-serif"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "13px"
     fontWeight: 500
     lineHeight: 1.4
   data:
-    fontFamily: "JetBrains Mono, Consolas, monospace"
+    fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.5
@@ -138,17 +138,17 @@ The palette pairs a vivid red accent with cool neutral canvases, surfaces, borde
 
 **The Foreground Pair Rule.** A control's foreground and background must switch theme together; never carry a light foreground onto a light fill or the reverse.
 
-Status and numeric trust remain separate from brand color. Use plain status labels (`RUN`, `WAIT`, `IDLE`, `LIMIT`, `ERR`) and explicit provenance (`EXACT`, `EST`, `API`, `UNKNOWN`). Color never substitutes for the label.
+Status and numeric trust remain separate from brand color. Use short human-readable statuses such as Running, Waiting, Idle and Ended. Explain observed/inferred status in source details rather than repeating uncertainty in every row. Declare numeric provenance at section or column level, in accessible source details and relevant tooltips; label estimated money visibly. Color never substitutes for the label.
 
 ## Typography
 
-Inter is the approved display, body and control family. JetBrains Mono is reserved for code, command snippets, IDs, measurements and compact data labels. Both are self-hosted under `web/public/fonts`; no remote font request is needed. Use tabular numerals for aligned metrics.
+The platform system sans is the user-approved application family. Use it for headings, body, controls, data and timestamps, with tabular numerals for aligned metrics. Monospace is reserved for code and executable commands. Existing bundled fonts remain available for non-application surfaces; no remote font request is needed.
 
 - **Display:** the frontmatter's responsive display role belongs to marketing headlines, not console page chrome.
 - **Application titles:** compact semibold titles distinguish the active view or conversation. Section headings are larger than body copy without becoming page heroes.
 - **Body and conversation:** body uses the regular role; chat uses the more generous conversation leading, reducing to a smaller body size on phones.
 - **Controls:** sentence-case sans labels share one weight and scale. Avoid technical-looking monospace labels for ordinary buttons.
-- **Data:** monospace makes columns, IDs and executable snippets easy to compare.
+- **Data:** system sans with tabular numerals keeps application rows aligned. Executable snippets and code retain monospace.
 
 **The Task Before Chrome Rule.** Application headings identify the current task; they do not repeat a marketing hero above it.
 
@@ -194,13 +194,13 @@ Desktop rail labels reveal on hover or visible keyboard focus; touch uses a labe
 
 ### Reporting containers and badges
 
-Reporting uses hairline grids, divided rows and truthful unavailable states. Trust badges are plain compact data labels, not decorative pills. Keep labels separate from values and align comparable rows. Shared thin scrollbars follow theme surfaces and text tones; forced-colors restores the system scrollbar palette. Dense populated metadata tables may use an explicit scroll container; empty-state text must fit the phone without horizontal scrolling.
+Reporting uses hairline grids, divided rows and truthful unavailable states. Repeated trust badges are replaced by plain-language section labels and a source-details disclosure. Keep labels separate from values and align comparable rows. Shared thin scrollbars follow theme surfaces and text tones; forced-colors restores the system scrollbar palette. Dense populated metadata tables may use an explicit scroll container; empty-state text must fit the phone without horizontal scrolling.
 
 ### Conversation bubbles and composer
 
 User messages align right in red with dark text; agent replies align left on a neutral gray surface. Submission immediately adds the optimistic user bubble and a gray agent waiting bubble. Reconcile that feedback with recorded history without duplicating messages; failed delivery preserves the draft. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
 
-The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Selecting a model requests the change immediately within the same visible conversation. Distinguish the request from agent-observed confirmation using centered status text and a centered timestamp, without side rules. Keep CLI commands, session IDs and generated continuation briefings out of ordinary chat. Preserve the title, history, selection and draft across provider switches. Saved supported chats offer Resume conversation on desktop and mobile; mobile requires the laptop and Gnomcode online. Conversation headers show compact remaining-limit readings with trust labels, refreshed with incoming observations; unknown and older readings remain explicit. Handoff also supports a workspace outside Git. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
+The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Selecting a model requests the change immediately within the same visible conversation. Distinguish the request from agent-observed confirmation using centered status text and a centered timestamp, without side rules. Keep CLI commands, session IDs and generated continuation briefings out of ordinary chat. Preserve the title, history, selection and draft across provider switches. Saved supported chats offer Resume conversation on desktop and mobile; mobile requires the laptop and Gnomcode online. Conversation headers show compact remaining-limit readings with source details available on demand, refreshed with incoming observations; unknown and older readings remain explicit. Handoff also supports a workspace outside Git. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
 
 ### Profile, pairing and feedback
 
@@ -231,5 +231,5 @@ Commands keep an integrated clipboard icon with a 44px target, an accessible nam
 - **Don't** use emojis, oversized pills, decorative gradients or color-only status indicators.
 - **Don't** restore the oversized console hero, duplicate top navigation or debug-style action toolbar.
 - **Don't** turn ordinary dashboard sections into nested floating cards.
-- **Don't** use a font warning as a reason to replace the approved Inter family.
+- **Don't** substitute a display or monospace face for the user-approved system application typography.
 - **Don't** infer release readiness, physical-device support or security certification from design captures.

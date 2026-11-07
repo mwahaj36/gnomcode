@@ -508,7 +508,7 @@
     <!-- Multi-Plan ROI Comparison Card -->
     <div class="card" data-local-view="usage" style="margin-bottom: 20px;">
       <div class="card-title">
-        <span>Subscription ROI Calculator</span>
+        <span>Estimated subscription value</span>
         <button type="button" class="btn-control" data-action="view:settings">Edit subscriptions</button>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px;" id="roi-cards-container">
@@ -522,11 +522,10 @@
       <aside class="ide-sidebar" id="ide-session-sidebar" aria-label="Session history">
         <div class="ide-sidebar-title"><h2>Conversations</h2><button type="button" class="btn-control" data-action="toggle-chat-list" aria-label="Collapse conversations" title="Collapse conversations"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2"/></svg></button></div>
         <button class="btn-primary" type="button" data-action="new-session">New conversation</button>
-        <label for="conversation-source">Show<select id="conversation-source"><option value="managed">Gnomcode conversations</option><option value="imported">Imported sessions (view-only)</option><option value="all">All sessions</option></select></label>
-        <label for="ide-session-search">Search titles, agents and projects</label>
-        <input id="ide-session-search" type="search" placeholder="Search conversation metadata" />
-        <label class="subagent-filter"><input id="include-subagents" type="checkbox"> Include subagents</label>
-        <details class="conversation-filters"><summary>Filter conversations</summary><div class="filters">
+        <label for="conversation-source">History<select id="conversation-source"><option value="managed">Gnomcode conversations</option><option value="imported">Imported sessions (view-only)</option><option value="all">All sessions</option></select></label>
+        <label for="ide-session-search" class="visually-hidden">Search conversations</label>
+        <input id="ide-session-search" type="search" placeholder="Search conversations" />
+        <details class="conversation-filters"><summary>Filters</summary><div class="filters"><label class="subagent-filter"><input id="include-subagents" type="checkbox"> Include subagents</label>
           <label>Project <select id="project-filter" data-change="project-filter"><option value="">All projects</option></select></label>
           <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option><option value="gemini-cli">Gemini CLI</option><option value="cursor">Cursor</option><option value="cline">Cline / Roo</option><option value="aider">Aider</option></select>
           <select id="status-filter" aria-label="Session status" data-change="filter"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="active">Running or waiting</option><option value="idle">Idle</option><option value="ended">Ended</option></select>
@@ -538,7 +537,7 @@
       <div class="ide-main">
         <section id="ide-launcher" class="ide-launcher" aria-labelledby="launcher-heading">
           <h2 id="launcher-heading">New agent session</h2>
-          <p>Choose an agent and workspace to begin. Use the terminal shell to install a CLI or sign in with your provider.</p>
+          <p>Choose an agent and the folder it should work in.</p>
           <form id="launch-agent-form" data-submit="launch-agent">
             <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="terminal">Terminal Shell</option></select></div>
             <div><label for="launch-repo-input">Workspace directory</label><div class="workspace-field"><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" aria-label="Choose folder" title="Choose folder"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg></button></div></div>
@@ -599,7 +598,7 @@
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
     <section class="profile-devices" aria-labelledby="remote-heading">
       <h2 id="remote-heading">Devices</h2>
-      <p>When account access is enabled, this desktop is available from every device signed in to your account. No separate phone pairing is needed.</p>
+      <p>Manage devices connected to your account.</p>
       <div id="remote-status" role="status">Checking devices...</div>
       <div id="remote-link"></div>
     </section>
@@ -635,7 +634,7 @@
       <div class="card">
         <div class="section-title" style="margin-bottom: 16px;">Custom Model Pricing Overrides</div>
         <div id="settings-pricing-list" style="margin-bottom: 14px; font-family: var(--font-mono); font-size: 11px;"></div>
-        
+
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
         <div class="profile-pricing-fields">
           <input type="text" id="settings-model-pattern" aria-label="Model name or pattern" placeholder="Model (e.g. claude-3-5)">
@@ -700,10 +699,10 @@
   <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
     <div class="table-container" style="margin-bottom: 20px;">
       <div class="table-header-controls">
-        <div style="font-weight: 600; font-size: 13px;">Reconnect after a quota reset</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Reopens your conversation after fresh quota confirms the reset. Send your next message to continue.</div>
+        <h2>Reconnect after a limit</h2>
+
       </div>
-      <p>In a conversation, open <strong>Schedule and automation</strong> to schedule a message, choose an automatic switch policy, or reconnect after a reset. Your laptop must stay awake and the agent must be signed in.</p>
+      <p>Set up reconnection or scheduling from a conversation.</p><details class="sp-help-details"><summary>How it works</summary><p>Open Schedule and automation in your conversation. Gnomcode can reconnect when fresh quota confirms a reset; send your next message to continue. Your laptop must stay awake and the agent must be signed in.</p></details>
       <button type="button" class="btn-control" data-action="automation-chat">Open conversations</button>
       <table>
         <thead>
@@ -719,7 +718,7 @@
           </tr>
         </thead>
         <tbody id="resume-queue-table">
-          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections armed. Open a Gnomcode conversation, expand Schedule and automation, then choose Reconnect after reset after a confirmed limit.</td></tr>
+          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections scheduled.</td></tr>
         </tbody>
       </table>
     </div>
@@ -727,16 +726,17 @@
     <!-- Guardrails Rules Section -->
     <div class="table-container" style="margin-bottom: 20px;">
       <div class="table-header-controls">
-        <div><div style="font-weight: 600; font-size: 13px;">Guardrail Rules</div><p>Hard stops can block Claude Code tool calls only when its hook is installed. Other agents receive alerts only. Hooks fail open; estimated spend is not a billing cap.</p></div>
+        <div><h2>Usage rules</h2><p>Get an alert when a session reaches a spend or turn limit.</p></div>
       </div>
-      <form id="guardrail-form" style="display:flex;flex-wrap:wrap;align-items:end;gap:16px;margin:16px 0;">
+      <form id="guardrail-form" class="sp-rule-form">
         <label>Agent<select id="rule-agent"><option value="">All agents</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="gemini-cli">Gemini CLI</option><option value="cursor">Cursor</option><option value="cline">Cline / Roo</option><option value="aider">Aider</option></select></label>
-        <label>Spend per session (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
-        <label>Turns per session<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
+        <label>Spend limit (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
+        <label>Turn limit<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
         <label>When reached<select id="rule-action"><option value="Warn">Send an alert</option><option value="HardStop">Stop via Claude hook; alert other agents</option></select></label>
         <button id="rule-save" class="btn-primary" type="submit">Add rule</button>
-        <p id="rule-status" role="status">Set a spend or turn threshold. Spend alerts use the trust level of the recorded usage.</p>
+        <p id="rule-status" role="status"></p>
       </form>
+      <details class="sp-help-details"><summary>About usage rules</summary><p>Spend is estimated, not a billing cap. Stops require the Claude Code hook; other agents receive alerts. If Gnomcode is unavailable, hooks allow the agent to continue.</p></details>
       <table>
         <thead>
           <tr>
@@ -749,16 +749,14 @@
           </tr>
         </thead>
         <tbody id="rules-table">
-          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No guardrail rules yet. Add a rule to set a local budget or loop alert.</td></tr>
+          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No usage rules yet.</td></tr>
         </tbody>
       </table>
     </div>
 
     <!-- Breach Alerts Section -->
+    <details class="sp-alert-history"><summary>Recent alerts</summary>
     <div class="table-container">
-      <div class="table-header-controls">
-        <div style="font-weight: 600; font-size: 13px;">Recent Guardrail Alerts</div>
-      </div>
       <table>
         <thead>
           <tr>
@@ -769,13 +767,14 @@
           </tr>
         </thead>
         <tbody id="alerts-table">
-          <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No guardrail alerts recorded. Configure a rule to monitor supported sessions.</td></tr>
+          <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No alerts yet.</td></tr>
         </tbody>
       </table>
     </div>
 
-    <details style="margin-top:24px;">
-      <summary>Previous context rotations</summary>
+    </details>
+    <details class="sp-help-details">
+      <summary>Rotation history</summary>
       <p>Providers manage their own context compaction. Gnomcode no longer suggests rotations based on context fill. To change model or provider, use the selector in your Gnomcode conversation.</p>
       <div hidden><select id="relay-policy-select"><option value="disabled">Disabled</option></select><select id="relay-strategy-select"><option value="same_agent">Same agent</option></select><select id="relay-threshold-select"><option value="90">90</option></select></div>
       <!-- Pending & Recent Relays Table -->

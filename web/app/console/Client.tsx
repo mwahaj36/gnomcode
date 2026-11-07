@@ -372,7 +372,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
   return (
     <main className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
-      <header className="web-context"><h1 aria-live="polite">{activeView === "overview" ? "Dashboard" : activeView === "chat" ? "Workspace" : activeView === "settings" ? "Profile" : activeView[0].toUpperCase() + activeView.slice(1)}</h1><span className={activeView === "settings" ? "" : "sr-only"}>{connectedSource}</span></header>
+      <header className="web-context"><h1 aria-live="polite">{activeView === "overview" ? "Dashboard" : activeView === "chat" ? "Workspace" : activeView === "settings" ? "Profile" : activeView[0].toUpperCase() + activeView.slice(1)}</h1></header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
         <p>Sign in to view activity from your paired desktop.</p>
         <div className="sp-console-connect-actions">
@@ -381,10 +381,10 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       </section>}
 
       {copyFeedback && <p role="status" className="sp-console-notice">{copyFeedback}</p>}
-      <div className="sp-console-refresh-state" aria-live="polite" hidden={activeView !== "settings"}>
+      <details className="sp-data-details" hidden={activeView !== "settings"}><summary>Connection details</summary><div className="sp-console-refresh-state" aria-live="polite">
         <span>{refreshMessage || connectedSource}</span>
         <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
-      </div>
+      </div></details>
 
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
@@ -396,12 +396,12 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         <Link className="web-download-link" href="/downloads" aria-label="Download desktop app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Download app</span></Link>
       </nav>
       <div className="sp-console-content">
-      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Sign in on your desktop to make it available here. Linking the native app allows every device signed in to this account to open its available sessions. No phone pairing or per-desktop approval is required.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button></div>{user && <details><summary>Connect an existing browser account</summary><p>Use this option in the native app when you signed in through a provider. Treat the copied connection like a password.</p><button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy account connection</button></details>}</section><DesktopDevices /><SettingsPanel embedded /></>}
+      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Account sync shares session metadata without end-to-end encryption. Linked desktops are available to every device signed into your account.</p><details><summary>What gets shared</summary><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Sign in on your desktop to make it available here. Linking the native app allows every device signed in to this account to open its available sessions. No phone pairing or per-desktop approval is required.</p></details><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button></div>{user && <details><summary>Connect an existing browser account</summary><p>Use this option in the native app when you signed in through a provider. Treat the copied connection like a password.</p><button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy account connection</button></details>}</section><DesktopDevices /><SettingsPanel embedded /></>}
       <div hidden={activeView !== "chat"}><RemoteCompanion embedded visible={activeView === "chat"} /></div>
       {activeView === "projects" && <section className="sp-activity"><h2>Project activity</h2>
         {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
       </section>}
-      {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
+      {activeView === "automations" && <section className="sp-activity"><h2>Conversation automation</h2><p>Schedule messages, reconnect after a limit, or choose automatic model switching from Workspace. Manage usage rules in the desktop app.</p><button type="button" className="sp-console-action" onClick={()=>changeConsoleView('chat')}>Open workspace</button></section>}
 
       {/* Timeline Filter Bar */}
       {user && desktopChoices.length>0 && activeView!=="chat" && <label className="sp-console-timeline-filter">Desktop<select value={desktopId || desktopChoices[0].id} onChange={event=>{lastDesktopSnapshot.current=null;setDesktopId(event.target.value);setPage(1);}}>{desktopChoices.map(desktop=><option key={desktop.id} value={desktop.id}>{desktop.name}</option>)}</select></label>}
@@ -430,27 +430,27 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
       {activeView === "usage" && <ProvidersPanel report={report} />}
 
-      {/* Subscription ROI Breakdown */}
+      {/* Estimated subscription value */}
       {activeView === "usage" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
         <div className="flex justify-between items-center mb-3">
-          <div className="text-xs text-muted uppercase font-semibold">Subscription ROI Breakdown</div>
+          <div className="text-xs text-muted uppercase font-semibold">Estimated subscription value</div>
           <button type="button" onClick={() => changeConsoleView("settings")} className="text-xs text-foreground underline underline-offset-4">
-            Edit plans
+            Manage plans
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+        <p className="sp-section-note">API-equivalent estimates, not invoices. Plan prices are recorded amounts.</p><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
           {activeRoi.map((roi) => (
               <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
               <div className="text-[11px] text-muted uppercase font-semibold">{roi.provider}</div>
               <div className="text-lg font-bold text-foreground my-1">
-                {typeof roi.multiplier === "number" ? `${roi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof roi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
+                {typeof roi.multiplier === "number" ? `${roi.multiplier.toFixed(1)}x` : "Unknown"} Return
               </div>
               <div className={`text-[11px] font-semibold ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
-                {typeof roi.net_savings_usd === "number" ? `${roi.net_savings_usd >= 0 ? "+" : ""}$${roi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> vs API
+                {typeof roi.net_savings_usd === "number" ? `${roi.net_savings_usd >= 0 ? "+" : ""}$${roi.net_savings_usd.toFixed(2)}` : "Unknown"} vs API
               </div>
               <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Plan: <span className="text-foreground">{typeof roi.monthly_plan_usd === "number" ? `$${roi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof roi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span> · {typeof roi.plan_usd === "number" ? `$${roi.plan_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span> ({roi.period_label || "period"})</div>
-                <div>Delivered value: <span className="text-accent font-semibold">{typeof roi.spend_usd === "number" ? `$${roi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof roi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
+                <div>Plan: <span className="text-foreground">{typeof roi.monthly_plan_usd === "number" ? `$${roi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"}</span> · {typeof roi.plan_usd === "number" ? `$${roi.plan_usd.toFixed(2)}` : "Unknown"} ({roi.period_label || "period"})</div>
+                <div>Delivered value: <span className="text-accent font-semibold">{typeof roi.spend_usd === "number" ? `$${roi.spend_usd.toFixed(2)}` : "Unknown"}</span></div>
               </div>
             </div>
           ))}
@@ -458,14 +458,14 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
             <div className="bg-bg border border-accent/40 rounded p-3.5">
               <div className="text-[11px] text-accent uppercase font-semibold">Combined Fleet ROI</div>
               <div className="text-lg font-bold text-accent my-1">
-                {typeof combinedRoi.multiplier === "number" ? `${combinedRoi.multiplier.toFixed(1)}x` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.multiplier === "number" ? "EST" : "UNKNOWN"}</span> Return
+                {typeof combinedRoi.multiplier === "number" ? `${combinedRoi.multiplier.toFixed(1)}x` : "Unknown"} Return
               </div>
               <div className={`text-[11px] font-semibold ${typeof combinedRoi.net_savings_usd !== "number" ? "text-muted" : combinedRoi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
-                {typeof combinedRoi.net_savings_usd === "number" ? `${combinedRoi.net_savings_usd >= 0 ? "+" : ""}$${combinedRoi.net_savings_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.net_savings_usd === "number" ? "EST" : "UNKNOWN"}</span> Net
+                {typeof combinedRoi.net_savings_usd === "number" ? `${combinedRoi.net_savings_usd >= 0 ? "+" : ""}$${combinedRoi.net_savings_usd.toFixed(2)}` : "Unknown"} Net
               </div>
               <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Total plan: <span className="text-foreground">{typeof combinedRoi.monthly_plan_usd === "number" ? `$${combinedRoi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.monthly_plan_usd === "number" ? "EXACT" : "UNKNOWN"}</span></span></div>
-                <div>Fleet value: <span className="text-accent font-semibold">{typeof combinedRoi.spend_usd === "number" ? `$${combinedRoi.spend_usd.toFixed(2)}` : "Unknown"} <span className="sp-trust">{typeof combinedRoi.spend_usd === "number" ? "EST" : "UNKNOWN"}</span></span></div>
+                <div>Total plan: <span className="text-foreground">{typeof combinedRoi.monthly_plan_usd === "number" ? `$${combinedRoi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"}</span></div>
+                <div>Fleet value: <span className="text-accent font-semibold">{typeof combinedRoi.spend_usd === "number" ? `$${combinedRoi.spend_usd.toFixed(2)}` : "Unknown"}</span></div>
               </div>
             </div>
           )}
@@ -479,7 +479,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
       {activeView === "limits" && <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
-      <p className="text-xs text-muted mb-3">Session rows and charts show metadata received from your paired desktop.</p>
+
       {activeView === "sessions" && <OngoingPanel sessions={ongoing} />}
       {activeView === "sessions" && snapshotTotal !== null && snapshotTotal >= 200 && <p role="status">The account view contains up to 200 recent or active sessions. The desktop reports {snapshotTotal} recorded sessions; older desktop versions may undercount. Filters and counts below cover only the published sessions. Open the local console for full history.</p>}
       {/* Session history */}
@@ -515,7 +515,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         {/* Pagination Controls */}
         <div className="sp-session-pagination">
           <div>
-            Page {page} of {totalPages} <span className="sp-trust">EXACT</span> ({totalCount} sessions <span className="sp-trust">EXACT</span>)
+            Page {page} of {totalPages} · {totalCount} sessions
           </div>
           <div className="flex gap-2" hidden={totalPages <= 1}>
             <button
