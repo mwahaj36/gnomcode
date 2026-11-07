@@ -1949,6 +1949,25 @@ mod tests {
 
     #[test]
     fn handoff_notice_persists_in_new_conversation_and_deletes_without_resurrection() {
+        if std::env::var_os("GNOMCODE_TEST_ISOLATED_HANDOFF").is_none() {
+            let home = tempfile::tempdir().expect("isolated handoff home");
+            let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "remote::tests::handoff_notice_persists_in_new_conversation_and_deletes_without_resurrection",
+                ])
+                .env("GNOMCODE_HOME", home.path())
+                .env("GNOMCODE_TEST_ISOLATED_HANDOFF", "1")
+                .output()
+                .expect("isolated handoff test");
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let db = Database::open_in_memory().expect("db");
         let mut db = db;
         let now = chrono::Utc::now();

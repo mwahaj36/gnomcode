@@ -3,13 +3,15 @@ import squirrelStartup from 'electron-squirrel-startup';
 import { spawn } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
 import * as path from 'node:path';
-import { workspaceLaunchHash, desktopNotification, daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip, windowChrome } from './security';
+import { activationArguments, workspaceLaunchHash, desktopNotification, daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip, windowChrome } from './security';
 import { dataHome, readDaemon } from './daemon-client';
+import {retainNotification,repairNotificationShortcut} from './notifications';
 
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let daemonPort = 0;
+const retainedNotifications=new Set<Notification>();
 
 function notify(args: string[]): boolean {
   const payload=desktopNotification(args);
@@ -17,7 +19,7 @@ function notify(args: string[]): boolean {
   if(!app.isReady()){void app.whenReady().then(()=>notify(args));return true;}
   if(Notification.isSupported()){
     const notification=new Notification(payload);
-    notification.on('click',showWindow);
+    retainNotification(notification,retainedNotifications,showWindow,process.platform);
     notification.show();
   }
   return true;
@@ -68,6 +70,10 @@ function showWindow(): void {
 }
 
 async function start(): Promise<void> {
+  if(process.platform==='win32'){
+    repairNotificationShortcut(path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','gnomcode.lnk'),process.execPath,shell);
+    Notification.isSupported();
+  }
   const baseUrl=await connectDaemon();
   const initial=new URL(baseUrl);initial.hash=workspaceLaunchHash(process.argv) || '';
   const url=initial.href;
@@ -198,9 +204,10 @@ app.setName('Gnomcode');
 if (process.platform === 'win32') app.setAppUserModelId('app.gnomcode.desktop');
 
 if (squirrelStartup) app.quit();
-else if (!app.requestSingleInstanceLock()) app.quit();
+else if (!app.requestSingleInstanceLock({argv:process.argv})) app.quit();
 else {
-  app.on('second-instance', (_event,args) => {
+  app.on('second-instance', (_event,commandLine,_cwd,additionalData) => {
+    const args=activationArguments(commandLine,additionalData);
     if(notify(args))return;
     const hash=workspaceLaunchHash(args);
     if(hash && window){const url=new URL(window.webContents.getURL());url.hash=hash;void window.loadURL(url.href);}

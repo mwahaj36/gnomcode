@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2 — 2026-11-07
+
+- Preserve original second-instance activation arguments so Chromium switches cannot replace notification text or workspace paths.
+- Retain Windows toasts after banner timeout and repair the installed app shortcut identity for Notification Center.
+
+
 ## 0.9.1 — 2026-11-06
 
 - Ship the Electron Windows shell and use one app instance for tray, shortcuts and workspace activation. Attribute native notifications to Gnomcode.

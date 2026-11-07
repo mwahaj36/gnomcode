@@ -108,3 +108,11 @@ test('workspace activation accepts only the local conversation route',()=>{
  assert.equal(workspaceLaunchHash(['app','--gnomcode-open-hash','#sessions?folder=C%3A%5Cproject']),'#sessions?folder=C%3A%5Cproject');
  for(const value of ['javascript:alert(1)','#auth','#sessions?token=secret','https://example.com'])assert.equal(workspaceLaunchHash(['app','--gnomcode-open-hash',value]),null);
 });
+
+test('second-instance activation uses original arguments rather than Chromium reordered switches',()=>{
+ const {activationArguments,desktopNotification}=require('../dist/security.js');
+ const original=['app','--gnomcode-notification','Response ready'];
+ const reordered=['app','--gnomcode-notification','--allow-file-access-from-files','Response ready'];
+ assert.deepEqual(desktopNotification(activationArguments(reordered,{argv:original})),{title:'Gnomcode',body:'Response ready'});
+ assert.deepEqual(activationArguments(original,{argv:[42]}),original);
+});

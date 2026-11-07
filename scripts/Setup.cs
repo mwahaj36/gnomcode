@@ -13,8 +13,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("gnomcode Setup")]
 [assembly: AssemblyProduct("gnomcode")]
 [assembly: AssemblyCompany("gnomcode")]
-[assembly: AssemblyVersion("0.9.1.0")]
-[assembly: AssemblyFileVersion("0.9.1.0")]
+[assembly: AssemblyVersion("0.9.2.0")]
+[assembly: AssemblyFileVersion("0.9.2.0")]
 
 public static class DeviceTheme
 {
@@ -127,7 +127,7 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v0.9.1  ·  64-bit Native";
+        lblVer.Text = "v0.9.2  ·  64-bit Native";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
         lblVer.ForeColor = Color.FromArgb(141, 153, 170);
         lblVer.Location = new Point(36, 431);
@@ -289,7 +289,7 @@ public class SetupForm : Form
                 string uninstallExe = Path.Combine(installDir, "Gnomcode-Uninstall.exe");
                 string ico = Path.Combine(installDir, "gnomcode.ico");
                 key.SetValue("DisplayName", "gnomcode");
-                key.SetValue("DisplayVersion", "0.9.1");
+                key.SetValue("DisplayVersion", "0.9.2");
                 key.SetValue("Publisher", "gnomcode");
                 key.SetValue("DisplayIcon", ico + ",0");
                 key.SetValue("InstallLocation", installDir);

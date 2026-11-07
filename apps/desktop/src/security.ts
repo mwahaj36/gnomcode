@@ -85,3 +85,8 @@ export function workspaceLaunchHash(args:string[]):string | null {
   const query=new URLSearchParams(hash.slice('#sessions?'.length));
   return query.size===1 && Boolean(query.get('folder')) ? hash : null;
 }
+
+export function activationArguments(commandLine:string[],additionalData:unknown):string[]{
+  const original=additionalData && typeof additionalData==='object' ? (additionalData as {argv?:unknown}).argv : null;
+  return Array.isArray(original) && original.length<=32 && original.every(value=>typeof value==='string' && value.length<=8192) ? original : commandLine;
+}
