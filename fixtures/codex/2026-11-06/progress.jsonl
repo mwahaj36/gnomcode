@@ -1,0 +1,4 @@
+{"timestamp":"2026-11-06T14:00:00Z","type":"session_meta","payload":{"id":"id_0001","cwd":"/workspace/sample-project","model":"gpt-6-luna"}}
+{"timestamp":"2026-11-06T14:00:01Z","type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-11-06T14:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","phase":"[REDACTED]","content":[{"type":"output_text","text":"[REDACTED]"}]}}
+{"timestamp":"2026-11-06T14:00:03Z","type":"event_msg","payload":{"type":"token_count","info":null}}

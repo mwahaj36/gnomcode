@@ -34,6 +34,8 @@ pub struct FileCtx {
     pub fallback_model: Option<String>,
     /// Optional fallback workspace path if the log file omits `cwd`.
     pub fallback_cwd: Option<String>,
+    /// Last observed activity when parsing an incremental chunk.
+    pub fallback_state: Option<gnomcode_core::SessionState>,
 }
 
 /// Normalized batch of domain records produced by an adapter from a byte chunk.
@@ -72,6 +74,81 @@ pub trait SourceAdapter {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gemini_tool_execution_ends_when_the_native_final_reply_arrives() {
+        use super::{FileCtx, SourceAdapter, gemini::GeminiAdapter};
+        let batch = GeminiAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/gemini-cli/2026-11-06/tool-final.json"),
+        );
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_debug_snapshot!("gemini_tool_final",(batch.sessions,batch.chat_events));});
+    }
+    #[test]
+    fn claude_user_turn_does_not_inherit_the_previous_completion() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let batch = ClaudeAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/claude-code/2026-11-06/new-turn.jsonl"),
+        );
+        assert_eq!(
+            batch.sessions[0].state,
+            gnomcode_core::SessionState::Thinking
+        );
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_debug_snapshot!("claude_new_turn",(batch.sessions,batch.chat_events));});
+    }
+
+    #[test]
+    fn codex_progress_and_token_counts_do_not_finish_the_turn() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let mut adapter = CodexAdapter::new();
+        let mut ctx = FileCtx::default();
+        let bytes = include_bytes!("../../../fixtures/codex/2026-11-06/progress.jsonl");
+        let batch = adapter.parse(&ctx, bytes);
+        assert_eq!(
+            batch.sessions[0].state,
+            gnomcode_core::SessionState::Thinking
+        );
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_debug_snapshot!("codex_progress",(&batch.sessions,&batch.chat_events));});
+        ctx.fallback_state = Some(gnomcode_core::SessionState::Thinking);
+        ctx.source_offset = bytes.len() as u64;
+        let batch=adapter.parse(&ctx,b"{\"timestamp\":\"2026-11-06T14:00:04Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"}}\n");
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
+    }
+
+    #[test]
+    fn codex_settings_change_does_not_start_a_turn() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let batch = CodexAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/codex/2026-11-06/model-settings.jsonl"),
+        );
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_debug_snapshot!("codex_settings",(&batch.sessions,&batch.chat_events));});
+        assert_eq!(batch.sessions[0].model.as_deref(), Some("gpt-6-luna"));
+        assert!(
+            batch
+                .chat_events
+                .iter()
+                .any(|event| event.status.as_deref() == Some("model_changed")
+                    || event.status.as_deref() == Some("model_active"))
+        );
+    }
+    #[test]
+    fn codex_incremental_settings_preserve_idle_state_and_workspace() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let ctx = FileCtx {
+            source_path: "rollout-2026-11-06T18-37-55-01a1b114-8aa7-7793-b4f9-1422ef6159b1.jsonl"
+                .into(),
+            source_offset: 100,
+            fallback_state: Some(gnomcode_core::SessionState::Idle),
+            fallback_cwd: Some("/workspace/audit".into()),
+            ..FileCtx::default()
+        };
+        let batch = CodexAdapter::new().parse(&ctx, b"{\"timestamp\":\"2026-11-06T13:40:23Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"thread_settings_applied\",\"thread_settings\":{\"model\":\"gpt-6-luna\"}}}\n");
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
+        assert_eq!(batch.projects[0].repo_root, "/workspace/audit");
+    }
     #[test]
     fn codex_attachment_transport_is_not_displayed_as_chat_text() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};

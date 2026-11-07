@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-05 - Approved console font detector exception](2026-11-05-approved-console-font.md)
+
 - [2026-11-05 - Console activity clarity](2026-11-05-console-activity-clarity.md)
 
 - [2026-11-05 - Codex hook review and browser folder picker](2026-11-05-codex-hook-review-folder-picker.md)
@@ -139,3 +141,5 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-10-26 — Session 1: Architecture Validation, Repo Initialization & M0 Foundation](2026-10-26-session-1-architecture-validation-repo-initialization-m0-foundation.md)
 
 - [2026-11-04 � Desktop onboarding](2026-11-04-desktop-onboarding.md)
+
+- [2026-11-06 — Live audit fixes](2026-11-06-live-audit-fixes.md)

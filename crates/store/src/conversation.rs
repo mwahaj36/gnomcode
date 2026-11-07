@@ -17,7 +17,7 @@ impl Database {
     /// Returns an error if the local mapping cannot be read.
     pub fn conversation_ids(&self) -> Result<Vec<String>, Error> {
         let mut statement = self.conn.prepare(obfstr::obfstr!(
-            "SELECT DISTINCT conversation_id FROM conversation_member LIMIT 1000"
+            "SELECT DISTINCT conversation_id FROM conversation_member"
         ))?;
         let rows = statement.query_map([], |row| row.get(0))?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
@@ -34,6 +34,7 @@ impl Database {
         repo: &str,
         model: Option<&str>,
     ) -> Result<(), Error> {
+        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO conversation_member(host_id,conversation_id,position) VALUES (?1,?1,0)"),[host])?;
         self.conn.execute(obfstr::obfstr!("UPDATE conversation_member SET agent=?2,repo=?3,requested_model=?4 WHERE host_id=?1"),params![host,agent,repo,model])?;
         Ok(())
     }

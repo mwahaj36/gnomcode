@@ -167,6 +167,29 @@ impl Database {
 }
 
 impl Database {
+    /// Lists recent generic notices awaiting opt-in background delivery.
+    ///
+    /// # Errors
+    /// Returns an error if pending notices cannot be read.
+    pub fn pending_push_notices(&self) -> Result<Vec<String>, Error> {
+        let mut query=self.conn.prepare(obfstr::obfstr!("SELECT id FROM automation_notice WHERE pushed=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5"))?;
+        Ok(query
+            .query_map([Utc::now().timestamp() - 120], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Marks a background notice accepted after the authenticated server acknowledges it.
+    ///
+    /// # Errors
+    /// Returns an error if delivery state cannot be saved.
+    pub fn mark_notice_pushed(&self, id: &str) -> Result<(), Error> {
+        self.conn.execute(
+            obfstr::obfstr!("UPDATE automation_notice SET pushed=1 WHERE id=?1"),
+            [id],
+        )?;
+        Ok(())
+    }
+
     /// Claims a bounded batch of recent OS notifications exactly once.
     pub fn claim_automation_notices(&self) -> Result<Vec<String>, Error> {
         let mut query=self.conn.prepare(obfstr::obfstr!("UPDATE automation_notice SET notified=1 WHERE id IN (SELECT id FROM automation_notice WHERE notified=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5) RETURNING message"))?;
@@ -229,6 +252,17 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn background_delivery_is_independent_of_desktop_claim_and_can_retry() {
+        let db = Database::open_in_memory().expect("db");
+        db.automation_notice("completed:test", "", "Ready")
+            .expect("notice");
+        assert_eq!(db.claim_automation_notices().expect("desktop").len(), 1);
+        assert_eq!(db.pending_push_notices().expect("push").len(), 1);
+        assert_eq!(db.pending_push_notices().expect("retry").len(), 1);
+        db.mark_notice_pushed("completed:test").expect("accepted");
+        assert!(db.pending_push_notices().expect("once").is_empty());
+    }
     #[test]
     fn native_notices_are_claimed_once_and_internal_reset_markers_stay_hidden() {
         let db = Database::open_in_memory().expect("db");

@@ -70,3 +70,23 @@ export function windowChrome(platform: string, dark: boolean): Pick<Electron.Bro
   return {autoHideMenuBar:true,titleBarStyle:platform === 'darwin' ? 'hiddenInset' : 'hidden',
     ...(platform === 'darwin' ? {} : {titleBarOverlay:{color:dark ? '#0d0d0f' : '#f6f7f8',symbolColor:dark ? '#ededee' : '#15191f',height:32}})};
 }
+
+export function desktopNotification(args: string[]): {title:string;body:string} | null {
+  const index=args.indexOf('--gnomcode-notification');
+  if(index < 0)return null;
+  const body=args[index+1];
+  if(!body || body.length>512 || /[\x00-\x1f]/.test(body))return null;
+  return {title:'Gnomcode',body};
+}
+
+export function workspaceLaunchHash(args:string[]):string | null {
+  const index=args.indexOf('--gnomcode-open-hash'),hash=index<0?'':args[index+1];
+  if(!hash || hash.length>8192 || !hash.startsWith('#sessions?'))return null;
+  const query=new URLSearchParams(hash.slice('#sessions?'.length));
+  return query.size===1 && Boolean(query.get('folder')) ? hash : null;
+}
+
+export function activationArguments(commandLine:string[],additionalData:unknown):string[]{
+  const original=additionalData && typeof additionalData==='object' ? (additionalData as {argv?:unknown}).argv : null;
+  return Array.isArray(original) && original.length<=32 && original.every(value=>typeof value==='string' && value.length<=8192) ? original : commandLine;
+}
