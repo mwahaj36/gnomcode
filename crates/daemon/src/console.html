@@ -522,11 +522,13 @@
       <aside class="ide-sidebar" id="ide-session-sidebar" aria-label="Session history">
         <div class="ide-sidebar-title"><h2>Conversations</h2><button type="button" class="btn-control" data-action="toggle-chat-list" aria-label="Collapse conversations" title="Collapse conversations"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2"/></svg></button></div>
         <button class="btn-primary" type="button" data-action="new-session">New conversation</button>
+        <label for="conversation-source">Show<select id="conversation-source"><option value="managed">Gnomcode conversations</option><option value="imported">Imported sessions (view-only)</option><option value="all">All sessions</option></select></label>
         <label for="ide-session-search">Search titles, agents and projects</label>
         <input id="ide-session-search" type="search" placeholder="Search conversation metadata" />
+        <label class="subagent-filter"><input id="include-subagents" type="checkbox"> Include subagents</label>
         <details class="conversation-filters"><summary>Filter conversations</summary><div class="filters">
           <label>Project <select id="project-filter" data-change="project-filter"><option value="">All projects</option></select></label>
-          <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option><option value="gemini-cli">Gemini CLI</option></select>
+          <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option><option value="gemini-cli">Gemini CLI</option><option value="cursor">Cursor</option><option value="cline">Cline / Roo</option><option value="aider">Aider</option></select>
           <select id="status-filter" aria-label="Session status" data-change="filter"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="active">Running or waiting</option><option value="idle">Idle</option><option value="ended">Ended</option></select>
         </div>
         </details><div id="ide-session-list">Loading conversations...</div>
@@ -554,11 +556,11 @@
           <p id="launch-status" role="status"></p>
         </section>
         <section id="session-chat-panel" aria-labelledby="session-chat-heading" hidden>
-          <div class="conversation-heading"><div><h2 id="session-chat-heading">Conversation</h2><p id="chat-session-label"></p></div><div id="chat-header-limits" class="sp-conversation-limits" role="status" aria-label="Remaining limits"></div><button id="chat-resume" class="btn-control" type="button" data-action="resume-chat" hidden>Resume conversation</button><button class="btn-control" type="button" data-action="workspace-terminal" aria-controls="workspace-terminal-pane">Terminal</button><details class="conversation-menu"><summary aria-label="Conversation actions">Actions</summary><div><button type="button" class="btn-control" data-action="focus-chat">Focus Window</button><button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Terminal stream</button><button type="button" class="btn-control" data-action="close-chat">Close</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div></details></div>
+          <div class="conversation-heading"><div><h2 id="session-chat-heading">Conversation</h2><p id="chat-session-label"></p></div><div id="chat-header-limits" class="sp-conversation-limits" role="status" aria-label="Remaining limits"></div><button id="chat-resume" class="btn-control" type="button" data-action="resume-chat" hidden>Resume conversation</button><button class="btn-control" type="button" data-action="workspace-terminal" aria-controls="workspace-terminal-pane">Terminal</button><details class="conversation-menu"><summary aria-label="Conversation actions">Actions</summary><div><button type="button" class="btn-control" data-action="focus-chat">Focus Window</button><button type="button" class="btn-control" id="chat-toggle-stream" data-action="toggle-stream">Agent terminal</button><button type="button" class="btn-control" data-action="close-chat">Close</button><button id="chat-delete" type="button" class="btn-control" data-action="delete-chat" hidden>Delete local chat history</button></div></details></div>
           <p id="chat-status" role="status"></p>
           <p id="session-action-status" role="status"></p><button id="session-action-copy" class="btn-control" type="button" hidden data-action="copy-workspace">Copy workspace path</button>
           <div id="chat-stream" role="log" aria-label="Conversation" aria-live="polite" tabindex="0"></div>
-          <div id="chat-terminal-view" role="log" aria-label="Interactive terminal. Click here to type; Control C interrupts." tabindex="0" hidden></div>
+          <div id="chat-terminal-view" role="log" aria-label="Agent terminal" tabindex="0" hidden></div>
           <form id="chat-prompt-form" data-submit="send-prompt">
             <label class="visually-hidden" for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="1" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Message the agent..."></textarea>
             <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
@@ -573,7 +575,8 @@
             <button type="button" class="btn-control" data-action="save-routing">Save routing policy</button>
             <p>Switching needs fresh known quota. Send your next message to continue; previous tasks are not replayed.</p>
             <p id="reset-reconnect-status" role="status"></p>
-            <button type="button" class="btn-control" data-action="reconnect-reset">Reconnect after reset</button>
+            <p id="reset-capability" hidden>This agent does not support native reconnection after reset. Choose another model or start a new conversation.</p>
+            <button id="reset-arm" type="button" class="btn-control" data-action="reconnect-reset">Reconnect after reset</button>
             <button type="button" class="btn-control" data-action="cancel-reset">Cancel reset reconnection</button>
             <div id="automation-notices" aria-label="Recent events"></div>
           </details>
@@ -591,6 +594,7 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
+    <p id="app-build" role="status">Checking installed version...</p>
     <div class="sp-settings-resources"><button type="button" class="btn-control" data-action="onboarding-start">Getting started</button><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
     <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
     <section class="profile-devices" aria-labelledby="remote-heading">
@@ -696,9 +700,11 @@
   <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
     <div class="table-container" style="margin-bottom: 20px;">
       <div class="table-header-controls">
-        <div style="font-weight: 600; font-size: 13px;">Auto-Resume Queue (Rate-Limited Sessions)</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Auto-continues rate-limited sessions as soon as quota resets</div>
+        <div style="font-weight: 600; font-size: 13px;">Reconnect after a quota reset</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Reopens your conversation after fresh quota confirms the reset. Send your next message to continue.</div>
       </div>
+      <p>In a conversation, open <strong>Schedule and automation</strong> to schedule a message, choose an automatic switch policy, or reconnect after a reset. Your laptop must stay awake and the agent must be signed in.</p>
+      <button type="button" class="btn-control" data-action="automation-chat">Open conversations</button>
       <table>
         <thead>
           <tr>
@@ -713,7 +719,7 @@
           </tr>
         </thead>
         <tbody id="resume-queue-table">
-          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No sessions are armed. Open a supported session and arm resume after a quota limit.</td></tr>
+          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections armed. Open a Gnomcode conversation, expand Schedule and automation, then choose Reconnect after reset after a confirmed limit.</td></tr>
         </tbody>
       </table>
     </div>
@@ -723,6 +729,14 @@
       <div class="table-header-controls">
         <div><div style="font-weight: 600; font-size: 13px;">Guardrail Rules</div><p>Hard stops can block Claude Code tool calls only when its hook is installed. Other agents receive alerts only. Hooks fail open; estimated spend is not a billing cap.</p></div>
       </div>
+      <form id="guardrail-form" style="display:flex;flex-wrap:wrap;align-items:end;gap:16px;margin:16px 0;">
+        <label>Agent<select id="rule-agent"><option value="">All agents</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="gemini-cli">Gemini CLI</option><option value="cursor">Cursor</option><option value="cline">Cline / Roo</option><option value="aider">Aider</option></select></label>
+        <label>Spend per session (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
+        <label>Turns per session<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
+        <label>When reached<select id="rule-action"><option value="Warn">Send an alert</option><option value="HardStop">Stop via Claude hook; alert other agents</option></select></label>
+        <button id="rule-save" class="btn-primary" type="submit">Add rule</button>
+        <p id="rule-status" role="status">Set a spend or turn threshold. Spend alerts use the trust level of the recorded usage.</p>
+      </form>
       <table>
         <thead>
           <tr>
@@ -760,52 +774,12 @@
       </table>
     </div>
 
-    <!-- Pro Labs Context Relay Engine Section -->
-    <div class="card" style="margin-bottom: 20px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <div class="card-title" style="margin: 0;">Context Relay Engine</div>
-          <span class="badge" style="font-size: 10px; font-weight: 700;">PRO LABS</span>
-        </div>
-        <div style="font-size: 11px; color: var(--text-muted);">
-          Fresh-session rotation & repository handoff via <code style="font-family: var(--font-mono); background: var(--card-hover); padding: 2px 4px; border-radius: 0;">.gnomcode/HANDOFF.md</code>
-        </div>
-      </div>
-
-      <!-- Explainer Box (SPEC §3.14 & Transparency) -->
-      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; line-height: 1.6; color: var(--text-muted);">
-        <strong style="color: var(--text);">Why rotated sessions run in your terminal:</strong> Anthropic, OpenAI, and Google operate proprietary GUI sidebars with closed internal databases. gnomcode maintains strict privacy invariants and does not access closed GUI databases. Rotated sessions launch in your terminal pane with a repository handoff summary. The new agent may still receive its own startup instructions and context.
-      </div>
-
-      <!-- Relay Controls Form -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
-        <div>
-          <label for="relay-policy-select" style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Execution Policy</label>
-          <select id="relay-policy-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--sp-control-radius); padding: 6px 10px; font-size: 11px; color: var(--text);">
-            <option value="ask_first">Ask First (Recommended / Default)</option>
-            <option value="auto">Auto-Relay (Zero-Touch Rotation)</option>
-            <option value="disabled">Disabled (Manual Only)</option>
-          </select>
-        </div>
-        <div>
-          <label for="relay-strategy-select" style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Relay Strategy</label>
-          <select id="relay-strategy-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--sp-control-radius); padding: 6px 10px; font-size: 11px; color: var(--text);">
-            <option value="same_agent">Same Agent & Model (Default)</option>
-            <option value="failover">Failover on Rate Limit (Claude to Codex)</option>
-          </select>
-        </div>
-        <div>
-          <label for="relay-threshold-select" style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 600;">Safety Buffer Threshold</label>
-          <select id="relay-threshold-select" data-change="relay-config" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--sp-control-radius); padding: 6px 10px; font-size: 11px; color: var(--text);">
-            <option value="85">85% Context Fill</option>
-            <option value="90">90% Context Fill (Recommended)</option>
-            <option value="95">95% Context Fill</option>
-          </select>
-        </div>
-      </div>
-
+    <details style="margin-top:24px;">
+      <summary>Previous context rotations</summary>
+      <p>Providers manage their own context compaction. Gnomcode no longer suggests rotations based on context fill. To change model or provider, use the selector in your Gnomcode conversation.</p>
+      <div hidden><select id="relay-policy-select"><option value="disabled">Disabled</option></select><select id="relay-strategy-select"><option value="same_agent">Same agent</option></select><select id="relay-threshold-select"><option value="90">90</option></select></div>
       <!-- Pending & Recent Relays Table -->
-      <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px;">Relay History & Pending Rotations</div>
+      <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px;">Rotation history</div>
       <div class="table-container"><table>
         <thead>
           <tr>
@@ -822,7 +796,7 @@
           <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No context handoffs recorded. Open a supported session to switch agents.</td></tr>
         </tbody>
       </table></div>
-    </div>
+    </details>
   </main>
 
   </div></div>

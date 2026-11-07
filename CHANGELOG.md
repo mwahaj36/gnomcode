@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.2 — 2026-11-07
+
+- Preserve original second-instance activation arguments so Chromium switches cannot replace notification text or workspace paths.
+- Retain Windows toasts after banner timeout and repair the installed app shortcut identity for Notification Center.
+
+
+## 0.9.1 — 2026-11-06
+
+- Ship the Electron Windows shell and use one app instance for tray, shortcuts and workspace activation. Attribute native notifications to Gnomcode.
+- Fix false completion and model-change states; correct Claude new-turn and Gemini tool-completion states.
+- Separate owned conversations from imported view-only history, hide subagents by default, filter legacy tool IDs and paginate after filtering.
+- Retire context-fill rotations in favor of native provider compaction. Add usable guardrail setup and clearer reconnection guidance.
+- Preserve drafts and confirmed model selection on errors, guard cold startup input and render interactive terminals with xterm.
+- Add opt-in authenticated background device notifications with owner isolation and vendor destination validation. Publish metadata and Rust-computed ROI per desktop.
+- Publish Windows binaries separately from private source; retain stable website download URLs and checksum verification.
+
+
 All notable changes to Gnomcode are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 

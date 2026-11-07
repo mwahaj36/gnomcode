@@ -630,7 +630,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             }
         }
         Some("sessions") => {
-            let result = db.lock().await.list_active_sessions(1000);
+            let result = db.lock().await.list_active_sessions(usize::MAX);
             match result {
                 Ok(sessions) => {
                     let hosted = gnomcode_pty::list_active_sessions();
@@ -665,7 +665,9 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                             row["title"] = json!(title);
                         }
                     }
-                    json!({"type":"sessions","sessions":visible})
+                    let mut page = conversation_page(visible, &request);
+                    page["type"] = json!("sessions");
+                    page
                 }
                 Err(_) => json!({"type":"error","message":"Could not load sessions"}),
             }
@@ -704,6 +706,19 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             );
             match gnomcode_pty::launch_session(&session_id, agent, repo, model).await {
                 Ok(record) => {
+                    if db
+                        .lock()
+                        .await
+                        .save_conversation_launch(
+                            &record.session_id,
+                            &record.agent,
+                            &record.repo_path,
+                            record.model.as_deref(),
+                        )
+                        .is_err()
+                    {
+                        return json!({"type":"error","message":"Agent started but its conversation could not be saved. Check your laptop before retrying."});
+                    }
                     json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent})
                 }
                 Err(err) => json!({"type":"error","message":format!("Launch failed: {err}")}),
@@ -726,7 +741,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                 .unwrap_or(200)
                 .min(500);
             let db = db.lock().await;
-            let sessions = db.list_active_sessions(1000).unwrap_or_default();
+            let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
             let native_id = conversation_session_id(
                 session_id,
                 &sessions,
@@ -761,7 +776,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                 return json!({"type":"error","message":"Missing prompt"});
             };
             if text.trim().is_empty()
-                || text.len() > 4000
+                || text.encode_utf16().count() > 4000
                 || text
                     .chars()
                     .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
@@ -769,13 +784,16 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             {
                 return json!({"type":"error","message":"Invalid prompt"});
             }
-            if crate::deliver_conversation_prompt(db, session_id, text)
-                .await
-                .is_ok()
-            {
-                json!({"type":"prompt_ack","session_id":session_id})
-            } else {
-                json!({"type":"error","message":"Prompt could not be delivered"})
+            match crate::deliver_conversation_prompt(db, session_id, text).await {
+                Ok(()) => json!({"type":"prompt_ack","session_id":session_id}),
+                Err(
+                    error @ (crate::HandoffError::Busy
+                    | crate::HandoffError::NotReady
+                    | crate::HandoffError::ImportedSession),
+                ) => json!({"type":"error","message":error.to_string()}),
+                Err(_) => {
+                    json!({"type":"error","message":"Delivery could not be confirmed. Check the conversation before retrying; your draft is saved."})
+                }
             }
         }
         Some("resume_session") => {
@@ -807,7 +825,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             let agent = request.get("agent").and_then(Value::as_str);
             let prepared = crate::prepare_model_change(db, session_id, model, agent).await;
             let Ok(prepared) = prepared else {
-                return json!({"type":"error","message":"Could not prepare model switch"});
+                return json!({"type":"error","message":match prepared {Err(crate::HandoffError::Busy)=>"Wait for the current response or approval to finish before changing models.",Err(crate::HandoffError::NotReady)=>"The agent is starting or needs native approval. Finish setup on your laptop, then retry.",Err(crate::HandoffError::ImportedSession)=>"This imported session is view-only. Start a Gnomcode conversation to change models.",_=>"Could not prepare model switch. Check the selected agent and workspace on your desktop."}});
             };
             match crate::execute_switch(prepared).await {
                 Ok(record) => {
@@ -829,7 +847,7 @@ pub(crate) fn record_model_change(
     source: &str,
     target: &gnomcode_pty::SessionRecord,
 ) -> Result<(), gnomcode_store::Error> {
-    let sessions = db.list_active_sessions(1000)?;
+    let sessions = db.list_active_sessions(usize::MAX)?;
     sync_conversation_bindings(db, &sessions, &gnomcode_pty::list_active_sessions())?;
     let previous_native = db
         .conversation_target(source)?
@@ -882,6 +900,19 @@ pub(crate) fn sync_conversation_bindings(
     sessions: &[Session],
     hosted: &[gnomcode_pty::SessionRecord],
 ) -> Result<(), gnomcode_store::Error> {
+    for record in hosted
+        .iter()
+        .filter(|record| crate::agent_for_model("@default", Some(&record.agent)).is_some())
+    {
+        if db.conversation_launch(&record.session_id)?.is_none() {
+            db.save_conversation_launch(
+                &record.session_id,
+                &record.agent,
+                &record.repo_path,
+                record.model.as_deref(),
+            )?;
+        }
+    }
     for (session, record) in session_bindings(sessions, hosted) {
         db.bind_conversation_host(&record.session_id, &session.id)?;
     }
@@ -907,18 +938,20 @@ pub(crate) fn conversation_host<'a>(
     sessions: &[Session],
     hosted: &'a [gnomcode_pty::SessionRecord],
 ) -> Result<Option<&'a gnomcode_pty::SessionRecord>, gnomcode_store::Error> {
-    if let Some((host, _, _)) = db.conversation_target(id)? {
-        return Ok(hosted.iter().find(|record| record.session_id == host));
-    }
-    Ok(hosted
-        .iter()
-        .find(|record| record.session_id == id)
-        .or_else(|| {
-            sessions
-                .iter()
-                .find(|session| session.id == id)
-                .and_then(|session| session_host(session, sessions, hosted))
-        }))
+    let record = if let Some((host, _, _)) = db.conversation_target(id)? {
+        hosted.iter().find(|record| record.session_id == host)
+    } else {
+        hosted
+            .iter()
+            .find(|record| record.session_id == id)
+            .or_else(|| {
+                sessions
+                    .iter()
+                    .find(|session| session.id == id)
+                    .and_then(|session| session_host(session, sessions, hosted))
+            })
+    };
+    Ok(record.filter(|record| crate::agent_for_model("@default", Some(&record.agent)).is_some()))
 }
 
 pub(crate) fn conversation_chat(
@@ -959,9 +992,79 @@ pub(crate) fn conversation_chat(
     Ok(events)
 }
 
+fn legacy_tool_session(id: &str) -> bool {
+    id.strip_prefix("codex:").is_some_and(|id| {
+        ["ctc_", "ctco_", "fc_", "call_"]
+            .iter()
+            .any(|prefix| id.starts_with(prefix))
+    })
+}
+
+pub(crate) fn conversation_page(mut rows: Vec<Value>, query: &Value) -> Value {
+    let search = query["search"].as_str().unwrap_or("").trim().to_lowercase();
+    let include_subagents = query["include_subagents"].as_bool().unwrap_or(false);
+    rows.retain(|row| {
+        (include_subagents || row["parent_session_id"].is_null())
+            && query["source"]
+                .as_str()
+                .filter(|value| !value.is_empty() && *value != "all")
+                .is_none_or(|source| row["source"] == source)
+            && query["agent"]
+                .as_str()
+                .filter(|value| !value.is_empty() && *value != "all")
+                .is_none_or(|agent| row["agent"] == agent)
+            && query["project"]
+                .as_str()
+                .filter(|value| !value.is_empty() && *value != "all")
+                .is_none_or(|project| row["project_id"] == project)
+            && query["status"]
+                .as_str()
+                .filter(|value| !value.is_empty() && *value != "all")
+                .is_none_or(|status| match status {
+                    "active" => matches!(
+                        row["state"].as_str(),
+                        Some("thinking" | "tool" | "awaiting_approval")
+                    ),
+                    "ongoing" => {
+                        row["hosted"] == true
+                            || matches!(
+                                row["state"].as_str(),
+                                Some("thinking" | "tool" | "awaiting_approval")
+                            )
+                    }
+                    _ => row["state"] == status,
+                })
+            && (search.is_empty()
+                || format!(
+                    "{} {} {}",
+                    row["title"].as_str().unwrap_or(""),
+                    row["agent"].as_str().unwrap_or(""),
+                    row["project_name"].as_str().unwrap_or("")
+                )
+                .to_lowercase()
+                .contains(&search))
+    });
+    rows.sort_by(|a, b| {
+        b["last_event_at"]
+            .as_str()
+            .cmp(&a["last_event_at"].as_str())
+            .then_with(|| a["id"].as_str().cmp(&b["id"].as_str()))
+    });
+    let total = rows.len();
+    let limit = query["limit"].as_u64().unwrap_or(50).clamp(1, 100) as usize;
+    let pages = total.div_ceil(limit).max(1);
+    let page = (query["page"].as_u64().unwrap_or(1) as usize).clamp(1, pages);
+    let rows: Vec<_> = rows
+        .into_iter()
+        .skip((page - 1) * limit)
+        .take(limit)
+        .collect();
+    json!({"sessions":rows,"page":page,"total_pages":pages,"total_count":total})
+}
+
 fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord]) -> Vec<Value> {
-    let mut visible = sessions.iter().take(100).map(|session| {
-        json!({"id":session.id,"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"last_event_at":session.last_event_at})
+    let mut visible = sessions.iter().filter(|session| !legacy_tool_session(&session.id)).map(|session| {
+        json!({"id":session.id,"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"last_event_at":session.last_event_at,"parent_session_id":session.parent_session_id,"project_id":session.project_id})
     }).collect::<Vec<_>>();
     for record in hosted {
         if !matches!(
@@ -1010,7 +1113,8 @@ pub(crate) fn conversation_sessions(
         }
     }
     for mut row in candidates {
-        let id = row["id"].as_str().unwrap_or_default();
+        let row_id = row["id"].as_str().unwrap_or_default().to_owned();
+        let id = row_id.as_str();
         let mapping = db.conversation_target(id)?;
         if mapping
             .as_ref()
@@ -1019,6 +1123,12 @@ pub(crate) fn conversation_sessions(
             continue;
         }
         let root = db.conversation_id(id)?;
+        if let Some(source) = sessions.iter().find(|session| {
+            session.id == db.conversation_source(id).unwrap_or_else(|_| id.to_owned())
+        }) {
+            row["parent_session_id"] = json!(source.parent_session_id);
+            row["project_id"] = json!(source.project_id);
+        }
         let host = conversation_host(db, id, sessions, hosted)?;
         let native = mapping
             .as_ref()
@@ -1031,16 +1141,20 @@ pub(crate) fn conversation_sessions(
             .or_else(|| observed.map(|session| session.agent.as_str()))
             .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
             .unwrap_or_default();
-        let can_resume = host.is_none()
+        let managed = host.is_some() || launch.is_some();
+        row["source"] = json!(if managed { "managed" } else { "imported" });
+        let can_resume = managed
+            && host.is_none()
             && (matches!(
                 agent,
                 "codex" | "claude-code" | "claude" | "gemini-cli" | "gemini"
-            ) || launch.as_ref().is_some_and(|launch| {
-                matches!(
-                    launch.agent.as_str(),
-                    "codex" | "claude-code" | "gemini-cli" | "antigravity"
-                )
-            }));
+            ) || observed.is_none()
+                && launch.as_ref().is_some_and(|launch| {
+                    matches!(
+                        launch.agent.as_str(),
+                        "codex" | "claude-code" | "gemini-cli" | "antigravity"
+                    )
+                }));
         let can_prompt = host.is_some_and(|record| {
             observed.is_none_or(|session| {
                 session.state == gnomcode_core::SessionState::Idle
@@ -1062,6 +1176,8 @@ pub(crate) fn conversation_sessions(
         row["hosted"] = json!(host.is_some());
         row["can_prompt"] = json!(can_prompt);
         row["can_resume"] = json!(can_resume);
+        row["can_reset"] =
+            json!(managed && matches!(agent, "codex" | "claude-code" | "gemini-cli"));
         row["limits"] = json!(limits);
         if host.is_some_and(|record| {
             observed.is_none_or(|session| {
@@ -1073,6 +1189,29 @@ pub(crate) fn conversation_sessions(
         }
         if let Some(title) = crate::conversation_title(db, &root) {
             row["title"] = json!(title);
+        }
+        if row["title"]
+            .as_str()
+            .is_none_or(|title| title.trim().is_empty() || title.eq_ignore_ascii_case("unknown"))
+        {
+            let label = db
+                .get_session_focus_target(native)?
+                .and_then(|target| target.repo_root)
+                .and_then(|path| {
+                    Path::new(&path)
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                })
+                .filter(|name| name != "unknown")
+                .unwrap_or_else(|| "Saved conversation".into());
+            row["title"] = json!(format!(
+                "{label} · {}",
+                row["last_event_at"]
+                    .as_str()
+                    .unwrap_or("")
+                    .get(..10)
+                    .unwrap_or("")
+            ));
         }
         if let Some(model) = launch.and_then(|launch| launch.model) {
             if observed.and_then(|session| session.model.as_deref()) != Some(model.as_str()) {
@@ -1171,6 +1310,59 @@ pub(crate) fn session_bindings<'s, 'h>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_provider_separates_owned_imported_and_subagent_history() {
+        let agents = [
+            "claude-code",
+            "codex",
+            "gemini-cli",
+            "antigravity",
+            "cursor",
+            "cline",
+            "aider",
+        ];
+        let mut rows = Vec::new();
+        for agent in agents {
+            for source in ["managed", "imported"] {
+                rows.push(json!({"id":format!("{agent}-{source}"),"agent":agent,"source":source,"title":agent,"parent_session_id":null,"state":"idle"}));
+            }
+            rows.push(json!({"id":format!("{agent}-child"),"agent":agent,"source":"imported","title":"Child","parent_session_id":"parent","state":"idle"}));
+        }
+        for agent in agents {
+            let owned = conversation_page(rows.clone(), &json!({"agent":agent,"source":"managed"}));
+            assert_eq!(owned["total_count"], 1, "{agent}");
+            let imported =
+                conversation_page(rows.clone(), &json!({"agent":agent,"source":"imported"}));
+            assert_eq!(imported["total_count"], 1, "{agent}");
+            let children = conversation_page(
+                rows.clone(),
+                &json!({"agent":agent,"source":"imported","include_subagents":true}),
+            );
+            assert_eq!(children["total_count"], 2, "{agent}");
+        }
+    }
+
+    #[test]
+    fn conversation_history_does_not_truncate_at_one_hundred() {
+        let now = chrono::Utc::now();
+        let sessions: Vec<_> = (0..205)
+            .map(|i| Session {
+                id: format!("codex:saved-{i}"),
+                agent: gnomcode_core::AgentId::Codex,
+                surface: gnomcode_core::Surface::Cli,
+                project_id: "test".into(),
+                parent_session_id: None,
+                model: None,
+                title: None,
+                state: gnomcode_core::SessionState::Idle,
+                pid: None,
+                started_at: now,
+                last_event_at: now,
+            })
+            .collect();
+        assert_eq!(remote_sessions(&sessions, &[]).len(), 205);
+    }
 
     #[test]
     fn hosted_session_binds_to_exact_subdirectory_without_git_origin_in_log() {
@@ -1321,7 +1513,8 @@ mod tests {
         assert!(
             conversation_sessions(&db, &[], &[shell])
                 .expect("no shells")
-                .is_empty()
+                .iter()
+                .all(|row| row["agent"] != "terminal")
         );
     }
 
@@ -1756,6 +1949,25 @@ mod tests {
 
     #[test]
     fn handoff_notice_persists_in_new_conversation_and_deletes_without_resurrection() {
+        if std::env::var_os("GNOMCODE_TEST_ISOLATED_HANDOFF").is_none() {
+            let home = tempfile::tempdir().expect("isolated handoff home");
+            let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "remote::tests::handoff_notice_persists_in_new_conversation_and_deletes_without_resurrection",
+                ])
+                .env("GNOMCODE_HOME", home.path())
+                .env("GNOMCODE_TEST_ISOLATED_HANDOFF", "1")
+                .output()
+                .expect("isolated handoff test");
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let db = Database::open_in_memory().expect("db");
         let mut db = db;
         let now = chrono::Utc::now();
@@ -1897,6 +2109,9 @@ mod tests {
             json!({"type":"switch","session_id":"missing","model":"--yolo"}),
         )
         .await;
-        assert_eq!(response["message"], "Could not prepare model switch");
+        assert_eq!(
+            response["message"],
+            "Could not prepare model switch. Check the selected agent and workspace on your desktop."
+        );
     }
 }

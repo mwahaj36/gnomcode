@@ -1,3 +1,4 @@
+import {supabase} from './supabase';
 /**
  * Gnomcode notification service for desktop browsers and mobile Progressive Web Apps.
  * Supports Web Notification API, Service Worker showNotification, and optional Web Audio chime.
@@ -94,7 +95,7 @@ export async function sendAppNotification(payload: NotificationPayload): Promise
   // Mobile PWA / Service Worker path (required for mobile notifications)
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await navigator.serviceWorker.getRegistration();
       if (reg && 'showNotification' in reg) {
         await reg.showNotification(title, {
           ...options,
@@ -187,13 +188,17 @@ export async function subscribeToPushServer(): Promise<PushSubscriptionResult> {
   }
 
   try {
-    const keyRes = await fetch('/api/push/vapid-key');
+    const keyRes = await fetch('/api/push/vapid-key',{signal:AbortSignal.timeout(15000)});
     const { configured, publicKey } = await keyRes.json();
     if (!configured || !publicKey) {
       return { ok: false, error: 'Server VAPID keys are not configured yet.' };
     }
 
-    const reg = await navigator.serviceWorker.ready;
+    let timer:ReturnType<typeof setTimeout> | undefined;
+    const reg=await Promise.race([
+      navigator.serviceWorker.register('/sw.js').then(()=>navigator.serviceWorker.ready),
+      new Promise<ServiceWorkerRegistration>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Notification setup timed out. Reload this app and try again.')),10000);})
+    ]).finally(()=>{if(timer)clearTimeout(timer);});
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({
@@ -202,10 +207,10 @@ export async function subscribeToPushServer(): Promise<PushSubscriptionResult> {
       });
     }
 
-    try {
-      localStorage.setItem('gnomcode-push-sub', JSON.stringify(sub));
-    } catch {}
-
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session)return {ok:false,error:'Sign in before enabling background notifications.'};
+    const saved=await fetch('/api/push/subscription',{method:'POST',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify(sub)});
+    if(!saved.ok)return {ok:false,error:'Could not save background notification setup. Try again when connected.'};
     return { ok: true, subscription: sub };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Subscription failed';
@@ -214,41 +219,42 @@ export async function subscribeToPushServer(): Promise<PushSubscriptionResult> {
 }
 
 /** Send a cold server-side Web Push test via VAPID */
-export async function triggerServerPushTest(title = 'Gnomcode Background Push', body = 'Server-delivered push notification verified.'): Promise<{ ok: boolean; message: string }> {
+export async function triggerServerPushTest(): Promise<{ ok: boolean; message: string }> {
   try {
-    let subJson = localStorage.getItem('gnomcode-push-sub');
-    let sub = subJson ? JSON.parse(subJson) : null;
-
-    if (!sub && 'serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.ready;
-      sub = await reg.pushManager.getSubscription();
-    }
-
-    if (!sub) {
-      const res = await subscribeToPushServer();
-      if (!res.ok || !res.subscription) {
-        return { ok: false, message: res.error || 'Could not obtain push subscription' };
-      }
-      sub = res.subscription;
-    }
-
+    const registered=await subscribeToPushServer();
+    if(!registered.ok)return {ok:false,message:registered.error || 'Notification registration failed.'};
+    const {data:{session}}=await supabase.auth.getSession();
+    if(!session)return {ok:false,message:'Sign in to test background notifications.'};
     const res = await fetch('/api/push/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        subscription: sub,
-        title,
-        body
-      })
+      signal:AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json',Authorization:`Bearer ${session.access_token}` },
+      body: JSON.stringify({event_id:`test-${crypto.randomUUID()}`,kind:'agent_event'})
     });
 
     const data = await res.json();
-    if (res.ok && data.ok) {
-      return { ok: true, message: 'Server Web Push dispatched successfully.' };
+    if (res.ok && data.ok && data.devices > 0) {
+      return { ok: true, message: 'The push service accepted the test. Check this device’s notification center.' };
     }
     return { ok: false, message: data.error || 'Push send rejected.' };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Server push failed';
     return { ok: false, message };
   }
+}
+
+/** Revokes only this browser's destination; signing out must not affect other devices. */
+export async function disableDeviceNotifications():Promise<boolean>{
+  try {
+    if(!('serviceWorker' in navigator))return true;
+    const registration=await navigator.serviceWorker.getRegistration();
+    const subscription=await registration?.pushManager.getSubscription();
+    if(!subscription)return true;
+    const {data:{session}}=await supabase.auth.getSession();
+    if(session){
+      const response=await fetch('/api/push/subscription',{method:'DELETE',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify(subscription)});
+      if(!response.ok)return false;
+    }
+    return await subscription.unsubscribe();
+  }catch{return false;}
 }

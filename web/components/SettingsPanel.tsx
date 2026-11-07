@@ -3,30 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
-import { getNotificationPermission, requestNotificationPermission, triggerTestNotification, type NotificationStatus } from "../lib/notifications";
-
-interface CustomModelPricing {
-  model_pattern: string;
-  input_per_mtok_usd: number | null;
-  output_per_mtok_usd: number | null;
-  cache_read_per_mtok_usd: number | null;
-  updated_at: string;
-}
+import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, triggerServerPushTest, type NotificationStatus } from "../lib/notifications";
 
 export default function SettingsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const [user, setUser] = useState<any>(null);
   const [displayName, setDisplayName] = useState("Developer");
-  const [openaiPlan, setOpenaiPlan] = useState(20);
-  const [claudePlan, setClaudePlan] = useState(20);
-  const [googlePlan, setGooglePlan] = useState(20);
-  const [customPricing, setCustomPricing] = useState<CustomModelPricing[]>([]);
-
-  // Add form
-  const [newPattern, setNewPattern] = useState("");
-  const [newInput, setNewInput] = useState("");
-  const [newOutput, setNewOutput] = useState("");
-  const [newCache, setNewCache] = useState("");
-
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const saveBusy = useRef(false);
@@ -47,11 +28,13 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
 
   const handleToggleNotifications = async () => {
     const granted = await requestNotificationPermission();
-    setNotifStatus(granted ? "granted" : "denied");
+    setNotifStatus(granted ? "granted" : getNotificationPermission());
+    if(granted){const result=await triggerServerPushTest();setStatusMessage(result.message);}
   };
 
   const handleTestNotification = async () => {
-    await triggerTestNotification();
+    const result=await triggerServerPushTest();
+    setStatusMessage(result.message);
   };
   const loadBusy = useRef(false);
   const loadGeneration = useRef(0);
@@ -77,10 +60,11 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
+      await disableDeviceNotifications();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       loadGeneration.current++;
-      setUser(null); setCustomPricing([]); setLastLoaded(null);
+      setUser(null); setLastLoaded(null);
       setNewPassword(""); setShowPassword(false); setPasswordMessage("");
       setStatusMessage("Signed out.");
     } catch {
@@ -94,13 +78,11 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
     loadBusy.current = true; setLoadingPreferences(true); setStatusMessage("Loading cloud preferences...");
     const generation = ++loadGeneration.current;
     try {
-      const { data, error } = await supabase.from("gnomcode_sync_state").select("display_name,openai_plan_usd,claude_plan_usd,google_plan_usd,custom_pricing").eq("user_id", currentUser.id).maybeSingle();
+      const { data, error } = await supabase.from("gnomcode_sync_state").select("display_name").eq("user_id", currentUser.id).maybeSingle();
       if (generation !== loadGeneration.current) return;
       if (error) throw error;
       if (data) {
         setDisplayName(data.display_name || "Developer");
-        setOpenaiPlan(data.openai_plan_usd ?? 20); setClaudePlan(data.claude_plan_usd ?? 20); setGooglePlan(data.google_plan_usd ?? 20);
-        setCustomPricing(data.custom_pricing || []);
       }
       setLastLoaded(new Date()); setStatusMessage(data ? "Cloud preferences loaded." : "No saved cloud preferences. Suggested values are shown.");
     } catch (error) {
@@ -114,10 +96,10 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
       if (!mounted || accountId.current === (session?.user?.id ?? null)) return;
       accountId.current = session?.user?.id ?? null;
       loadGeneration.current++; loadBusy.current = false;
-      setUser(session?.user ?? null); setCustomPricing([]); setLastLoaded(null);
+      setUser(session?.user ?? null); setLastLoaded(null);
       if (session?.user) setStatusMessage("");
       else { setNewPassword(""); setShowPassword(false); setPasswordMessage(""); }
-      setDisplayName("Developer"); setOpenaiPlan(20); setClaudePlan(20); setGooglePlan(20);
+      setDisplayName("Developer");
       if (session?.user) void loadSettings(session.user);
     };
     supabase.auth.getSession().then(({ data: { session } }) => apply(session));
@@ -140,25 +122,9 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
     } finally { saveBusy.current = false; setSaving(false); }
   };
 
-  const savePlans = async (e: React.FormEvent) => {
+  const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await persist({ display_name: displayName, openai_plan_usd: openaiPlan, claude_plan_usd: claudePlan, google_plan_usd: googlePlan }, "Cloud preferences saved. Local desktop configuration is managed separately.");
-  };
-
-  const addPricing = async () => {
-    if (!newPattern.trim()) return;
-    const rates = [newInput, newOutput, newCache].map(value => value.trim() === "" ? null : Number(value));
-    if (rates.some(value => value !== null && (!Number.isFinite(value) || value < 0))) { setStatusMessage("Enter nonnegative rates; leave unknown rates blank."); return; }
-    const entry: CustomModelPricing = { model_pattern: newPattern.trim(), input_per_mtok_usd: rates[0], output_per_mtok_usd: rates[1], cache_read_per_mtok_usd: rates[2], updated_at: new Date().toISOString() };
-    const next = [...customPricing.filter(p => p.model_pattern !== entry.model_pattern), entry];
-    if (await persist({ custom_pricing: next }, "Cloud pricing preferences saved. Desktop pricing is configured locally.")) {
-      setCustomPricing(next); setNewPattern(""); setNewInput(""); setNewOutput(""); setNewCache("");
-    }
-  };
-
-  const deletePricing = async (pattern: string) => {
-    const next = customPricing.filter(p => p.model_pattern !== pattern);
-    if (await persist({ custom_pricing: next }, "Cloud pricing preference removed.")) setCustomPricing(next);
+    await persist({display_name:displayName},"Account display name saved.");
   };
 
   return (
@@ -169,7 +135,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
             gnomcode / settings
           </h1>
           <p className="text-xs text-muted mt-1 font-sans">
-            Manage your account, plan costs, and custom pricing overrides.
+            Manage your account and notification settings.
           </p>
         </div>
         <Link href="/console" className="sp-settings-back">← Return to Console</Link>
@@ -255,7 +221,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
         <div className="sp-settings-notifications" style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid var(--sp-border)" }}>
           <h3>Device & PWA Notifications</h3>
           <p className="sp-settings-hint" style={{ marginTop: "4px", marginBottom: "16px" }}>
-            Alerts for agent completions, required approvals, and quota resets on this device. Status: <strong style={{ textTransform: "uppercase" }}>{notifStatus}</strong>
+            Enable and test background alerts on each device. Your laptop must stay awake with account Remote access enabled. On iPhone, open Gnomcode from the Home Screen. Browser permission: <strong style={{ textTransform: "uppercase" }}>{notifStatus}</strong>
           </p>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
             {notifStatus !== "granted" ? (
@@ -268,7 +234,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
               </button>
             ) : (
               <span className="sp-trust-exact" style={{ padding: "8px 12px", border: "1px solid var(--sp-border)", borderRadius: "4px" }}>
-                [NOTIFICATIONS ACTIVE]
+                [PERMISSION GRANTED]
               </span>
             )}
             <button
@@ -276,19 +242,20 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
               onClick={handleTestNotification}
               className="sp-settings-action"
             >
-              Send Test Alert
+              Enable and send test alert
             </button>
+            <button type="button" className="sp-settings-action" onClick={async()=>{setStatusMessage(await disableDeviceNotifications()?'Background alerts disabled on this device.':'Could not disable background alerts. Check your connection and try again.');}}>Disable background alerts on this device</button>
           </div>
         </div>
       </section>
 
-      {/* Monthly Subscription Plans */}
-      <section className="sp-settings-section" aria-labelledby="settings-plans">
+      {/* Account profile */}
+      <section className="sp-settings-section" aria-labelledby="settings-profile">
         <div className="sp-settings-section-heading">
-          <h2 id="settings-plans">Subscription costs</h2>
-          <span>Suggested monthly costs · edit to match your plans for ROI estimates</span>
+          <h2 id="settings-profile">Account profile</h2>
+          <span>Your account display name</span>
         </div>
-        <form onSubmit={savePlans} className="sp-settings-plans-form">
+        <form onSubmit={saveProfile} className="sp-settings-plans-form">
           <div>
             <label htmlFor="display-name">Developer display name</label>
             <input id="display-name"
@@ -299,155 +266,19 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
             />
           </div>
 
-          <div className="sp-settings-plan-grid">
-            <div>
-              <label htmlFor="openai-plan">OpenAI plan ($/mo)</label>
-              <input id="openai-plan"
-                type="number"
-                min="0" step="1"
-                value={openaiPlan}
-                onChange={(e) => setOpenaiPlan(Number(e.target.value))}
-                className="sp-settings-input"
-              />
-              <span className="sp-settings-hint">Plus: $20 · Pro: $200</span>
-            </div>
-
-            <div>
-              <label htmlFor="claude-plan">Claude plan ($/mo)</label>
-              <input id="claude-plan"
-                type="number"
-                min="0" step="1"
-                value={claudePlan}
-                onChange={(e) => setClaudePlan(Number(e.target.value))}
-                className="sp-settings-input"
-              />
-              <span className="sp-settings-hint">Pro: $20 · Max 5x: $100</span>
-            </div>
-
-            <div>
-              <label htmlFor="google-plan">Google AI plan ($/mo)</label>
-              <input id="google-plan"
-                type="number"
-                min="0" step="1"
-                value={googlePlan}
-                onChange={(e) => setGooglePlan(Number(e.target.value))}
-                className="sp-settings-input"
-              />
-              <span className="sp-settings-hint">Pro: $20 · Free: $0</span>
-            </div>
-          </div>
-
           <div className="sp-settings-submit">
             <button
               type="submit"
               disabled={saving || !user}
               className="sp-settings-action sp-settings-primary"
             >
-              {saving ? "Saving..." : "Save Subscription Preferences"}
+              {saving ? "Saving..." : "Save display name"}
             </button>
           </div>
         </form>
       </section>
 
-      {/* Custom Model Pricing Overrides */}
-      <section className="sp-settings-section" aria-labelledby="settings-custom-pricing">
-        <div className="sp-settings-section-heading sp-settings-stack-heading">
-        <h2 id="settings-custom-pricing">Custom model pricing</h2>
-        <p>
-          Override default catalog token rates with custom negotiated pricing or enterprise discount tiers.
-        </p>
-        </div>
-
-        <div className="sp-settings-pricing-form">
-          <div className="sp-settings-pattern"><label htmlFor="pricing-pattern">Model pattern</label>
-          <input
-            id="pricing-pattern"
-            type="text"
-            placeholder="e.g. gpt-4o"
-            value={newPattern}
-            onChange={(e) => setNewPattern(e.target.value)}
-            className="sp-settings-input"
-          />
-          </div>
-          <div><label htmlFor="pricing-input">Input $/M</label>
-          <input
-            id="pricing-input"
-            type="number"
-            min="0" step="0.01"
-            value={newInput}
-            onChange={(e) => setNewInput(e.target.value)}
-            className="sp-settings-input"
-          />
-          </div>
-          <div><label htmlFor="pricing-output">Output $/M</label>
-          <input
-            id="pricing-output"
-            type="number"
-            min="0" step="0.01"
-            value={newOutput}
-            onChange={(e) => setNewOutput(e.target.value)}
-            className="sp-settings-input"
-          />
-          </div>
-          <div><label htmlFor="pricing-cache">Cache read $/M</label>
-          <input
-            id="pricing-cache"
-            type="number"
-            min="0" step="0.01"
-            value={newCache}
-            onChange={(e) => setNewCache(e.target.value)}
-            className="sp-settings-input"
-          />
-          </div>
-        </div>
-        <button
-          disabled={saving || !user}
-          onClick={addPricing}
-          className="sp-settings-action sp-settings-add"
-        >
-          Add / Update Price Override
-        </button>
-
-        <div className="sp-settings-table-scroll" role="region" aria-label="Custom pricing overrides" tabIndex={0}>
-          <table className="w-full text-left">
-            <thead>
-              <tr>
-                <th className="p-3">Model Pattern</th>
-                <th className="p-3">Input $/M</th>
-                <th className="p-3">Output $/M</th>
-                <th className="p-3">Cache Read $/M</th>
-                <th className="p-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {customPricing.map((p) => (
-              <tr key={p.model_pattern}>
-                  <td data-label="Model pattern">{p.model_pattern}</td>
-                  <td data-label="Input $/M">{p.input_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.input_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
-                  <td data-label="Output $/M">{p.output_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.output_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
-                  <td data-label="Cache read $/M">{p.cache_read_per_mtok_usd == null ? <span className="sp-trust-unknown">UNKNOWN</span> : <>{`$${p.cache_read_per_mtok_usd.toFixed(2)}`} <span className="sp-trust-exact">USER</span></>}</td>
-                  <td data-label="Action">
-                    <button
-                      disabled={saving || !user}
-                      onClick={() => deletePricing(p.model_pattern)}
-                      className="sp-settings-delete"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {customPricing.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="sp-settings-empty">
-                    No custom pricing overrides configured. Default provider rates apply.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <section className="sp-settings-section"><h2>Usage and pricing</h2><p>Subscription costs and model pricing are configured in Profile on your desktop. Reports here use that desktop’s Rust-computed values. Choose the desktop in the reporting view.</p><Link href="/docs">Open setup guide</Link></section>
     </main>
   );
 }

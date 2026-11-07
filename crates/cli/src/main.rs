@@ -796,6 +796,27 @@ fn open_browser(url: &str) {
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".to_owned());
         let install_dir = std::path::PathBuf::from(&local_app_data).join("Gnomcode");
 
+        let desktop = std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.parent()
+                    .map(|base| base.join("desktop").join("gnomcode-desktop.exe"))
+            })
+            .filter(|exe| exe.is_file())
+            .unwrap_or_else(|| install_dir.join("desktop").join("gnomcode-desktop.exe"));
+        if desktop.is_file()
+            && std::process::Command::new(desktop)
+                .args(
+                    url.find('#')
+                        .map(|index| vec!["--gnomcode-open-hash", &url[index..]])
+                        .unwrap_or_default(),
+                )
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .is_ok()
+        {
+            return;
+        }
         // Ensure tray background service is running
         let run_tray = install_dir.join("run-tray.vbs");
         if run_tray.exists() {

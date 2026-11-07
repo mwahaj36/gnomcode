@@ -696,6 +696,26 @@ pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
 pub fn send_desktop_notification(title: &str, body: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
+        // Prefer the installed shell so Windows attributes alerts to Gnomcode.
+        if let Some(shell) = std::env::current_exe().ok().and_then(|exe| {
+            exe.ancestors()
+                .skip(1)
+                .take(4)
+                .flat_map(|base| {
+                    [
+                        base.join("desktop").join("gnomcode-desktop.exe"),
+                        base.join("gnomcode-desktop.exe"),
+                    ]
+                })
+                .find(|path| path.is_file())
+        }) {
+            use std::os::windows::process::CommandExt as _;
+            return std::process::Command::new(shell)
+                .creation_flags(0x0800_0000)
+                .args(["--gnomcode-notification", body])
+                .spawn()
+                .is_ok();
+        }
         let escaped_title = title.replace('\'', "''");
         let escaped_body = body.replace('\'', "''");
         let script = format!(

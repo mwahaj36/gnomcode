@@ -219,100 +219,14 @@ pub fn run_guardrails(db: &Database) -> Result<(), Box<dyn std::error::Error + S
     Ok(())
 }
 
-/// Context Relay Engine (SPEC §3.14 / Pro Labs).
-/// Scans active sessions for context window saturation >= threshold,
-/// records pending relay events or auto-executes handoff based on policy.
+/// Retires context rotations for providers that manage their own context.
+/// Explicit user-requested model and provider switches remain available.
 pub fn run_context_relay(db: &Database) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = db.get_context_relay_config()?;
-    if config.policy == "disabled" {
-        return Ok(());
-    }
-
-    let (active_sessions, _) = db.list_sessions_paginated(None, Some("active"), 0, 50)?;
-    let existing_relays = db.list_context_relays()?;
-
-    for s in active_sessions {
-        // Auto-compacting environments (IDEs like VS Code, Cursor, Windsurf, Antigravity IDE,
-        // or agents with native compaction like Antigravity, Cursor, Cline) manage and compact
-        // their context window automatically; bypass context relay handoff alerts and rotations.
-        if s.surface == "ide" || matches!(s.agent.as_str(), "antigravity" | "cursor" | "cline") {
-            continue;
-        }
-
-        let Some(win) = s.context_window else {
-            continue;
-        };
-        if win == 0 {
-            continue;
-        };
-        let fill_pct = ((s.context_tokens as f64 / win as f64) * 100.0).round() as u32;
-
-        if fill_pct >= config.threshold_pct {
-            // Check if already recorded/pending for this session
-            if existing_relays.iter().any(|r| {
-                r.session_id == s.id
-                    && (r.status == "pending" || r.status == "executed" || r.status == "dismissed")
-            }) {
-                continue;
-            }
-
-            // Determine target agent based on strategy
-            let target_agent = if config.strategy == "failover" {
-                if s.agent == "claude-code" {
-                    "codex".to_owned()
-                } else {
-                    "claude-code".to_owned()
-                }
-            } else {
-                s.agent.clone()
-            };
-
-            let relay_id = format!("relay-{}", s.id);
-            let cwd = db
-                .get_session_focus_target(&s.id)
-                .ok()
-                .flatten()
-                .and_then(|t| t.repo_root)
-                .filter(|p| !p.trim().is_empty())
-                .or_else(|| db.find_antigravity_workspace(&s.id))
-                .unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|_| ".".to_owned())
-                });
-
-            let entry = gnomcode_store::ContextRelayEntry {
-                id: relay_id,
-                session_id: s.id.clone(),
-                source_agent: s.agent.clone(),
-                target_agent: target_agent.clone(),
-                project_name: s.project_name.clone(),
-                cwd,
-                fill_pct,
-                status: "pending".to_owned(),
-                created_at: chrono::Utc::now().to_rfc3339(),
-                executed_at: None,
-            };
-
-            db.record_context_relay(&entry)?;
-
-            // Dispatch desktop notification across platforms
-            let title = format!("[RELAY] Context Reserve: {}", s.agent);
-            let body = format!(
-                "Session in {} reached {}% context. Relay checkpoint prepared for {}.",
-                s.project_name, fill_pct, target_agent
-            );
-            let _ = gnomcode_platform::send_desktop_notification(&title, &body);
-
-            if config.policy == "auto" {
-                match execute_relay_handoff(&entry) {
-                    Ok(()) => db.update_context_relay_status(&entry.id, "executed")?,
-                    Err(error) => tracing::warn!("context relay launch failed: {error}"),
-                }
-            }
+    for relay in db.list_context_relays()? {
+        if relay.status == "pending" {
+            db.update_context_relay_status(&relay.id, "dismissed")?;
         }
     }
-
     Ok(())
 }
 
@@ -419,6 +333,38 @@ mod remote_entitlement_tests {
         assert!(super::cloud_user_is_pro(
             &serde_json::json!({"email":"mwahaj25@gmail.com"})
         ));
+    }
+
+    #[test]
+    fn native_compaction_clears_pending_relays_without_erasing_history() {
+        let db = gnomcode_store::Database::open_in_memory().expect("db");
+        for agent in [
+            "claude-code",
+            "codex",
+            "gemini-cli",
+            "antigravity",
+            "cursor",
+            "cline",
+            "aider",
+        ] {
+            db.record_context_relay(&gnomcode_store::ContextRelayEntry {
+                id: format!("relay-{agent}"),
+                session_id: format!("{agent}:test"),
+                source_agent: agent.into(),
+                target_agent: agent.into(),
+                project_name: "test".into(),
+                cwd: "test".into(),
+                fill_pct: 90,
+                status: "pending".into(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                executed_at: None,
+            })
+            .expect("record");
+        }
+        super::run_context_relay(&db).expect("relay pass");
+        let history = db.list_context_relays().expect("history");
+        assert_eq!(history.len(), 7);
+        assert!(history.iter().all(|row| row.status != "pending"));
     }
 
     #[test]

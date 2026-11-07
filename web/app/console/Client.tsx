@@ -150,6 +150,8 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
   const [authChecked, setAuthChecked] = useState(false);
 
   // Filters & Pagination
+  const [desktopId,setDesktopId]=useState('');
+  const [desktopChoices,setDesktopChoices]=useState<{id:string;name:string}[]>([]);
   const [timeline, setTimeline] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [projectNames, setProjectNames] = useState<string[]>([]);
@@ -237,7 +239,11 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     try {
     if (user) {
       try {
-        const desktop = await supabase.from("gnomcode_sync_state").select("*").eq("user_id", user.id).maybeSingle();
+        const directory=await supabase.from("spawnt_desktops").select("id,name,last_seen_at,live_snapshot").eq("user_id",user.id).order("last_seen_at",{ascending:false});
+        const choices=directory.data || [];
+        setDesktopChoices(choices.map(row=>({id:row.id,name:row.name})));
+        const chosen=choices.find(row=>row.id===desktopId) || choices[0];
+        const desktop={data:chosen,error:directory.error};
         if (generation !== metricsGeneration.current) return false;
         if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
         const snap = lastDesktopSnapshot.current;
@@ -255,8 +261,8 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         setReport(snap?.timelines?.[timeline] || (timeline === "today" ? snap?.timeline : null) || null);
         setQuota(snap?.quota || []);
         setSnapshotGeneratedAt(snap?.generated_at || null);
-        setRoiByProvider(snap?.roi_by_provider || []);
-        setCombinedRoi(snap?.combined_roi || null);
+        setRoiByProvider(snap?.roi_by_timeline?.[timeline]?.roi_by_provider || []);
+        setCombinedRoi(snap?.roi_by_timeline?.[timeline]?.combined_roi || null);
         setSnapshotLoaded(Boolean(snap));
         setActiveCount(snap?.ongoing_count ?? snap?.active_count ?? null);
         setSnapshotTotal(typeof snap?.total_count === "number" ? snap.total_count : null);
@@ -287,7 +293,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     refreshInFlight.current = false;
     }
     return refreshed;
-  }, [user, timeline, projectFilter, agentFilter, statusFilter, page]);
+  }, [user, desktopId, timeline, projectFilter, agentFilter, statusFilter, page]);
 
   const refreshCloudSnapshot = async () => {
     if (manualRefreshInFlight.current || refreshing) return;
@@ -391,13 +397,14 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       </nav>
       <div className="sp-console-content">
       {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Sign in on your desktop to make it available here. Linking the native app allows every device signed in to this account to open its available sessions. No phone pairing or per-desktop approval is required.</p><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button></div>{user && <details><summary>Connect an existing browser account</summary><p>Use this option in the native app when you signed in through a provider. Treat the copied connection like a password.</p><button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy account connection</button></details>}</section><DesktopDevices /><SettingsPanel embedded /></>}
-      {activeView === "chat" && <RemoteCompanion embedded />}
+      <div hidden={activeView !== "chat"}><RemoteCompanion embedded visible={activeView === "chat"} /></div>
       {activeView === "projects" && <section className="sp-activity"><h2>Project activity</h2>
         {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
       </section>}
       {activeView === "automations" && <div className="sp-console-notice" role="status">Resume queues and guardrails are configured on the paired local console. Session rotation is available from session details.</div>}
 
       {/* Timeline Filter Bar */}
+      {user && desktopChoices.length>0 && activeView!=="chat" && <label className="sp-console-timeline-filter">Desktop<select value={desktopId || desktopChoices[0].id} onChange={event=>{lastDesktopSnapshot.current=null;setDesktopId(event.target.value);setPage(1);}}>{desktopChoices.map(desktop=><option key={desktop.id} value={desktop.id}>{desktop.name}</option>)}</select></label>}
       {["overview", "usage"].includes(activeView) && <div className="sp-console-timeline-filter">
         <div className="text-xs text-muted">
           <span className="text-foreground">{report?.range_label || "Activity"}</span>

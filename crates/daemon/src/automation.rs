@@ -65,6 +65,12 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
             json!({"type":"schedules","session_id":conversation,"messages":messages,"reset_armed":armed}),
         );
     }
+    if kind == "schedule" || (kind == "resume_on_reset" && request["enabled"] != false) {
+        let id = conversation.clone();
+        if !store(db, move |db| Ok(db.conversation_launch(&id)?.is_some())).await? {
+            return Err("Imported provider sessions are view-only. Start a Gnomcode conversation to use automation.".into());
+        }
+    }
     let _control = crate::CONVERSATION_CONTROL.lock().await;
     if kind == "resume_on_reset" {
         let id = conversation.clone();
@@ -165,7 +171,7 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
     let due = request["due_at"].as_i64().ok_or("Choose a delivery time")?;
     let now = chrono::Utc::now().timestamp();
     if text.is_empty()
-        || text.len() > 4000
+        || text.encode_utf16().count() > 4000
         || text.starts_with('/')
         || text
             .chars()
@@ -236,7 +242,10 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     let _ = store(db, Database::expire_automation_records).await;
     if let Ok(sessions) = store(db, |db| db.list_active_sessions(1000)).await {
         let mut current = std::collections::HashMap::new();
-        for session in sessions {
+        for session in sessions
+            .into_iter()
+            .filter(|session| session.parent_session_id.is_none())
+        {
             if session.state == gnomcode_core::SessionState::Idle
                 && previous.sessions.get(&session.id).is_some_and(|state| {
                     matches!(

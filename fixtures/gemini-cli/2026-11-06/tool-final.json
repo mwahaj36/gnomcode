@@ -1,0 +1,1 @@
+{"sessionId":"id_0001","messages":[{"id":"id_0002","type":"gemini","timestamp":"2026-11-06T12:00:00Z","model":"gemini-test","toolCalls":[{"name":"read_file"}]},{"id":"id_0003","type":"gemini","timestamp":"2026-11-06T12:00:01Z","model":"gemini-test","content":"[REDACTED]"}]}

@@ -143,7 +143,11 @@ impl SourceAdapter for GeminiAdapter {
                     }
                 }
 
+                if msg.get("type").and_then(Value::as_str) == Some("user") {
+                    session.state = SessionState::Thinking;
+                }
                 if msg.get("type").and_then(Value::as_str) == Some("gemini") {
+                    session.state = SessionState::Idle;
                     let model = msg
                         .get("model")
                         .and_then(Value::as_str)
