@@ -158,6 +158,7 @@ impl SourceAdapter for ClaudeAdapter {
                 _ => None,
             };
             if let (Some(role), Some(message)) = (role, obj.get("message")) {
+                sess.state = SessionState::Thinking;
                 let content = message.get("content");
                 let text = match content {
                     Some(Value::String(text)) => text.clone(),
@@ -202,7 +203,11 @@ impl SourceAdapter for ClaudeAdapter {
                                 let detail = extract_tool_detail(block.get("input"));
                                 let summary = redact_summary(name, &detail);
                                 let kind = classify_tool_kind(name);
-                                sess.state = SessionState::Tool;
+                                sess.state = if name == "AskUserQuestion" {
+                                    SessionState::AwaitingApproval
+                                } else {
+                                    SessionState::Tool
+                                };
                                 batch.activity_events.push(ActivityEvent {
                                     session_id: session_id.clone(),
                                     timestamp: ts,

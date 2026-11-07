@@ -6,7 +6,6 @@ import AppNavbar from "../../components/AppNavbar";
 import {
   getNotificationPermission,
   requestNotificationPermission,
-  triggerTestNotification,
   triggerServerPushTest,
   isStandalonePWA,
   type NotificationStatus
@@ -16,7 +15,7 @@ export default function AppLauncherClient() {
   const [notifStatus, setNotifStatus] = useState<NotificationStatus>("default");
   const [isStandalone, setIsStandalone] = useState(false);
   const [testSent, setTestSent] = useState(false);
-  const [serverPushMsg, setServerPushMsg] = useState("");
+  const [notificationMessage,setNotificationMessage]=useState('');
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [installed, setInstalled] = useState(false);
 
@@ -42,20 +41,15 @@ export default function AppLauncherClient() {
 
   const handleEnableNotifs = async () => {
     const granted = await requestNotificationPermission();
-    setNotifStatus(granted ? "granted" : "denied");
+    setNotifStatus(granted ? "granted" : getNotificationPermission());
+    if(granted){const result=await triggerServerPushTest();setNotificationMessage(result.message);}
   };
 
   const handleTestNotif = async () => {
     setTestSent(true);
-    await triggerTestNotification();
-    setTimeout(() => setTestSent(false), 3000);
-  };
-
-  const handleServerPushTest = async () => {
-    setServerPushMsg("Testing...");
-    const res = await triggerServerPushTest();
-    setServerPushMsg(res.ok ? "Delivered" : "Not configured");
-    setTimeout(() => setServerPushMsg(""), 3500);
+    const result=await triggerServerPushTest();
+    setNotificationMessage(result.message);
+    setTestSent(false);
   };
 
   const handleInstallClick = async () => {
@@ -150,6 +144,7 @@ export default function AppLauncherClient() {
           </div>
         </div>
 
+        {notificationMessage && <p role="status">{notificationMessage}</p>}
         {/* Notifications & Device Companion Settings */}
         <div className="border border-[var(--sp-border)] rounded-lg p-5 bg-[var(--sp-card)] space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[var(--sp-border)] pb-3">
@@ -185,14 +180,6 @@ export default function AppLauncherClient() {
               {testSent ? "Alert Triggered" : "Test Local Alert"}
             </button>
 
-            <button
-              onClick={handleServerPushTest}
-              className="px-3 py-1.5 text-xs font-mono font-semibold uppercase tracking-wider rounded border border-[var(--sp-border)] text-[var(--sp-text)] hover:bg-[var(--sp-card-hover)] transition-colors"
-              title="Dispatches background server push via VAPID"
-            >
-              {serverPushMsg ? serverPushMsg : "Test Server Push"}
-            </button>
-
             <Link
               href="/settings"
               className="px-3 py-1.5 text-xs font-mono uppercase tracking-wider rounded text-[var(--sp-muted)] hover:text-[var(--sp-text)] transition-colors"
@@ -208,7 +195,7 @@ export default function AppLauncherClient() {
             [NOTIFICATION ARCHITECTURE]
           </div>
           <p>
-            Local PWA notifications fire directly through the Service Worker when paired with your desktop daemon. For closed-browser push delivery while your mobile device is asleep, optional VAPID keys may be configured via environment variables.
+            Enable and test background alerts on this device while signed in. Your laptop must stay awake with account Remote access enabled. On iPhone, open Gnomcode from the Home Screen.
           </p>
         </div>
       </main>

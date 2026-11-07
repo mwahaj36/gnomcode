@@ -33,6 +33,13 @@ public static class CheckInstallerOptions {
         string files = Path.Combine(Path.GetTempPath(), "gnomcode-installer-files-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(files);
         try {
+            MethodInfo safePath=integration.GetMethod("DesktopPayloadPath");
+            Assert(safePath != null,"Desktop archive paths must be validated");
+            foreach(string entry in new[]{"../outside.exe",@"C:\outside.exe",@"..\outside.exe","file:stream"}) {
+                bool unsafeRejected=false;
+                try {safePath.Invoke(null,new object[]{files,entry});} catch(TargetInvocationException){unsafeRejected=true;}
+                Assert(unsafeRejected,"Archive must reject unsafe path: "+entry);
+            }
             validate.Invoke(null, new object[] { files });
             File.WriteAllText(Path.Combine(files, "unrelated.txt"), "keep");
             bool rejected = false;

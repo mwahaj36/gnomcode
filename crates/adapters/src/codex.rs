@@ -236,7 +236,7 @@ impl SourceAdapter for CodexAdapter {
                     parent_session_id: self.parent_session_id.clone(),
                     model: self.active_model.clone(),
                     title: self.subagent_title.clone(),
-                    state: SessionState::Thinking,
+                    state: SessionState::Idle,
                     pid: None,
                     started_at: ts,
                     last_event_at: ts,
@@ -321,13 +321,28 @@ impl SourceAdapter for CodexAdapter {
                     parent_session_id: self.parent_session_id.clone(),
                     model: self.active_model.clone(),
                     title: self.subagent_title.clone(),
-                    state: SessionState::Thinking,
+                    state: ctx.fallback_state.unwrap_or(SessionState::Idle),
                     pid: None,
                     started_at: ts,
                     last_event_at: ts,
                 });
                 sess.last_event_at = ts;
-                sess.state = SessionState::Thinking;
+                if line_type == "turn_context"
+                    || (line_type == "event_msg"
+                        && matches!(
+                            payload.get("type").and_then(Value::as_str),
+                            Some("task_started" | "user_message" | "agent_reasoning")
+                        ))
+                    || line_type == "response_item"
+                {
+                    sess.state = SessionState::Thinking;
+                }
+                if line_type == "response_item"
+                    && payload.get("type").and_then(Value::as_str) == Some("function_call")
+                    && payload.get("name").and_then(Value::as_str) == Some("request_user_input")
+                {
+                    sess.state = SessionState::AwaitingApproval;
+                }
                 if self.parent_session_id.is_some() && sess.parent_session_id.is_none() {
                     sess.parent_session_id.clone_from(&self.parent_session_id);
                 }
@@ -337,7 +352,7 @@ impl SourceAdapter for CodexAdapter {
                 if line_type == "event_msg"
                     && matches!(
                         payload.get("type").and_then(Value::as_str),
-                        Some("task_complete" | "turn_aborted" | "token_count")
+                        Some("task_complete" | "turn_aborted")
                     )
                 {
                     sess.state = SessionState::Idle;
@@ -351,7 +366,10 @@ impl SourceAdapter for CodexAdapter {
                 });
                 if let Some(m) = turn_model {
                     if !m.trim().is_empty() {
-                        if line_type == "turn_context" && self.last_turn_model.as_deref() != Some(m)
+                        if (line_type == "turn_context"
+                            || payload.get("type").and_then(Value::as_str)
+                                == Some("thread_settings_applied"))
+                            && self.last_turn_model.as_deref() != Some(m)
                         {
                             let (content, status) = self.last_turn_model.as_ref().map_or_else(
                                 || (format!("Model active: {m}"), "model_active"),

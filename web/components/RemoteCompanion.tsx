@@ -8,17 +8,17 @@ import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoic
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
 import { reconcileChat, renderConversationLimits, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
-import { getNotificationPermission, requestNotificationPermission, sendAppNotification, triggerTestNotification } from '../lib/notifications';
+import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
-type Session = { id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean };
+type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean };
 type ChatEvent = { event_id: string; turn_index: number; created_at: string; role: string; content: string; status?: string | null };
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
-type AutomationNotice = {id:string;conversation_id:string;message:string};
-type Reply = { reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[] } & Partial<FolderListing>;
+type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
+type Reply = { reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
-export default function RemoteCompanion({ embedded = false }: { embedded?: boolean }) {
+export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
   const autoConnect = useRef(false);
   const [optimistic, setOptimistic] = useState<Record<string,PendingChat[]>>({});
@@ -28,6 +28,17 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'unavailable' | 'paired'>('ready');
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [historyRows,setHistoryRows]=useState<Session[]>([]);
+  const [historyPage,setHistoryPage]=useState(1);
+  const [historyPages,setHistoryPages]=useState(1);
+  const [historyTotal,setHistoryTotal]=useState(0);
+  const [includeSubagents,setIncludeSubagents]=useState(false);
+  const historyQuery=useRef({page:1,search:'',include_subagents:false,source:'managed'});
+  const launchPending=useRef(false);
+  const launchDeadline=useRef(0);
+  const [launching,setLaunching]=useState(false);
+  const notifiedEvents=useRef(new Set<string>());
+  const backgroundNotifications=useRef(false);
   const [selected, setSelected] = useState('');
   const [showSessions, setShowSessions] = useState(false);
   const [newSession,setNewSession]=useState(false);
@@ -60,19 +71,18 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     setNotifGranted(getNotificationPermission() === 'granted');
   }, []);
   async function toggleOrTestNotifications() {
-    if (getNotificationPermission() !== 'granted') {
-      const granted = await requestNotificationPermission();
-      setNotifGranted(granted);
-      if (granted) {
-        setNotice('Notifications enabled for agent events.');
-        void triggerTestNotification();
-      } else {
-        setError('Notification permission not granted.');
-      }
-    } else {
-      setNotice('Triggering test alert...');
-      await triggerTestNotification();
+    const granted = getNotificationPermission() === 'granted' || await requestNotificationPermission();
+    setNotifGranted(granted);
+    if (!granted) {
+      setError(getNotificationPermission() === 'unsupported'
+        ? 'Notifications are unavailable in this browser. On iPhone, add Gnomcode to the Home Screen and open it there.'
+        : 'Notifications are blocked. Allow notifications for Gnomcode in this browser and device settings, then test again.');
+      return;
     }
+    setNotice('Registering this device and sending a background test...');
+    const result=await triggerServerPushTest();
+    if(result.ok){backgroundNotifications.current=true;setNotice(result.message+' Agent alerts also work with Remote closed while your laptop stays online.');}
+    else {setNotice('');setError(result.message);}
   }
   const promptInput = useRef<HTMLTextAreaElement | null>(null);
   const chatContainer = useRef<HTMLDivElement | null>(null);
@@ -131,22 +141,24 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   },[]);
 
   useEffect(()=>{
+    if(!visible)return;
     if(phase!=='paired' && phase!=='reconnecting' && !(phase==='unavailable' && sessions.length))return;
     const body=document.body,html=document.documentElement;
     const previous={position:body.style.position,top:body.style.top,width:body.style.width,overflow:body.style.overflow,htmlOverflow:html.style.overflow};
     const y=window.scrollY;
     body.style.position='fixed';body.style.top=`${-y}px`;body.style.width='100%';body.style.overflow='hidden';html.style.overflow='hidden';
     return()=>{body.style.position=previous.position;body.style.top=previous.top;body.style.width=previous.width;body.style.overflow=previous.overflow;html.style.overflow=previous.htmlOverflow;window.scrollTo(0,y);};
-  },[phase,sessions.length]);
+  },[phase,sessions.length,visible]);
 
   useEffect(()=>{const visible=()=>{
     if(document.visibilityState!=='visible' || !proofKey.current)return;
-    if(socket.current?.readyState===WebSocket.OPEN && channel.current && authenticated.current){lastReply.current=Date.now();void send({type:'sessions'}).catch(()=>reconnect.current());}
+    if(socket.current?.readyState===WebSocket.OPEN && channel.current && authenticated.current){lastReply.current=Date.now();void requestSessions().catch(()=>reconnect.current());}
     else if(socket.current?.readyState!==WebSocket.CONNECTING){if(reconnectTimer.current)clearTimeout(reconnectTimer.current);reconnect.current();}
   };document.addEventListener('visibilitychange',visible);window.addEventListener('online',visible);return()=>{document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible);};},[]);
 
   useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
     const previous=accountOwner.current;
+    if(event==='SIGNED_OUT'){backgroundNotifications.current=false;void disableDeviceNotifications();}
     if(event==='SIGNED_OUT' || (previous && session?.user.id && previous!==session.user.id)){
       disconnect();if(previous)void forgetDevice(previous);accountOwner.current=session?.user.id||'';
     }
@@ -258,16 +270,24 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     void send({ type: 'chat', session_id: sessionId, before, limit: 500 }).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN && authenticated.current)setError('Chat connection lost.');});
   }
 
+  function requestSessions(){return send({type:'sessions',...historyQuery.current});}
+
   async function beginPaired() {
     const epoch=connectionEpoch.current;
     authenticated.current=true;retryStart.current=0;setError('');setPhase('paired');
     try {sessionStorage.setItem('gnomcode-pairing-offer',JSON.stringify(link));}catch{}
-    await send({type:'sessions'});
+    if(getNotificationPermission()==='granted')void subscribeToPushServer().then(result=>{
+      if(epoch!==connectionEpoch.current)return;
+      backgroundNotifications.current=result.ok;
+      if(!result.ok)setNotice(result.error || 'Background notification setup could not be confirmed. Use the notification button to retry.');
+    });
+    await requestSessions();
     await send({type:'routing'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
     poll.current = setInterval(() => {
-      void send({type:'sessions'}).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN)setError('Session refresh failed. Check the desktop connection and reconnect.');});
+      if(launchPending.current && Date.now()>launchDeadline.current){launchPending.current=false;setLaunching(false);setError('Launch is not confirmed. Check conversations before retrying; the agent may have started.');}
+      void requestSessions().catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN)setError('Session refresh failed. Check the desktop connection and reconnect.');});
       if (selectedRef.current && !loadingHistory.current) loadChat(selectedRef.current);
       if(selectedRef.current)void send({type:'schedules',session_id:selectedRef.current}).catch(()=>{});
       void send({type:'notices'}).catch(()=>{});
@@ -277,7 +297,17 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
   async function handle(reply: Reply, epoch:number) {
     if(epoch!==connectionEpoch.current)return;
     if (reply.type === 'schedules') { if(reply.session_id===selectedRef.current){setSchedules(reply.messages || []);setResetArmed(Boolean(reply.reset_armed));} }
-    else if(reply.type==='notices'){setAutomationNotices(reply.notices || []);}
+    else if(reply.type==='notices'){
+      const notices=reply.notices || [];
+      setAutomationNotices(notices);
+      for(const item of notices){
+        if(notifiedEvents.current.has(item.id))continue;
+        notifiedEvents.current.add(item.id);
+        if(!backgroundNotifications.current && document.hidden && item.created_at*1000 >= Date.now()-120000){
+          void sendAppNotification({title:'Gnomcode',body:item.message,tag:item.id,data:{url:'/remote'}});
+        }
+      }
+    }
     else if(reply.type==='routing'){setRouting(reply.policy || 'ask_first');}
     else if(reply.type==='schedule_ack') {
       const pending=pendingSchedule.current;
@@ -295,24 +325,15 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     else if (reply.type === 'workspaces' && reply.path && reply.roots && reply.folders) {
       setFoldersLoading(false); setFolderBrowser({path:reply.path,parent:reply.parent || null,roots:reply.roots,folders:reply.folders,truncated:Boolean(reply.truncated)});
     } else if (reply.type === 'sessions') {
-      setSessions(reply.sessions || []);
+      setHistoryRows(reply.sessions || []);
+      setHistoryPage(reply.page || 1);setHistoryPages(reply.total_pages || 1);setHistoryTotal(reply.total_count ?? reply.sessions?.length ?? 0);
+      setSessions(previous=>{const selected=previous.find(row=>row.id===selectedRef.current);const rows=reply.sessions || [];return selected && !rows.some(row=>row.id===selected.id)?[...rows,selected]:rows;});
       if (!selectedRef.current && reply.sessions?.length) {
-        const preferred=reply.sessions.find(session=>session.id===restoredSession.current) || reply.sessions.find(session=>session.can_prompt);
+        const preferred=reply.sessions.find(session=>session.id===restoredSession.current) || reply.sessions.find(session=>session.can_prompt) || reply.sessions[0];
         if(preferred)selectSession(preferred.id);
       }
     } else if (reply.type === 'chat' && reply.session_id === selectedRef.current) {
       const page = reply.events || [];
-      if (typeof document !== 'undefined' && document.hidden && page.length > 0) {
-        const last = page[page.length - 1];
-        if (last && last.role === 'assistant') {
-          void sendAppNotification({
-            title: active?.title || 'Agent Response Ready',
-            body: last.content ? last.content.slice(0, 100) : 'Agent completed a turn.',
-            tag: 'agent-turn',
-            data: { url: '/remote' }
-          });
-        }
-      }
       setEvents(current => {
         const all = new Map(current.map(event => [event.event_id, event]));
         page.forEach(event => all.set(event.event_id, event));
@@ -326,7 +347,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     } else if(reply.type==='trusted' && reply.secret){const key=await rememberDevice(link,reply.secret,()=>epoch===connectionEpoch.current && !manualDisconnect.current);if(epoch!==connectionEpoch.current)return;proofKey.current=key;await beginPaired();}
     else if(reply.type==='resumed'){await beginPaired();}
     else if(reply.type==='resume_rejected'){manualDisconnect.current=true;proofKey.current=null;await forgetDevice(accountOwner.current,connectedDesktop.current);socket.current?.close();setPhase('ready');setError('Access was revoked or this browser credential is no longer recognized. Open Devices to reconnect through your account.');}
-    else if (reply.type === 'launch_ack') { setNotice('Agent started. Send its first message below.');setNewSession(false); await send({ type: 'sessions' }); if (reply.session_id) selectSession(reply.session_id); }
+    else if (reply.type === 'launch_ack') { launchPending.current=false;setLaunching(false);setNotice('Agent started. Send its first message below.');setNewSession(false); await requestSessions(); if (reply.session_id) selectSession(reply.session_id); }
     else if (reply.type === 'prompt_ack') {
       const pending = pendingPrompt.current;
       if (pending && (!reply.session_id || reply.session_id === pending.session)) {
@@ -335,10 +356,11 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
         pendingPrompt.current = null; setSending(false); setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).map(item=>item.id === pending.id ? {...item,delivered:true} : item)})); setNotice('');
       }
     }
-    else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await send({type:'sessions'}); if(reply.session_id) loadChat(reply.session_id); }
+    else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await requestSessions(); if(reply.session_id) loadChat(reply.session_id); }
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
-    else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await send({ type: 'sessions' }); }
+    else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
     else if (reply.type === 'error') {
+      if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
       if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
       if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
       if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
@@ -497,7 +519,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
     {workspace && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>
       <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button ref={sidebarClose} type="button" aria-label="Close conversations" onClick={()=>{setShowSessions(false);sidebarToggle.current?.focus();}}>Close</button></div>
       <details open={newSession} onToggle={event=>setNewSession(event.currentTarget.open)}><summary>New conversation</summary>
-      <form onSubmit={event => { event.preventDefault(); if(!connected)return; void send({ type:'launch', agent:launchAgent, repo_path:launchRepo.trim(), model:launchModel.trim() || undefined }).catch(() => setError('Agent could not be launched. Check the desktop connection.')); }}>
+      <form onSubmit={event => { event.preventDefault(); if(!connected || launchPending.current)return; launchPending.current=true;launchDeadline.current=Date.now()+15000;setLaunching(true);setNotice('Starting agent on your desktop...'); void send({ type:'launch', agent:launchAgent, repo_path:launchRepo.trim(), model:launchModel.trim() || undefined }).catch(() => {launchPending.current=false;setLaunching(false);setError('Agent could not be launched. Check the desktop connection.');}); }}>
         <label htmlFor="remote-launch-agent">Agent</label><select id="remote-launch-agent" value={launchAgent} onChange={event => setLaunchAgent(event.target.value)}><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option></select>
         <label htmlFor="remote-launch-repo">Workspace directory on desktop</label><input id="remote-launch-repo" value={launchRepo} onChange={event => setLaunchRepo(event.target.value)} required />
         <button type="button" disabled={foldersLoading} onClick={() => void browseFolders()}>Browse desktop folders</button>
@@ -514,11 +536,12 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
           <footer><button type="button" onClick={()=>folderDialog.current?.close()}>Cancel</button><button type="button" className="sp-primary-action" disabled={foldersLoading} onClick={()=>{setLaunchRepo(folderBrowser.path);folderDialog.current?.close();}}>Use this folder</button></footer>
         </dialog>}
         <label htmlFor="remote-launch-model">Model (optional)</label><input id="remote-launch-model" value={launchModel} onChange={event => setLaunchModel(event.target.value)} maxLength={128} />
-        <button type="submit" disabled={!connected || !launchRepo.trim()}>Launch Agent</button>
+        <button type="submit" disabled={!connected || launching || !launchRepo.trim()}>{launching?'Launching...':'Launch Agent'}</button>
       </form></details>
-        <label className="remote-history-search" htmlFor="remote-history-search">Search titles and agents<input id="remote-history-search" type="search" value={conversationSearch} onChange={event=>setConversationSearch(event.target.value)} placeholder="Search conversation metadata" /></label>
-        <div className="remote-session-list">{sessions.filter(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())).map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => { selectSession(session.id); if (matchMedia('(max-width: 760px)').matches) sidebarToggle.current?.focus(); }}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
-        {!sessions.length ? <p>No conversations yet. Start an agent here or on your desktop.</p> : !sessions.some(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())) && <p role="status">No conversations match your search.</p>}
+        <label className="remote-history-search" htmlFor="remote-history-search">Search titles and agents<input id="remote-history-search" type="search" value={conversationSearch} onChange={event=>{setConversationSearch(event.target.value);historyQuery.current={...historyQuery.current,page:1,search:event.target.value};void requestSessions();}} placeholder="Search conversation metadata" /></label>
+        <label>Show<select defaultValue="managed" onChange={event=>{historyQuery.current={...historyQuery.current,page:1,source:event.target.value};void requestSessions();}}><option value="managed">Gnomcode conversations</option><option value="imported">Imported sessions (view-only)</option><option value="all">All sessions</option></select></label>
+        <label className="subagent-filter"><input type="checkbox" checked={includeSubagents} onChange={event=>{setIncludeSubagents(event.target.checked);historyQuery.current={...historyQuery.current,page:1,include_subagents:event.target.checked};void requestSessions();}} /> Include subagents</label><div className="remote-session-list">{historyRows.filter(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())).map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => { selectSession(session.id); if (matchMedia('(max-width: 760px)').matches) sidebarToggle.current?.focus(); }}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
+        <nav aria-label="Conversation pages"><button type="button" disabled={!connected || historyPage<=1} onClick={()=>{historyQuery.current.page=historyPage-1;void requestSessions();}}>Previous</button><span>{historyPage} / {historyPages} · {historyTotal} conversations</span><button type="button" disabled={!connected || historyPage>=historyPages} onClick={()=>{historyQuery.current.page=historyPage+1;void requestSessions();}}>Next</button></nav>{!historyRows.length ? <p>No conversations yet. Start an agent here or on your desktop.</p> : !historyRows.some(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())) && <p role="status">No conversations match your search.</p>}
       </aside>
       <div className="remote-conversation">{selected ? <>
         {historyLoading && <p role="status">Loading messages...</p>}
@@ -527,7 +550,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
           loadingHistory.current = true; setHistoryLoading(true); loadChat(selectedRef.current, events[0]?.event_id);
         }}>Load earlier messages</button>}
         <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" />
-        <details className="remote-automation"><summary>Schedule and automation</summary>
+        <details hidden={active?.source === 'imported'} className="remote-automation"><summary>Schedule and automation</summary>
           <p>Saved on your laptop after confirmation. Keep it awake with Gnomcode running. Message text is redacted before storage.</p>
           <label htmlFor="remote-schedule-time">Delivery time (your local time)</label><input id="remote-schedule-time" type="datetime-local" value={scheduleTime} onChange={event=>setScheduleTime(event.target.value)} />
           <button type="button" disabled={!connected || schedulePending || !prompt.trim()} onClick={()=>void scheduleDraft()}>{schedulePending?'Saving...':'Schedule current draft'}</button>
@@ -536,7 +559,7 @@ export default function RemoteCompanion({ embedded = false }: { embedded?: boole
           <label htmlFor="remote-routing">When an agent reaches a limit</label><select id="remote-routing" value={routing} disabled={!connected} onChange={event=>{setRouting(event.target.value);requestAutomation({type:'routing',policy:event.target.value});}}><option value="ask_first">Let me choose</option><option value="automatic">Automatically switch model or provider</option><option value="deny_cross_provider">Automatically switch within provider</option></select>
           <p>Switching needs fresh known quota. Send your next message to continue; previous tasks are not replayed.</p>
           <p role="status">{resetArmed?'Reset reconnection armed. Waiting for fresh quota confirmation.':'Reset reconnection is not armed.'}</p>
-          <button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:true})}>Reconnect after reset</button><button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:false})}>Cancel reset reconnection</button>
+          <button type="button" disabled={!connected || !active?.can_reset} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:true})}>Reconnect after reset</button><button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:false})}>Cancel reset reconnection</button>
           <div aria-label="Recent events">{automationNotices.filter(item=>(item.conversation_id===selected || !item.conversation_id)).slice(0,8).map(item=><p key={item.id}>{item.message}</p>)}</div>
         </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Read-only history.'}</p>{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div> : <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
           <label htmlFor="remote-prompt">Message the agent</label>

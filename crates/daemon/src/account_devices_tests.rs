@@ -36,6 +36,15 @@ async fn native_consent_grants_all_account_devices_across_desktops_and_survives_
         .enable_account_access(owner)
         .await
         .expect("confirm native account access once");
+    devices
+        .snapshot_desktop_id("20000000-0000-0000-0000-000000000002")
+        .await
+        .expect("metadata for another account");
+    assert_eq!(
+        devices.state.lock().await.owner,
+        owner,
+        "snapshot publication must not replace the Remote owner or skip room revocation"
+    );
     first = load_state(owner).await.expect("consent survives restart");
     first.remote_enabled = true;
     assert!(

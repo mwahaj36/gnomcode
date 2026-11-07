@@ -206,7 +206,12 @@ fn ingest_files(
             _ => None,
         };
 
-        let fallback_cwd = if file.agent == AgentId::Antigravity {
+        let codex_session = (file.agent == AgentId::Codex)
+            .then(|| Session::compose_id(AgentId::Codex, codex_session_id_from_path(&path_str)));
+        let fallback_cwd = if let Some(id) = codex_session.as_deref() {
+            db.get_session_focus_target(id)?
+                .and_then(|target| target.repo_root)
+        } else if file.agent == AgentId::Antigravity {
             let conv_id = extract_conversation_id(&path_str);
             db.find_antigravity_workspace(conv_id)
         } else {
@@ -218,6 +223,11 @@ fn ingest_files(
             source_offset: read_result.effective_start_offset,
             fallback_model,
             fallback_cwd,
+            fallback_state: codex_session
+                .as_deref()
+                .map(|id| db.session_state(id))
+                .transpose()?
+                .flatten(),
         };
 
         let mut adapter: Box<dyn SourceAdapter> = match file.agent {
@@ -241,6 +251,7 @@ fn ingest_files(
         let batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
         if repair_chat_format {
             db.repair_chat_contents(&batch.chat_events)?;
+            db.repair_session_metadata(&batch.projects, &batch.sessions)?;
             continue;
         }
         if is_rewritten
@@ -362,6 +373,13 @@ mod tests {
             ..FileCtx::default()
         };
         let mut batch = CodexAdapter::new().parse(&context, bytes.as_bytes());
+        let expected_project = batch.sessions[0].project_id.clone();
+        let original_project = batch.projects[0].clone();
+        batch.sessions[0].project_id =
+            gnomcode_core::Project::from_origin(None, "/unknown", None).id;
+        batch
+            .projects
+            .push(gnomcode_core::Project::from_origin(None, "/unknown", None));
         batch.chat_events[0].content = markdown.split_whitespace().collect::<Vec<_>>().join(" ");
         let mut db = Database::open_in_memory().expect("db");
         let checkpoint = SourceCheckpoint {
@@ -411,6 +429,15 @@ mod tests {
         ingest_all(&mut db).expect("repair");
         let chat = db.get_session_chat("codex:format", None).expect("chat");
         assert_eq!(chat[0].content, markdown);
+        assert_eq!(
+            db.get_session_focus_target("codex:format")
+                .expect("focus")
+                .expect("session")
+                .repo_root
+                .as_deref(),
+            Some(original_project.repo_root.as_str())
+        );
+        assert!(!expected_project.is_empty());
         assert_eq!(chat[0].event_id, event_id);
         assert_eq!(
             db.get_checkpoint(&context.source_path)

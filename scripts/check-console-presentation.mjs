@@ -46,7 +46,7 @@ updateSummary(element,{activeCount:2});assert.equal(writes,2);assert.equal(value
 
 const webConsole = await readFile(new URL('../web/app/console/Client.tsx', import.meta.url), 'utf8');
 assert.doesNotMatch(webConsole, /gnomcode_cloud_sessions_live/, 'retired hosted sessions must not be queried');
-assert.match(webConsole, /gnomcode_sync_state/, 'desktop summary sync remains available');
+assert.match(webConsole, /spawnt_desktops/, 'desktop summaries use per-desktop storage');
 
 const partial={cost_basis:'unknown',priced_turns:2,unpriced_turns:1,total_cost_usd:12,total_cache_savings_usd:4,range_label:'This month'};
 assert.match(renderSummary({report:partial}),/\$12.00/);

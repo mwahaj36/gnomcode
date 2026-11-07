@@ -295,6 +295,23 @@ function cycleTheme() {
       }
     }
 
+    async function saveGuardrail() {
+      const button=document.getElementById('rule-save'),status=document.getElementById('rule-status');
+      button.disabled=true;
+      status.textContent='Saving rule...';
+      try {
+        await apiJson('/api/v1/rules',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({
+          id:`rule-${Date.now()}`,project_id:null,agent:document.getElementById('rule-agent').value || null,
+          max_spend_usd:document.getElementById('rule-spend').value ? Number(document.getElementById('rule-spend').value) : null,
+          max_turns:document.getElementById('rule-turns').value ? Number(document.getElementById('rule-turns').value) : null,
+          action:document.getElementById('rule-action').value
+        })});
+        status.textContent='Rule saved. It applies to each matching session. Alerts appear below.';
+        await loadProData();
+      } catch(error) {status.textContent=`Rule could not be saved. ${error.message}`;}
+      finally {button.disabled=false;}
+    }
+    document.getElementById('guardrail-form').addEventListener('submit',event=>{event.preventDefault();void saveGuardrail();});
     async function loadProData() {
       try {
         const licRes = await fetch('/api/v1/license', { headers, signal: AbortSignal.timeout(15000) });
@@ -322,7 +339,7 @@ function cycleTheme() {
           const queue = await qRes.json();
           const qTable = document.getElementById('resume-queue-table');
           if (!queue || queue.length === 0) {
-            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No sessions are armed. Open a supported session and arm resume after a quota limit.</td></tr>';
+            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections armed. Open a Gnomcode conversation, expand Schedule and automation, then choose Reconnect after reset after a confirmed limit.</td></tr>';
           } else {
             qTable.innerHTML = queue.map(e => `
               <tr>
@@ -465,7 +482,7 @@ function cycleTheme() {
           showNotice('Handoff launched a fresh session. Check the target conversation and reported model.');
           loadRelayData();
         } else {
-          showNotice('Handoff failed. Check the target CLI in Terminal stream and try again.');
+          showNotice('Handoff failed. Check the target CLI in Agent terminal and try again.');
         }
       } catch (err) {
         showNotice('Error: ' + err.message);
@@ -680,6 +697,8 @@ function cycleTheme() {
     let chatWs = null;
     let installedAgents = [];
     let ideSessions = [];
+    let conversationRows = [];
+    let conversationRequest = 0;
     let hostedSessions = [];
     let chatRequest = 0;
     const chatDrafts = new Map();
@@ -710,9 +729,7 @@ function cycleTheme() {
 
     async function renderIdeSessions() {
       const presentation = await import('/console-presentation.js');
-      const known = new Set(ideSessions.map(session => session.id));
-      const hosted = hostedSessions.filter(session => !known.has(session.session_id)).map(session => ({ ...session, id: session.session_id, title: session.title || 'New conversation', last_event_at: session.started_at, state: 'hosted' }));
-      document.getElementById('ide-session-list').innerHTML = presentation.renderSessionList([...hosted, ...ideSessions], activeChatSession, document.getElementById('ide-session-search').value);
+      document.getElementById('ide-session-list').innerHTML = presentation.renderSessionList(conversationRows, activeChatSession);
     }
 
     function showLauncher() {
@@ -818,7 +835,7 @@ function cycleTheme() {
           document.getElementById('chat-delivery-status').textContent = '';
           void renderCurrentChat();
         }
-      } catch { if (activeChatSession === sourceSession) showNotice('Model change could not be confirmed. Your draft is saved. Check the selected model and try again.'); }
+      } catch (error) { select.value=select.dataset.currentSelection || ''; if (activeChatSession === sourceSession) showNotice(error.message || 'Model change could not be confirmed. Your draft is saved. Check the selected model and try again.'); }
       finally { modelHandoffBusy=false;pendingPrompts.delete(sourceSession);select.disabled=false;document.getElementById('chat-send-btn').disabled=pendingPrompts.has(activeChatSession);showCurrentChatModel(); }
     }
 
@@ -1029,7 +1046,7 @@ function cycleTheme() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || (res.status === 404 ? 'The agent terminal is no longer connected. Open Terminal stream to check it, or start a new conversation. Your draft is saved.' : 'The terminal did not accept the prompt. Check Terminal stream and retry.'));
+          throw new Error(err.message || (res.status === 404 ? 'The agent terminal is no longer connected. Open Agent terminal to check it, or start a new conversation. Your draft is saved.' : 'The terminal did not accept the prompt. Check Agent terminal and retry.'));
         }
         if ((chatDeletionGenerations.get(sessionId) || 0) !== deletionGeneration) return;
         optimistic.delivered = true;
@@ -1071,7 +1088,7 @@ function cycleTheme() {
       } else {
         terminal.hidden = true;
         stream.hidden = false;
-        if (btn) btn.textContent = 'Terminal stream';
+        if (btn) btn.textContent = 'Agent terminal';
         if (chatWs) { chatWs.close(); chatWs = null; }
       }
     }
@@ -1116,27 +1133,21 @@ function cycleTheme() {
     }
 
     function connectTerminalWs() {
-      if (chatWs || !activeChatSession) return;
-      const terminal = document.getElementById('chat-terminal-view');
-      if (!terminal) return;
-      terminal.textContent = 'Connecting to PTY terminal stream...\n';
-      const url = new URL(window.location.href);
-      const token = url.searchParams.get('token') || '';
-      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProto}//${location.host}/api/v1/sessions/${encodeURIComponent(activeChatSession)}/pty?token=${encodeURIComponent(token)}`;
-      try {
-        chatWs = new WebSocket(wsUrl);
-        chatWs.binaryType = 'arraybuffer';
-        chatWs.onmessage = (e) => {
-          const text = typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data);
-          terminal.textContent = (terminal.textContent + text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')).slice(-200000);
-          terminal.scrollTop = terminal.scrollHeight;
-        };
-        chatWs.onerror = () => { terminal.textContent += '\n[Terminal stream disconnected or not hosted by Gnomcode]'; };
-        chatWs.onclose = () => { chatWs = null; };
-      } catch (e) {
-        terminal.textContent += '\n[Terminal stream unavailable. Reopen the session and try again.]';
-      }
+      if(chatWs || !activeChatSession)return;
+      const element=document.getElementById('chat-terminal-view');
+      element.replaceChildren();
+      const terminal=new Terminal({cols:80,rows:24,scrollback:3000,fontSize:13,fontFamily:'Consolas, monospace',allowProposedApi:false});
+      const fit=new FitAddon.FitAddon();terminal.loadAddon(fit);terminal.open(element);
+      const url=new URL(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/pty`,location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';url.searchParams.set('token',token);
+      const socket=new WebSocket(url);chatWs=socket;socket.binaryType='arraybuffer';
+      const resize=()=>{if(element.hidden)return;fit.fit();if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({resize:{cols:terminal.cols,rows:terminal.rows}}));};
+      const observer=new ResizeObserver(resize);observer.observe(element);
+      socket.onopen=()=>{resize();terminal.focus();};
+      socket.onmessage=event=>terminal.write(typeof event.data==='string'?event.data:new Uint8Array(event.data));
+      const input=terminal.onData(data=>{if(socket.readyState===WebSocket.OPEN)socket.send(new TextEncoder().encode(data));});
+      socket.onerror=()=>terminal.writeln('\r\nAgent terminal unavailable. Reopen this view to retry.');
+      socket.onclose=()=>{observer.disconnect();input.dispose();terminal.dispose();if(chatWs===socket){chatWs=null;element.textContent='Agent terminal disconnected. Reopen this view to reconnect.';}};
+      requestAnimationFrame(resize);
     }
 
     async function loadChat(sessionId, earlier = false, silent = false) {
@@ -1148,7 +1159,7 @@ function cycleTheme() {
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
         document.getElementById('chat-stream').hidden = false;
-        document.getElementById('chat-toggle-stream').textContent = 'Terminal stream';
+        document.getElementById('chat-toggle-stream').textContent = 'Agent terminal';
       }
       const request = ++chatRequest;
       document.getElementById('ide-launcher').hidden = true;
@@ -1156,7 +1167,15 @@ function cycleTheme() {
       const hosted = hostedSessions.find(session => session.session_id === sessionId);
       document.getElementById('session-chat-heading').textContent = session?.title || hosted?.title || 'New conversation';
       document.getElementById('chat-session-label').textContent = hosted?.agent || session?.agent || 'Agent';
-      document.getElementById('chat-resume').hidden = Boolean(hosted) || !['codex','claude-code','gemini-cli'].includes(session?.agent);
+      const imported = session?.source === 'imported';
+      document.getElementById('chat-resume').hidden = !session?.can_resume;
+      document.getElementById('reset-arm').hidden = !session?.can_reset;
+      document.getElementById('reset-capability').hidden = imported || Boolean(session?.can_reset);
+
+      document.getElementById('chat-prompt-form').hidden = imported;
+      document.getElementById('chat-automation').hidden = imported;
+      document.getElementById('chat-toggle-stream').hidden = imported;
+      if(imported)document.getElementById('chat-session-label').textContent += ' · Imported, view-only';
       void showChatLimits();
       renderIdeSessions();
       showCurrentChatModel();
@@ -1251,6 +1270,7 @@ function cycleTheme() {
       try {
         if (!projectsLoaded) await loadProjects();
         const requestedPage = currentPage;
+        const request = ++conversationRequest;
         const project = document.getElementById('project-filter').value;
         const agent = document.getElementById('agent-filter').value;
         const status = document.getElementById('status-filter').value;
@@ -1260,15 +1280,21 @@ function cycleTheme() {
 
         const jsonStr = JSON.stringify(res);
         try { hostedSessions = (await apiJson('/api/v1/sessions/hosted', { headers })).sessions || []; } catch { hostedSessions = []; }
-        ideSessions = await apiJson(`/api/v1/conversations?agent=${agent}&project=${encodeURIComponent(project)}`, {headers});
+        const conversations = await apiJson(`/api/v1/conversations?page=${requestedPage}&limit=${pageLimit}&agent=${agent}&status=${status}&project=${encodeURIComponent(project)}&search=${encodeURIComponent(document.getElementById('ide-session-search').value)}&source=${encodeURIComponent(document.getElementById('conversation-source').value)}&include_subagents=${document.getElementById('include-subagents').checked}`, {headers});
+        if(request !== conversationRequest)return true;
+        const selected = ideSessions.find(session=>session.id===activeChatSession);
+        conversationRows = conversations.sessions || [];
+        ideSessions = [...conversationRows];
+        if(selected && !ideSessions.some(session=>session.id===selected.id))ideSessions.push(selected);
+        currentPage = conversations.page;
+        document.getElementById('pagination-info').textContent = `${conversations.page} / ${conversations.total_pages} · ${conversations.total_count} conversations`;
+        document.getElementById('pagination-controls').hidden = conversations.total_pages <= 1;
+        document.getElementById('prev-btn').disabled = conversations.page <= 1;
+        document.getElementById('next-btn').disabled = conversations.page >= conversations.total_pages;
         void showChatLimits();
         if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
 
         summaryState.activeCount = res.ongoing_count ?? res.active_count ?? null; await refreshSummary();
-        document.getElementById('pagination-info').textContent = res.total_pages > 1 ? `${res.page} / ${res.total_pages}` : `${res.total_count} conversation${res.total_count === 1 ? '' : 's'}`;
-        document.getElementById('pagination-controls').hidden = res.total_pages <= 1;
-        document.getElementById('prev-btn').disabled = res.page <= 1;
-        document.getElementById('next-btn').disabled = res.page >= res.total_pages;
 
         const presentation = await import('/console-presentation.js');
         presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
@@ -1461,6 +1487,8 @@ function cycleTheme() {
       }
     }
     async function loadSettingsData() {
+      void apiJson('/health',{headers}).then(health=>{document.getElementById('app-build').textContent=`Gnomcode ${health.version || 'version unavailable'}`;}).catch(()=>{document.getElementById('app-build').textContent='Installed version unavailable. Reload when the daemon is connected.';});
+
       try {
         const [userResponse, statsResponse] = await Promise.all([
           fetch('/api/v1/user', { headers }),
@@ -1637,7 +1665,7 @@ function cycleTheme() {
     }
 
     const actions = { 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
-      'delete-chat': deleteChat, 'load-chat': loadChat,
+      'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': showLauncher, 'new-session': showLauncher,
@@ -1667,13 +1695,9 @@ function cycleTheme() {
       else if (target.dataset.change === 'filter') onFilterChange();
       else if (target.dataset.change === 'relay-config') saveRelayConfig();
     });
-    document.getElementById('ide-session-search').addEventListener('input', renderIdeSessions);
-    document.getElementById('chat-terminal-view').addEventListener('keydown', event => {
-      if (!chatWs || chatWs.readyState !== WebSocket.OPEN || event.metaKey || event.altKey) return;
-      const keys = { Enter:'\r', Backspace:'\x7f', Tab:'\t', Escape:'\x1b', ArrowUp:'\x1b[A', ArrowDown:'\x1b[B', ArrowRight:'\x1b[C', ArrowLeft:'\x1b[D' };
-      const input = event.ctrlKey && event.key.toLowerCase() === 'c' ? '\x03' : !event.ctrlKey ? keys[event.key] || (event.key.length === 1 ? event.key : '') : '';
-      if (input) { event.preventDefault(); chatWs.send(new TextEncoder().encode(input)); }
-    });
+    document.getElementById('ide-session-search').addEventListener('input', () => {currentPage=1;void loadSessions();});
+    document.getElementById('conversation-source').addEventListener('change', () => {currentPage=1;void loadSessions();});
+    document.getElementById('include-subagents').addEventListener('change', () => {currentPage=1;void loadSessions();});
     document.addEventListener('submit', event => {
       const form = event.target.closest('[data-submit]');
       if (!form) return;

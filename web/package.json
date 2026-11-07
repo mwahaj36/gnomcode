@@ -1,6 +1,6 @@
 {
   "name": "gnomcode-web",
-  "version": "0.9.0",
+  "version": "0.9.2",
   "private": true,
   "scripts": {
     "prebuild": "node ../scripts/build-chat-markdown.mjs --check",
@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
-    "@types/web-push": "^3.6.4",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "markdown-it": "15.0.3",
@@ -23,13 +22,14 @@
     "pg": "^8.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "web-push": "^3.6.7"
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/web-push": "3.6.4",
     "autoprefixer": "^10.4.18",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.28",

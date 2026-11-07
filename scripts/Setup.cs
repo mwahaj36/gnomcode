@@ -13,8 +13,8 @@ using Microsoft.Win32;
 [assembly: AssemblyTitle("gnomcode Setup")]
 [assembly: AssemblyProduct("gnomcode")]
 [assembly: AssemblyCompany("gnomcode")]
-[assembly: AssemblyVersion("0.9.0.0")]
-[assembly: AssemblyFileVersion("0.9.0.0")]
+[assembly: AssemblyVersion("0.9.2.0")]
+[assembly: AssemblyFileVersion("0.9.2.0")]
 
 public static class DeviceTheme
 {
@@ -127,7 +127,7 @@ public class SetupForm : Form
 
         // Version badge
         Label lblVer = new Label();
-        lblVer.Text = "v0.9.0  ·  64-bit Native";
+        lblVer.Text = "v0.9.2  ·  64-bit Native";
         lblVer.Font = new Font("Segoe UI", 8.0f, FontStyle.Regular);
         lblVer.ForeColor = Color.FromArgb(141, 153, 170);
         lblVer.Location = new Point(36, 431);
@@ -256,6 +256,10 @@ public class SetupForm : Form
 
         Assembly asm = Assembly.GetExecutingAssembly();
         foreach (string resName in asm.GetManifestResourceNames()) {
+            if (resName == "desktop.zip") {
+                using(Stream desktop=asm.GetManifestResourceStream(resName)) InstallerIntegration.ExtractDesktop(desktop,installDir);
+                continue;
+            }
             string fileName = resName;
             if (resName.StartsWith("payload.")) {
                 fileName = resName.Substring("payload.".Length);
@@ -275,12 +279,17 @@ public class SetupForm : Form
 
     private void RegisterUninstallEntry()
     {
+
+        using(RegistryKey appId=Registry.CurrentUser.CreateSubKey(@"Software\Classes\AppUserModelId\app.gnomcode.desktop")) {
+            appId.SetValue("DisplayName","Gnomcode");
+            appId.SetValue("IconUri",Path.Combine(installDir,"gnomcode.ico"));
+        }
         using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode")) {
             if (key != null) {
                 string uninstallExe = Path.Combine(installDir, "Gnomcode-Uninstall.exe");
                 string ico = Path.Combine(installDir, "gnomcode.ico");
                 key.SetValue("DisplayName", "gnomcode");
-                key.SetValue("DisplayVersion", "0.9.0");
+                key.SetValue("DisplayVersion", "0.9.2");
                 key.SetValue("Publisher", "gnomcode");
                 key.SetValue("DisplayIcon", ico + ",0");
                 key.SetValue("InstallLocation", installDir);
@@ -312,8 +321,8 @@ public class SetupForm : Form
         string desktopLnk = Path.Combine(desktopDir, "gnomcode.lnk");
         if (desktopShortcut.Checked) {
             dynamic scDesktop = shell.CreateShortcut(desktopLnk);
-            scDesktop.TargetPath = "wscript.exe";
-            scDesktop.Arguments = "\"" + vbs + "\"";
+            scDesktop.TargetPath = Path.Combine(installDir,"desktop","gnomcode-desktop.exe");
+            scDesktop.Arguments = "";
             scDesktop.IconLocation = ico + ",0";
             scDesktop.Description = "gnomcode";
             scDesktop.WorkingDirectory = installDir;
@@ -325,8 +334,8 @@ public class SetupForm : Form
         string startLnk = Path.Combine(startMenuDir, "gnomcode.lnk");
         if (startMenuShortcut.Checked) {
             dynamic scStart = shell.CreateShortcut(startLnk);
-            scStart.TargetPath = "wscript.exe";
-            scStart.Arguments = "\"" + vbs + "\"";
+            scStart.TargetPath = Path.Combine(installDir,"desktop","gnomcode-desktop.exe");
+            scStart.Arguments = "";
             scStart.IconLocation = ico + ",0";
             scStart.Description = "gnomcode";
             scStart.WorkingDirectory = installDir;
@@ -357,6 +366,11 @@ public class SetupForm : Form
             string runTray = Path.Combine(installDir, "run-tray.vbs");
             string openConsole = Path.Combine(installDir, "open-console.vbs");
 
+            string desktop=Path.Combine(installDir,"desktop","gnomcode-desktop.exe");
+            if(File.Exists(desktop)) {
+                Process.Start(new ProcessStartInfo {FileName=desktop,UseShellExecute=false,CreateNoWindow=true});
+                return;
+            }
             if (File.Exists(runTray)) {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
                     FileName = "wscript.exe",
@@ -380,6 +394,29 @@ public class SetupForm : Form
 
 public static class InstallerIntegration
 {
+    public static string DesktopPayloadPath(string installDir,string entry) {
+        if(String.IsNullOrEmpty(entry) || Path.IsPathRooted(entry) || entry.IndexOf(':') >= 0) throw new IOException("Invalid desktop payload path");
+        string root=Path.GetFullPath(Path.Combine(installDir,"desktop"))+Path.DirectorySeparatorChar;
+        string dest=Path.GetFullPath(Path.Combine(root,entry));
+        if(!dest.StartsWith(root,StringComparison.OrdinalIgnoreCase)) throw new IOException("Desktop payload escapes install folder");
+        if(File.Exists(dest) && (File.GetAttributes(dest)&FileAttributes.ReparsePoint)!=0) throw new IOException("Desktop payload cannot replace linked files");
+        for(string dir=Path.GetDirectoryName(dest);dir!=null && dir.Length>=root.Length-1;dir=Path.GetDirectoryName(dir)) {
+            if(Directory.Exists(dir) && (File.GetAttributes(dir)&FileAttributes.ReparsePoint)!=0) throw new IOException("Desktop payload cannot use linked directories");
+        }
+        return dest;
+    }
+
+    public static void ExtractDesktop(Stream stream,string installDir) {
+        using(var archive=new ZipArchive(stream,ZipArchiveMode.Read)) {
+            foreach(var entry in archive.Entries) {
+                if(entry.Name.Length==0)continue;
+                string dest=DesktopPayloadPath(installDir,entry.FullName);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                using(Stream source=entry.Open()) using(Stream output=File.Create(dest)) source.CopyTo(output);
+            }
+        }
+    }
+
     public static void ValidateInstallDirectory(string installDir) {
         if (installDir.StartsWith(@"\\") || installDir == Path.GetPathRoot(installDir)) throw new IOException("Choose a dedicated folder on a local drive.");
         if (!Directory.Exists(installDir) || Directory.GetFileSystemEntries(installDir).Length == 0) return;
@@ -390,6 +427,15 @@ public static class InstallerIntegration
     }
 
     public static void RemovePayloadFiles(Assembly payload, string installDir) {
+        using(Stream stream=payload.GetManifestResourceStream("desktop.zip")) {
+            if(stream!=null)using(var archive=new ZipArchive(stream,ZipArchiveMode.Read)) {
+                foreach(var entry in archive.Entries) {
+                    if(entry.Name.Length==0)continue;
+                    string dest=DesktopPayloadPath(installDir,entry.FullName);
+                    if(File.Exists(dest))File.Delete(dest);
+                }
+            }
+        }
         foreach (string resource in payload.GetManifestResourceNames()) {
             string name = resource.StartsWith("payload.") ? resource.Substring(8) : resource;
             if (Path.GetFileName(name) != name) continue;
@@ -399,6 +445,14 @@ public static class InstallerIntegration
     }
 
     public static void StopTrayProcesses(string installDir) {
+        string desktop=Path.GetFullPath(Path.Combine(installDir,"desktop"))+Path.DirectorySeparatorChar;
+        foreach(Process process in Process.GetProcesses()) {
+            try {
+                if(process.ProcessName!="gnomcode-desktop" && process.ProcessName!="gnomcode")continue;
+                string exe=process.MainModule.FileName;
+                if(exe.StartsWith(desktop,StringComparison.OrdinalIgnoreCase)) {process.Kill();process.WaitForExit(3000);}
+            }catch{} finally{process.Dispose();}
+        }
         string tray = Path.Combine(installDir, "tray.ps1").Replace("'", "''");
         string profile = Path.Combine(installDir, "AppProfile").Replace("'", "''");
         string script = "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and ((($_.Name -eq 'powershell.exe' -or $_.Name -eq 'pwsh.exe') -and $_.CommandLine.IndexOf('" + tray + "', [StringComparison]::OrdinalIgnoreCase) -ge 0) -or (($_.Name -eq 'msedge.exe' -or $_.Name -eq 'chrome.exe') -and $_.CommandLine.IndexOf('" + profile + "', [StringComparison]::OrdinalIgnoreCase) -ge 0)) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
@@ -595,6 +649,7 @@ public class UninstallForm : Form
     {
         try {
             InstallerIntegration.ConfigureExplorer(Registry.CurrentUser, installDir, false);
+            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\AppUserModelId\app.gnomcode.desktop",false);
             Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode", false);
         } catch {}
     }

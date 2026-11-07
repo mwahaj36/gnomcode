@@ -11,3 +11,7 @@ workers/
 **/node_modules/
 **/.next/
 **/.env*
+
+# Desktop release binaries are hosted by the binary-only releases repository.
+web/public/downloads/*.exe
+web/public/downloads/*.zip

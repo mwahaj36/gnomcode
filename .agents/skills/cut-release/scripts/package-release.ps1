@@ -38,10 +38,23 @@ $NoticeLines = [IO.File]::ReadAllText("$Out/THIRD_PARTY_NOTICES.html") -split "`
 [IO.File]::WriteAllText("$Out/THIRD_PARTY_NOTICES.html", ($NoticeLines -join "`n"), (New-Object Text.UTF8Encoding($false)))
 Copy-Item $NativeExe "$Out/gnomcode.exe" -Force
 Copy-Item "LICENSE" "$Out/LICENSE" -Force
+$DesktopStaging = Join-Path $RepoRoot "apps/desktop/staging"
+New-Item -ItemType Directory -Path (Join-Path $DesktopStaging "bin") -Force | Out-Null
+Copy-Item $NativeExe (Join-Path $DesktopStaging "bin/gnomcode.exe") -Force
+Copy-Item "LICENSE" (Join-Path $DesktopStaging "EULA.txt") -Force
+Copy-Item "$Out/THIRD_PARTY_NOTICES.html" (Join-Path $DesktopStaging "THIRD_PARTY_NOTICES.html") -Force
+& node apps/desktop/desktop-notices.cjs
+if ($LASTEXITCODE -ne 0) { throw "Desktop notices staging failed" }
+& npm run package --prefix apps/desktop
+if ($LASTEXITCODE -ne 0) { throw "Electron packaging failed" }
+$DesktopPackage=Join-Path $RepoRoot "apps/desktop/out/Gnomcode-win32-x64"
+$DesktopZip=Join-Path $DesktopStaging "desktop.zip"
+Compress-Archive -Path (Join-Path $DesktopPackage "*") -DestinationPath $DesktopZip -Force -CompressionLevel Optimal
 $CompilerArgs = @(
     "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/gnomcode.ico",
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
     "/resource:$NativeExe,gnomcode.exe",
+    "/resource:$DesktopZip,desktop.zip",
     "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/gnomcode.ico,gnomcode.ico", "/resource:$RepoRoot/scripts/gnomcode-tray.ico,gnomcode-tray.ico",
     "/resource:$RepoRoot/web/public/icons/gnomcode-512.png,gnomcode-mark.png",
     "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
