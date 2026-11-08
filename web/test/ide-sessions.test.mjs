@@ -86,7 +86,7 @@ test('activity identifies the selected total and the plotted date window', () =>
   const markup = presentation.renderActivity({range_label:'All time',total_tokens:2800000000,daily:[{date:'2026-08-24',total_tokens:118000000,chart_pct:20,turns:1},{date:'2026-10-29',total_tokens:128000000,chart_pct:30,turns:1}]});
   assert.doesNotMatch(markup, /Daily activity/);
   assert.match(markup,/All time/);
-  assert.match(markup,/Chart window:/);
+  assert.match(markup,/sp-activity-caption/);
   assert.match(markup,/Aug 24, 2026/);
   assert.match(markup,/Oct 29, 2026/);
 });

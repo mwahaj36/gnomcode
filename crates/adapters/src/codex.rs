@@ -27,6 +27,18 @@ pub struct CodexAdapter {
     last_turn_model: Option<String>,
 }
 
+fn is_valid_codex_session_id(s: &str) -> bool {
+    let trimmed = s.trim();
+    !trimmed.is_empty()
+        && trimmed != "unknown"
+        && !trimmed.starts_with("ctc_")
+        && !trimmed.starts_with("fc_")
+        && !trimmed.starts_with("ctco_")
+        && !trimmed.starts_with("call_")
+        && !trimmed.starts_with("rs_")
+        && !trimmed.starts_with("msg_")
+}
+
 impl CodexAdapter {
     /// Creates a new Codex adapter instance.
     #[must_use]
@@ -97,7 +109,7 @@ impl SourceAdapter for CodexAdapter {
                     .get("session_id")
                     .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
-                    .filter(|s| !s.trim().is_empty())
+                    .filter(|s| is_valid_codex_session_id(s))
                 {
                     self.raw_session_id = Some(sid.to_owned());
                 }
@@ -108,13 +120,7 @@ impl SourceAdapter for CodexAdapter {
                     .get("id")
                     .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
-                    .filter(|s| {
-                        !s.trim().is_empty()
-                            && !s.starts_with("ctc_")
-                            && !s.starts_with("fc_")
-                            && !s.starts_with("ctco_")
-                            && !s.starts_with("call_")
-                    })
+                    .filter(|s| is_valid_codex_session_id(s))
                     .unwrap_or_else(|| {
                         if !path_id.is_empty() && path_id != "unknown" {
                             path_id
@@ -122,10 +128,13 @@ impl SourceAdapter for CodexAdapter {
                             payload
                                 .get("session_id")
                                 .and_then(Value::as_str)
+                                .filter(|s| is_valid_codex_session_id(s))
                                 .unwrap_or("unknown")
                         }
                     });
-                self.raw_session_id = Some(raw_sid.to_owned());
+                if raw_sid != "unknown" {
+                    self.raw_session_id = Some(raw_sid.to_owned());
+                }
 
                 let parent_sid = payload
                     .get("parent_thread_id")
