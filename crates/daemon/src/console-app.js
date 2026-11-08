@@ -109,6 +109,7 @@ function cycleTheme() {
     function setView(view, updateUrl = true) {
       document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view === 'auth' ? 'Account' : view[0].toUpperCase() + view.slice(1);
       activeView = view;
+      try { sessionStorage.setItem('gnomcode-active-view', view); } catch (_) {}
       document.body.dataset.consoleView = view;
       document.getElementById('chat-list-toggle').hidden = view !== 'sessions';
       const titles = { overview: 'Dashboard', sessions: 'Workspace', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Profile', auth: 'Account' };
@@ -1281,14 +1282,16 @@ function cycleTheme() {
         const conversations = await apiJson(`/api/v1/conversations?page=${requestedPage}&limit=${pageLimit}&agent=${agent}&status=${status}&project=${encodeURIComponent(project)}&search=${encodeURIComponent(document.getElementById('ide-session-search').value)}&source=${encodeURIComponent(document.getElementById('conversation-source').value)}&include_subagents=${document.getElementById('include-subagents').checked}`, {headers});
         if(request !== conversationRequest)return true;
         const selected = ideSessions.find(session=>session.id===activeChatSession);
-        conversationRows = conversations.sessions || [];
+        conversationRows = Array.isArray(conversations) ? conversations : (conversations.sessions || []);
         ideSessions = [...conversationRows];
         if(selected && !ideSessions.some(session=>session.id===selected.id))ideSessions.push(selected);
-        currentPage = conversations.page;
-        document.getElementById('pagination-info').textContent = `${conversations.page} / ${conversations.total_pages} · ${conversations.total_count} conversations`;
-        document.getElementById('pagination-controls').hidden = conversations.total_pages <= 1;
-        document.getElementById('prev-btn').disabled = conversations.page <= 1;
-        document.getElementById('next-btn').disabled = conversations.page >= conversations.total_pages;
+        currentPage = (conversations && conversations.page) || requestedPage || 1;
+        const totalPages = (conversations && conversations.total_pages) || 1;
+        const totalCount = (conversations && conversations.total_count) != null ? conversations.total_count : conversationRows.length;
+        document.getElementById('pagination-info').textContent = `${currentPage} / ${totalPages} · ${totalCount} conversations`;
+        document.getElementById('pagination-controls').hidden = totalPages <= 1;
+        document.getElementById('prev-btn').disabled = currentPage <= 1;
+        document.getElementById('next-btn').disabled = currentPage >= totalPages;
         void showChatLimits();
         if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
 
@@ -1426,10 +1429,10 @@ function cycleTheme() {
         document.getElementById('auth-cloud-status').textContent = 'Account connection unavailable. Retry Reload view.';
         document.getElementById('auth-publication-status').textContent = 'Local monitoring does not require an account connection.';
         document.getElementById('cloud-sync-status').textContent = 'Account status unavailable. Retry Reload view.';
-        document.getElementById('account-entry').hidden = true;
-        document.getElementById('dashboard-signin').hidden = true;
+        document.getElementById('account-entry').hidden = false;
+        document.getElementById('dashboard-signin').hidden = false;
         document.getElementById('auth-paired-card').hidden = true;
-        document.getElementById('auth-unpaired-card').hidden = true;
+        document.getElementById('auth-unpaired-card').hidden = false;
         return false;
       }
     }
@@ -1706,8 +1709,12 @@ function cycleTheme() {
       else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
     });
 
-    const initialView = window.location.hash.slice(1);
-    if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(initialView)) setView(initialView, false);
+    const hashView = window.location.hash.slice(1);
+    let initialView = hashView;
+    if (!initialView) {
+      try { initialView = sessionStorage.getItem('gnomcode-active-view') || ''; } catch (_) {}
+    }
+    if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(initialView)) setView(initialView, Boolean(hashView));
     else setView('overview', false);
     openExplorerWorkspace();
     offerOnboarding();

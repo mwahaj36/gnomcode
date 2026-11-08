@@ -31,6 +31,7 @@ try{
    const field=page.locator('#'+id),rect=await field.boundingBox(),label=await field.locator('..').boundingBox();
    assert.ok(rect&&label&&rect.y>label.y,`${id}: label must sit above its field`);
    assert.ok(rect.height>=44&&rect.width>0,`${id}: control must be usable`);
+   if(width<760)assert.ok(await field.evaluate(el=>parseFloat(getComputedStyle(el).fontSize)>=16),`${id}: phone inputs must avoid focus zoom`);
   }
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${width}/${theme}: no page overflow`);
   await page.close();

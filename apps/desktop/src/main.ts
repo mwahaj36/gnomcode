@@ -186,7 +186,12 @@ async function start(): Promise<void> {
       const nextUrl = await readDaemon(dataHome()) ?? await connectDaemon();
       if (nextUrl !== connectedUrl) {
         daemonPort = Number(new URL(nextUrl).port || '80');
-        await current.loadURL(nextUrl);
+        const targetUrl = new URL(nextUrl);
+        try {
+          const currentUrl = new URL(current.webContents.getURL());
+          if (currentUrl.hash) targetUrl.hash = currentUrl.hash;
+        } catch (_) {}
+        await current.loadURL(targetUrl.href);
         connectedUrl = nextUrl;
       }
       await refreshTray(nextUrl);

@@ -868,11 +868,27 @@ impl Database {
             WHERE session_id IN (
                 SELECT id FROM session
                 WHERE agent = 'codex'
-                  AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%')
+                  AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%' OR id LIKE 'codex:call_%' OR id LIKE 'codex:rs_%' OR id LIKE 'codex:msg_%')
+            );
+            DELETE FROM activity_event
+            WHERE session_id IN (
+                SELECT id FROM session
+                WHERE agent = 'codex'
+                  AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%' OR id LIKE 'codex:call_%' OR id LIKE 'codex:rs_%' OR id LIKE 'codex:msg_%')
+            );
+            DELETE FROM chat_event
+            WHERE session_id IN (
+                SELECT id FROM session
+                WHERE agent = 'codex'
+                  AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%' OR id LIKE 'codex:call_%' OR id LIKE 'codex:rs_%' OR id LIKE 'codex:msg_%')
             );
             DELETE FROM session
             WHERE agent = 'codex'
-              AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%');
+              AND (id LIKE 'codex:ctc_%' OR id LIKE 'codex:fc_%' OR id LIKE 'codex:ctco_%' OR id LIKE 'codex:call_%' OR id LIKE 'codex:rs_%' OR id LIKE 'codex:msg_%');
+
+            -- Clean up self-referencing subagents where background tasks set parent to self
+            UPDATE session SET parent_session_id = NULL WHERE parent_session_id = id;
+            UPDATE session SET title = NULL WHERE title = 'Subagent' AND parent_session_id IS NULL;
         "#))?;
         Ok(())
     }
@@ -1820,7 +1836,7 @@ impl Database {
             r#"
             SELECT id, agent, surface, project_id, parent_session_id, model, title, state, pid, started_at, last_event_at
             FROM session
-            WHERE surface <> 'cloud' AND id NOT GLOB 'codex:ctc_*' AND id NOT GLOB 'codex:ctco_*' AND id NOT GLOB 'codex:fc_*' AND id NOT GLOB 'codex:call_*'
+            WHERE surface <> 'cloud' AND id NOT GLOB 'codex:ctc_*' AND id NOT GLOB 'codex:ctco_*' AND id NOT GLOB 'codex:fc_*' AND id NOT GLOB 'codex:call_*' AND id NOT GLOB 'codex:rs_*' AND id NOT GLOB 'codex:msg_*'
             ORDER BY last_event_at DESC
             LIMIT ?1
             "#,
@@ -2412,7 +2428,7 @@ impl Database {
             .unwrap_or("all");
         let total_count: i64 = self.conn.query_row(
             r#"SELECT COUNT(*) FROM session s
-               WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND (?1 = 'all' OR s.agent = ?1)
+               WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
@@ -2428,7 +2444,7 @@ impl Database {
                 SELECT s.*, p.name AS project_name,
                     CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
-                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND (?1 = 'all' OR s.agent = ?1)
+                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))

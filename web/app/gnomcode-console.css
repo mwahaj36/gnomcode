@@ -177,6 +177,8 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console .ide-chat-controls .btn-control{padding:8px 12px;min-height:36px;font:12px/1.4 var(--sp-font-sans)}
 .sp-native-console.chat-list-collapsed .ide-layout{grid-template-columns:minmax(0,1fr)}
 .sp-native-console.chat-list-collapsed .ide-sidebar{display:none}
+.sp-native-console .ide-expand-sidebar{display:none}
+.sp-native-console.chat-list-collapsed .ide-expand-sidebar{display:inline-flex;align-items:center;gap:8px;margin-bottom:16px}
 @media(max-width:760px){.sp-native-console .sp-console-workspace{padding-left:56px}.sp-native-console .sp-console-workspace>.sp-console-nav{width:56px;flex-direction:column;padding:8px 4px;border-bottom:0}.sp-native-console .sp-console-nav button{border-bottom:0}.sp-native-console .sp-console-content{padding:0 16px 24px}.sp-native-console .console-context{gap:8px;flex-wrap:wrap;padding:8px 0}.sp-native-console .console-context .console-status{font-size:10px}.sp-native-console .ide-layout{grid-template-columns:minmax(0,1fr)}.sp-native-console .ide-sidebar{position:absolute;inset:65px 0 0 56px;z-index:20;max-width:300px;border-right:1px solid var(--sp-border)}.sp-native-console .ide-main{padding:16px}.sp-native-console .console-context h1{font-size:16px}.sp-native-console[data-console-view="sessions"] .console-context{padding:8px 12px}.sp-native-console #chat-prompt-help{display:none}}
 @media(prefers-reduced-motion:reduce){.sp-native-console .sp-console-nav,.sp-native-console .rail-label{transition:none}}
 
@@ -645,6 +647,7 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .sp-console-app>.sp-data-details{margin:8px 0 20px}
 .sp-settings-notifications>details{margin-top:16px;font-size:13px;color:var(--sp-text-2)}
 .sp-remote:not(.is-paired):not(.is-reconnecting) .remote-heading :is(h1,h2){white-space:normal;overflow:visible;text-overflow:clip;font-size:18px;line-height:1.4}
+@media(max-width:760px){:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-settings-page) :is(input,select,textarea):not([type="checkbox"]):not([type="radio"]){font-size:16px}}
 @media(min-width:1100px){.sp-native-console .sp-rule-form{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:760px){.sp-native-console .sp-console-content{padding-inline:20px}.sp-native-console .console-context{min-height:64px;margin-bottom:24px}.sp-summary-grid{gap:16px}.sp-summary-grid>div:nth-child(n){border:0}.sp-native-console .sp-rule-form{grid-template-columns:minmax(0,1fr)}.sp-native-console :is(.table-container,.profile-devices,.profile-appearance,.profile-data,.sp-account-row){padding-bottom:24px;margin-bottom:24px}.sp-activity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-native-console[data-console-view="sessions"] .sp-console-content{padding:0}.sp-activity-totals strong{font-size:24px}}
 @media(prefers-reduced-motion:reduce){.sp-native-console .view-content.active{animation:none}}
