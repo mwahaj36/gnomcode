@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.3 — 2026-11-07
+
+- Simplify application pages with system typography, consistent spacing, aligned responsive forms and compact checkboxes.
+- Replace repeated trust badges and uncertainty warnings with plain labels and accessible source details; preserve estimated, unknown and stale reporting.
+- Honor hidden UI regions, simplify empty states and disclose activity breakdowns, secondary histories and setup explanations on demand.
+
 ## 0.9.2 — 2026-11-07
 
 - Preserve original second-instance activation arguments so Chromium switches cannot replace notification text or workspace paths.
