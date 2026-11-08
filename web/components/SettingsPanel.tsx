@@ -219,10 +219,8 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
         )}
 
         <div className="sp-settings-notifications" style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid var(--sp-border)" }}>
-          <h3>Device & PWA Notifications</h3>
-          <p className="sp-settings-hint" style={{ marginTop: "4px", marginBottom: "16px" }}>
-            Enable and test background alerts on each device. Your laptop must stay awake with account Remote access enabled. On iPhone, open Gnomcode from the Home Screen. Browser permission: <strong style={{ textTransform: "uppercase" }}>{notifStatus}</strong>
-          </p>
+          <h3>Notifications</h3>
+          <p className="sp-settings-hint">{notifStatus === 'granted' ? 'Allowed on this device.' : notifStatus === 'denied' ? 'Blocked in browser settings.' : 'Not enabled on this device.'}</p>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
             {notifStatus !== "granted" ? (
               <button
@@ -230,11 +228,11 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
                 onClick={handleToggleNotifications}
                 className="sp-settings-action sp-settings-primary"
               >
-                Enable Notifications
+                Enable notifications
               </button>
             ) : (
               <span className="sp-trust-exact" style={{ padding: "8px 12px", border: "1px solid var(--sp-border)", borderRadius: "4px" }}>
-                [PERMISSION GRANTED]
+                Notifications allowed
               </span>
             )}
             <button
@@ -242,10 +240,11 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
               onClick={handleTestNotification}
               className="sp-settings-action"
             >
-              Enable and send test alert
+              {notifStatus === 'granted' ? 'Send test alert' : 'Enable and test'}
             </button>
             <button type="button" className="sp-settings-action" onClick={async()=>{setStatusMessage(await disableDeviceNotifications()?'Background alerts disabled on this device.':'Could not disable background alerts. Check your connection and try again.');}}>Disable background alerts on this device</button>
           </div>
+          <details><summary>Setup help</summary><p>Your laptop must stay awake with account Remote access enabled. On iPhone, open Gnomcode from the Home Screen. Enable and test alerts separately on each device.</p></details>
         </div>
       </section>
 

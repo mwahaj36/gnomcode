@@ -3,13 +3,13 @@ import { readFile } from 'node:fs/promises';
 const { renderActivity, renderProviders, renderQuota, renderSessions, renderProjects, renderSummary, updateSummary } = await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 const {renderConversationLimits}=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 assert.match(renderConversationLimits([{label:'5h',remaining_pct:75,basis:'exact',observed_at:new Date().toISOString(),stale:false}]),/75%/);
-assert.match(renderConversationLimits([{label:'Weekly',remaining_pct:12,basis:'estimated',stale:true}]),/EST/);
+assert.match(renderConversationLimits([{label:'Weekly',remaining_pct:12,basis:'estimated',stale:true}]),/Estimated/);
 assert.match(renderConversationLimits([{label:'Weekly',remaining_pct:12,basis:'estimated',stale:true}]),/Last seen/);
 assert.match(renderConversationLimits([]),/Limits unavailable/);
 assert.doesNotMatch(renderConversationLimits([{label:'<script>',remaining_pct:null,basis:'unknown'}]),/<script>|0%/);
 assert.match(renderSummary({ report: { cost_basis: 'unknown', total_cost_usd: 0 } }), /Unknown/);
 assert.doesNotMatch(renderSummary({ report: { cost_basis: 'unknown', total_cost_usd: 0 } }), /\$0\.00/);
-assert.match(renderSummary({activeCount:3}), /EST · Inferred/);
+assert.match(renderSummary({activeCount:3}), /inferred from recent records/);
 assert.match(renderActivity(null), /unavailable/);
 assert.match(renderActivity({ daily: [] }), /No recorded usage/);
 const activity = renderActivity({ total_tokens: 100, daily: [{ date: '2026-10-28', total_tokens: 100, chart_pct: 100, cost_basis: 'unknown', cost_usd: 0, turns: 1 }] });
@@ -17,7 +17,7 @@ assert.match(activity, /Recorded tokens/);
 assert.match(activity, /Unknown/);
 assert.doesNotMatch(activity, /\$0\.00/);
 const quota = renderQuota([{ provider: '<script>', limit_id: 'sample', window: 'weekly', used_pct: 75, remaining_pct: 25, resets_at: '2020-01-01', basis: 'exact' }], null);
-assert.match(quota, /STALE/);
+assert.match(quota, /Last received reading/);
 assert.match(quota, /awaiting provider update/);
 assert.match(quota, /25\.0% remaining/);
 assert.doesNotMatch(quota, /<script>/);
@@ -34,7 +34,7 @@ console.log('PASS: shared console escaping, unknown data, trust, reset and fresh
 
 const providers=renderProviders({cost_basis:'unknown',providers:[{provider:'<script>',total_cost_usd:0,models:[{model:'<img onerror=x>',input_tokens:100,output_tokens:10,cost_usd:0}]}]});
 assert.doesNotMatch(providers,/<script>|<img|\$0\.00/);
-assert.match(providers,/Unknown · Price unavailable/);
+assert.match(providers,/title="Price unavailable">Unknown/);
 
 let writes=0, values=[];
 globalThis.document={activeElement:null};
@@ -60,7 +60,7 @@ assert.match(hourly, /\$12\.00/, 'expanded interval details retain their own cos
 const {renderOngoing}=await import(new URL('../web/lib/console-presentation.js',import.meta.url));
 const inferredSession=renderOngoing([{id:'unknown',title:'unknown',project_name:'unknown',agent:'codex',is_ongoing:true,state:'thinking',last_event_at:new Date().toISOString()}]);
 assert.match(inferredSession, /Inferred from recorded activity/);
-assert.match(inferredSession, /<b>Possibly running<\/b>/);
+assert.match(inferredSession, /<b>Running<\/b>/);
 assert.match(inferredSession, /Private session/);
 assert.match(renderOngoing([{id:'active-1',title:'Current session',agent:'codex',is_active:true,state:'thinking',last_event_at:'2026-10-28T00:00:00Z'},{id:'idle-1',title:'Old session',is_active:false}]),/Current session/);
 assert.doesNotMatch(renderOngoing([{id:'idle-1',title:'Old session',is_active:false}]),/Old session/);

@@ -92,7 +92,7 @@ impl SourceAdapter for AntigravityAdapter {
                             .chars()
                             .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
                             .collect();
-                        if sender.len() >= 32 {
+                        if sender.len() >= 32 && sender != conv_id {
                             self.parent_session_id =
                                 Some(Session::compose_id(AgentId::Antigravity, &sender));
                             if self.subagent_title.is_none() {
@@ -182,6 +182,15 @@ impl SourceAdapter for AntigravityAdapter {
                         sess.project_id = proj.id.clone();
                         if !batch.projects.iter().any(|p| p.id == proj.id) {
                             batch.projects.push(proj);
+                        }
+                    }
+                    if sess.title.is_none() && self.parent_session_id.is_none() {
+                        if let Some(prompt) = extract_antigravity_user_prompt(content) {
+                            let first_line = prompt.lines().next().unwrap_or("").trim();
+                            if !first_line.is_empty() {
+                                let truncated: String = first_line.chars().take(80).collect();
+                                sess.title = Some(truncated);
+                            }
                         }
                     }
                 }

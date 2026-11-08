@@ -6,7 +6,7 @@ Mode: Operate. Primary artifact: `crates/daemon/src/console.html`. Related surfa
 
 **THESIS:** Give conversation work a dedicated, breathable application workspace; keep tracking in Dashboard and personal/device configuration in Profile.
 
-**OWN-WORLD:** Gnomcode near-black/light canvases, Inter body text, red primary actions and right-hand user bubbles, neutral gray agent replies, geometric SVG icons, hairline divisions and restrained 6px controls. Avoid oversized headers, pills and debug-style toolbars.
+**OWN-WORLD:** Gnomcode near-black/light canvases, user-approved platform system sans typography, red primary actions and right-hand user bubbles, neutral gray agent replies, geometric SVG icons, hairline divisions and restrained 6px controls. Avoid oversized headers, pills and debug-style toolbars. Use short status labels and disclose source/provenance details on demand; visibly label estimated money. Forms share stacked labels, compact checkbox geometry and responsive spacing.
 
 **STORY:** Find a readable conversation, choose a desktop workspace, prompt the actual CLI and read formatted replies. Track usage separately. Pair by entering the desktop code in web Profile, without links or QR and followed by the phone six-digit security code entered on desktop and confirmed on phone. Remembered devices resume after reload/background through challenge-bound proof, expire after seven inactive days and can be revoked.
 

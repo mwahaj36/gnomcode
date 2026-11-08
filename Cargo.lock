@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -858,7 +858,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-adapters"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "chrono",
  "gnomcode-core",
@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-core"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "aes-gcm",
  "chrono",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-daemon"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "axum",
  "chrono",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-ingest"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "chrono",
  "gnomcode-adapters",
@@ -937,7 +937,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-platform"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "gnomcode-core",
  "libc",
@@ -951,7 +951,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-pty"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "axum",
  "chrono",
@@ -972,7 +972,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-store"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "chrono",
  "gnomcode-core",
@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-tray"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "gnomcode-core",
  "gnomcode-daemon",
