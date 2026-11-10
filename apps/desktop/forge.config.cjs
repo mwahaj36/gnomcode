@@ -16,6 +16,7 @@ module.exports = {
       path.join(__dirname, 'staging', 'DESKTOP_THIRD_PARTY_NOTICES.html'),
       path.join(__dirname, 'staging', 'ELECTRON_LICENSE.txt'),
       path.join(__dirname, 'staging', 'CHROMIUM_LICENSES.html'),
+      path.join(__dirname, '../../scripts/gnomcode.ico'),
       path.join(__dirname, '../../scripts/gnomcode-tray.ico'),
       path.join(__dirname, '../../scripts/tray-badges'),
       path.join(__dirname, '../../web/public/icons/gnomcode-64.png'),

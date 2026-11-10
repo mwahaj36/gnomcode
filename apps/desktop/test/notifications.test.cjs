@@ -15,6 +15,9 @@ test('notification registration repairs only a shortcut targeting this app',()=>
  const links={readShortcutLink:()=>({target:'C:\\App\\Gnomcode.exe'}),writeShortcutLink:(...args)=>{written=args;return true}};
  assert.equal(repairNotificationShortcut('app.lnk','C:\\App\\Gnomcode.exe',links),true);
  assert.deepEqual(written,['app.lnk','update',{target:'C:\\App\\Gnomcode.exe',appUserModelId:'app.gnomcode.desktop'}]);
+ written=null;
+ assert.equal(repairNotificationShortcut('app.lnk','C:\\App\\Gnomcode.exe',links,'C:\\App\\icon.ico'),true);
+ assert.deepEqual(written,['app.lnk','update',{target:'C:\\App\\Gnomcode.exe',appUserModelId:'app.gnomcode.desktop',icon:'C:\\App\\icon.ico'}]);
  written=null;links.readShortcutLink=()=>({target:'C:\\Other\\App.exe'});
  assert.equal(repairNotificationShortcut('app.lnk','C:\\App\\Gnomcode.exe',links),false);assert.equal(written,null);
 });

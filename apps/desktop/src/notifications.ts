@@ -1,4 +1,4 @@
-import type {Notification} from 'electron';
+import type { Notification, ShortcutDetails } from 'electron';
 
 export function retainNotification(notification:Notification,retained:Set<Notification>,onClick:()=>void,platform:NodeJS.Platform):void {
   // A collected toast is removed from Action Center, even after its banner times out.
@@ -12,11 +12,28 @@ export function retainNotification(notification:Notification,retained:Set<Notifi
   });
 }
 
-export function repairNotificationShortcut(shortcut:string,executable:string,links:Pick<typeof import('electron').shell,'readShortcutLink'|'writeShortcutLink'>):boolean {
+export function repairNotificationShortcut(
+  shortcut: string,
+  executable: string,
+  links: Pick<typeof import('electron').shell, 'readShortcutLink' | 'writeShortcutLink'>,
+  icon?: string,
+): boolean {
   try {
-    const details=links.readShortcutLink(shortcut);
-    if(details.target.toLowerCase()!==executable.toLowerCase())return false;
-    if(details.appUserModelId==='app.gnomcode.desktop')return true;
-    return links.writeShortcutLink(shortcut,'update',{target:details.target,appUserModelId:'app.gnomcode.desktop'});
-  }catch{return false;}
+    const details = links.readShortcutLink(shortcut);
+    if (details.target.toLowerCase() !== executable.toLowerCase()) return false;
+    const resolvedIcon = icon || details.icon;
+    if (details.appUserModelId === 'app.gnomcode.desktop' && (!resolvedIcon || details.icon === resolvedIcon)) return true;
+    const options: ShortcutDetails = {
+      target: details.target,
+      appUserModelId: 'app.gnomcode.desktop',
+    };
+    if (resolvedIcon) options.icon = resolvedIcon;
+    if (typeof details.iconIndex === 'number') options.iconIndex = details.iconIndex;
+    if (details.args) options.args = details.args;
+    if (details.cwd) options.cwd = details.cwd;
+    if (details.description) options.description = details.description;
+    return links.writeShortcutLink(shortcut, 'update', options);
+  } catch {
+    return false;
+  }
 }
