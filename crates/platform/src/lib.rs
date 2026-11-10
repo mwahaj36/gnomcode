@@ -696,41 +696,42 @@ pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
 pub fn send_desktop_notification(title: &str, body: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        // Prefer the installed shell so Windows attributes alerts to Gnomcode.
-        if let Some(shell) = std::env::current_exe().ok().and_then(|exe| {
-            exe.ancestors()
-                .skip(1)
-                .take(4)
-                .flat_map(|base| {
-                    [
-                        base.join("desktop").join("gnomcode-desktop.exe"),
-                        base.join("gnomcode-desktop.exe"),
-                    ]
-                })
-                .find(|path| path.is_file())
-        }) {
-            use std::os::windows::process::CommandExt as _;
-            return std::process::Command::new(shell)
-                .creation_flags(0x0800_0000)
-                .args(["--gnomcode-notification", body])
-                .spawn()
-                .is_ok();
+        // Only deliver through the installed shell if the desktop application is ALREADY RUNNING.
+        // Never spawn gnomcode-desktop.exe when it is closed, as that resurrects the desktop shell
+        // after the user has quit.
+        let shell_running = {
+            let mut system = sysinfo::System::new();
+            system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            system.processes().values().any(|p| {
+                let name = p.name().to_string_lossy();
+                name.eq_ignore_ascii_case("gnomcode-desktop.exe")
+                    || name.eq_ignore_ascii_case("gnomcode-desktop")
+            })
+        };
+
+        if shell_running {
+            if let Some(shell) = std::env::current_exe().ok().and_then(|exe| {
+                exe.ancestors()
+                    .skip(1)
+                    .take(4)
+                    .flat_map(|base| {
+                        [
+                            base.join("desktop").join("gnomcode-desktop.exe"),
+                            base.join("gnomcode-desktop.exe"),
+                        ]
+                    })
+                    .find(|path| path.is_file())
+            }) {
+                use std::os::windows::process::CommandExt as _;
+                return std::process::Command::new(shell)
+                    .creation_flags(0x0800_0000)
+                    .args(["--gnomcode-notification", body])
+                    .spawn()
+                    .is_ok();
+            }
         }
-        let escaped_title = title.replace('\'', "''");
-        let escaped_body = body.replace('\'', "''");
-        let script = format!(
-            "[reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null; \
-             $n = New-Object System.Windows.Forms.NotifyIcon; \
-             $n.Icon = [System.Drawing.SystemIcons]::Information; \
-             $n.Visible = $true; \
-             $n.ShowBalloonTip(5000, '{escaped_title}', '{escaped_body}', [System.Windows.Forms.ToolTipIcon]::Info); Start-Sleep -Seconds 6; $n.Dispose()"
-        );
-        use std::os::windows::process::CommandExt as _;
-        std::process::Command::new("powershell")
-            .creation_flags(0x0800_0000)
-            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
-            .spawn()
-            .is_ok()
+        let _ = (title, body);
+        false
     }
     #[cfg(target_os = "macos")]
     {

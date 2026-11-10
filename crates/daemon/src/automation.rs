@@ -242,33 +242,44 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     let _ = store(db, Database::expire_automation_records).await;
     if let Ok(sessions) = store(db, |db| db.list_active_sessions(1000)).await {
         let mut current = std::collections::HashMap::new();
+        let now = chrono::Utc::now();
         for session in sessions
             .into_iter()
             .filter(|session| session.parent_session_id.is_none())
         {
-            if session.state == gnomcode_core::SessionState::Idle
-                && previous.sessions.get(&session.id).is_some_and(|state| {
+            if session.state == gnomcode_core::SessionState::Idle {
+                let was_busy = previous.sessions.get(&session.id).is_some_and(|state| {
                     matches!(
                         state,
                         gnomcode_core::SessionState::Thinking | gnomcode_core::SessionState::Tool
                     )
-                })
-            {
-                notice(
-                    db,
-                    &format!(
-                        "completed:{}:{}",
-                        session.id,
-                        session.last_event_at.to_rfc3339()
-                    ),
-                    &session.id,
-                    "Agent finished its response. The conversation is ready.",
-                )
-                .await;
+                });
+                if was_busy {
+                    // Debounce: ensure the session has settled in Idle for at least 8 seconds
+                    // to prevent intermediate output chunks and tool executions from spamming alerts.
+                    if now - session.last_event_at >= chrono::Duration::seconds(8) {
+                        notice(
+                            db,
+                            &format!(
+                                "completed:{}:{}",
+                                session.id,
+                                session.last_event_at.to_rfc3339()
+                            ),
+                            &session.id,
+                            "Agent finished its response. The conversation is ready.",
+                        )
+                        .await;
+                        current.insert(session.id.clone(), session.state);
+                    } else if let Some(prev) = previous.sessions.get(&session.id) {
+                        // Keep previous busy state so we re-evaluate after settling
+                        current.insert(session.id.clone(), *prev);
+                    }
+                    continue;
+                }
             }
             if session.state == gnomcode_core::SessionState::AwaitingApproval
                 && previous.sessions.get(&session.id) != Some(&session.state)
-                && chrono::Utc::now() - session.last_event_at <= chrono::Duration::minutes(5)
+                && now - session.last_event_at <= chrono::Duration::minutes(5)
             {
                 notice(
                     db,

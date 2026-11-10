@@ -71,10 +71,65 @@ fn npm_entry_point(prefix: &Path, package: &str, name: &str) -> Option<std::path
     (resolved.is_file() && resolved.starts_with(package.canonicalize().ok()?)).then_some(entry)
 }
 
-/// Checks PATH and the official Antigravity CLI installation directory.
+/// Checks PATH, the official Antigravity CLI installation directory, and Antigravity IDE.
 #[must_use]
 pub fn executable_available(name: &str) -> bool {
-    on_path(name) || (name == "agy" && antigravity_cli().is_some())
+    on_path(name)
+        || (name == "agy" && antigravity_cli().is_some())
+        || (name == "antigravity" && (antigravity_cli().is_some() || antigravity_ide_available()))
+}
+
+/// Checks whether Google Antigravity IDE is available or running on this system.
+#[must_use]
+pub fn antigravity_ide_available() -> bool {
+    #[cfg(windows)]
+    {
+        if let Some(local_appdata) = std::env::var_os("LOCALAPPDATA") {
+            let path = std::path::PathBuf::from(local_appdata)
+                .join("Programs")
+                .join("Antigravity")
+                .join("Antigravity.exe");
+            if path.is_file() {
+                return true;
+            }
+        }
+        if let Some(prog_files) = std::env::var_os("ProgramFiles") {
+            let path = std::path::PathBuf::from(prog_files)
+                .join("Antigravity")
+                .join("Antigravity.exe");
+            if path.is_file() {
+                return true;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if std::path::Path::new("/Applications/Antigravity.app").exists() {
+            return true;
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            if std::path::PathBuf::from(home)
+                .join("Applications")
+                .join("Antigravity.app")
+                .exists()
+            {
+                return true;
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if std::path::Path::new("/usr/bin/antigravity").exists()
+            || std::path::Path::new("/opt/Antigravity/antigravity").exists()
+        {
+            return true;
+        }
+    }
+    let home = crate::user_home_dir();
+    home.join(".gemini")
+        .join("antigravity")
+        .join("brain")
+        .is_dir()
 }
 
 fn on_path(name: &str) -> bool {
