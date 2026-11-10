@@ -1130,7 +1130,13 @@ async fn installed_agents_handler(
             "install_command": "npm install -g @google/gemini-cli",
             "login_command": "gemini"
         }),
-        json!({"id":"antigravity","name":"Antigravity CLI","installed":gnomcode_platform::executables::executable_available("agy"),"install_command":"Install Antigravity CLI from antigravity.google","login_command":"agy"}),
+        json!({
+            "id": "antigravity",
+            "name": "Google Antigravity",
+            "installed": gnomcode_platform::executables::executable_available("antigravity"),
+            "install_command": "Install Antigravity from antigravity.google",
+            "login_command": "agy"
+        }),
         json!({
             "id": "terminal",
             "name": "Terminal Shell",

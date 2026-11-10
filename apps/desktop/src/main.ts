@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, session, shell, Tray } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
 import * as path from 'node:path';
 import { activationArguments, workspaceLaunchHash, desktopNotification, daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip, windowChrome } from './security';
@@ -11,7 +11,20 @@ let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let daemonPort = 0;
+let spawnedDaemon: ChildProcess | null = null;
 const retainedNotifications=new Set<Notification>();
+
+function stopDaemon(): void {
+  if (spawnedDaemon && !spawnedDaemon.killed) {
+    try {
+      if (process.platform === 'win32' && spawnedDaemon.pid) {
+        spawn('taskkill', ['/F', '/T', '/PID', String(spawnedDaemon.pid)], { windowsHide: true, stdio: 'ignore' });
+      } else {
+        spawnedDaemon.kill('SIGTERM');
+      }
+    } catch (_) {}
+  }
+}
 
 function notify(args: string[]): boolean {
   const payload=desktopNotification(args);
@@ -32,6 +45,7 @@ async function connectDaemon(): Promise<string> {
   const binary = app.isPackaged ? path.join(process.resourcesPath, 'bin', `gnomcode${extension}`) : path.resolve(__dirname, '../../../target/debug', `gnomcode${extension}`);
   const child = spawn(binary, ['daemon'], { detached: true, stdio: 'ignore', windowsHide: true, env: daemonEnvironment(process.env) });
   child.on('error', () => {});
+  spawnedDaemon = child;
   child.unref();
   for (let attempt = 0; attempt < 40; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -168,7 +182,7 @@ async function start(): Promise<void> {
   try {
     tray = new Tray(icon);
     tray.setToolTip('Gnomcode');
-    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Gnomcode', click: showWindow }, { label: 'Quit', click: () => { quitting = true; app.quit(); } }]));
+    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Gnomcode', click: showWindow }, { type: 'separator' }, { label: 'Quit Gnomcode', click: () => { quitting = true; stopDaemon(); app.quit(); } }]));
     if(process.platform==='win32')tray.on('click',showWindow);
     tray.on('double-click', showWindow);
   } catch {
@@ -218,7 +232,7 @@ else {
     if(hash && window){const url=new URL(window.webContents.getURL());url.hash=hash;void window.loadURL(url.href);}
     showWindow();
   });
-  app.on('before-quit', () => { quitting = true; });
+  app.on('before-quit', () => { quitting = true; stopDaemon(); });
   app.on('window-all-closed', () => { if (!tray) app.quit(); });
   app.whenReady().then(start).catch(() => {
     dialog.showErrorBox('Gnomcode could not start', 'Check that the local daemon is installed and try again.');

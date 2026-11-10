@@ -2057,13 +2057,21 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if querying or updating the local SQLite store fails.
     pub fn reconcile_antigravity_projects(&mut self) -> Result<usize, Error> {
-        let home = std::env::var("USERPROFILE")
-            .or_else(|_| std::env::var("HOME"))
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let gemini_base = std::env::var("GEMINI_HOME")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map_or_else(
+                || {
+                    let home = std::env::var("USERPROFILE")
+                        .or_else(|_| std::env::var("HOME"))
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+                    home.join(".gemini")
+                },
+                std::path::PathBuf::from,
+            );
 
-        let agy_db_path = home
-            .join(".gemini")
+        let agy_db_path = gemini_base
             .join("antigravity")
             .join("conversation_summaries.db");
 
@@ -3660,7 +3668,7 @@ mod tests {
         assert_eq!(ongoing_count, 1, "recent idle sessions remain ongoing");
         assert_eq!(ongoing[0].state, "idle");
         assert!(!ongoing[0].is_active);
-        let old = (Utc::now() - chrono::Duration::seconds(121)).to_rfc3339();
+        let old = (Utc::now() - chrono::Duration::seconds(901)).to_rfc3339();
         db.conn
             .execute(
                 "UPDATE session SET last_event_at = ?1 WHERE id = 'claude-code:s1'",

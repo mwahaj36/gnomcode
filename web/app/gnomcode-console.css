@@ -422,6 +422,10 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 
 .workspace-field{position:relative}.workspace-field #launch-repo-input{padding-right:52px}.workspace-field #launch-workspace-browse{position:absolute;right:3px;top:3px;width:40px;min-height:38px;padding:8px;background:transparent;display:flex;align-items:center;justify-content:center}
 .sp-chat-waiting{align-self:flex-start;color:var(--sp-text-2);max-width:100%}.sp-chat-waiting header{display:none}.sp-chat-waiting .sp-chat-body{font-size:13px}.sp-chat-waiting .sp-chat-body::before{content:'';display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:10px;animation:chat-pulse 1s ease-in-out infinite alternate}@keyframes chat-pulse{to{opacity:.3}}@media(prefers-reduced-motion:reduce){.sp-chat-waiting .sp-chat-body::before{animation:none}}
+.sp-imported-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:12px;margin-top:12px;max-width:900px;width:100%;align-self:center;flex:none}
+.sp-imported-banner[hidden]{display:none!important}
+.sp-imported-info{font-size:13px;line-height:1.4;color:var(--sp-text-2)}
+.sp-imported-actions{flex:none}
 .sp-native-console #chat-prompt-text:focus-visible{outline:0}.sp-native-console #chat-prompt-form:focus-within{border-color:var(--sp-border-strong)}
 
 .conversation-heading>.btn-control{margin-left:auto;background:transparent}#workspace-terminal-pane{flex:none;height:240px;min-height:160px;border-top:1px solid var(--sp-border);margin-top:12px;overflow:hidden} .workspace-terminal-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font:12px/1.5 var(--sp-font-mono);color:var(--sp-text-2)}#workspace-terminal-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#workspace-terminal-screen{height:190px;overflow:auto;background:#0d0d0f;padding:8px}#workspace-terminal-screen>div{min-width:660px;height:100%}
