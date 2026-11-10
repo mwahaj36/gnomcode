@@ -115,13 +115,20 @@ async function start(): Promise<void> {
     window.setIcon(iconImage);
   }
   const current = window;
+  current.once('ready-to-show', () => {
+    if (!notify(process.argv) && !process.argv.includes('--background')) {
+      showWindow();
+    }
+  });
   current.webContents.setWindowOpenHandler(details => {
     if (isAllowedExternalUrl(details.url)) void shell.openExternal(details.url).catch(() => {});
     return { action: 'deny' };
   });
   current.webContents.on('will-navigate', (event, target) => { if (!isDaemonNavigation(target, daemonPort)) event.preventDefault(); });
   current.webContents.on('will-redirect', (event, target) => { if (!isDaemonNavigation(target, daemonPort)) event.preventDefault(); });
-  current.on('close', event => { if (!quitting && tray) { event.preventDefault(); current.hide(); } });
+  current.on('close', event => {
+    if (!quitting && tray) { event.preventDefault(); current.hide(); }
+  });
   ipcMain.handle('desktop:set-appearance', (event, theme: unknown, ...extra: unknown[]) => {
     if (extra.length || !['light','dark'].includes(String(theme)) || typeof theme !== 'string' || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender or appearance');
     const overlay = windowChrome(process.platform, theme === 'dark').titleBarOverlay;
@@ -202,8 +209,12 @@ async function start(): Promise<void> {
     tray = null;
   }
   await current.loadURL(url);
-  if(!notify(process.argv) && !process.argv.includes('--background'))showWindow();
-  if (!tray) void dialog.showMessageBox(current, { type: 'info', message: 'System tray unavailable', detail: 'Keep this window open to use Gnomcode. Closing it quits the desktop shell; the daemon keeps running.' });
+  if(!notify(process.argv) && !process.argv.includes('--background')) {
+    showWindow();
+  }
+  if (!tray) {
+    void dialog.showMessageBox(current, { type: 'info', message: 'System tray unavailable', detail: 'Keep this window open to use Gnomcode. Closing it quits the desktop shell; the daemon keeps running.' });
+  }
   let connectedUrl = baseUrl;
   let checking = false;
   const checkDaemon = async (): Promise<void> => {
@@ -235,9 +246,11 @@ async function start(): Promise<void> {
 app.setName('Gnomcode');
 if (process.platform === 'win32') app.setAppUserModelId('app.gnomcode.desktop');
 
-if (squirrelStartup) app.quit();
-else if (!app.requestSingleInstanceLock({argv:process.argv})) app.quit();
-else {
+if (squirrelStartup) {
+  app.quit();
+} else if (!app.requestSingleInstanceLock({argv:process.argv})) {
+  app.quit();
+} else {
   app.on('second-instance', (_event,commandLine,_cwd,additionalData) => {
     const args=activationArguments(commandLine,additionalData);
     if(notify(args))return;
@@ -246,7 +259,9 @@ else {
     showWindow();
   });
   app.on('before-quit', () => { quitting = true; stopDaemon(); });
-  app.on('window-all-closed', () => { if (!tray) app.quit(); });
+  app.on('window-all-closed', () => {
+    if (!tray) app.quit();
+  });
   app.whenReady().then(start).catch(() => {
     dialog.showErrorBox('Gnomcode could not start', 'Check that the local daemon is installed and try again.');
     app.exit(1);
