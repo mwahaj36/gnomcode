@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
@@ -83,9 +83,17 @@ function showWindow(): void {
   window.focus();
 }
 
+function getAppIcon(): string {
+  const iconName = process.platform === 'win32' ? 'gnomcode.ico' : 'gnomcode-64.png';
+  return app.isPackaged
+    ? path.join(process.resourcesPath, iconName)
+    : path.resolve(__dirname, process.platform === 'win32' ? '../../../scripts/gnomcode.ico' : '../../../web/public/icons/gnomcode-64.png');
+}
+
 async function start(): Promise<void> {
+  const appIconPath = getAppIcon();
   if(process.platform==='win32'){
-    repairNotificationShortcut(path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','gnomcode.lnk'),process.execPath,shell);
+    repairNotificationShortcut(path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','gnomcode.lnk'),process.execPath,shell,appIconPath);
     Notification.isSupported();
   }
   const baseUrl=await connectDaemon();
@@ -96,11 +104,16 @@ async function start(): Promise<void> {
   isolatedSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isAllowedResource(details.url, daemonPort) }));
   isolatedSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   Menu.setApplicationMenu(null);
+  const iconImage = nativeImage.createFromPath(appIconPath);
   window = new BrowserWindow({
     ...windowChrome(process.platform, nativeTheme.shouldUseDarkColors),
+    icon: iconImage.isEmpty() ? appIconPath : iconImage,
     title: 'Gnomcode', width: 1280, height: 820, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: !app.isPackaged, session: isolatedSession }
   });
+  if (!iconImage.isEmpty()) {
+    window.setIcon(iconImage);
+  }
   const current = window;
   current.webContents.setWindowOpenHandler(details => {
     if (isAllowedExternalUrl(details.url)) void shell.openExternal(details.url).catch(() => {});
