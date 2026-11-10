@@ -28,6 +28,11 @@
    - *Root Cause:* `apps/desktop/src/main.ts` did not track the spawned daemon child process PID or terminate it on quit.
    - *Fix:* Added `stopDaemon()` in `apps/desktop/src/main.ts` using `taskkill` on Windows and `SIGTERM` on Unix, executed on tray quit and `before-quit`.
 
+5. **Windows Taskbar Application Icon Fallback:**
+   - *Problem:* Windows taskbar displayed the default Electron framework atom icon instead of the Gnomcode brandmark.
+   - *Root Cause:* `BrowserWindow` constructor in `apps/desktop/src/main.ts` omitted the `icon` property, `forge.config.cjs` did not include `gnomcode.ico` in packaged `extraResource`, and `repairNotificationShortcut` in `apps/desktop/src/notifications.ts` omitted the icon field when updating the Start Menu shortcut, clearing its `IconLocation` on Windows. Windows taskbar grouped the window under the shortcut's `AppUserModelId` (`app.gnomcode.desktop`), found no icon on the HWND or the shortcut, and fell back to Electron's default window class atom icon.
+   - *Fix:* Added `getAppIcon()` resolving `gnomcode.ico`, bundled `gnomcode.ico` in `forge.config.cjs` extraResource, passed `icon: iconImage` and called `window.setIcon(iconImage)` on the window, updated `repairNotificationShortcut` to preserve and set `icon: resolvedIcon`, and rebuilt the packaged distribution.
+
 ## 3. Verification
 - `cargo fmt --check`: Passed.
 - `cargo clippy --workspace --all-targets -- -D warnings`: Passed.
