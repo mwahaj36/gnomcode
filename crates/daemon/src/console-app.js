@@ -1174,7 +1174,16 @@ function cycleTheme() {
       document.getElementById('chat-prompt-form').hidden = imported;
       document.getElementById('chat-automation').hidden = imported;
       document.getElementById('chat-toggle-stream').hidden = imported;
-      if(imported)document.getElementById('chat-session-label').textContent += ' · Imported, view-only';
+      const banner = document.getElementById('imported-session-banner');
+      if (banner) {
+        banner.hidden = !imported;
+        if (imported) {
+          const agentName = session?.agent === 'antigravity' ? 'Google Antigravity' : (session?.agent || 'your agent application');
+          document.getElementById('imported-banner-text').textContent = `This conversation is active in ${agentName}. Responses, tokens and quota are observed in real time.`;
+          document.getElementById('imported-focus-btn').textContent = session?.agent === 'antigravity' ? 'Open in Antigravity' : 'Focus Agent Window';
+        }
+      }
+      if(imported)document.getElementById('chat-session-label').textContent += ' · Observed';
       void showChatLimits();
       renderIdeSessions();
       showCurrentChatModel();

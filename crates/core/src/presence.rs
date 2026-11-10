@@ -1,8 +1,8 @@
 //! Source-independent session presence rules for every agent.
 use serde::{Deserialize, Serialize};
 
-/// Grace duration for recent observations and brief idle gaps.
-pub const RECENT_ACTIVITY_GRACE_MS: i64 = 120_000;
+/// Grace duration for recent observations and brief idle gaps (15 minutes).
+pub const RECENT_ACTIVITY_GRACE_MS: i64 = 900_000;
 /// Maximum age of an unresolved source observation without live process evidence.
 pub const STALE_EXECUTION_LIMIT_MS: i64 = 86_400_000;
 
@@ -61,15 +61,15 @@ mod tests {
     #[test]
     fn rules_apply_without_provider_specific_exceptions() {
         assert_eq!(
-            classify_presence("idle", Some(120_000), false),
+            classify_presence("idle", Some(900_000), false),
             SessionPresence::RecentlyIdle
         );
         assert_eq!(
-            classify_presence("idle", Some(120_001), true),
+            classify_presence("idle", Some(900_001), true),
             SessionPresence::Inactive
         );
         assert_eq!(
-            classify_presence("thinking", Some(120_001), false),
+            classify_presence("thinking", Some(900_001), false),
             SessionPresence::Inactive
         );
         assert_eq!(
