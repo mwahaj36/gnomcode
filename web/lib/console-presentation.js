@@ -126,6 +126,11 @@ function updateMarkup(element, markup) {
 
 export function updateQuota(element, pools, publishedAt) { updateMarkup(element, renderQuota(pools, publishedAt)); }
 
+const PROVIDERS = {
+  'claude-code': { name: 'Claude Code', missing: 'Run `gnomcode integrate claude`, then use Claude Code in a terminal. Limits are shared with claude.ai chats.' },
+  codex: { name: 'Codex', missing: 'Appears after your next Codex request.' },
+  antigravity: { name: 'Antigravity', missing: 'Not available yet: Antigravity does not record limits in its local logs.' },
+};
 const limitTone = pool => pool.reset_passed || !Number.isFinite(pool.remaining_pct) ? 'unknown' : pool.remaining_pct <= 0 ? 'exhausted' : pool.remaining_pct < 20 ? 'low' : 'ok';
 const limitHeadline = pool => pool.reset_passed ? 'Reset' : Number.isFinite(pool.remaining_pct) ? (pool.remaining_pct <= 0 ? 'Exhausted' : `${Math.round(pool.remaining_pct)}% left`) : 'Unknown';
 function limitDetail(pool) {
@@ -140,8 +145,9 @@ const observedLabel = at => Number.isFinite(Date.parse(at)) ? `Seen ${relativeAc
 export function renderQuota(pools, publishedAt, { illustrative = false, compact = true } = {}) {
   if (compact && pools?.length) {
     const grouped = new Map();
+    for (const provider of illustrative ? [] : Object.keys(PROVIDERS)) grouped.set(provider, []);
     for (const pool of pools) { const list = grouped.get(pool.provider) || []; list.push(pool); grouped.set(pool.provider, list); }
-    return `<section class="sp-limits-compact" aria-label="Provider limits"><div class="sp-panel-heading"><h2>Provider limits</h2><p>${illustrative ? 'Illustrative limits' : 'Percent left in each window, from the latest provider reading'}</p></div>${[...grouped].map(([provider, windows])=>`<details data-key="${escape(provider)}"><summary><strong>${escape(provider)}</strong><div class="sp-limit-windows">${windows.map(pool=>`<span class="sp-limit-${limitTone(pool)}" title="${escape(trust(pool.basis))} · ${escape(observedLabel(pool.observed_at))}"><small>${escape(pool.window?.replaceAll('_',' ') || 'Window')}</small><b>${escape(limitHeadline(pool))}</b><small>${escape(limitDetail(pool))}</small></span>`).join('')}</div></summary>${renderQuota(windows,publishedAt,{illustrative,compact:false})}</details>`).join('')}</section>`;
+    return `<section class="sp-limits-compact" aria-label="Provider limits"><div class="sp-panel-heading"><h2>Provider limits</h2><p>${illustrative ? 'Illustrative limits' : 'Percent left in each window, from the latest provider reading'}</p></div>${[...grouped].map(([provider, windows])=>!windows.length ? `<div class="sp-limit-missing"><strong>${escape(PROVIDERS[provider]?.name || provider)}</strong><span>${escape(PROVIDERS[provider]?.missing || 'No reading yet')}</span></div>` : `<details data-key="${escape(provider)}"><summary><strong>${escape(PROVIDERS[provider]?.name || provider)}</strong><div class="sp-limit-windows">${windows.map(pool=>`<span class="sp-limit-${limitTone(pool)}" title="${escape(trust(pool.basis))} · ${escape(observedLabel(pool.observed_at))}"><small>${escape((new Set(windows.map(w=>w.limit_id)).size > 1 ? pool.limit_id.replaceAll('_',' ') + ' · ' : '') + (pool.window?.replaceAll('_',' ') || 'Window'))}</small><b>${escape(limitHeadline(pool))}</b><small>${escape(limitDetail(pool))}</small></span>`).join('')}</div></summary>${renderQuota(windows,publishedAt,{illustrative,compact:false})}</details>`).join('')}</section>`;
   }
   const publication = publishedAt ? new Date(publishedAt).getTime() : NaN;
   const stale = !Number.isFinite(publication) || Date.now() - publication > 120000;

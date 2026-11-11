@@ -661,3 +661,5 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .sp-limit-exhausted b{color:var(--sp-primary-text)}
 .sp-limit-low b{color:#d97706}
 .sp-limit-unknown b{color:var(--sp-text-3)}
+.sp-limit-missing{display:grid;grid-template-columns:minmax(64px,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-bottom:1px solid var(--sp-border);font:13px/1.5 var(--sp-font-mono)}
+.sp-limit-missing span{color:var(--sp-text-3);font-family:var(--sp-font-sans);text-align:right}
