@@ -58,6 +58,21 @@ pub fn scan_log_files(roots: &[AgentRoot]) -> Vec<DiscoveredFile> {
                     path: root.path.clone(),
                 });
             }
+        } else if root.agent == AgentId::Antigravity {
+            // Brain folders hold thousands of artifacts; transcripts sit at a fixed depth.
+            for conversation in fs::read_dir(&root.path).into_iter().flatten().flatten() {
+                let path = conversation
+                    .path()
+                    .join(".system_generated")
+                    .join("logs")
+                    .join("transcript.jsonl");
+                if path.is_file() {
+                    files.push(DiscoveredFile {
+                        agent: root.agent,
+                        path,
+                    });
+                }
+            }
         } else {
             collect_files_recursively(root.agent, &root.path, &mut files);
         }
@@ -589,6 +604,26 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|f| f.agent == AgentId::ClaudeCode));
         assert!(files.iter().any(|f| f.agent == AgentId::GeminiCli));
+    }
+
+    #[test]
+    fn antigravity_scan_reads_only_fixed_transcript_paths() {
+        let dir = tempdir().expect("temp dir");
+        let logs = dir
+            .path()
+            .join("conv")
+            .join(".system_generated")
+            .join("logs");
+        fs::create_dir_all(&logs).expect("logs");
+        fs::write(logs.join("transcript.jsonl"), b"{}").expect("transcript");
+        fs::write(dir.path().join("conv").join("artifact.jsonl"), b"{}").expect("artifact");
+        let files = scan_log_files(&[AgentRoot {
+            agent: AgentId::Antigravity,
+            path: dir.path().to_path_buf(),
+            exists: true,
+        }]);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].path.ends_with("transcript.jsonl"));
     }
 
     #[test]
