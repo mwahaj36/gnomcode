@@ -58,13 +58,8 @@ Adapter inventory originally inspected on 2026-10-26. This table describes sourc
 | **Codex CLI + ChatGPT / Codex Desktop App** | A (M1) | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`; `session_meta.payload.originator` distinguishes `"Codex Desktop"` vs CLI vs VS Code) | exact (`last_token_usage`) | Yes (`provenance.model`) | **exact** (`rate_limits` 5h + weekly per `limit_id`) | heuristic |
 | **Antigravity** (app / IDE / CLI) | A (M1) | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` | recorded per `PLANNER_RESPONSE` when present | Sometimes, from settings/fallback | unknown; adapter emits no quota snapshots | heuristic |
 | **Gemini CLI** | A (M1) | `~/.gemini/tmp/<hash>/chats/` + `~/.gemini/` | recorded when present | Sometimes | unknown; adapter emits no quota snapshots | heuristic |
-| **Cline / Roo Code** | B (M4) | `<editor>/User/globalStorage/{saoudrizwan.claude-dev,rooveterinaryinc.roo-cline}/tasks/<id>/ui_messages.json` | partial (`api_req_started`; missing fields can become zero) | Sometimes | unknown; adapter emits no quota snapshots | heuristic |
-| **Cursor** | C (experimental) | `Cursor/User/globalStorage` / compatible transcript exports | partial | partial | unknown | heuristic where recorded |
-| **Aider** | C (opt-in) | `AIDER_ANALYTICS_LOG` file/directory; configure Aider recording separately | partial; missing fields can become zero | Sometimes | unknown; adapter emits no quota snapshots | No |
 
 The A/B/C labels are historical adapter priorities, not release guarantees. Actual discovery and record coverage vary by installed version. No undocumented provider API is approved by this inventory.
-
-Editor roots for Cline/Roo are probed across `Code`, `Code - Insiders`, `Cursor`, `Windsurf`, `VSCodium` under `%APPDATA%` (Win), `~/Library/Application Support` (mac), `~/.config` (Linux).
 
 ---
 
@@ -76,9 +71,6 @@ Editor roots for Cline/Roo are probed across `Code`, `Code - Insiders`, `Cursor`
 | Codex | CLI/desktop/IDE log adapter and history | Official CLI; no desktop app takeover |
 | Gemini CLI | Adapter and history | Official CLI |
 | Antigravity | Transcript adapter | Official `agy` CLI; live authenticated acceptance pending |
-| Cline / Roo | Editor logs | No hosted editor control |
-| Cursor | Local logs | No hosted editor control |
-| Aider | Opt-in logs | No hosted launcher |
 
 Remote commands additionally require paired authorization and a live uniquely bound supported agent host. Shells are local-only. Real model/provider compatibility remains a launch acceptance gate.
 
@@ -104,11 +96,11 @@ Windows setup is per-user and waits for an explicit Install action. Choose a ded
 
 ### 3.5 Ingestion
 
-Cursor JSON discovery is not proof of a conversation: require a supported messages/conversation array with a recorded user/assistant timestamp. Never substitute ingestion time for missing Cursor timestamps or infer a running process from an imported transcript; such exports are saved/ended history, and missing models remain unknown. Store-open maintenance removes only legacy idle Cursor placeholders without model/title/PID/parent, events, conversation bindings, resume/alert/relay references or children. Keep all evidence-bearing history and agent-owned files.
+Cline/Roo, Cursor and Aider adapters were removed on 2026-11-12 to focus on agents Gnomcode can launch, resume and report limits for. Their roots are no longer discovered. Previously ingested rows remain in the local database and are never deleted or relabeled: typed lists, reports and queues skip unknown agent identifiers. Agent-owned logs are untouched.
 
-Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Discover Aider only when `AIDER_ANALYTICS_LOG` explicitly names an existing supported log file or directory. Aider command activity uses a generic tool name and redacts the command summary before persistence. Missing model identifiers remain unknown rather than being guessed. Cursor roots are automatically discovered when present. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
+Watchers improve latency; reconciliation/checkpoints guarantee progress. Handle rotation, truncation, partial records, duplicates and malformed/unknown lines without killing ingestion. Windows reads share READ/WRITE/DELETE and do not hold idle source handles. Accept LF and CRLF. Respect home overrides and preserve agent logs. Missing model identifiers remain unknown rather than being guessed. Cursor roots are automatically discovered when present. Codex harness/AGENTS/environment context is excluded from conversation display/ingestion; legacy filtering preserves row cursors.
 
-Antigravity IDE and CLI transcripts share the existing parser but use separate `antigravity/brain` and `antigravity-cli/brain` roots under `GEMINI_HOME` (default `~/.gemini`). CLI sessions retain the CLI surface. Resolve workspace metadata read-only from the corresponding summary databases; preserve native logs and use stable conversation/step deduplication keys. Subagent sessions across adapters (Codex subagent rollouts, Antigravity child agents, Claude subagents, Cline tasks, Cursor subagents, Gemini subagents) preserve their distinct IDs, parent session links (`parent_session_id`), and subagent identities/roles (e.g. `Goodall (control) · Subagent`) rather than colliding with or clobbering parent sessions and models. Session listings expose recorded token counts and subagent relationships.
+Antigravity IDE and CLI transcripts share the existing parser but use separate `antigravity/brain` and `antigravity-cli/brain` roots under `GEMINI_HOME` (default `~/.gemini`). CLI sessions retain the CLI surface. Resolve workspace metadata read-only from the corresponding summary databases; preserve native logs and use stable conversation/step deduplication keys. Subagent sessions across adapters (Codex subagent rollouts, Antigravity child agents, Claude subagents, Gemini subagents) preserve their distinct IDs, parent session links (`parent_session_id`), and subagent identities/roles (e.g. `Goodall (control) · Subagent`) rather than colliding with or clobbering parent sessions and models. Session listings expose recorded token counts and subagent relationships.
 
 ### 3.6 Storage and local conversation
 
@@ -126,7 +118,7 @@ Chat rows remain local and are excluded from metadata sync. History supports pag
 
 ### 3.7 Session and conversation state
 
-Prefer the source application's saved chat label over prompt-derived labels. Refresh Codex's session_index.jsonl (relative to its discovered sessions root, respecting CODEX_HOME), Claude sessions-index.json plus custom-title records, and title/summary metadata in supported Gemini/Cursor exports. Existing Antigravity summary reconciliation retains its title. Labels are bounded and redacted before local persistence; metadata-only renames do not advance activity or require transcript re-ingestion. Keep the original native source's name across provider switches. Sources without a reliable native label retain a cleaned user-request/project fallback; attachment-wrapper headings are not chat names. Sidecar reads use shared platform file reads, remain read-only and skip unavailable/oversized metadata files (8 MiB cap). No dedicated Cline/Roo/Aider saved-name source is claimed.
+Prefer the source application's saved chat label over prompt-derived labels. Refresh Codex's session_index.jsonl (relative to its discovered sessions root, respecting CODEX_HOME), Claude sessions-index.json plus custom-title records, and title/summary metadata in supported Gemini exports. Existing Antigravity summary reconciliation retains its title. Labels are bounded and redacted before local persistence; metadata-only renames do not advance activity or require transcript re-ingestion. Keep the original native source's name across provider switches. Sources without a reliable native label retain a cleaned user-request/project fallback; attachment-wrapper headings are not chat names. Sidecar reads use shared platform file reads, remain read-only and skip unavailable/oversized metadata files (8 MiB cap).
 
 Web Remote entry points share the console navigation shell, including the unpaired Connect your desktop screen. Cloud Project activity lists project labels already present in the latest session snapshot and opens filtered session history; missing snapshots offer connection/reload actions. This view does not fabricate detailed local-only project rollups or add project data to cloud sync, and its list is not a timeline-filtered usage report.
 
@@ -166,7 +158,7 @@ Use native focus integration where available and document Wayland/unsupported fa
 
 ### 3.14 Resume and routing
 
-Resume Queue and routing are free local features. Policies include `ask_first`, `automatic` and `deny_cross_provider`; legacy Context Relay has its own configuration. Context Relay bypasses auto-compacting environments (`surface: ide` and agents including Antigravity, Cursor, and Cline that manage compaction natively in-place), avoiding unnecessary context-reserve alerts or automated relay rotations. Require a known quota observation recorded at or after the eligibility time, with a valid percentage, before resuming; reject future observations. Respect native approval and unique host binding. Do not promise replay of arbitrary original prompt text: the legacy privacy transition stopped storing custom queue prompts. Verify real quota-reset/native resume behavior before claiming universal automatic continuation.
+Resume Queue and routing are free local features. Policies include `ask_first`, `automatic` and `deny_cross_provider`; legacy Context Relay has its own configuration. Context Relay bypasses auto-compacting environments (`surface: ide` and agents including Antigravity that manage compaction natively in-place), avoiding unnecessary context-reserve alerts or automated relay rotations. Require a known quota observation recorded at or after the eligibility time, with a valid percentage, before resuming; reject future observations. Respect native approval and unique host binding. Do not promise replay of arbitrary original prompt text: the legacy privacy transition stopped storing custom queue prompts. Verify real quota-reset/native resume behavior before claiming universal automatic continuation.
 
 ### 3.14.1 Handoff
 
