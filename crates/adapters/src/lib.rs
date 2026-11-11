@@ -185,6 +185,17 @@ mod tests {
         }
     }
     #[test]
+    fn claude_desktop_entrypoint_is_a_desktop_surface() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let line = br#"{"type":"user","sessionId":"s","entrypoint":"claude-desktop","timestamp":"2026-11-11T20:40:20Z","cwd":"/w","message":{"role":"user","content":"Hi"}}
+"#;
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), line);
+        assert_eq!(
+            batch.sessions[0].surface,
+            gnomcode_core::Surface::DesktopApp
+        );
+    }
+    #[test]
     fn codex_injected_context_is_not_a_user_turn() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let batch = CodexAdapter::new().parse(
