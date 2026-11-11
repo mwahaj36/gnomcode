@@ -196,6 +196,21 @@ mod tests {
         );
     }
     #[test]
+    fn claude_status_limits_are_exact_and_missing_windows_stay_absent() {
+        let quota = super::claude::parse_status_limits(
+            br#"{"observed_at":"2026-11-12T10:00:00Z","rate_limits":{"five_hour":{"used_percentage":42.5,"resets_at":1794480000}}}"#,
+        );
+        assert_eq!(quota.len(), 1);
+        assert_eq!(quota[0].provider, "claude-code");
+        assert_eq!(quota[0].window, gnomcode_core::QuotaWindow::FiveHour);
+        assert!((quota[0].used_pct - 42.5).abs() < f64::EPSILON);
+        assert_eq!(quota[0].basis, TrustLevel::Exact);
+        assert!(quota[0].resets_at.is_some());
+        assert!(super::claude::parse_status_limits(b"not json").is_empty());
+        assert!(super::claude::parse_status_limits(br#"{"rate_limits":{}}"#).is_empty());
+    }
+
+    #[test]
     fn claude_subagent_transcript_is_a_linked_child_session() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let log = br#"{"type":"user","isSidechain":true,"agentId":"a7fe2469649710219","sessionId":"f9e0d79c-2390-4145-b072-d45b7266d56f","timestamp":"2026-11-11T22:10:13Z","cwd":"/w","message":{"role":"user","content":"Read a file"}}

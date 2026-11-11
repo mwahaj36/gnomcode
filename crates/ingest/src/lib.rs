@@ -155,7 +155,47 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     let roots = discover_agent_roots();
     let discovered = scan_log_files(&roots);
     let repair_chat_format = db.chat_format_needs_repair()?;
-    ingest_files(db, &roots, &discovered, repair_chat_format)
+    let total = ingest_files(db, &roots, &discovered, repair_chat_format)?;
+    ingest_claude_status_limits(
+        db,
+        &gnomcode_platform::gnomcode_home().join(CLAUDE_LIMITS_FILE),
+    )?;
+    Ok(total)
+}
+
+/// Written by `gnomcode statusline` from Claude Code's status line input.
+pub const CLAUDE_LIMITS_FILE: &str = "claude-limits.json";
+
+fn ingest_claude_status_limits(db: &mut Database, path: &Path) -> Result<(), Error> {
+    let Ok(bytes) = fs::read(path) else {
+        return Ok(());
+    };
+    let path_str = path.to_string_lossy().into_owned();
+    // The file is a few hundred bytes of limits only, so its content is the fingerprint.
+    let fingerprint = String::from_utf8_lossy(&bytes).into_owned();
+    if db
+        .get_checkpoint(&path_str)?
+        .is_some_and(|checkpoint| checkpoint.fingerprint == fingerprint)
+    {
+        return Ok(());
+    }
+    let quota = gnomcode_adapters::claude::parse_status_limits(&bytes);
+    let size = bytes.len() as u64;
+    db.commit_batch(
+        &[],
+        &[],
+        &[],
+        &[],
+        &quota,
+        &SourceCheckpoint {
+            file_path: path_str,
+            last_read_offset: size,
+            file_size: size,
+            fingerprint,
+            last_ingested_at: Utc::now(),
+        },
+    )?;
+    Ok(())
 }
 
 fn ingest_files(
