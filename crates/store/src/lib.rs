@@ -850,20 +850,7 @@ impl Database {
         if !push_column_exists {
             self.conn.execute_batch(obfstr::obfstr!("BEGIN; ALTER TABLE automation_notice ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0; INSERT INTO schema_migrations(version,applied_at) VALUES (14,datetime('now')); COMMIT;"))?;
         }
-        // Older Cursor parsing treated settings JSON as empty, freshly active sessions.
         self.conn.execute_batch(obfstr::obfstr!(r#"
-            DELETE FROM session
-            WHERE agent='cursor' AND state='idle' AND model IS NULL AND title IS NULL
-              AND pid IS NULL AND parent_session_id IS NULL
-              AND NOT EXISTS (SELECT 1 FROM usage_record WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM activity_event WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM chat_event WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM conversation_member WHERE native_id=session.id OR host_id=session.id OR conversation_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM resume_queue WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM alert WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM context_relay WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM session child WHERE child.parent_session_id=session.id);
-
             DELETE FROM usage_record
             WHERE session_id IN (
                 SELECT id FROM session
@@ -1390,17 +1377,11 @@ impl Database {
             let eligible_after = DateTime::parse_from_rfc3339(&eligible_str)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
-            let agent = match agent_str.as_str() {
-                "claude-code" => AgentId::ClaudeCode,
-                "codex" => AgentId::Codex,
-                "antigravity" => AgentId::Antigravity,
-                "gemini-cli" => AgentId::GeminiCli,
-                "cline" => AgentId::Cline,
-                "cursor" => AgentId::Cursor,
-                "aider" => AgentId::Aider,
-                _ => AgentId::ClaudeCode,
+            // Rows from unknown or removed agents stay stored but are never relabeled.
+            let Some(agent) = AgentId::parse(&agent_str) else {
+                return Ok(None);
             };
-            Ok(ResumeQueueEntry {
+            Ok(Some(ResumeQueueEntry {
                 session_id,
                 agent,
                 cwd,
@@ -1408,9 +1389,13 @@ impl Database {
                 max_runs,
                 runs_completed,
                 eligible_after,
-            })
+            }))
         })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+        let mut out = Vec::new();
+        for row in rows {
+            out.extend(row?);
+        }
+        Ok(out)
     }
 
     /// Updates the runs completed count for an armed session.
@@ -1845,15 +1830,9 @@ impl Database {
         let limit_i64 = i64::try_from(limit).unwrap_or(50);
         let rows = stmt.query_map(params![limit_i64], |row| {
             let agent_str: String = row.get(1)?;
-            let agent = match agent_str.as_str() {
-                "claude-code" => AgentId::ClaudeCode,
-                "codex" => AgentId::Codex,
-                "antigravity" => AgentId::Antigravity,
-                "gemini-cli" => AgentId::GeminiCli,
-                "cline" => AgentId::Cline,
-                "cursor" => AgentId::Cursor,
-                "aider" => AgentId::Aider,
-                _ => AgentId::ClaudeCode,
+            // Rows from unknown or removed agents stay stored but are never relabeled.
+            let Some(agent) = AgentId::parse(&agent_str) else {
+                return Ok(None);
             };
             let surface_str: String = row.get(2)?;
             let surface = match surface_str.as_str() {
@@ -1886,7 +1865,7 @@ impl Database {
                 other => other,
             };
 
-            Ok(Session {
+            Ok(Some(Session {
                 id: row.get(0)?,
                 agent,
                 surface,
@@ -1898,12 +1877,12 @@ impl Database {
                 pid: row.get(8)?,
                 started_at,
                 last_event_at,
-            })
+            }))
         })?;
 
         let mut out = Vec::new();
         for r in rows {
-            out.push(r?);
+            out.extend(r?);
         }
         Ok(out)
     }
@@ -1936,22 +1915,16 @@ impl Database {
 
         let rows = stmt.query_map([], |row| {
             let agent_str: String = row.get(1)?;
-            let agent = match agent_str.as_str() {
-                "claude-code" => AgentId::ClaudeCode,
-                "codex" => AgentId::Codex,
-                "antigravity" => AgentId::Antigravity,
-                "gemini-cli" => AgentId::GeminiCli,
-                "cline" => AgentId::Cline,
-                "cursor" => AgentId::Cursor,
-                "aider" => AgentId::Aider,
-                _ => AgentId::ClaudeCode,
+            // Rows from unknown or removed agents stay stored but are never relabeled.
+            let Some(agent) = AgentId::parse(&agent_str) else {
+                return Ok(None);
             };
             let in_tok: i64 = row.get(3)?;
             let read_tok: i64 = row.get(4)?;
             let out_tok: i64 = row.get(5)?;
             let turn_count: i64 = row.get(8)?;
 
-            Ok(ReportRow {
+            Ok(Some(ReportRow {
                 project_name: row.get(0)?,
                 agent,
                 model: row.get(2)?,
@@ -1961,13 +1934,13 @@ impl Database {
                 total_cost_usd: row.get(6)?,
                 total_cache_savings_usd: row.get(7)?,
                 turn_count: u64::try_from(turn_count.max(0)).unwrap_or(0),
-            })
+            }))
         })?;
 
         let custom_prices = self.get_custom_model_pricings().unwrap_or_default();
         let mut out = Vec::new();
         for r in rows {
-            let mut row = r?;
+            let Some(mut row) = r? else { continue };
             if let Some(custom) = custom_prices.iter().find(|cp| {
                 row.model
                     .to_lowercase()
@@ -3234,85 +3207,6 @@ mod tests {
     };
 
     #[test]
-    fn reopening_store_removes_only_evidence_free_cursor_placeholders() {
-        let mut db = Database::open_in_memory().expect("database");
-        let project = Project::from_origin(None, "/unknown", None);
-        let now = Utc::now();
-        let sessions = [
-            "empty", "chat", "usage", "activity", "model", "title", "bound", "queue",
-        ]
-        .map(|name| Session {
-            id: format!("cursor:{name}"),
-            agent: AgentId::Cursor,
-            surface: Surface::Ide,
-            project_id: project.id.clone(),
-            parent_session_id: None,
-            model: (name == "model").then(|| "recorded".into()),
-            title: (name == "title").then(|| "Saved conversation".into()),
-            state: SessionState::Idle,
-            pid: None,
-            started_at: now,
-            last_event_at: now,
-        });
-        db.commit_batch(
-            &[project],
-            &sessions,
-            &[],
-            &[],
-            &[],
-            &SourceCheckpoint {
-                file_path: "fixture".into(),
-                last_read_offset: 0,
-                file_size: 0,
-                fingerprint: "fixture".into(),
-                last_ingested_at: now,
-            },
-        )
-        .expect("sessions");
-        db.insert_chat_event(&gnomcode_core::ChatEvent {
-            event_id: "preserve".into(),
-            session_id: "cursor:chat".into(),
-            turn_index: 0,
-            role: gnomcode_core::ChatRole::User,
-            content: "Keep history".into(),
-            tool_name: None,
-            status: None,
-            created_at: now,
-        })
-        .expect("chat");
-        db.conn.execute("INSERT INTO usage_record VALUES ('usage','cursor:usage',?1,'model',1,1,0,0,0,0,1,100,0,0,'unknown','fixture')", [now.to_rfc3339()]).expect("usage");
-        db.conn.execute("INSERT INTO activity_event(session_id,timestamp,kind) VALUES ('cursor:activity',?1,'tool_start')", [now.to_rfc3339()]).expect("activity");
-        db.conn.execute("INSERT INTO conversation_member(host_id,conversation_id,native_id,position) VALUES ('host','conversation','cursor:bound',0)", []).expect("binding");
-        db.conn.execute("INSERT INTO resume_queue VALUES ('cursor:queue','cursor','fixture','keep',1,0,?1,?1)", [now.to_rfc3339()]).expect("queue");
-        db.migrate().expect("reopen maintenance");
-        let remaining: Vec<String> = db
-            .conn
-            .prepare("SELECT id FROM session ORDER BY id")
-            .expect("query")
-            .query_map([], |row| row.get(0))
-            .expect("rows")
-            .collect::<Result<_, _>>()
-            .expect("ids");
-        assert_eq!(
-            remaining,
-            [
-                "cursor:activity",
-                "cursor:bound",
-                "cursor:chat",
-                "cursor:model",
-                "cursor:queue",
-                "cursor:title",
-                "cursor:usage"
-            ]
-        );
-        assert_eq!(
-            db.get_session_chat("cursor:chat", None).expect("history")[0].content,
-            "Keep history"
-        );
-        db.migrate().expect("idempotent maintenance");
-    }
-
-    #[test]
     fn all_time_activity_groups_by_span_without_losing_totals() {
         use super::{DailyUsage, group_activity};
         let rows = ["2024-01-01", "2024-01-31", "2024-10-01"]
@@ -3900,9 +3794,6 @@ mod tests {
             AgentId::Codex,
             AgentId::Antigravity,
             AgentId::GeminiCli,
-            AgentId::Cline,
-            AgentId::Cursor,
-            AgentId::Aider,
         ] {
             let mut provider_session = session.clone();
             provider_session.agent = agent;

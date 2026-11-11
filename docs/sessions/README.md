@@ -147,3 +147,5 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-04 � Desktop onboarding](2026-11-04-desktop-onboarding.md)
 
 - [2026-11-06 — Live audit fixes](2026-11-06-live-audit-fixes.md)
+
+- [2026-11-12 — Live audit and editor adapter removal](2026-11-12-remove-editor-adapters.md)

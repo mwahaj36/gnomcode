@@ -997,7 +997,6 @@ mod tests {
                 .env("CODEX_HOME", root.path().join("codex"))
                 .env("CLAUDE_CONFIG_DIR", root.path().join("claude"))
                 .env("GEMINI_HOME", root.path().join("gemini"))
-                .env_remove("AIDER_ANALYTICS_LOG")
                 .status()
                 .expect("isolated ingest test");
             assert!(status.success());
