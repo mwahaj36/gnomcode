@@ -127,9 +127,9 @@ function updateMarkup(element, markup) {
 export function updateQuota(element, pools, publishedAt) { updateMarkup(element, renderQuota(pools, publishedAt)); }
 
 const PROVIDERS = {
-  'claude-code': { name: 'Claude Code', missing: 'Run `gnomcode integrate claude`, then use Claude Code in a terminal. Limits are shared with claude.ai chats.' },
+  'claude-code': { name: 'Claude Code', missing: 'Run `gnomcode limits enable claude`. Covers the desktop app, terminal and claude.ai chats.' },
   codex: { name: 'Codex', missing: 'Appears after your next Codex request.' },
-  antigravity: { name: 'Antigravity', missing: 'Not available yet: Antigravity does not record limits in its local logs.' },
+  antigravity: { name: 'Antigravity', missing: 'Run `gnomcode limits enable antigravity`; readings appear while an Antigravity agent is running.' },
 };
 const limitTone = pool => pool.reset_passed || !Number.isFinite(pool.remaining_pct) ? 'unknown' : pool.remaining_pct <= 0 ? 'exhausted' : pool.remaining_pct < 20 ? 'low' : 'ok';
 const limitHeadline = pool => pool.reset_passed ? 'Reset' : Number.isFinite(pool.remaining_pct) ? (pool.remaining_pct <= 0 ? 'Exhausted' : `${Math.round(pool.remaining_pct)}% left`) : 'Unknown';

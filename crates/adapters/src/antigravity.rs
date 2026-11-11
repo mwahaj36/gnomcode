@@ -10,8 +10,8 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use gnomcode_core::{
-    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
-    Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
+    Session, SessionState, Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::{redact_chat_content, redact_summary},
 };
@@ -483,4 +483,48 @@ pub fn extract_antigravity_user_prompt(content: &str) -> Option<String> {
     } else {
         Some(gnomcode_core::redact::clean_user_message(trimmed))
     }
+}
+
+/// Converts the language server's `GetUserStatus` reply into per-model quota rows.
+///
+/// Each `cascadeModelConfigData.clientModelConfigs[]` entry carries
+/// `quotaInfo {remainingFraction: 0..=1, resetTime: RFC3339}`; entries without a fraction stay absent.
+#[must_use]
+pub fn parse_user_status(value: &Value, observed_at: DateTime<Utc>) -> Vec<QuotaSnapshot> {
+    let plan = value
+        .pointer("/userStatus/userTier/name")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    value
+        .pointer("/userStatus/cascadeModelConfigData/clientModelConfigs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|config| {
+            let quota = config.get("quotaInfo")?;
+            let remaining = quota.get("remainingFraction")?.as_f64()?;
+            let resets_at = quota
+                .get("resetTime")
+                .and_then(Value::as_str)
+                .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+                .map(|at| at.with_timezone(&Utc));
+            // shortcut: Antigravity does not name its windows; a reset within 6 h is the rolling window.
+            let window = match resets_at {
+                Some(reset) if reset - observed_at > chrono::Duration::hours(6) => {
+                    QuotaWindow::Weekly
+                }
+                _ => QuotaWindow::FiveHour,
+            };
+            Some(QuotaSnapshot {
+                provider: AgentId::Antigravity.as_str().to_owned(),
+                limit_id: config.get("label")?.as_str()?.chars().take(64).collect(),
+                window,
+                used_pct: ((1.0 - remaining) * 100.0).clamp(0.0, 100.0),
+                resets_at,
+                plan: plan.clone(),
+                basis: TrustLevel::Api,
+                observed_at,
+            })
+        })
+        .collect()
 }

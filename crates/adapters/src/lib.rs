@@ -211,6 +211,50 @@ mod tests {
     }
 
     #[test]
+    fn claude_oauth_usage_maps_every_window_and_skips_nulls() {
+        let body = serde_json::json!({
+            "five_hour": {"utilization": 12.0, "resets_at": "2026-11-12T03:00:00+00:00"},
+            "seven_day": {"utilization": 40.5, "resets_at": "2026-11-16T08:00:00+00:00"},
+            "seven_day_opus": null,
+            "seven_day_sonnet": {"utilization": 3.0, "resets_at": null}
+        });
+        let quota = super::claude::parse_oauth_usage(&body, chrono::Utc::now());
+        let ids: Vec<_> = quota
+            .iter()
+            .map(|q| (q.limit_id.as_str(), q.window))
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                ("claude", gnomcode_core::QuotaWindow::FiveHour),
+                ("claude", gnomcode_core::QuotaWindow::Weekly),
+                ("sonnet", gnomcode_core::QuotaWindow::Weekly)
+            ]
+        );
+        assert!(quota.iter().all(|q| q.basis == TrustLevel::Exact));
+        assert!(quota[0].resets_at.is_some() && quota[2].resets_at.is_none());
+    }
+
+    #[test]
+    fn antigravity_user_status_maps_model_quota() {
+        let now = chrono::Utc::now();
+        let soon = (now + chrono::Duration::hours(3)).to_rfc3339();
+        let later = (now + chrono::Duration::days(4)).to_rfc3339();
+        let body = serde_json::json!({"userStatus": {"userTier": {"name": "Pro"}, "cascadeModelConfigData": {"clientModelConfigs": [
+            {"label": "Gemini 3.8 Flash", "modelOrAlias": {"model": "m1"}, "quotaInfo": {"remainingFraction": 0.75, "resetTime": soon}},
+            {"label": "Claude Opus", "modelOrAlias": {"model": "m2"}, "quotaInfo": {"remainingFraction": 0.0, "resetTime": later}},
+            {"label": "No quota", "modelOrAlias": {"model": "m3"}}
+        ]}}});
+        let quota = super::antigravity::parse_user_status(&body, now);
+        assert_eq!(quota.len(), 2);
+        assert_eq!(quota[0].window, gnomcode_core::QuotaWindow::FiveHour);
+        assert!((quota[0].used_pct - 25.0).abs() < 1e-9);
+        assert_eq!(quota[1].window, gnomcode_core::QuotaWindow::Weekly);
+        assert!((quota[1].used_pct - 100.0).abs() < 1e-9);
+        assert_eq!(quota[0].plan.as_deref(), Some("Pro"));
+    }
+
+    #[test]
     fn claude_subagent_transcript_is_a_linked_child_session() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let log = br#"{"type":"user","isSidechain":true,"agentId":"a7fe2469649710219","sessionId":"f9e0d79c-2390-4145-b072-d45b7266d56f","timestamp":"2026-11-11T22:10:13Z","cwd":"/w","message":{"role":"user","content":"Read a file"}}
