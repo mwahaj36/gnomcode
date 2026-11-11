@@ -2170,8 +2170,15 @@ pub(crate) struct QuotaPoolView {
 }
 
 pub(crate) fn quota_views(snapshots: Vec<gnomcode_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
+    let now = chrono::Utc::now();
     snapshots
         .into_iter()
+        // A pool whose window reset over a week ago without a new reading is retired, not "awaiting".
+        .filter(|snapshot| {
+            snapshot
+                .resets_at
+                .is_none_or(|reset| now - reset < chrono::Duration::days(7))
+        })
         .map(|snapshot| {
             let reset_passed = snapshot
                 .resets_at
