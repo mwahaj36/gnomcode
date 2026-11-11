@@ -338,15 +338,7 @@ mod remote_entitlement_tests {
     #[test]
     fn native_compaction_clears_pending_relays_without_erasing_history() {
         let db = gnomcode_store::Database::open_in_memory().expect("db");
-        for agent in [
-            "claude-code",
-            "codex",
-            "gemini-cli",
-            "antigravity",
-            "cursor",
-            "cline",
-            "aider",
-        ] {
+        for agent in ["claude-code", "codex", "gemini-cli", "antigravity"] {
             db.record_context_relay(&gnomcode_store::ContextRelayEntry {
                 id: format!("relay-{agent}"),
                 session_id: format!("{agent}:test"),
@@ -363,7 +355,7 @@ mod remote_entitlement_tests {
         }
         super::run_context_relay(&db).expect("relay pass");
         let history = db.list_context_relays().expect("history");
-        assert_eq!(history.len(), 7);
+        assert_eq!(history.len(), 4);
         assert!(history.iter().all(|row| row.status != "pending"));
     }
 

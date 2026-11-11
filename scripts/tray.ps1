@@ -295,8 +295,6 @@ function Focus-AgentApp([string]$agent, [string]$projectName, [string]$surface) 
             "^codex$" { if ($surface -eq 'desktop_app') { @('ChatGPT','Codex') } else { @('WindowsTerminal','cmd','powershell','pwsh') } }
             "^claude" { if ($surface -eq 'desktop_app') { @('Claude') } else { @('WindowsTerminal','cmd','powershell','pwsh') } }
             "antigravity" { @('Antigravity') }
-            "cursor" { @('Cursor') }
-            "cline|roo" { @('Code') }
             "gemini" { @('WindowsTerminal','cmd','powershell','pwsh') }
             default { @() }
         }

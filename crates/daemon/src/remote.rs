@@ -1313,15 +1313,7 @@ mod tests {
 
     #[test]
     fn every_provider_separates_owned_imported_and_subagent_history() {
-        let agents = [
-            "claude-code",
-            "codex",
-            "gemini-cli",
-            "antigravity",
-            "cursor",
-            "cline",
-            "aider",
-        ];
+        let agents = ["claude-code", "codex", "gemini-cli", "antigravity"];
         let mut rows = Vec::new();
         for agent in agents {
             for source in ["managed", "imported"] {

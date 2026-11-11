@@ -4,12 +4,9 @@
 use chrono::Utc;
 use gnomcode_adapters::{
     FileCtx, SourceAdapter,
-    aider::AiderAdapter,
     antigravity::{AntigravityAdapter, extract_conversation_id},
     claude::ClaudeAdapter,
-    cline::ClineAdapter,
     codex::{CodexAdapter, codex_session_id_from_path},
-    cursor::CursorAdapter,
     gemini::GeminiAdapter,
 };
 use gnomcode_core::{AgentId, Session};
@@ -103,15 +100,6 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
                     .is_some_and(|n| n == "transcript.jsonl")
         }
         AgentId::GeminiCli => ext.eq_ignore_ascii_case("json"),
-        AgentId::Cline => {
-            ext.eq_ignore_ascii_case("json")
-                && path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .is_some_and(|n| n == "ui_messages.json")
-        }
-        AgentId::Cursor => ext.eq_ignore_ascii_case("json") || ext.eq_ignore_ascii_case("jsonl"),
-        AgentId::Aider => ext.eq_ignore_ascii_case("jsonl") || ext.eq_ignore_ascii_case("json"),
     }
 }
 
@@ -155,10 +143,7 @@ fn ingest_files(
             }
         };
         let start_offset = checkpoint.as_ref().map_or(0, |c| c.last_read_offset);
-        let is_rewritten = matches!(
-            file.agent,
-            AgentId::GeminiCli | AgentId::Cline | AgentId::Cursor
-        );
+        let is_rewritten = file.agent == AgentId::GeminiCli;
 
         let file_fingerprint = if is_rewritten {
             fs::metadata(&file.path).ok().and_then(|meta| {
@@ -235,9 +220,6 @@ fn ingest_files(
             AgentId::Codex => Box::new(CodexAdapter::new()),
             AgentId::Antigravity => Box::new(AntigravityAdapter::new()),
             AgentId::GeminiCli => Box::new(GeminiAdapter::new()),
-            AgentId::Cline => Box::new(ClineAdapter::new()),
-            AgentId::Cursor => Box::new(CursorAdapter::new()),
-            AgentId::Aider => Box::new(AiderAdapter::new()),
         };
 
         let parsed_len = if is_rewritten {
@@ -352,7 +334,7 @@ mod tests {
                 .env(CHILD,root.path()).env("HOME",root.path()).env("USERPROFILE",root.path())
                 .env("APPDATA",root.path()).env("LOCALAPPDATA",root.path()).env("XDG_CONFIG_HOME",root.path()).env("XDG_DATA_HOME",root.path())
                 .env("CODEX_HOME",root.path().join("codex")).env("CLAUDE_CONFIG_DIR",root.path().join("claude")).env("GEMINI_HOME",root.path().join("gemini"))
-                .env_remove("AIDER_ANALYTICS_LOG").status().expect("isolated test");
+                .status().expect("isolated test");
             assert!(status.success());
             return;
         }
@@ -580,21 +562,6 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn scan_includes_an_explicit_aider_log_file() {
-        let dir = tempdir().expect("temp dir");
-        let path = dir.path().join("aider.jsonl");
-        fs::write(&path, b"{}\n").expect("fixture");
-        let roots = [AgentRoot {
-            agent: AgentId::Aider,
-            path: path.clone(),
-            exists: true,
-        }];
-        let files = scan_log_files(&roots);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, path);
-    }
-
-    #[test]
     fn scan_log_files_filters_proper_extensions_and_names() {
         let dir = tempdir().expect("temp dir");
         let claude_dir = dir.path().join("claude");
@@ -609,19 +576,19 @@ mod tests {
                 exists: true,
             },
             AgentRoot {
-                agent: AgentId::Cline,
-                path: dir.path().join("cline"),
+                agent: AgentId::GeminiCli,
+                path: dir.path().join("gemini"),
                 exists: true,
             },
         ];
-        let cline_dir = dir.path().join("cline");
-        fs::create_dir_all(&cline_dir).expect("create cline dir");
-        fs::write(cline_dir.join("ui_messages.json"), b"[]").expect("write cline");
+        let gemini_dir = dir.path().join("gemini");
+        fs::create_dir_all(&gemini_dir).expect("create gemini dir");
+        fs::write(gemini_dir.join("session.json"), b"{}").expect("write gemini");
 
         let files = scan_log_files(&roots);
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|f| f.agent == AgentId::ClaudeCode));
-        assert!(files.iter().any(|f| f.agent == AgentId::Cline));
+        assert!(files.iter().any(|f| f.agent == AgentId::GeminiCli));
     }
 
     #[test]

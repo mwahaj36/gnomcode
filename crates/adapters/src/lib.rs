@@ -2,12 +2,9 @@
 //!
 //! See `docs/SPEC.md` §3.5 and §4.2 for the adapter architecture and invariants.
 
-pub mod aider;
 pub mod antigravity;
 pub mod claude;
-pub mod cline;
 pub mod codex;
-pub mod cursor;
 pub mod gemini;
 pub mod titles;
 
@@ -176,7 +173,6 @@ mod tests {
 {"type":"custom-title","sessionId":"native","customTitle":"Saved chat name"}
 "#),
             (Box::new(super::gemini::GeminiAdapter::new()), br#"{"sessionId":"native","summary":"Saved chat name","messages":[]}"#),
-            (Box::new(super::cursor::CursorAdapter::new()), br#"{"sessionId":"native","title":"Saved chat name","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"}]}"#),
         ];
         for (mut adapter, bytes) in cases {
             let batch = adapter.parse(&FileCtx::default(), bytes);
@@ -472,26 +468,6 @@ mod tests {
         });
     }
 
-    #[test]
-    fn cursor_chat_keeps_user_and_assistant_text_only() {
-        use super::{FileCtx, SourceAdapter, cursor::CursorAdapter};
-        let bytes = br#"{"sessionId":"cursor-chat","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"},{"role":"assistant","timestamp":"2026-10-26T12:00:05Z","content":"Answer","tool_calls":[{"name":"Shell","output":"secret"}]},{"role":"tool","content":"secret output"}]}"#;
-        let batch = CursorAdapter::new().parse(&FileCtx::default(), bytes);
-        assert_eq!(batch.chat_events.len(), 2);
-        assert_eq!(batch.chat_events[0].content, "Question");
-        assert_eq!(batch.chat_events[1].content, "Answer");
-    }
-
-    #[test]
-    fn cline_chat_keeps_task_feedback_and_answer_without_tools() {
-        use super::{FileCtx, SourceAdapter, cline::ClineAdapter};
-        let bytes = br#"[{"ts":1,"type":"say","say":"task","text":"Question"},{"ts":2,"type":"say","say":"text","text":"Answer"},{"ts":3,"type":"say","say":"tool","text":"secret tool output"},{"ts":4,"type":"say","say":"user_feedback","text":"Follow up"}]"#;
-        let batch = ClineAdapter::new().parse(&FileCtx::default(), bytes);
-        assert_eq!(batch.chat_events.len(), 3);
-        assert_eq!(batch.chat_events[0].content, "Question");
-        assert_eq!(batch.chat_events[1].content, "Answer");
-        assert_eq!(batch.chat_events[2].content, "Follow up");
-    }
     use super::{
         FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
         codex::CodexAdapter, gemini::GeminiAdapter,
@@ -709,14 +685,6 @@ mod tests {
                 Box::new(super::antigravity::AntigravityAdapter::new()),
                 include_bytes!("../../../fixtures/antigravity/synthetic/missing-model.jsonl"),
             ),
-            (
-                Box::new(super::aider::AiderAdapter::new()),
-                include_bytes!("../../../fixtures/aider/synthetic/missing-model.jsonl"),
-            ),
-            (
-                Box::new(super::cline::ClineAdapter::new()),
-                include_bytes!("../../../fixtures/cline/synthetic/missing-model.json"),
-            ),
         ];
         for (mut adapter, bytes) in cases {
             let batch = adapter.parse(&FileCtx::default(), bytes);
@@ -743,38 +711,12 @@ mod tests {
     }
 
     #[test]
-    fn aider_command_is_not_persisted_as_a_tool_name() {
-        let batch = super::aider::AiderAdapter::new().parse(
-            &FileCtx::default(),
-            include_bytes!("../../../fixtures/aider/synthetic/missing-model.jsonl"),
-        );
-        assert_eq!(
-            batch.activity_events[0].tool_name.as_deref(),
-            Some("command")
-        );
-        let synthetic =
-            br#"{"timestamp":"2026-10-26T10:00:00Z","command":"echo API_KEY=synthetic-secret"}
-"#;
-        let batch = super::aider::AiderAdapter::new().parse(&FileCtx::default(), synthetic);
-        assert!(
-            !batch.activity_events[0]
-                .summary_redacted
-                .as_deref()
-                .unwrap_or_default()
-                .contains("synthetic-secret")
-        );
-    }
-
-    #[test]
     fn all_adapters_reject_truncated_input_without_storing_chat() {
         let adapters: Vec<Box<dyn SourceAdapter>> = vec![
             Box::new(ClaudeAdapter::new()),
             Box::new(CodexAdapter::new()),
             Box::new(super::antigravity::AntigravityAdapter::new()),
             Box::new(super::gemini::GeminiAdapter::new()),
-            Box::new(super::cline::ClineAdapter::new()),
-            Box::new(super::cursor::CursorAdapter::new()),
-            Box::new(super::aider::AiderAdapter::new()),
         ];
         for mut adapter in adapters {
             let batch = adapter.parse(&FileCtx::default(), b"{\"truncated\":\r\n");
@@ -785,70 +727,5 @@ mod tests {
                 adapter.agent_id().as_str()
             );
         }
-    }
-
-    #[test]
-    fn cline_adapter_parses_ui_messages_and_approval() {
-        use super::cline::ClineAdapter;
-        let mut adapter = ClineAdapter::new();
-        let ctx = FileCtx {
-            source_path: "/home/dev/.config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/task-123/ui_messages.json".to_owned(),
-            ..FileCtx::default()
-        };
-        let sample = br#"[
-            {"ts": 1729900000000, "type": "say", "say": "task", "text": "start task"},
-            {"ts": 1729900010000, "type": "say", "say": "api_req_started", "text": "{\"tokensIn\":1000,\"tokensOut\":200,\"cost\":0.01,\"modelId\":\"claude-3-5-sonnet\"}"},
-            {"ts": 1729900020000, "type": "ask", "ask": "tool", "text": "execute command"}
-        ]"#;
-        let batch = adapter.parse(&ctx, sample);
-        assert_eq!(batch.parse_errors, 0);
-        assert_eq!(batch.sessions.len(), 1);
-        assert_eq!(
-            batch.sessions[0].state,
-            gnomcode_core::SessionState::AwaitingApproval
-        );
-        assert_eq!(batch.usage_records.len(), 1);
-        assert_eq!(batch.usage_records[0].input_tokens, 1000);
-        assert_eq!(batch.usage_records[0].cost_usd, 0.01);
-    }
-
-    #[test]
-    fn cursor_and_aider_adapters_parse_cleanly() {
-        use super::aider::AiderAdapter;
-        use super::cursor::CursorAdapter;
-
-        let mut cursor = CursorAdapter::new();
-        let c_ctx = FileCtx {
-            source_path: "/workspace/.cursor/transcripts/sess-abc.json".to_owned(),
-            ..FileCtx::default()
-        };
-        let c_sample = br#"{
-            "sessionId": "sess-abc",
-            "messages": [
-                {"role": "user", "timestamp": "2026-10-26T12:00:00Z"},
-                {"role": "assistant", "timestamp": "2026-10-26T12:00:05Z", "model": "gpt-4o", "usage": {"prompt_tokens": 500, "completion_tokens": 150}}
-            ]
-        }"#;
-        let c_batch = cursor.parse(&c_ctx, c_sample);
-        assert_eq!(c_batch.parse_errors, 0);
-        assert_eq!(c_batch.sessions.len(), 1);
-        assert_eq!(
-            c_batch.sessions[0].state,
-            gnomcode_core::SessionState::Ended
-        );
-        assert_eq!(c_batch.usage_records.len(), 1);
-
-        let mut aider = AiderAdapter::new();
-        let a_ctx = FileCtx {
-            source_path: "/workspace/.aider.analytics.jsonl".to_owned(),
-            ..FileCtx::default()
-        };
-        let a_sample = b"{\"timestamp\":\"2026-10-26T12:00:00Z\",\"model\":\"claude-3-5-sonnet\",\"tokens_sent\":800,\"tokens_received\":250,\"cost\":0.005,\"event\":\"chat\"}\n";
-        let a_batch = aider.parse(&a_ctx, a_sample);
-        assert_eq!(a_batch.parse_errors, 0);
-        assert_eq!(a_batch.sessions.len(), 1);
-        assert_eq!(a_batch.sessions[0].state, gnomcode_core::SessionState::Idle);
-        assert_eq!(a_batch.usage_records.len(), 1);
-        assert_eq!(a_batch.usage_records[0].cost_usd, 0.005);
     }
 }

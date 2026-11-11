@@ -13,9 +13,6 @@
 - OpenAI Codex (`codex`)
 - Google Antigravity (`agy`)
 - Google Gemini CLI (`gemini`)
-- Cline & Roo Code
-- Cursor
-- Aider (opt-in)
 
 ## Official Documentation & Guides
 - [Getting Started](https://gnomcode.vercel.app/docs/getting-started): Installation, system requirements, and initial setup.

@@ -734,13 +734,6 @@ async fn focus_session_handler(
         if gnomcode_platform::focus_agent_application(&target.agent, &target.surface) {
             return (true, "application");
         }
-        if matches!(target.agent.as_str(), "cline" | "roo") {
-            if let Some(path) = target.repo_root {
-                if gnomcode_platform::focus_project_in_editor(&path) {
-                    return (false, "project_requested");
-                }
-            }
-        }
         (false, "unavailable")
     })
     .await

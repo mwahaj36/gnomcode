@@ -29,8 +29,6 @@ body:
         - OpenAI Codex CLI
         - Google Antigravity
         - Gemini CLI
-        - Cline / Roo Code
-        - Cursor
         - General / Tray / Daemon
     validations:
       required: true
