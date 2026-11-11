@@ -467,7 +467,9 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 @media(hover:hover) and (pointer:fine){
  body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:width .16s ease}
  body.sp-native-console .sp-console-nav .rail-label,.sp-web-app .sp-console-nav button>span,.sp-web-app .web-download-link span{opacity:0!important}
- body.sp-native-console .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)),.sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)),.sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important;transition-delay:.3s}
+ /* Hover intent: a passing pointer must not cover content near the left edge. */
+ body.sp-native-console .sp-console-workspace>.sp-console-nav:has(:focus-visible),.sp-web-app .sp-console-workspace>.sp-console-nav:has(:focus-visible){transition-delay:0s}
  body.sp-native-console .sp-console-nav:is(:hover,:has(:focus-visible)) .rail-label,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) button>span,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) .web-download-link span{opacity:1!important}
  body.sp-native-console #navigation-toggle,.sp-web-app .sp-console-nav>button:first-of-type{display:none!important}
 }
