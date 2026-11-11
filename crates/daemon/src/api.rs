@@ -2165,18 +2165,25 @@ pub(crate) struct QuotaPoolView {
     #[serde(flatten)]
     snapshot: gnomcode_core::QuotaSnapshot,
     remaining_pct: Option<f64>,
+    /// The recorded window has reset; its old reading no longer describes capacity.
+    reset_passed: bool,
 }
 
 pub(crate) fn quota_views(snapshots: Vec<gnomcode_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
     snapshots
         .into_iter()
         .map(|snapshot| {
-            let remaining_pct = (snapshot.basis != gnomcode_core::TrustLevel::Unknown
+            let reset_passed = snapshot
+                .resets_at
+                .is_some_and(|reset| reset <= chrono::Utc::now());
+            let remaining_pct = (!reset_passed
+                && snapshot.basis != gnomcode_core::TrustLevel::Unknown
                 && snapshot.used_pct.is_finite())
             .then(|| (100.0 - snapshot.used_pct).clamp(0.0, 100.0));
             QuotaPoolView {
                 snapshot,
                 remaining_pct,
+                reset_passed,
             }
         })
         .collect()

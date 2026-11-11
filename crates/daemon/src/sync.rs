@@ -652,6 +652,7 @@ mod tests {
                 "plan",
                 "provider",
                 "remaining_pct",
+                "reset_passed",
                 "resets_at",
                 "used_pct",
                 "window"
