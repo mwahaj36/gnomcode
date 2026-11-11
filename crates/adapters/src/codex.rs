@@ -21,6 +21,8 @@ use std::collections::HashSet;
 pub struct CodexAdapter {
     seen_dedup_keys: HashSet<String>,
     raw_session_id: Option<String>,
+    /// Set once the file's own session header has fixed its identity.
+    identity_fixed: bool,
     parent_session_id: Option<String>,
     subagent_title: Option<String>,
     active_model: Option<String>,
@@ -72,6 +74,8 @@ impl SourceAdapter for CodexAdapter {
         let path_id = codex_session_id_from_path(&ctx.source_path);
         if self.raw_session_id.is_none() && !path_id.is_empty() && path_id != "unknown" {
             self.raw_session_id = Some(path_id.to_owned());
+            // Only a UUID in the rollout filename is authoritative over in-file headers.
+            self.identity_fixed = path_id.len() == 36 && path_id.as_bytes()[8] == b'-';
         }
 
         let mut line_offset = ctx.source_offset;
@@ -132,8 +136,13 @@ impl SourceAdapter for CodexAdapter {
                                 .unwrap_or("unknown")
                         }
                     });
+                // Forked subagent rollouts replay the parent's header; it must not take over.
+                if self.identity_fixed && self.raw_session_id.as_deref() != Some(raw_sid) {
+                    continue;
+                }
                 if raw_sid != "unknown" {
                     self.raw_session_id = Some(raw_sid.to_owned());
+                    self.identity_fixed = true;
                 }
 
                 let parent_sid = payload
@@ -423,7 +432,15 @@ impl SourceAdapter for CodexAdapter {
                 if line_type == "event_msg"
                     && payload.get("type").and_then(Value::as_str) == Some("token_count")
                 {
-                    let dedup_key = format!("{raw_sid}:{ordinal}");
+                    // Codex re-emits a turn's last_token_usage without advancing the cumulative
+                    // total; keying by that total counts each turn once, even across reads.
+                    let dedup_key = payload
+                        .get("info")
+                        .and_then(|info| info.get("total_token_usage"))
+                        .map_or_else(
+                            || format!("{raw_sid}:{ordinal}"),
+                            |total| format!("{raw_sid}:total:{total}"),
+                        );
 
                     if self.seen_dedup_keys.insert(dedup_key.clone()) {
                         if let Some(info) = payload.get("info").and_then(Value::as_object) {

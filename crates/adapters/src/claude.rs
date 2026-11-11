@@ -78,7 +78,21 @@ impl SourceAdapter for ClaudeAdapter {
                 .get("sessionId")
                 .and_then(Value::as_str)
                 .unwrap_or_else(|| fallback_id_from_path(&ctx.source_path));
-            let session_id = Session::compose_id(AgentId::ClaudeCode, raw_sid);
+            // Subagent transcripts repeat the parent's sessionId; their own identity is agentId.
+            let sidechain_agent = obj
+                .get("agentId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty() && obj.get("isSidechain") == Some(&Value::Bool(true)));
+            let session_id = match sidechain_agent {
+                Some(agent) => {
+                    if self.parent_session_id.is_none() {
+                        self.parent_session_id =
+                            Some(Session::compose_id(AgentId::ClaudeCode, raw_sid));
+                    }
+                    Session::compose_id(AgentId::ClaudeCode, &format!("agent-{agent}"))
+                }
+                None => Session::compose_id(AgentId::ClaudeCode, raw_sid),
+            };
 
             let cwd = obj
                 .get("cwd")
@@ -366,6 +380,7 @@ pub(crate) fn fallback_id_from_path(path: &str) -> &str {
     path.rsplit(['/', '\\'])
         .next()
         .and_then(|name| {
+            let name = name.strip_suffix(".zst").unwrap_or(name);
             name.strip_suffix(".jsonl")
                 .or_else(|| name.strip_suffix(".json"))
         })
