@@ -2060,6 +2060,23 @@ impl Database {
             Err(_) => return Ok(0),
         };
 
+        // Antigravity's own summaries are authoritative for subagent links; repair any drift.
+        if let Ok(mut links) = agy_conn
+            .prepare("SELECT conversation_id, parent_conversation_id FROM conversation_summaries")
+        {
+            let rows: Vec<(String, String)> = links
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .filter_map(Result::ok)
+                .collect();
+            for (conversation, parent) in rows {
+                let parent = (!parent.trim().is_empty()).then(|| format!("antigravity:{parent}"));
+                self.conn.execute(
+                    "UPDATE session SET parent_session_id = ?1 WHERE id = ?2 AND parent_session_id IS NOT ?1",
+                    params![parent, format!("antigravity:{conversation}")],
+                )?;
+            }
+        }
+
         let mut stmt = self.conn.prepare(
             r#"
             SELECT s.id, s.project_id

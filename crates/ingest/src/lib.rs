@@ -106,6 +106,7 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
                     .file_name()
                     .and_then(|s| s.to_str())
                     .is_some_and(|n| n.starts_with("rollout-"))
+                || is_archived_codex_rollout(path)
         }
         AgentId::Antigravity => {
             ext.eq_ignore_ascii_case("jsonl")
@@ -116,6 +117,27 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
         }
         AgentId::GeminiCli => ext.eq_ignore_ascii_case("json"),
     }
+}
+
+/// Newer Codex versions compress finished rollouts to `rollout-*.jsonl.zst`.
+fn is_archived_codex_rollout(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|n| n.starts_with("rollout-") && n.ends_with(".jsonl.zst"))
+}
+
+/// Upper bound for one decompressed archive; larger ones are skipped rather than exhausting memory.
+const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+
+fn decompress_archive(bytes: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    let decoder = ruzstd::decoding::StreamingDecoder::new(bytes).ok()?;
+    let mut out = Vec::new();
+    decoder
+        .take(MAX_ARCHIVE_BYTES + 1)
+        .read_to_end(&mut out)
+        .ok()?;
+    (out.len() as u64 <= MAX_ARCHIVE_BYTES).then_some(out)
 }
 
 fn complete_jsonl_prefix_len(bytes: &[u8]) -> usize {
@@ -158,7 +180,8 @@ fn ingest_files(
             }
         };
         let start_offset = checkpoint.as_ref().map_or(0, |c| c.last_read_offset);
-        let is_rewritten = file.agent == AgentId::GeminiCli;
+        let archived = is_archived_codex_rollout(&file.path);
+        let is_rewritten = file.agent == AgentId::GeminiCli || archived;
 
         let file_fingerprint = if is_rewritten {
             fs::metadata(&file.path).ok().and_then(|meta| {
@@ -183,10 +206,17 @@ fn ingest_files(
         } else {
             start_offset
         };
-        let Ok(read_result) = read_from_offset(&file.path, read_offset) else {
+        let Ok(mut read_result) = read_from_offset(&file.path, read_offset) else {
             repair_complete = false;
             continue;
         };
+        if archived {
+            let Some(bytes) = decompress_archive(&read_result.bytes) else {
+                tracing::warn!("skipping unreadable Codex archive");
+                continue;
+            };
+            read_result.bytes = bytes;
+        }
         if read_result.bytes.is_empty() && read_offset == read_result.file_size {
             continue;
         }
@@ -624,6 +654,33 @@ mod tests {
         }]);
         assert_eq!(files.len(), 1);
         assert!(files[0].path.ends_with("transcript.jsonl"));
+    }
+
+    #[test]
+    fn archived_codex_rollouts_are_discovered_and_decompressed() {
+        let name = "rollout-2026-10-06T18-57-03-01a11180-e7a8-7d12-9e69-9f6fadc2399b.jsonl.zst";
+        assert!(super::is_agent_log_file(
+            AgentId::Codex,
+            std::path::Path::new(name)
+        ));
+        assert_eq!(
+            gnomcode_adapters::codex::codex_session_id_from_path(name),
+            "01a11180-e7a8-7d12-9e69-9f6fadc2399b"
+        );
+        let plain = b"{\"type\":\"session_meta\"}
+"
+        .repeat(100);
+        let mut packed = Vec::new();
+        ruzstd::encoding::compress(
+            &plain[..],
+            &mut packed,
+            ruzstd::encoding::CompressionLevel::Fastest,
+        );
+        assert_eq!(
+            super::decompress_archive(&packed).as_deref(),
+            Some(&plain[..])
+        );
+        assert!(super::decompress_archive(b"not zstd").is_none());
     }
 
     #[test]
