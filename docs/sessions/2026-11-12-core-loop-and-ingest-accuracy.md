@@ -23,3 +23,8 @@ Fix the verified audit defects in the core loop and prove Claude Code, Codex and
 ## Verification
 - `cargo test --workspace`, `cargo clippy -D warnings`, web and desktop tests.
 - `scripts/verify-ingest.py` on a fresh ingest: Claude and Antigravity exact on every token class; Codex exact except one documented session (0.3%).
+
+## Addendum: API limits (ADR 0029)
+- `gnomcode limits enable|disable|status|check <claude|antigravity>`; daemon polls opted-in providers every 5 min.
+- Claude: OAuth usage endpoint with Claude Code's own token; never refreshed. On this machine the CLI token was expired (desktop-only sign-in), so a one-time `claude auth login` is needed.
+- Antigravity: language server `GetUserStatus` via its loopback descriptor; the `agy` CLI endpoint returned 401 without a token in PTY and non-PTY tests, so CodexBar's CLI path was not adopted.

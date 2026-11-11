@@ -9,6 +9,7 @@ pub mod pro;
 pub mod remote;
 mod remote_trust;
 pub mod sync;
+pub mod vendor_limits;
 
 use chrono::Utc;
 use gnomcode_ingest::ingest_all;
