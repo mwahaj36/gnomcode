@@ -428,3 +428,36 @@ pub fn parse_status_limits(bytes: &[u8]) -> Vec<QuotaSnapshot> {
     })
     .collect()
 }
+
+/// Converts Anthropic's OAuth usage response into exact account-wide quota rows.
+///
+/// Windows: `five_hour`, `seven_day` and per-model weeklies (`seven_day_opus`, `seven_day_sonnet`),
+/// each `{utilization: 0..=100, resets_at: RFC3339}`. Null or missing windows stay absent.
+#[must_use]
+pub fn parse_oauth_usage(value: &Value, observed_at: DateTime<Utc>) -> Vec<QuotaSnapshot> {
+    [
+        ("five_hour", "claude", QuotaWindow::FiveHour),
+        ("seven_day", "claude", QuotaWindow::Weekly),
+        ("seven_day_opus", "opus", QuotaWindow::Weekly),
+        ("seven_day_sonnet", "sonnet", QuotaWindow::Weekly),
+    ]
+    .into_iter()
+    .filter_map(|(key, limit_id, window)| {
+        let limit = value.get(key)?;
+        Some(QuotaSnapshot {
+            provider: AgentId::ClaudeCode.as_str().to_owned(),
+            limit_id: limit_id.to_owned(),
+            window,
+            used_pct: limit.get("utilization")?.as_f64()?.clamp(0.0, 100.0),
+            resets_at: limit
+                .get("resets_at")
+                .and_then(Value::as_str)
+                .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+                .map(|at| at.with_timezone(&Utc)),
+            plan: None,
+            basis: TrustLevel::Exact,
+            observed_at,
+        })
+    })
+    .collect()
+}

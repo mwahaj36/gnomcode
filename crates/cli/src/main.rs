@@ -103,6 +103,13 @@ enum Commands {
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
+    /// Opt in or out of exact limits read from a provider API with the agent's own sign-in.
+    Limits {
+        /// `enable`, `disable`, `status` or `check` (fetch once and print).
+        action: String,
+        /// Provider (`claude`).
+        provider: String,
+    },
     /// Internal Claude Code status line: records account limits and prints them.
     #[command(hide = true)]
     Statusline,
@@ -209,6 +216,7 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
+        Commands::Limits { action, provider } => cmd_limits(&action, &provider).await,
         Commands::Statusline => {
             cmd_statusline();
             Ok(())
@@ -375,6 +383,55 @@ fn cmd_hook() -> Result<()> {
             "gnomcode guardrail: session threshold reached. Remove or raise the rule to continue."
         );
         std::process::exit(2);
+    }
+    Ok(())
+}
+
+async fn cmd_limits(action: &str, provider: &str) -> Result<()> {
+    use gnomcode_daemon::vendor_limits;
+    anyhow::ensure!(
+        vendor_limits::PROVIDERS.contains(&provider),
+        "supported providers: {}",
+        vendor_limits::PROVIDERS.join(", ")
+    );
+    match action {
+        "enable" | "disable" => {
+            vendor_limits::set_enabled(provider, action == "enable")?;
+            println!(
+                "{provider} API limits {action}d. When enabled, Gnomcode reads {provider}'s local sign-in only to request your limits from the provider every 5 minutes; the token is never stored, logged or refreshed."
+            );
+        }
+        "status" => println!(
+            "{provider} API limits {}",
+            if vendor_limits::enabled(provider) {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        ),
+        "check" => match vendor_limits::check(provider).await {
+            Ok(quota) if quota.is_empty() => {
+                println!("{provider}: signed in, but no limit windows reported")
+            }
+            Ok(quota) => {
+                for pool in quota {
+                    println!(
+                        "{provider} {} {:?}: {:.0}% left{}",
+                        pool.limit_id,
+                        pool.window,
+                        100.0 - pool.used_pct,
+                        pool.resets_at
+                            .map(|at| format!(
+                                ", resets {}",
+                                at.with_timezone(&chrono::Local).format("%a %H:%M")
+                            ))
+                            .unwrap_or_default()
+                    );
+                }
+            }
+            Err(reason) => println!("{provider}: {reason}"),
+        },
+        _ => anyhow::bail!("action must be enable, disable, status or check"),
     }
     Ok(())
 }
@@ -816,6 +873,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
     let _automation_handle = orchestrator.spawn_automation();
+    let _vendor_limits_handle = gnomcode_daemon::vendor_limits::spawn(orchestrator.db());
     let remote = Arc::new(gnomcode_daemon::remote::RemoteManager::new());
     let restore_remote = remote.clone();
     let restore_db = orchestrator.db();
