@@ -19,8 +19,13 @@ pub fn background_agent_command(name: &str) -> std::process::Command {
 /// Resolves official CLI executables, including Windows npm packages, without a shell.
 #[must_use]
 pub fn agent_command(name: &str) -> (String, Vec<String>) {
-    if name == "agy" && !on_path(name) {
-        if let Some(binary) = antigravity_cli() {
+    if !on_path(name) {
+        let installed = match name {
+            "agy" => antigravity_cli(),
+            "claude" => claude_cli(),
+            _ => None,
+        };
+        if let Some(binary) = installed {
             return (binary.to_string_lossy().into_owned(), Vec::new());
         }
     }
@@ -76,6 +81,7 @@ fn npm_entry_point(prefix: &Path, package: &str, name: &str) -> Option<std::path
 pub fn executable_available(name: &str) -> bool {
     on_path(name)
         || (name == "agy" && antigravity_cli().is_some())
+        || (name == "claude" && claude_cli().is_some())
         || (name == "antigravity" && (antigravity_cli().is_some() || antigravity_ide_available()))
 }
 
@@ -151,6 +157,39 @@ fn antigravity_cli() -> Option<std::path::PathBuf> {
         .join("agy");
     let directory = binary.parent()?;
     (binary.is_file() && executable_in(directory, "agy")).then_some(binary)
+}
+
+/// Finds Claude Code outside PATH: the native installer, then the copy bundled with the Claude desktop app.
+fn claude_cli() -> Option<std::path::PathBuf> {
+    let file = if cfg!(windows) {
+        "claude.exe"
+    } else {
+        "claude"
+    };
+    let native = crate::user_home_dir().join(".local").join("bin").join(file);
+    if native
+        .parent()
+        .is_some_and(|dir| executable_in(dir, "claude"))
+    {
+        return Some(native);
+    }
+    // Windows desktop app layout: Claude-Data/<install>/claude-code/<version>/<build>/claude.exe.
+    let root = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("Claude-Data");
+    let children = |dir: &Path| {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>()
+    };
+    children(&root)
+        .iter()
+        .flat_map(|install| children(&install.join("claude-code")))
+        .flat_map(|version| children(&version))
+        .map(|build| build.join(file))
+        .filter(|binary| binary.is_file())
+        .max_by_key(|binary| binary.metadata().and_then(|m| m.modified()).ok())
 }
 
 fn executable_in(directory: &Path, name: &str) -> bool {
@@ -239,6 +278,52 @@ mod tests {
             ])
             .env(CHILD, root.path())
             .env("LOCALAPPDATA", root.path())
+            .env("HOME", root.path())
+            .env("PATH", root.path())
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
+    }
+
+    #[test]
+    fn claude_bundled_with_desktop_app_is_found_without_path_entry() {
+        const CHILD: &str = "GNOMCODE_TEST_CLAUDE_BUNDLE";
+        if let Some(root) = std::env::var_os(CHILD) {
+            let expected = std::path::PathBuf::from(root)
+                .join("Claude-Data")
+                .join("claude_x")
+                .join("claude-code")
+                .join("2.1.321")
+                .join("build")
+                .join("claude.exe");
+            assert!(executable_available("claude"));
+            assert_eq!(
+                agent_command("claude"),
+                (expected.to_string_lossy().into_owned(), vec![])
+            );
+            return;
+        }
+        if !cfg!(windows) {
+            return;
+        }
+        let root = tempfile::tempdir().expect("root");
+        let build = root
+            .path()
+            .join("Claude-Data")
+            .join("claude_x")
+            .join("claude-code")
+            .join("2.1.321")
+            .join("build");
+        std::fs::create_dir_all(&build).expect("build dir");
+        std::fs::write(build.join("claude.exe"), "fixture").expect("binary");
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "executables::tests::claude_bundled_with_desktop_app_is_found_without_path_entry",
+            ])
+            .env(CHILD, root.path())
+            .env("LOCALAPPDATA", root.path())
+            .env("USERPROFILE", root.path())
             .env("HOME", root.path())
             .env("PATH", root.path())
             .status()
