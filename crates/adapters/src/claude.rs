@@ -93,6 +93,7 @@ impl SourceAdapter for ClaudeAdapter {
                 {
                     Surface::Ide
                 }
+                Some(ep) if ep.contains("desktop") => Surface::DesktopApp,
                 _ => Surface::Cli,
             };
 
