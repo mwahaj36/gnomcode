@@ -7,8 +7,8 @@
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
 use gnomcode_core::{
-    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
-    Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
+    Session, SessionState, Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::{redact_chat_content, redact_summary},
 };
@@ -385,4 +385,46 @@ pub(crate) fn fallback_id_from_path(path: &str) -> &str {
                 .or_else(|| name.strip_suffix(".json"))
         })
         .unwrap_or("unknown")
+}
+
+/// Converts the limits file written by `gnomcode statusline` into exact account-wide quota rows.
+///
+/// Claude reports `rate_limits.{five_hour,seven_day}.{used_percentage,resets_at}` (epoch seconds)
+/// for Pro/Max plans; absent windows stay absent rather than becoming zero.
+#[must_use]
+pub fn parse_status_limits(bytes: &[u8]) -> Vec<QuotaSnapshot> {
+    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+        return Vec::new();
+    };
+    let Some(observed_at) = value
+        .get("observed_at")
+        .and_then(Value::as_str)
+        .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.with_timezone(&Utc))
+    else {
+        return Vec::new();
+    };
+    [
+        ("five_hour", QuotaWindow::FiveHour),
+        ("seven_day", QuotaWindow::Weekly),
+    ]
+    .into_iter()
+    .filter_map(|(key, window)| {
+        let limit = value.get("rate_limits")?.get(key)?;
+        let used_pct = limit.get("used_percentage")?.as_f64()?;
+        Some(QuotaSnapshot {
+            provider: AgentId::ClaudeCode.as_str().to_owned(),
+            limit_id: "claude".to_owned(),
+            window,
+            used_pct: used_pct.clamp(0.0, 100.0),
+            resets_at: limit
+                .get("resets_at")
+                .and_then(Value::as_i64)
+                .and_then(|at| DateTime::from_timestamp(at, 0)),
+            plan: None,
+            basis: TrustLevel::Exact,
+            observed_at,
+        })
+    })
+    .collect()
 }
