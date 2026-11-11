@@ -196,6 +196,87 @@ mod tests {
         );
     }
     #[test]
+    fn claude_subagent_transcript_is_a_linked_child_session() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let log = br#"{"type":"user","isSidechain":true,"agentId":"a7fe2469649710219","sessionId":"f9e0d79c-2390-4145-b072-d45b7266d56f","timestamp":"2026-11-11T22:10:13Z","cwd":"/w","message":{"role":"user","content":"Read a file"}}
+{"type":"assistant","isSidechain":true,"agentId":"a7fe2469649710219","sessionId":"f9e0d79c-2390-4145-b072-d45b7266d56f","timestamp":"2026-11-11T22:10:15Z","cwd":"/w","requestId":"r1","message":{"id":"m1","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"stable"}],"usage":{"input_tokens":10,"output_tokens":2}}}
+"#;
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), log);
+        let child = "claude-code:agent-a7fe2469649710219";
+        assert!(batch.sessions.iter().all(|s| s.id == child));
+        assert!(batch.usage_records.iter().all(|u| u.session_id == child));
+        assert_eq!(
+            batch.sessions[0].parent_session_id.as_deref(),
+            Some("claude-code:f9e0d79c-2390-4145-b072-d45b7266d56f")
+        );
+    }
+
+    #[test]
+    fn antigravity_reply_from_created_subagent_does_not_make_parent_a_child() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let parent_ctx = FileCtx {
+            source_path: "/h/.gemini/antigravity/brain/8fce098d-c9f3-405c-af14-d078f0b40115/.system_generated/logs/transcript.jsonl".into(),
+            ..FileCtx::default()
+        };
+        let parent = br#"{"step_index":0,"type":"USER_INPUT","source":"USER","created_at":"2026-10-25T21:30:00Z","content":"Design a logo"}
+{"step_index":5,"type":"SYSTEM_MESSAGE","source":"SYSTEM","created_at":"2026-10-25T21:38:30Z","content":"[Message] sender=8650dd28-1fdb-4a8d-9756-1aef8d290e08 priority=HIGH content=done"}
+"#;
+        let batch = AntigravityAdapter::new().parse(&parent_ctx, parent);
+        assert!(batch.sessions.iter().all(|s| s.parent_session_id.is_none()));
+        let child_ctx = FileCtx {
+            source_path: "/h/.gemini/antigravity/brain/8650dd28-1fdb-4a8d-9756-1aef8d290e08/.system_generated/logs/transcript.jsonl".into(),
+            ..FileCtx::default()
+        };
+        let child = br#"{"step_index":0,"type":"SYSTEM_MESSAGE","source":"SYSTEM","created_at":"2026-10-25T21:38:12Z","content":"[Message] sender=8fce098d-c9f3-405c-af14-d078f0b40115 priority=HIGH content=task"}
+"#;
+        let batch = AntigravityAdapter::new().parse(&child_ctx, child);
+        assert_eq!(
+            batch.sessions[0].parent_session_id.as_deref(),
+            Some("antigravity:8fce098d-c9f3-405c-af14-d078f0b40115")
+        );
+    }
+
+    #[test]
+    fn codex_forked_rollout_keeps_its_own_identity() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let log = br#"{"type":"session_meta","ordinal":0,"timestamp":"2026-11-09T19:56:59Z","payload":{"id":"01a1c1e2-a983-7782-a159-fb9a11f1cb56","forked_from_id":"01a1c1df-7203-7a32-97f4-1de4edf53491","parent_thread_id":"01a1c1df-7203-7a32-97f4-1de4edf53491","cwd":"/w"}}
+{"type":"session_meta","ordinal":1,"timestamp":"2026-11-09T19:56:59Z","payload":{"id":"01a1c1df-7203-7a32-97f4-1de4edf53491","cwd":"/w"}}
+{"type":"event_msg","ordinal":2,"timestamp":"2026-11-09T19:57:19Z","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":5},"last_token_usage":{"output_tokens":5}}}}
+"#;
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), log);
+        let child = "codex:01a1c1e2-a983-7782-a159-fb9a11f1cb56";
+        assert!(batch.usage_records.iter().all(|u| u.session_id == child));
+        assert!(batch.sessions.iter().all(|s| s.id == child));
+        assert_eq!(
+            batch.sessions[0].parent_session_id.as_deref(),
+            Some("codex:01a1c1df-7203-7a32-97f4-1de4edf53491")
+        );
+    }
+
+    #[test]
+    fn codex_reemitted_token_count_is_counted_once() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let event = |ordinal: u32, total: u32, last: u32| {
+            format!(
+                r#"{{"type":"event_msg","ordinal":{ordinal},"timestamp":"2026-11-11T10:00:0{ordinal}Z","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":{total},"output_tokens":{total}}},"last_token_usage":{{"input_tokens":{last},"output_tokens":{last}}}}}}}}}"#
+            )
+        };
+        let log = format!(
+            "{{\"type\":\"session_meta\",\"timestamp\":\"2026-11-11T10:00:00Z\",\"payload\":{{\"id\":\"01a11180-e7a8-7d12-9e69-9f6fadc2399b\",\"cwd\":\"/w\"}}}}
+{}
+{}
+{}
+",
+            event(1, 10, 10),
+            event(2, 10, 10),
+            event(3, 25, 15)
+        );
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), log.as_bytes());
+        let output: u64 = batch.usage_records.iter().map(|u| u.output_tokens).sum();
+        assert_eq!(output, 25);
+    }
+
+    #[test]
     fn codex_injected_context_is_not_a_user_turn() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
         let batch = CodexAdapter::new().parse(

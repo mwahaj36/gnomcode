@@ -83,7 +83,10 @@ impl SourceAdapter for AntigravityAdapter {
             let step_type = obj.get("type").and_then(Value::as_str).unwrap_or("");
             let source = obj.get("source").and_then(Value::as_str).unwrap_or("");
             if let Some(raw_content) = obj.get("content").and_then(Value::as_str) {
+                // Only a child's opening system message names its parent; later sender=
+                // messages in a parent are replies from the subagents it created.
                 if self.parent_session_id.is_none()
+                    && step_idx == 0
                     && (source == "SYSTEM" || step_type == "SYSTEM_MESSAGE")
                 {
                     if let Some(pos) = raw_content.find("sender=") {

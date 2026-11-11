@@ -191,11 +191,12 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
         .map_or_else(|| home.join(".claude"), PathBuf::from)
         .join("projects");
 
-    let codex_root = env::var("CODEX_HOME")
+    let codex_home = env::var("CODEX_HOME")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map_or_else(|| home.join(".codex"), PathBuf::from)
-        .join("sessions");
+        .map_or_else(|| home.join(".codex"), PathBuf::from);
+    let codex_root = codex_home.join("sessions");
+    let codex_archive_root = codex_home.join("archived_sessions");
 
     let gemini_base = env::var("GEMINI_HOME")
         .ok()
@@ -203,6 +204,10 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
         .map_or_else(|| home.join(".gemini"), PathBuf::from);
 
     let antigravity_root = gemini_base.join("antigravity").join("brain");
+    // Older Antigravity IDE builds kept history in a separate home.
+    let antigravity_ide_root = gemini_base
+        .join(obfstr::obfstr!("antigravity-ide"))
+        .join("brain");
     let antigravity_cli_root = gemini_base
         .join(obfstr::obfstr!("antigravity-cli"))
         .join("brain");
@@ -223,6 +228,16 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             agent: AgentId::Antigravity,
             exists: antigravity_root.exists(),
             path: antigravity_root,
+        },
+        AgentRoot {
+            agent: AgentId::Codex,
+            exists: codex_archive_root.exists(),
+            path: codex_archive_root,
+        },
+        AgentRoot {
+            agent: AgentId::Antigravity,
+            exists: antigravity_ide_root.exists(),
+            path: antigravity_ide_root,
         },
         AgentRoot {
             agent: AgentId::Antigravity,
