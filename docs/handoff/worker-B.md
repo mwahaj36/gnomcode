@@ -11,8 +11,8 @@
 | 1 | Section C | Quick actions (canned prompts, never raw argv) | PR open | [#188](https://github.com/mwahaj36/spawnt/pull/188) | Optional Worker A backend persistence |
 | 2 | Section C | Changes view (read-only diff on console and phone) | PR open | [#190](https://github.com/mwahaj36/spawnt/pull/190) | Optional Worker A Remote `changes` handler |
 | 3 | Section C | File viewer on phone and console (read-only, workspace only) | PR open | [#191](https://github.com/mwahaj36/spawnt/pull/191) | Optional Worker A `C file listing and reading` |
-| 4 | Section C | Artifacts alongside changes | in progress | - | Optional Worker A `C last-turn artifacts` |
-| 5 | Section C | Phone attachments UI | not started | - | - |
+| 4 | Section C | Artifacts alongside changes | PR open | [#192](https://github.com/mwahaj36/spawnt/pull/192) | Optional Worker A `C last-turn artifacts` |
+| 5 | Section C | Phone attachments UI | in progress | - | Optional Worker A `C attachments` |
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | not started | - | - |
 | 7 | B / G5 | G5 interrupt button on phone and console chat | not started | - | Worker A G5 PR |
 | 8 | Section E1 | Local console built from web/ React (Home) | not started | - | - |
@@ -67,3 +67,17 @@
 - **Deviations:** Requests `repo_files` / `repo_file` on user open only and intercepts `Unsupported remote command` in-sheet; no Rust edits.
 - **Open risks/questions:** Waiting on Worker A's `C file listing and reading` PR + ADR for daemon-side directory listing and Remote E2EE parity.
 - **Dependencies:** Local reading works against existing `GET /api/v1/repos/file`; directory listing and Remote E2EE depend on Worker A `C file listing and reading` PR.
+
+### 4. Section C — Artifacts alongside changes (HTML sandboxed, Markdown, images)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/192 (`feat/artifacts-view-ui`, commit `4b371d2`)
+- **What changed:**
+  - `web/lib/console-presentation.js`, `web/lib/console-presentation.d.ts`: exported `classifyArtifactKind`, `isSafeArtifactImageSrc`, `renderArtifactsList`, and `renderArtifactPreview` (HTML inside strict `<iframe sandbox="" referrerpolicy="no-referrer" srcdoc="...">`, Markdown via sanitized `MarkdownIt`, images validated via data-URI/local-API allowlist).
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: added `#chat-artifacts-btn` and `#chat-artifacts-panel` reading `GET /api/v1/sessions/{id}/artifacts` + workspace change count from `GET /api/v1/repos/diff` (with fallback to changed markdown/HTML files via `/api/v1/repos/file`).
+  - `web/components/RemoteCompanion.tsx`: added `Artifacts` button in `.sp-remote-tools` and `.sp-artifacts-sheet` requesting `{ type: 'artifacts', session_id }` on demand with calm `Unsupported remote command` handling and React `<iframe sandbox="" referrerPolicy="no-referrer" srcDoc={...} />`.
+  - `web/app/gnomcode-console.css`: appended `var(--sp-*)` token styles, responsive grid/stack at 390px and 1440px, 44px mobile targets, hidden secondary tools on `max-height: 450px`.
+  - `web/test/artifacts-view.test.mjs`, `docs/SPEC.md` (append §11), `docs/ROADMAP_1.0.md` (append status), `docs/sessions/2026-11-13-artifacts-view-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `crates/daemon/src/console.html:87`, `remote.rs:625-920`, and `RemoteCompanion.tsx:586` (no artifact inspection panel/sheet). Tests: `web/test/artifacts-view.test.mjs` (3/3 pass), `web/` `npm test` (102/102 pass). Gate: `CARGO_INCREMENTAL=0` `fmt`/`clippy`/`test` pass, `check-local-console.mjs` pass, `web/` `npm ci` + `npm test` + `npm run typecheck` + `npm run build` pass, encoding/LF/mojibake check pass.
+- **Verification:** Visually verified live in `chrome-headless-shell.exe` against mocked endpoints at `390x844` and `1440x900` (dark & light): `overflowX=false`, `artifactsVisible=true`, `itemCount=3`, `hasSandboxedIframe=true`, `changesText="2 workspace changes"`. Not verified live over Remote E2EE relay (`artifacts` unimplemented in daemon).
+- **Deviations:** Requests `artifacts` on demand only and intercepts `Unsupported remote command` in-sheet; no Rust edits.
+- **Open risks/questions:** Waiting on Worker A `C last-turn artifacts` PR + ADR for daemon-side artifact tracking and Remote E2EE parity.
+- **Dependencies:** Full turn-scoped artifact tracking and Remote E2EE depend on Worker A `C last-turn artifacts` PR.
