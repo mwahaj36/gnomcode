@@ -91,6 +91,14 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
                     "gemini-cli" => gnomcode_core::AgentId::GeminiCli,
                     _ => return Err(gnomcode_store::Error::Migration("Unsupported agent".into())),
                 };
+                // Never guess a folder: without the session's own, there is nothing safe to resume in.
+                let Some(cwd) = target
+                    .repo_root
+                    .clone()
+                    .filter(|cwd| !cwd.trim().is_empty())
+                else {
+                    return Ok(false);
+                };
                 let quotas = db.get_latest_quota_snapshots()?;
                 let now = chrono::Utc::now();
                 let limited: Vec<_> = quotas
@@ -115,7 +123,7 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
                 db.arm_resume_queue(&gnomcode_core::rules::ResumeQueueEntry {
                     session_id: id,
                     agent,
-                    cwd: target.repo_root.unwrap_or_default(),
+                    cwd,
                     resume_prompt: "continue".into(),
                     max_runs: 1,
                     runs_completed: 0,

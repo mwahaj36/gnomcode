@@ -182,7 +182,18 @@ pub fn resolve_project(project: &Project) -> Project {
 }
 
 /// Resolves the projects of a freshly parsed batch and points its sessions at the resolved ids.
-fn resolve_batch_projects(batch: &mut gnomcode_adapters::ParsedBatch) {
+///
+/// Returns each session's own folder (before resolution; none for Unassigned), so resume can start
+/// the agent where the session ran even when its project merges several folders.
+fn resolve_batch_projects(batch: &mut gnomcode_adapters::ParsedBatch) -> Vec<(String, String)> {
+    let cwds = batch
+        .sessions
+        .iter()
+        .filter_map(|session| {
+            let project = batch.projects.iter().find(|p| p.id == session.project_id)?;
+            (!project.is_unassigned()).then(|| (session.id.clone(), project.repo_root.clone()))
+        })
+        .collect();
     for project in &mut batch.projects {
         let resolved = resolve_project(project);
         if resolved.id == project.id {
@@ -197,6 +208,15 @@ fn resolve_batch_projects(batch: &mut gnomcode_adapters::ParsedBatch) {
             session.project_id.clone_from(&resolved.id);
         }
         *project = resolved;
+    }
+    cwds
+}
+
+fn record_cwds(db: &Database, cwds: &[(String, String)]) {
+    for (session, cwd) in cwds {
+        if let Err(error) = db.record_session_cwd(session, cwd) {
+            tracing::warn!("session folder could not be recorded: {error}");
+        }
     }
 }
 
@@ -221,6 +241,10 @@ pub fn reproject_all(db: &mut Database) -> Result<usize, Error> {
             || target.name != project.name
             || target.repo_root != project.repo_root
         {
+            if target.id != project.id && !target.is_unassigned() {
+                // Before the merge a stored project is one folder: each session's own.
+                db.backfill_session_cwd(&project.id, &project.repo_root)?;
+            }
             db.reassign_project(&project.id, &target)?;
             changed += 1;
         }
@@ -398,10 +422,11 @@ fn ingest_files(
             continue;
         }
         let mut batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
-        resolve_batch_projects(&mut batch);
+        let cwds = resolve_batch_projects(&mut batch);
         if repair_chat_format {
             db.repair_chat_contents(&batch.chat_events)?;
             db.repair_session_metadata(&batch.projects, &batch.sessions)?;
+            record_cwds(db, &cwds);
             continue;
         }
         if is_rewritten
@@ -433,6 +458,8 @@ fn ingest_files(
             &batch.chat_events,
         ) {
             tracing::warn!("failed to commit batch for {path_str}: {e}");
+        } else {
+            record_cwds(db, &cwds);
         }
         import_native_titles(db, file.agent, &read_result.bytes[..parsed_len])?;
     }

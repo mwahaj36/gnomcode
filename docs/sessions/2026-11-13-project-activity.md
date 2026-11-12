@@ -27,7 +27,7 @@ Real data after the change (temp copy, `GNOMCODE_HOME`): 131 project rows became
 ## Problems and decisions
 
 - The user guessed truncated prefixes; the data says otherwise (real scratch folders). They now share one `Codex chats` row instead of being hidden, so spend is not lost.
-- Resume uses the project's last observed folder, so a session resumed from a merged project (repository, Codex chats, temporary) uses that folder, not necessarily its own subfolder. Recorded in SPEC section 3.6.
+- Review blocker: resume must not use a merged project's last observed folder. Sessions now record their own folder (`session.cwd`, additive column); ingest records it before resolution, and legacy rows are backfilled from their old one-folder project just before it merges. `get_session_focus_target` returns the session folder, else the project root for repository projects only; Codex chats, Temporary and Unassigned have no fallback and resume/launch is refused with a clear message. Recorded in SPEC section 3.6.
 - A remote-keyed project whose folder is offline can be renamed to the remote's name and back when the drive returns; cosmetic.
 - Sibling worktree folders outside the repository (`fleethud-wt/phase4`) cannot be resolved without the repository and stay separate.
 - No agent logos: the monochrome marks exist only on the marketing site and the local console cannot serve them; agent names are text.

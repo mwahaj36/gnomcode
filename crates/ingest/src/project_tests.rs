@@ -9,6 +9,20 @@ use std::collections::BTreeMap;
 /// Stores `(stored key, folder)` projects the way earlier versions did, one session each, then
 /// recomputes them and returns project name -> session count.
 fn recompute(legacy: &[(&str, &str)]) -> BTreeMap<String, usize> {
+    let db = recomputed_db(legacy);
+    let (rows, total) = db
+        .list_sessions_filtered(None, None, None, 0, 100)
+        .expect("sessions");
+    assert_eq!(total, legacy.len(), "no session is lost");
+    let mut counts = BTreeMap::new();
+    for row in rows {
+        *counts.entry(row.project_name).or_default() += 1;
+    }
+    counts
+}
+
+/// Session `codex:s{i}` belongs to `legacy[i]`.
+fn recomputed_db(legacy: &[(&str, &str)]) -> Database {
     let mut db = Database::open_in_memory().expect("db");
     let now = Utc::now();
     let projects: Vec<Project> = legacy
@@ -48,15 +62,96 @@ fn recompute(legacy: &[(&str, &str)]) -> BTreeMap<String, usize> {
     db.commit_batch(&projects, &sessions, &[], &[], &[], &checkpoint)
         .expect("legacy rows");
     reproject_all(&mut db).expect("recompute");
-    let (rows, total) = db
-        .list_sessions_filtered(None, None, None, 0, 100)
-        .expect("sessions");
-    assert_eq!(total, legacy.len(), "no session is lost");
-    let mut counts = BTreeMap::new();
-    for row in rows {
-        *counts.entry(row.project_name).or_default() += 1;
+    db
+}
+
+fn resume_folder(db: &Database, index: usize) -> Option<String> {
+    db.get_session_focus_target(&format!("codex:s{index}"))
+        .expect("target")
+        .expect("session")
+        .repo_root
+}
+
+#[test]
+fn resume_uses_each_sessions_own_folder_never_the_merged_projects_last_one() {
+    let bas = "C:\\Users\\W\\Documents\\Codex\\2026-10-21\\bas";
+    let co = "C:\\Users\\W\\Documents\\Codex\\2026-10-21\\co";
+    let temp = "C:/Users/W/AppData/Local/Temp/audit";
+    let db = recomputed_db(&[
+        ("c:/u/codex/2026-10-21/bas", bas),
+        ("c:/u/codex/2026-10-21/co", co),
+        ("c:/u/appdata/local/temp/audit", temp),
+        ("c:", "C:/"),
+    ]);
+    assert_eq!(resume_folder(&db, 0).as_deref(), Some(bas));
+    assert_eq!(resume_folder(&db, 1).as_deref(), Some(co));
+    assert_eq!(resume_folder(&db, 2).as_deref(), Some(temp));
+    assert_eq!(
+        resume_folder(&db, 3),
+        None,
+        "unassigned sessions have no folder to resume in"
+    );
+}
+
+#[test]
+fn sessions_in_a_repository_keep_their_subfolder_and_fall_back_to_the_repository_root() {
+    let base = tempfile::Builder::new()
+        .prefix("repo")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("repo dir");
+    let root = base.path().join("app");
+    std::fs::create_dir_all(root.join(".git")).expect("git dir");
+    std::fs::create_dir_all(root.join("crates").join("daemon")).expect("subfolder");
+    let root = root.to_string_lossy().into_owned();
+    let sub = format!(
+        "{root}{}crates{}daemon",
+        std::path::MAIN_SEPARATOR,
+        std::path::MAIN_SEPARATOR
+    );
+    let key = |text: &str| text.replace('\\', "/").to_lowercase();
+    let db = recomputed_db(&[(&key(&root), &root), (&key(&sub), &sub)]);
+    assert_eq!(resume_folder(&db, 1).as_deref(), Some(sub.as_str()));
+    assert_eq!(resume_folder(&db, 0).as_deref(), Some(root.as_str()));
+}
+
+#[test]
+fn new_batches_record_the_sessions_own_folder_even_when_the_project_merges_folders() {
+    use super::{record_cwds, resolve_batch_projects};
+    use gnomcode_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+    let mut db = Database::open_in_memory().expect("db");
+    let folders = [
+        "C:\\Users\\W\\Documents\\Codex\\2026-10-21\\bas",
+        "C:\\Users\\W\\Documents\\Codex\\2026-11-09\\cle",
+    ];
+    for (index, folder) in folders.iter().enumerate() {
+        let meta = serde_json::json!({"type":"session_meta","timestamp":"2026-11-02T00:00:00Z","payload":{"id":format!("chat{index}"),"cwd":folder}});
+        let log = format!("{meta}\n");
+        let mut batch = CodexAdapter::new().parse(&FileCtx::default(), log.as_bytes());
+        let cwds = resolve_batch_projects(&mut batch);
+        let checkpoint = SourceCheckpoint {
+            file_path: format!("chat{index}"),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch(&batch.projects, &batch.sessions, &[], &[], &[], &checkpoint)
+            .expect("commit");
+        record_cwds(&db, &cwds);
     }
-    counts
+    assert_eq!(
+        db.list_projects().expect("projects").len(),
+        1,
+        "one Codex chats project"
+    );
+    for (index, folder) in folders.iter().enumerate() {
+        let own = db
+            .get_session_focus_target(&format!("codex:chat{index}"))
+            .expect("target")
+            .expect("session")
+            .repo_root;
+        assert_eq!(own.as_deref(), Some(*folder));
+    }
 }
 
 #[test]

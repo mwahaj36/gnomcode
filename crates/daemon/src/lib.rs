@@ -61,7 +61,9 @@ pub enum HandoffError {
     )]
     NotReady,
     /// The source session or its repository is unavailable.
-    #[error("session or repository not found")]
+    #[error(
+        "session not found, or it has no recorded folder to continue in (Codex chats, temporary and unassigned sessions cannot be resumed from here)"
+    )]
     MissingSession,
     /// The session store could not be read.
     #[error("store error: {0}")]

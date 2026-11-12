@@ -812,6 +812,16 @@ impl Database {
             "#,
         )?;
 
+        // The folder a session itself ran in; projects can merge folders, so it is stored per session.
+        if !self
+            .conn
+            .prepare("SELECT 1 FROM pragma_table_info('session') WHERE name = 'cwd'")?
+            .exists([])?
+        {
+            self.conn
+                .execute("ALTER TABLE session ADD COLUMN cwd TEXT", [])?;
+        }
+
         let has_v5: bool = self
             .conn
             .query_row(
@@ -2181,6 +2191,32 @@ impl Database {
         rows.collect::<Result<_, _>>().map_err(Error::from)
     }
 
+    /// Records the folder a session itself ran in. Resume and launch use this, never a merged
+    /// project's last observed folder.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the update fails.
+    pub fn record_session_cwd(&self, session_id: &str, cwd: &str) -> Result<(), Error> {
+        self.conn.execute(
+            "UPDATE session SET cwd = ?2 WHERE id = ?1 AND cwd IS NOT ?2",
+            params![session_id, cwd],
+        )?;
+        Ok(())
+    }
+
+    /// Gives sessions of `project_id` that have no recorded folder the project's folder. Only valid
+    /// before the project is merged: an unmerged project is one folder, so it is each session's own.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the update fails.
+    pub fn backfill_session_cwd(&self, project_id: &str, cwd: &str) -> Result<(), Error> {
+        self.conn.execute(
+            "UPDATE session SET cwd = ?2 WHERE project_id = ?1 AND cwd IS NULL",
+            params![project_id, cwd],
+        )?;
+        Ok(())
+    }
+
     /// Moves every session of project `old_id` to `project`, merging into an existing row with
     /// the same canonical key. Only derived project fields change; sessions, usage and chat are kept.
     ///
@@ -3297,7 +3333,9 @@ impl Database {
     ) -> Result<Option<SessionFocusTarget>, Error> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT s.pid, p.repo_root, s.agent, s.surface
+            SELECT s.pid,
+                COALESCE(s.cwd, CASE WHEN p.canonical_key = '/unknown' OR p.canonical_key LIKE 'scratch/%' THEN NULL ELSE p.repo_root END),
+                s.agent, s.surface
             FROM session s
             LEFT JOIN project p ON s.project_id = p.id
             WHERE s.id = ?1
@@ -4808,5 +4846,52 @@ mod tests {
         db.reassign_project(&renamed.id, &renamed)
             .expect("same key");
         assert_eq!(db.list_projects().expect("projects").len(), 1);
+    }
+
+    #[test]
+    fn resume_folder_is_the_sessions_own_with_a_root_fallback_only_for_repositories() {
+        let db = heatmap_db(&["2026-11-10T10:00:00Z"]);
+        let add = |id: &str, project: &Project, cwd: Option<&str>| {
+            db.conn
+                .execute(
+                    "INSERT OR IGNORE INTO project(id,canonical_key,repo_root,name) VALUES (?1,?2,?3,?4)",
+                    rusqlite::params![project.id, project.canonical_key, project.repo_root, project.name],
+                )
+                .expect("project");
+            db.conn
+                .execute(
+                    "INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at,cwd) VALUES (?1,'codex','cli',?2,'idle','2026-11-11T00:00:00Z','2026-11-11T00:00:00Z',?3)",
+                    rusqlite::params![id, project.id, cwd],
+                )
+                .expect("session");
+        };
+        let old = "C:\\Users\\W\\Documents\\Codex\\2026-10-14\\old";
+        let repo = Project::from_origin(None, "/work/app", None);
+        let chats = Project::from_origin(
+            None,
+            "C:\\Users\\W\\Documents\\Codex\\2026-10-21\\bas",
+            None,
+        );
+        let none = Project::from_origin(None, "C:/", None);
+        add("codex:own", &repo, Some("/work/app/crates/x"));
+        add("codex:bare-repo", &repo, None);
+        add("codex:chat-own", &chats, Some(old));
+        add("codex:chat-bare", &chats, None);
+        add("codex:unassigned", &none, None);
+        let folder = |id: &str| {
+            db.get_session_focus_target(id)
+                .expect("target")
+                .expect("session")
+                .repo_root
+        };
+        assert_eq!(folder("codex:own").as_deref(), Some("/work/app/crates/x"));
+        assert_eq!(folder("codex:bare-repo").as_deref(), Some("/work/app"));
+        assert_eq!(folder("codex:chat-own").as_deref(), Some(old));
+        assert_eq!(
+            folder("codex:chat-bare"),
+            None,
+            "a shared bucket has no folder of its own"
+        );
+        assert_eq!(folder("codex:unassigned"), None);
     }
 }
