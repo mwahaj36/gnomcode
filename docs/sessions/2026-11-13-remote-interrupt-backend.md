@@ -1,5 +1,11 @@
 # G5 Remote interrupt backend
 
+## Current verification after baseline PR #189
+
+Rebased onto `fix/restore-green-baseline` at `0d439e6d07c02e814f4f4d0cb050e17d88d7c9d1`; this PR depends on #189. The full quality-gate script now passes with CARGO_INCREMENTAL=0 and isolated GNOMCODE_HOME/CLAUDE_CONFIG_DIR/CODEX_HOME: formatting, workspace clippy with -D warnings, workspace tests, cargo-deny and core dependency purity. All four G5 tests execute and pass. No native cancellation or physical-phone claim is added. The earlier failure records below document the initial baseline blocker, resolved by #189.
+
+The rebase conflicted only in the session index; both new session links were retained without changing existing entries. A Windows editor command failed during rebase continuation; using Git's verified true.exe as the no-op editor completed the rebase without changing source or commit text.
+
 ## Goal and evidence
 
 Add backend-only turn interruption, preserving the hosted process and native permission prompts. At base `fee3c8e`, `crates/daemon/src/remote.rs:626-866` rejects interrupt as unsupported. `crates/pty/src/lib.rs:797-817` implements process stop, while `:1056-1078` already provides authenticated input acknowledged after the PTY write.
@@ -34,7 +40,7 @@ The first two regression tests failed with `Unsupported remote command` before i
 
 No Worker B code dependency. Worker B can implement the phone button against the documented JSON. Is Esc accepted as cancellation by each currently supported CLI version? This remains a live acceptance question; no universal cancellation claim is made.
 
-## Status at stop
+## Initial stop (resolved by baseline PR #189)
 
 G5 implementation is reviewable but remains a draft because the full gate is red. Root cause of the consent-test failure: `remote_device_action_handler` reads cloud auth at `crates/daemon/src/api.rs:1772-1775` before checking `remote_access_confirmed` at `:1779-1780` (line numbers in this branch). An isolated unsigned-in home therefore returns 401 before reaching the required 428 consent rejection. Existing handler edits are outside the append-only route/module allowance. Updating vulnerable ruzstd also needs the unowned root Cargo.toml/Cargo.lock. Owner must assign those fixes or explicitly extend file ownership; no lint, test or advisory suppression is proposed.
 
