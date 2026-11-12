@@ -148,6 +148,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/models", get(models_handler))
         .route("/api/v1/model-catalog", get(model_catalog_handler))
         .route("/api/v1/report", get(report_handler))
+        .route("/api/v1/activity/heatmap", get(activity_heatmap_handler))
         .route("/api/v1/projects", get(projects_handler))
         .route("/api/v1/quota", get(quota_handler))
         .route(
@@ -1962,6 +1963,21 @@ async fn report_handler(
     ))
 }
 
+async fn activity_heatmap_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let heatmap = tokio::task::spawn_blocking(move || {
+        let db = state.db.blocking_lock();
+        db.activity_heatmap(chrono::Utc::now().date_naive())
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(heatmap))
+}
+
 pub(crate) fn report_roi(
     report: &gnomcode_store::TimelineReport,
     user_profile: &UserProfile,
@@ -2855,6 +2871,45 @@ mod tests {
             .expect("body");
         let listing: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(listing["folders"][0]["name"], "project");
+    }
+
+    #[tokio::test]
+    async fn activity_heatmap_requires_auth_and_returns_dense_days() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "local-test-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let request = |auth: &str| {
+            Request::builder()
+                .uri("/api/v1/activity/heatmap")
+                .header("host", "127.0.0.1:41738")
+                .header("authorization", auth)
+                .body(Body::empty())
+                .expect("request")
+        };
+        assert_eq!(
+            app.clone()
+                .oneshot(request("Bearer wrong"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let response = app
+            .oneshot(request("Bearer local-test-token"))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
+            .await
+            .expect("body");
+        let heatmap: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        let days = heatmap["days"].as_array().expect("days");
+        assert!((365..=371).contains(&days.len()));
+        assert!(heatmap["first_recorded"].is_null());
+        assert_eq!(heatmap["stats"]["active_days"], 0);
     }
 
     #[tokio::test]
