@@ -245,7 +245,8 @@ async function start(): Promise<void> {
 }
 
 app.setName('Gnomcode');
-if (process.platform === 'win32') app.setAppUserModelId('app.gnomcode.desktop');
+// Dev runs use their own identity so electron.exe never claims the installed app's taskbar icon.
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'app.gnomcode.desktop' : 'app.gnomcode.desktop.dev');
 
 if (squirrelStartup) {
   app.quit();

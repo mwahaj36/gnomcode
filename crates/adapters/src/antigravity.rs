@@ -515,9 +515,12 @@ pub fn parse_user_status(value: &Value, observed_at: DateTime<Utc>) -> Vec<Quota
                 }
                 _ => QuotaWindow::FiveHour,
             };
+            // Effort variants ("Claude Opus 5.5 (High)") share one quota; keep the model family.
+            let label = config.get("label")?.as_str()?;
+            let family = label.split(" (").next().unwrap_or(label);
             Some(QuotaSnapshot {
                 provider: AgentId::Antigravity.as_str().to_owned(),
-                limit_id: config.get("label")?.as_str()?.chars().take(64).collect(),
+                limit_id: family.chars().take(64).collect(),
                 window,
                 used_pct: ((1.0 - remaining) * 100.0).clamp(0.0, 100.0),
                 resets_at,
@@ -525,6 +528,65 @@ pub fn parse_user_status(value: &Value, observed_at: DateTime<Utc>) -> Vec<Quota
                 basis: TrustLevel::Api,
                 observed_at,
             })
+        })
+        .fold(Vec::new(), |mut pools: Vec<QuotaSnapshot>, pool| {
+            if !pools
+                .iter()
+                .any(|seen| seen.limit_id == pool.limit_id && seen.window == pool.window)
+            {
+                pools.push(pool);
+            }
+            pools
+        })
+}
+
+/// Converts `RetrieveUserQuotaSummary` into pooled quota rows: one per group and window.
+///
+/// Groups (`Gemini Models`, `Claude and GPT models`, `Gemini 4 Argon`) hold `buckets` with
+/// `window` (`5h` | `weekly`), `remainingFraction` and `resetTime`, the same pools Antigravity shows.
+#[must_use]
+pub fn parse_quota_summary(value: &Value, observed_at: DateTime<Utc>) -> Vec<QuotaSnapshot> {
+    let groups = value
+        .pointer("/response/groups")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    groups
+        .flat_map(|group| {
+            let name: String = group
+                .get("displayName")
+                .and_then(Value::as_str)
+                .unwrap_or("Antigravity")
+                .chars()
+                .take(64)
+                .collect();
+            group
+                .get("buckets")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(move |bucket| {
+                    let window = match bucket.get("window")?.as_str()? {
+                        "5h" => QuotaWindow::FiveHour,
+                        "weekly" => QuotaWindow::Weekly,
+                        _ => return None,
+                    };
+                    let remaining = bucket.get("remainingFraction")?.as_f64()?;
+                    Some(QuotaSnapshot {
+                        provider: AgentId::Antigravity.as_str().to_owned(),
+                        limit_id: name.clone(),
+                        window,
+                        used_pct: ((1.0 - remaining) * 100.0).clamp(0.0, 100.0),
+                        resets_at: bucket
+                            .get("resetTime")
+                            .and_then(Value::as_str)
+                            .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+                            .map(|at| at.with_timezone(&Utc)),
+                        plan: None,
+                        basis: TrustLevel::Api,
+                        observed_at,
+                    })
+                })
         })
         .collect()
 }

@@ -236,6 +236,38 @@ mod tests {
     }
 
     #[test]
+    fn antigravity_quota_summary_maps_pools_and_windows() {
+        let body = serde_json::json!({"response": {"groups": [
+            {"displayName": "Gemini Models", "buckets": [
+                {"bucketId": "gemini-weekly", "window": "weekly", "remainingFraction": 0.47, "resetTime": "2026-11-15T17:52:22Z"},
+                {"bucketId": "gemini-5h", "window": "5h", "remainingFraction": 1, "resetTime": "2026-11-12T07:43:50Z"}
+            ]},
+            {"displayName": "Gemini 4 Argon", "buckets": [
+                {"bucketId": "gemini-argon-wtu-weekly", "window": "weekly", "remainingFraction": 0, "resetTime": "2026-11-16T09:21:14Z"}
+            ]},
+            {"displayName": "Unknown window", "buckets": [{"window": "daily", "remainingFraction": 1}]}
+        ]}});
+        let quota = super::antigravity::parse_quota_summary(&body, chrono::Utc::now());
+        let pools: Vec<_> = quota
+            .iter()
+            .map(|q| (q.limit_id.as_str(), q.window, q.used_pct.round() as i64))
+            .collect();
+        assert_eq!(
+            pools,
+            [
+                ("Gemini Models", gnomcode_core::QuotaWindow::Weekly, 53),
+                ("Gemini Models", gnomcode_core::QuotaWindow::FiveHour, 0),
+                ("Gemini 4 Argon", gnomcode_core::QuotaWindow::Weekly, 100)
+            ]
+        );
+        assert!(
+            quota
+                .iter()
+                .all(|q| q.basis == TrustLevel::Api && q.resets_at.is_some())
+        );
+    }
+
+    #[test]
     fn antigravity_user_status_maps_model_quota() {
         let now = chrono::Utc::now();
         let soon = (now + chrono::Duration::hours(3)).to_rfc3339();
@@ -247,6 +279,7 @@ mod tests {
         ]}}});
         let quota = super::antigravity::parse_user_status(&body, now);
         assert_eq!(quota.len(), 2);
+        assert_eq!(quota[0].limit_id, "Gemini 3.8 Flash");
         assert_eq!(quota[0].window, gnomcode_core::QuotaWindow::FiveHour);
         assert!((quota[0].used_pct - 25.0).abs() < 1e-9);
         assert_eq!(quota[1].window, gnomcode_core::QuotaWindow::Weekly);

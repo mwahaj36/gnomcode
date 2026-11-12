@@ -2171,8 +2171,22 @@ pub(crate) struct QuotaPoolView {
 
 pub(crate) fn quota_views(snapshots: Vec<gnomcode_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
     let now = chrono::Utc::now();
+    // Every source reports all of a provider's pools at once, so rows older than the provider's
+    // latest snapshot belong to renamed or regrouped pools and are superseded.
+    let mut latest = std::collections::HashMap::new();
+    for snapshot in &snapshots {
+        let seen = latest
+            .entry(snapshot.provider.clone())
+            .or_insert(snapshot.observed_at);
+        *seen = (*seen).max(snapshot.observed_at);
+    }
     snapshots
         .into_iter()
+        .filter(|snapshot| {
+            latest
+                .get(&snapshot.provider)
+                .is_none_or(|at| *at - snapshot.observed_at <= chrono::Duration::minutes(10))
+        })
         // A pool whose window reset over a week ago without a new reading is retired, not "awaiting".
         .filter(|snapshot| {
             snapshot

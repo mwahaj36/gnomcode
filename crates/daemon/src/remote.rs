@@ -1781,7 +1781,8 @@ mod tests {
             ))
             .await
             .expect("send confirm");
-        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        // Pairing takes several seconds on a loaded machine; the deadline only guards against hangs.
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 if manager.status().await.paired {
                     break;
