@@ -14,6 +14,7 @@ pub mod redact;
 pub mod remote_crypto;
 pub mod routing;
 pub mod rules;
+pub mod update;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

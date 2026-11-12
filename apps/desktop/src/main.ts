@@ -7,6 +7,7 @@ import { activationArguments, workspaceLaunchHash, desktopNotification, daemonEn
 import { dataHome, readDaemon, daemonRequest } from './daemon-client';
 import { formatTrayMenu, formatTrayTooltip, type TrayAction, type TrayItem, type TrayProvider, type TraySession } from './tray-menu';
 import {retainNotification,repairNotificationShortcut} from './notifications';
+import { launchVerifiedInstaller, parseUpdateStatus, verifyStagedInstaller, type DesktopUpdateStatus } from './updater';
 
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -86,7 +87,30 @@ let currentDaemonUrl = '';
 let latestTrayTemplate: TrayItem[] | null = null;
 let trayMenuOpenedAt = 0;
 
-function openView(view: 'usage' | 'sessions'): void {
+let latestUpdateStatus: DesktopUpdateStatus | null = null;
+let installLaunched = false;
+
+function maybeInstallUpdateOnExit(): boolean {
+  if (installLaunched || !latestUpdateStatus) return false;
+  const verified = verifyStagedInstaller(latestUpdateStatus, path.join(dataHome(), 'updates'));
+  if (!verified) return false;
+  installLaunched = true;
+  if (!launchVerifiedInstaller(verified)) {
+    installLaunched = false;
+    return false;
+  }
+  return true;
+}
+
+function restartToUpdate(): boolean {
+  if (!maybeInstallUpdateOnExit()) return false;
+  quitting = true;
+  stopDaemon();
+  app.quit();
+  return true;
+}
+
+function openView(view: 'usage' | 'sessions' | 'settings'): void {
   showWindow();
   if (!window) return;
   try {
@@ -101,7 +125,8 @@ function openView(view: 'usage' | 'sessions'): void {
 function runTrayAction(action: TrayAction): void {
   switch (action.kind) {
     case 'open': showWindow(); break;
-    case 'quit': quitting = true; stopDaemon(); app.quit(); break;
+    case 'quit': maybeInstallUpdateOnExit(); quitting = true; stopDaemon(); app.quit(); break;
+    case 'restart-to-update': restartToUpdate(); break;
     case 'open-view': openView(action.view); break;
     case 'copy': clipboard.writeText(action.text); break;
     case 'focus-session':
@@ -135,15 +160,17 @@ function applyTrayMenu(): void {
 }
 
 async function refreshTrayMenu(): Promise<void> {
-  const [overview, sessions] = currentDaemonUrl
+  const [overview, sessions, updateRaw] = currentDaemonUrl
     ? await Promise.all([
         daemonRequest(currentDaemonUrl, 'GET', '/api/v1/providers/overview'),
         daemonRequest(currentDaemonUrl, 'GET', '/api/v1/sessions?status=ongoing&limit=100'),
+        daemonRequest(currentDaemonUrl, 'GET', '/api/v1/update/status'),
       ])
-    : [null, null];
+    : [null, null, null];
   const providers = Array.isArray(overview) ? overview as TrayProvider[] : null;
   const list = sessions && typeof sessions === 'object' && Array.isArray((sessions as { sessions?: unknown }).sessions) ? (sessions as { sessions: TraySession[] }).sessions : null;
-  latestTrayTemplate = formatTrayMenu(providers, list, new Date());
+  latestUpdateStatus = parseUpdateStatus(updateRaw);
+  latestTrayTemplate = formatTrayMenu(providers, list, new Date(), { update: latestUpdateStatus });
   trayLimitsTooltip = providers ? formatTrayTooltip(providers) : null;
   tray?.setToolTip(trayLimitsTooltip ?? trayStatusTooltip);
   applyTrayMenu();
@@ -214,6 +241,10 @@ async function start(): Promise<void> {
   ipcMain.handle('desktop:bring-to-front', (event, ...args: unknown[]) => {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
     showWindow();
+  });
+  ipcMain.handle('desktop:restart-to-update', (event, ...args: unknown[]) => {
+    if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
+    return restartToUpdate();
   });
   ipcMain.handle('desktop:choose-workspace', async (event, ...args: unknown[]) => {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
@@ -342,7 +373,7 @@ if (squirrelStartup) {
     if(hash && window){const url=new URL(window.webContents.getURL());url.hash=hash;void window.loadURL(url.href);}
     showWindow();
   });
-  app.on('before-quit', () => { quitting = true; stopDaemon(); });
+  app.on('before-quit', () => { maybeInstallUpdateOnExit(); quitting = true; stopDaemon(); });
   app.on('window-all-closed', () => {
     if (!tray) app.quit();
   });

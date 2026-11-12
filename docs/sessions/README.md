@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - In-app desktop auto-update from allowed manifest](2026-11-13-desktop-auto-update.md)
 - [2026-11-13 - Needs-you notifications and push redaction](2026-11-13-needs-you-notifications.md)
 - [2026-11-13 - Diagnostics command and endpoint (`gnomcode doctor`)](2026-11-13-doctor.md)
 - [2026-11-13 - Project names and Project activity](2026-11-13-project-activity.md)
