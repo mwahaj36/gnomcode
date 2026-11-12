@@ -109,6 +109,9 @@ enum Commands {
         action: String,
         /// Provider (`claude`).
         provider: String,
+        /// With `enable claude`: do not run the official `claude` CLI to refresh an expiring sign-in.
+        #[arg(long)]
+        no_refresh: bool,
     },
     /// Internal Claude Code status line: records account limits and prints them.
     #[command(hide = true)]
@@ -216,7 +219,11 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
-        Commands::Limits { action, provider } => cmd_limits(&action, &provider).await,
+        Commands::Limits {
+            action,
+            provider,
+            no_refresh,
+        } => cmd_limits(&action, &provider, no_refresh).await,
         Commands::Statusline => {
             cmd_statusline();
             Ok(())
@@ -387,7 +394,7 @@ fn cmd_hook() -> Result<()> {
     Ok(())
 }
 
-async fn cmd_limits(action: &str, provider: &str) -> Result<()> {
+async fn cmd_limits(action: &str, provider: &str, no_refresh: bool) -> Result<()> {
     use gnomcode_daemon::vendor_limits;
     anyhow::ensure!(
         vendor_limits::PROVIDERS.contains(&provider),
@@ -397,18 +404,43 @@ async fn cmd_limits(action: &str, provider: &str) -> Result<()> {
     match action {
         "enable" | "disable" => {
             vendor_limits::set_enabled(provider, action == "enable")?;
-            println!(
-                "{provider} API limits {action}d. When enabled, Gnomcode reads {provider}'s local sign-in only to request your limits from the provider every 5 minutes; the token is never stored, logged or refreshed."
-            );
-        }
-        "status" => println!(
-            "{provider} API limits {}",
-            if vendor_limits::enabled(provider) {
-                "enabled"
-            } else {
-                "disabled"
+            if provider == "claude" && action == "enable" {
+                vendor_limits::set_refresh_enabled(!no_refresh)?;
             }
-        ),
+            println!(
+                "{provider} API limits {action}d. When enabled, Gnomcode reads {provider}'s local sign-in only to request your limits from the provider every 5 minutes; the token is never stored or logged."
+            );
+            if provider == "claude" && action == "enable" {
+                println!(
+                    "{}",
+                    if no_refresh {
+                        "Sign-in refresh is off: run `claude` in a terminal when the sign-in expires."
+                    } else {
+                        "When the sign-in is about to expire, Gnomcode runs the official `claude auth status` in the background to refresh it (no model usage). Use `--no-refresh` to turn this off."
+                    }
+                );
+            }
+        }
+        "status" => {
+            println!(
+                "{provider} API limits {}",
+                if vendor_limits::enabled(provider) {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+            if provider == "claude" && vendor_limits::enabled(provider) {
+                println!(
+                    "claude sign-in refresh {}",
+                    if vendor_limits::refresh_enabled(provider) {
+                        "on"
+                    } else {
+                        "off"
+                    }
+                );
+            }
+        }
         "check" => match vendor_limits::check(provider).await {
             Ok(quota) if quota.is_empty() => {
                 println!("{provider}: signed in, but no limit windows reported")
