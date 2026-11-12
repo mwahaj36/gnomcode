@@ -278,6 +278,18 @@ pub struct DailyUsage {
     pub turns: u64,
     /// Bar height relative to the busiest recorded day, computed in Rust.
     pub chart_pct: f64,
+    /// Activity intensity 0..=4 for grid cells, computed in Rust.
+    #[serde(default)]
+    pub level: u8,
+}
+
+/// Intensity level 0..=4 for `value` relative to `max`, square-root scaled so outliers do not flatten the grid.
+pub(crate) fn activity_level(value: u64, max: u64) -> u8 {
+    if value == 0 || max == 0 {
+        return 0;
+    }
+    let ratio = (value as f64 / max as f64).sqrt();
+    ((ratio * 4.0).ceil() as u8).clamp(1, 4)
 }
 
 fn group_activity(rows: Vec<DailyUsage>, range: &str) -> (Vec<DailyUsage>, &'static str) {
@@ -338,6 +350,119 @@ fn group_activity(rows: Vec<DailyUsage>, range: &str) -> (Vec<DailyUsage>, &'sta
             .or_insert(row);
     }
     (groups.into_values().collect(), unit)
+}
+
+/// One UTC day in the activity grid.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct HeatmapDay {
+    /// UTC date `YYYY-MM-DD`.
+    pub date: String,
+    /// Tokens including cache exactly once.
+    pub total_tokens: u64,
+    /// Recorded API-equivalent cost.
+    pub cost_usd: f64,
+    /// Pricing provenance.
+    pub cost_basis: TrustLevel,
+    /// Measured invocations.
+    pub turns: u64,
+    /// Intensity 0..=4.
+    pub level: u8,
+}
+
+/// Summary figures for the activity grid.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct HeatmapStats {
+    /// Tokens over days since the first recording.
+    pub total_tokens: u64,
+    /// Days with recorded tokens.
+    pub active_days: u32,
+    /// Busiest recorded day, earliest on ties.
+    pub busiest: Option<HeatmapBusiest>,
+    /// Consecutive active days ending today (or yesterday when today is empty).
+    pub current_streak: u32,
+    /// Longest run of consecutive active days.
+    pub longest_streak: u32,
+}
+
+/// Busiest recorded day.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct HeatmapBusiest {
+    /// UTC date `YYYY-MM-DD`.
+    pub date: String,
+    /// Tokens on that day.
+    pub total_tokens: u64,
+}
+
+/// Dense daily activity for the trailing year, starting on a Monday.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct ActivityHeatmap {
+    /// First date (a Monday).
+    pub from: String,
+    /// Last date (today, UTC).
+    pub to: String,
+    /// Earliest UTC date with any recorded usage ever.
+    pub first_recorded: Option<String>,
+    /// One entry per day from `from` to `to`.
+    pub days: Vec<HeatmapDay>,
+    /// Summary figures over days since `first_recorded`.
+    pub stats: HeatmapStats,
+}
+
+/// Summary figures over `days` on or after `first_recorded`; all zero when nothing is recorded.
+pub(crate) fn heatmap_stats(
+    days: &[HeatmapDay],
+    first_recorded: Option<chrono::NaiveDate>,
+    today: chrono::NaiveDate,
+) -> HeatmapStats {
+    let mut stats = HeatmapStats {
+        total_tokens: 0,
+        active_days: 0,
+        busiest: None,
+        current_streak: 0,
+        longest_streak: 0,
+    };
+    let Some(first) = first_recorded else {
+        return stats;
+    };
+    let mut run = 0u32;
+    let mut recorded = Vec::new();
+    for day in days {
+        let Ok(date) = chrono::NaiveDate::parse_from_str(&day.date, "%Y-%m-%d") else {
+            continue;
+        };
+        if date < first || date > today {
+            continue;
+        }
+        stats.total_tokens = stats.total_tokens.saturating_add(day.total_tokens);
+        let active = day.total_tokens > 0;
+        if active {
+            stats.active_days += 1;
+            run += 1;
+            stats.longest_streak = stats.longest_streak.max(run);
+            if stats
+                .busiest
+                .as_ref()
+                .is_none_or(|best| day.total_tokens > best.total_tokens)
+            {
+                stats.busiest = Some(HeatmapBusiest {
+                    date: day.date.clone(),
+                    total_tokens: day.total_tokens,
+                });
+            }
+        } else {
+            run = 0;
+        }
+        recorded.push((date, active));
+    }
+    let mut backwards = recorded.iter().rev().peekable();
+    if backwards
+        .peek()
+        .is_some_and(|(date, active)| *date == today && !*active)
+    {
+        backwards.next();
+    }
+    stats.current_streak = backwards.take_while(|(_, active)| *active).count() as u32;
+    stats
 }
 
 /// Local-only project usage rollup; repository identity is not published to cloud.
@@ -2643,6 +2768,116 @@ impl Database {
         rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
     }
 
+    /// Per-bucket usage rows shared by the timeline report and the activity grid:
+    /// tokens including cache exactly once, recorded cost and turns per UTC day
+    /// (per UTC hour when `range_kind` is `today`).
+    fn daily_usage_rows(
+        &self,
+        range_kind: &str,
+        from: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Vec<DailyUsage>, Error> {
+        let mut statement = self.conn.prepare(obfstr::obfstr!(r#"
+            SELECT CASE WHEN ?3 = 'today' THEN strftime('%Y-%m-%dT%H:00:00Z', u.timestamp) ELSE date(u.timestamp) END,
+                SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
+                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(*),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
+            FROM usage_record u JOIN session s ON s.id = u.session_id
+            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1)) AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
+            GROUP BY 1 ORDER BY 1
+        "#))?;
+        let rows = statement
+            .query_map(params![from, to, range_kind], |row| {
+                let tokens: i64 = row.get(1)?;
+                let turns: i64 = row.get(3)?;
+                let unknown: i64 = row.get(4)?;
+                Ok(DailyUsage {
+                    priced_turns: (turns - unknown).max(0) as u64,
+                    unpriced_turns: unknown.max(0) as u64,
+                    date: row.get(0)?,
+                    total_tokens: tokens.max(0) as u64,
+                    cost_usd: row.get(2)?,
+                    turns: turns.max(0) as u64,
+                    cost_basis: if unknown > 0 {
+                        TrustLevel::Unknown
+                    } else {
+                        TrustLevel::Estimated
+                    },
+                    chart_pct: 0.0,
+                    level: 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Dense daily activity for the 53 ISO weeks ending on `today` (UTC), starting on a Monday.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn activity_heatmap(&self, today: chrono::NaiveDate) -> Result<ActivityHeatmap, Error> {
+        let this_monday =
+            today - chrono::Duration::days(i64::from(today.weekday().num_days_from_monday()));
+        let from = this_monday - chrono::Duration::weeks(52);
+        let rows = self.daily_usage_rows(
+            "heatmap",
+            Some(&format!("{from}T00:00:00Z")),
+            Some(&format!("{today}T23:59:59.999Z")),
+        )?;
+        let mut by_date = std::collections::BTreeMap::new();
+        for row in rows {
+            if let Ok(date) = chrono::NaiveDate::parse_from_str(&row.date, "%Y-%m-%d") {
+                by_date.insert(date, row);
+            }
+        }
+        let first_recorded: Option<chrono::NaiveDate> = self
+            .conn
+            .query_row(
+                obfstr::obfstr!(
+                    "SELECT MIN(date(u.timestamp)) FROM usage_record u JOIN session s ON s.id = u.session_id WHERE s.surface <> 'cloud'"
+                ),
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )?
+            .and_then(|text| chrono::NaiveDate::parse_from_str(&text, "%Y-%m-%d").ok());
+        let mut days = Vec::new();
+        let mut date = from;
+        while date <= today {
+            days.push(match by_date.remove(&date) {
+                Some(row) => HeatmapDay {
+                    date: date.to_string(),
+                    total_tokens: row.total_tokens,
+                    cost_usd: row.cost_usd,
+                    cost_basis: row.cost_basis,
+                    turns: row.turns,
+                    level: 0,
+                },
+                None => HeatmapDay {
+                    date: date.to_string(),
+                    total_tokens: 0,
+                    cost_usd: 0.0,
+                    cost_basis: TrustLevel::Unknown,
+                    turns: 0,
+                    level: 0,
+                },
+            });
+            date += chrono::Duration::days(1);
+        }
+        let maximum = days.iter().map(|day| day.total_tokens).max().unwrap_or(0);
+        for day in &mut days {
+            day.level = activity_level(day.total_tokens, maximum);
+        }
+        let stats = heatmap_stats(&days, first_recorded, today);
+        Ok(ActivityHeatmap {
+            from: from.to_string(),
+            to: today.to_string(),
+            first_recorded: first_recorded.map(|date| date.to_string()),
+            days,
+            stats,
+        })
+    }
+
     /// Generates timeline-filtered report grouped by provider (Anthropic, OpenAI, Google)
     /// and model.
     ///
@@ -2908,37 +3143,7 @@ impl Database {
 
         let items_count = providers.iter().map(|p| p.models.len()).sum();
 
-        let mut daily_statement = self.conn.prepare(obfstr::obfstr!(r#"
-            SELECT CASE WHEN ?3 = 'today' THEN strftime('%Y-%m-%dT%H:00:00Z', u.timestamp) ELSE date(u.timestamp) END,
-                SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
-                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
-                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(*),
-                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
-            FROM usage_record u JOIN session s ON s.id = u.session_id
-            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1)) AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
-            GROUP BY 1 ORDER BY 1
-        "#))?;
-        let mut daily = daily_statement
-            .query_map(params![cutoff, to_ts, range_kind], |row| {
-                let tokens: i64 = row.get(1)?;
-                let turns: i64 = row.get(3)?;
-                let unknown: i64 = row.get(4)?;
-                Ok(DailyUsage {
-                    priced_turns: (turns - unknown).max(0) as u64,
-                    unpriced_turns: unknown.max(0) as u64,
-                    date: row.get(0)?,
-                    total_tokens: tokens.max(0) as u64,
-                    cost_usd: row.get(2)?,
-                    turns: turns.max(0) as u64,
-                    cost_basis: if unknown > 0 {
-                        TrustLevel::Unknown
-                    } else {
-                        TrustLevel::Estimated
-                    },
-                    chart_pct: 0.0,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut daily = self.daily_usage_rows(range_kind, cutoff.as_deref(), to_ts)?;
         let (grouped, activity_interval) = group_activity(daily, range_kind);
         daily = grouped;
         let maximum = daily.iter().map(|day| day.total_tokens).max().unwrap_or(0);
@@ -2951,6 +3156,7 @@ impl Database {
             } else {
                 day.total_tokens as f64 / maximum as f64 * 100.0
             };
+            day.level = activity_level(day.total_tokens, maximum);
         }
 
         Ok(TimelineReport {
@@ -3303,6 +3509,7 @@ mod tests {
                 priced_turns: 1,
                 unpriced_turns: 0,
                 chart_pct: 0.0,
+                level: 0,
             })
             .to_vec();
         let (rows, unit) = group_activity(rows, "all");
@@ -3330,6 +3537,7 @@ mod tests {
             priced_turns: 1,
             unpriced_turns: 0,
             chart_pct: 0.0,
+            level: 0,
         };
         assert_eq!(
             super::group_activity(vec![row("2026-01-01"), row("2026-01-30")], "all").1,
@@ -4228,5 +4436,217 @@ mod tests {
             .get_session_chat("chat-sess-1", None)
             .expect("fetch empty");
         assert!(after.is_empty());
+    }
+
+    #[test]
+    fn activity_level_zero_for_no_tokens() {
+        assert_eq!(super::activity_level(0, 1_000), 0);
+        assert_eq!(super::activity_level(10, 0), 0);
+    }
+
+    #[test]
+    fn activity_level_four_for_max() {
+        assert_eq!(super::activity_level(1_000, 1_000), 4);
+    }
+
+    #[test]
+    fn activity_level_one_for_tiny_values() {
+        assert_eq!(super::activity_level(1, 1_000_000), 1);
+    }
+
+    #[test]
+    fn activity_level_sqrt_scaled() {
+        assert_eq!(super::activity_level(400, 1_600), 2);
+        assert_eq!(super::activity_level(100, 1_600), 1);
+    }
+
+    fn heat_day(date: &str, tokens: u64) -> super::HeatmapDay {
+        super::HeatmapDay {
+            date: date.to_owned(),
+            total_tokens: tokens,
+            cost_usd: 0.0,
+            cost_basis: TrustLevel::Unknown,
+            turns: 0,
+            level: 0,
+        }
+    }
+
+    fn date(text: &str) -> chrono::NaiveDate {
+        chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").expect("date")
+    }
+
+    fn heatmap_db(timestamps: &[&str]) -> Database {
+        let mut db = Database::open_in_memory().expect("in-memory db");
+        let project = Project::from_origin(
+            Some("https://github.com/mwahaj36/spawnt"),
+            "/workspace/gnomcode",
+            Some("main"),
+        );
+        let session = Session {
+            id: "antigravity:heat".to_owned(),
+            agent: AgentId::Antigravity,
+            surface: Surface::Ide,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gemini-2.5-pro".to_owned()),
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+        let usage: Vec<UsageRecord> = timestamps
+            .iter()
+            .enumerate()
+            .map(|(index, stamp)| UsageRecord {
+                dedup_key: format!("heat:{index}"),
+                session_id: session.id.clone(),
+                timestamp: chrono::DateTime::parse_from_rfc3339(stamp)
+                    .expect("timestamp")
+                    .with_timezone(&Utc),
+                model: "gemini-2.5-pro".to_owned(),
+                input_tokens: 100,
+                output_tokens: 10,
+                reasoning_tokens: 0,
+                cache_read_tokens: 0,
+                cache_write_5m_tokens: 0,
+                cache_write_1h_tokens: 0,
+                context_tokens: 110,
+                context_window: Some(1_000_000),
+                cost_usd: 1.0,
+                cache_savings_usd: 0.0,
+                cost_basis: TrustLevel::Exact,
+                pricing_version: "2026-10-26".to_owned(),
+            })
+            .collect();
+        let checkpoint = SourceCheckpoint {
+            file_path: "heat.jsonl".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "heat".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch(&[project], &[session], &usage, &[], &[], &checkpoint)
+            .expect("commit batch");
+        db
+    }
+
+    #[test]
+    fn heatmap_starts_on_monday_and_ends_today() {
+        use chrono::Datelike;
+        let db = heatmap_db(&[]);
+        let today = date("2026-11-12");
+        let map = db.activity_heatmap(today).expect("heatmap");
+        assert!((365..=371).contains(&map.days.len()));
+        let first = date(&map.days[0].date);
+        assert_eq!(first.weekday(), chrono::Weekday::Mon);
+        assert_eq!(map.days.last().expect("last").date, "2026-11-12");
+        assert_eq!(map.from, map.days[0].date);
+        assert_eq!(map.to, "2026-11-12");
+    }
+
+    #[test]
+    fn heatmap_is_dense_with_zero_days() {
+        let db = heatmap_db(&["2026-11-10T12:00:00Z"]);
+        let map = db.activity_heatmap(date("2026-11-12")).expect("heatmap");
+        for pair in map.days.windows(2) {
+            assert_eq!(
+                date(&pair[1].date) - date(&pair[0].date),
+                chrono::Duration::days(1)
+            );
+        }
+        let active: Vec<_> = map.days.iter().filter(|day| day.total_tokens > 0).collect();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].date, "2026-11-10");
+        assert_eq!(active[0].total_tokens, 110);
+        assert_eq!(active[0].level, 4);
+        assert_eq!(map.days[0].level, 0);
+        assert_eq!(map.days[0].cost_basis, TrustLevel::Unknown);
+    }
+
+    #[test]
+    fn heatmap_first_recorded_none_when_empty() {
+        let db = heatmap_db(&[]);
+        let map = db.activity_heatmap(date("2026-11-12")).expect("heatmap");
+        assert_eq!(map.first_recorded, None);
+        assert_eq!(map.stats.active_days, 0);
+        assert!(map.stats.busiest.is_none());
+    }
+
+    #[test]
+    fn heatmap_stats_streak_across_gap() {
+        let days = [
+            heat_day("2026-11-09", 5),
+            heat_day("2026-11-10", 5),
+            heat_day("2026-11-11", 0),
+            heat_day("2026-11-12", 5),
+            heat_day("2026-11-13", 5),
+        ];
+        let stats = super::heatmap_stats(&days, Some(date("2026-11-09")), date("2026-11-13"));
+        assert_eq!(stats.current_streak, 2);
+        assert_eq!(stats.longest_streak, 2);
+        assert_eq!(stats.active_days, 4);
+        assert_eq!(stats.total_tokens, 20);
+    }
+
+    #[test]
+    fn heatmap_current_streak_counts_from_yesterday_when_today_empty() {
+        let days = [
+            heat_day("2026-11-10", 5),
+            heat_day("2026-11-11", 5),
+            heat_day("2026-11-12", 0),
+        ];
+        let stats = super::heatmap_stats(&days, Some(date("2026-11-10")), date("2026-11-12"));
+        assert_eq!(stats.current_streak, 2);
+        let stale = [
+            heat_day("2026-11-10", 5),
+            heat_day("2026-11-11", 0),
+            heat_day("2026-11-12", 0),
+        ];
+        let stats = super::heatmap_stats(&stale, Some(date("2026-11-10")), date("2026-11-12"));
+        assert_eq!(stats.current_streak, 0);
+    }
+
+    #[test]
+    fn heatmap_busiest_prefers_earliest_on_tie() {
+        let days = [
+            heat_day("2026-11-10", 9),
+            heat_day("2026-11-11", 9),
+            heat_day("2026-11-12", 3),
+        ];
+        let stats = super::heatmap_stats(&days, Some(date("2026-11-10")), date("2026-11-12"));
+        let busiest = stats.busiest.expect("busiest");
+        assert_eq!(busiest.date, "2026-11-10");
+        assert_eq!(busiest.total_tokens, 9);
+    }
+
+    #[test]
+    fn heatmap_ignores_days_before_first_recorded_in_stats() {
+        let days = [
+            heat_day("2026-11-09", 100),
+            heat_day("2026-11-10", 5),
+            heat_day("2026-11-11", 5),
+        ];
+        let stats = super::heatmap_stats(&days, Some(date("2026-11-10")), date("2026-11-11"));
+        assert_eq!(stats.total_tokens, 10);
+        assert_eq!(stats.active_days, 2);
+        let none = super::heatmap_stats(&days, None, date("2026-11-11"));
+        assert_eq!((none.total_tokens, none.active_days), (0, 0));
+    }
+
+    #[test]
+    fn heatmap_uses_utc_day_boundaries() {
+        let db = heatmap_db(&["2026-11-10T23:30:00Z", "2026-11-11T00:30:00Z"]);
+        let map = db.activity_heatmap(date("2026-11-12")).expect("heatmap");
+        let on = |day: &str| {
+            map.days
+                .iter()
+                .find(|entry| entry.date == day)
+                .map(|entry| entry.total_tokens)
+        };
+        assert_eq!(on("2026-11-10"), Some(110));
+        assert_eq!(on("2026-11-11"), Some(110));
+        assert_eq!(map.first_recorded.as_deref(), Some("2026-11-10"));
+        assert_eq!(map.stats.longest_streak, 2);
     }
 }
