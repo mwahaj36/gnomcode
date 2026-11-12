@@ -3,7 +3,7 @@
 ## 2026-11-13: ownership blocker before G5
 
 - Branch: `docs/handoff-worker-A`.
-- Handoff PR: pending creation; this record will be updated with its URL.
+- Handoff PR: https://github.com/mwahaj36/spawnt/pull/185.
 - Starting commit: `fee3c8ee8529213c60d541e7e160594979d6ad44` (`origin/main`).
 - Prerequisite: `gh pr list --state open --json number` returned `[]` before fetching and creating the isolated worktree. None of PRs #178 through #183 remained open. Trust: exact GitHub response.
 - Scope: documentation only. No implementation, endpoint, JSON shape, setting or ADR was added. No feature is marked complete in SPEC or the roadmap.
@@ -56,6 +56,13 @@ All entries below have no feature PR, changed files, endpoint, JSON shape, setti
 
 - Last implementation commit: none. Last inspected main commit: `fee3c8ee8529213c60d541e7e160594979d6ad44`.
 - Active reporting branch: `docs/handoff-worker-A`; no feature branch or partially written implementation exists.
-- Half done: documentation PR publication only, until the publication addendum below records its URL and commit.
+- Half done: no implementation. Reporting PR #185 is open; this final reporting update completes publication.
 - Resume: first resolve dispatcher/module file ownership. Then fetch, confirm prerequisites, create `feat/remote-interrupt` from fresh `origin/main` in a new worktree, inspect relevant SPEC/code again, verify native Esc behavior, write the failing test and implement G5 within the assigned files. Do not assume this report defines any protocol shape.
 - Recommended merge order: handoff documentation PR only; no implementation PRs exist. Do not merge on Worker A's behalf automatically.
+
+### Publication addendum
+
+- Log PR and merge order: https://github.com/mwahaj36/spawnt/pull/185 only.
+- Reporting snapshot commit before this final status update: `5f0f64a` on `docs/handoff-worker-A`. The final status update is the following commit in that PR's history.
+- Documentation checks: `git diff --cached --check` passed after removing extra EOF blank lines; new files have LF and UTF-8 without BOM; staged diff contains zero `U+00C2` mojibake matches (exact check result).
+- The reporting worktree is removed after pushing this status update; resume from the remote branch if further reporting edits are needed. No target or web/.next was generated in it.
