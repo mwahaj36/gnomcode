@@ -6,6 +6,7 @@ pub mod api;
 pub mod approvals;
 mod automation;
 pub mod doctor;
+mod interrupt;
 pub mod model_catalog;
 pub mod pro;
 pub mod remote;

@@ -51,3 +51,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [ ] Website download page and version updated (Vercel)
 - [ ] Real-device checks: physical phone Remote + approvals, installed PWA; macOS/Linux runs recorded or listed as known gaps
 - [ ] Pricing decision (after release)
+
+## Worker A backend delivery details
+
+- [ ] G5 backend: state-gated Esc request over E2EE Remote and authenticated local API implemented with bounded idempotency receipts (ADR 0035); completion blocked on baseline consent-test failure and ruzstd advisory gate. Phone button belongs to Worker B; native-provider cancellation and physical-phone acceptance remain unverified.
