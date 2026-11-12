@@ -1,3 +1,5 @@
+- [2026-11-13 - Worker A dispatcher ownership blocker](2026-11-13-worker-a-ownership-blocker.md)
+
 # Engineering sessions
 
 - [2026-11-13 - First-run tour refresh for four places and Workspace](2026-11-13-tour-refresh.md)
