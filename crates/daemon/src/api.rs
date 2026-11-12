@@ -1476,25 +1476,32 @@ async fn repo_diff_get_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let diff_str = git_output(&canonical_repo, &["diff", "--no-ext-diff", "HEAD"]).await?;
-    let status_str = git_output(&canonical_repo, &["status", "--porcelain"]).await?;
+    let (diff_str, diff_lossy) =
+        git_output(&canonical_repo, &["diff", "--no-ext-diff", "HEAD"]).await?;
+    let (status_str, status_lossy) =
+        git_output(&canonical_repo, &["status", "--porcelain=v1", "-z"]).await?;
+    // shortcut: -z entries become lines, so names containing newlines split; fine for a viewer.
+    let status_str = status_str.replace('\0', "\n");
 
     Ok(Json(json!({
         "repo": query.repo,
         "diff": diff_str,
-        "status": status_str
+        "status": status_str,
+        "lossy": diff_lossy || status_lossy
     })))
 }
 
-async fn git_output(repo: &std::path::Path, args: &[&str]) -> Result<String, StatusCode> {
+/// Runs a read-only git command; returns stdout decoded lossily and whether bytes were replaced.
+async fn git_output(repo: &std::path::Path, args: &[&str]) -> Result<(String, bool), StatusCode> {
     use tokio::io::AsyncReadExt as _;
     const LIMIT: u64 = 1_048_576;
     let mut command = tokio::process::Command::new("git");
     command
-        .arg("--no-pager")
+        .args(["--no-pager", "-c", "core.quotepath=off"])
         .args(args)
         .current_dir(repo)
         .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
@@ -1525,7 +1532,10 @@ async fn git_output(repo: &std::path::Path, args: &[&str]) -> Result<String, Sta
         if !status.success() {
             return Err(StatusCode::BAD_REQUEST);
         }
-        String::from_utf8(bytes).map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)
+        Ok(match String::from_utf8(bytes) {
+            Ok(text) => (text, false),
+            Err(error) => (String::from_utf8_lossy(error.as_bytes()).into_owned(), true),
+        })
     })
     .await
     .map_err(|_| StatusCode::GATEWAY_TIMEOUT)?
@@ -3270,14 +3280,58 @@ mod tests {
         );
         std::fs::write(dir.path().join("tracked"), "after\n").expect("file");
         std::fs::write(dir.path().join("untracked"), "new\n").expect("file");
-        let diff = super::git_output(dir.path(), &["diff", "--no-ext-diff", "HEAD"])
+        let (diff, _) = super::git_output(dir.path(), &["diff", "--no-ext-diff", "HEAD"])
             .await
             .expect("diff");
-        let status = super::git_output(dir.path(), &["status", "--porcelain"])
+        let (status, _) = super::git_output(dir.path(), &["status", "--porcelain"])
             .await
             .expect("status");
         assert!(diff.contains("+after"));
         assert!(status.contains("?? untracked"));
+    }
+
+    #[tokio::test]
+    async fn git_output_handles_non_ascii_names_and_non_utf8_diffs() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .output()
+        };
+        if !git(&["init", "-q"]).is_ok_and(|o| o.status.success()) {
+            return; // git missing
+        }
+        std::fs::write(dir.path().join("caf\u{e9}.txt"), b"ok\n").expect("file");
+        std::fs::write(dir.path().join("bin.txt"), b"a\n").expect("file");
+        assert!(git(&["add", "-A"]).expect("git").status.success());
+        assert!(
+            git(&[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .expect("git")
+            .status
+            .success()
+        );
+        std::fs::write(dir.path().join("bin.txt"), b"b\xff\xfe\n").expect("file");
+        std::fs::write(dir.path().join("na\u{ef}ve.txt"), b"new\n").expect("file");
+        let (diff, lossy) = super::git_output(dir.path(), &["diff", "--no-ext-diff", "HEAD"])
+            .await
+            .expect("lossy diff must not fail");
+        assert!(lossy && diff.contains('\u{fffd}'));
+        let (status, _) = super::git_output(dir.path(), &["status", "--porcelain=v1", "-z"])
+            .await
+            .expect("status");
+        assert!(
+            status.contains("na\u{ef}ve.txt"),
+            "unquoted name: {status:?}"
+        );
     }
 
     #[tokio::test]
