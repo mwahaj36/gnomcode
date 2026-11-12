@@ -3847,14 +3847,25 @@ mod tests {
             "provider": "overview-issue-test", "limit_id": "claude", "window": "weekly", "used_pct": 2.0,
             "resets_at": null, "plan": null, "basis": "exact", "observed_at": "2026-11-12T03:37:17Z"
         })).expect("quota");
-        crate::vendor_limits::record_issue("overview-issue-test", Some("Claude sign-in expired".to_owned()));
+        crate::vendor_limits::record_issue(
+            "overview-issue-test",
+            Some("Claude sign-in expired".to_owned()),
+        );
         let list = overviews(vec![quota], chrono::Utc::now(), true, false);
         crate::vendor_limits::record_issue("overview-issue-test", None);
-        let card = list.iter().find(|o| o.provider == "overview-issue-test").expect("card");
+        let card = list
+            .iter()
+            .find(|o| o.provider == "overview-issue-test")
+            .expect("card");
         assert_eq!(card.source_issue.as_deref(), Some("Claude sign-in expired"));
         let json = serde_json::to_value(card).expect("json");
         assert_eq!(json["source_issue"], "Claude sign-in expired");
-        assert!(serde_json::to_value(&list[1]).expect("json").get("source_issue").is_none());
+        assert!(
+            serde_json::to_value(&list[1])
+                .expect("json")
+                .get("source_issue")
+                .is_none()
+        );
     }
 
     #[test]
