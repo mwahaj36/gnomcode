@@ -220,6 +220,22 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/sessions/{id}/permissions",
             post(permissions_post_handler),
         )
+        .route(
+            "/api/v1/approvals",
+            get(crate::approvals::list_handler).post(crate::approvals::create_handler),
+        )
+        .route(
+            "/api/v1/approvals/notify",
+            post(crate::approvals::notify_handler),
+        )
+        .route(
+            "/api/v1/approvals/{id}/wait",
+            get(crate::approvals::wait_handler),
+        )
+        .route(
+            "/api/v1/approvals/{id}/decision",
+            post(crate::approvals::decision_handler),
+        )
         .route("/api/v1/repos/file", get(repo_file_get_handler))
         .route("/api/v1/repos/diff", get(repo_diff_get_handler))
         .route("/api/v1/sessions/{id}/switch", post(switch_session_handler))
@@ -1813,7 +1829,7 @@ async fn remote_revoke_handler(
     Ok(Json(json!({"ok": true, "revoked": revoked})))
 }
 
-fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
+pub(crate) fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
     // 1. Host header validation
     if let Some(host) = headers.get("host").and_then(|h| h.to_str().ok()) {
         let clean = host.split(':').next().unwrap_or(host);

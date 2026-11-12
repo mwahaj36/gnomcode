@@ -74,6 +74,8 @@ The A/B/C labels are historical adapter priorities, not release guarantees. Actu
 
 Remote commands additionally require paired authorization and a live uniquely bound supported agent host. Shells are local-only. Real model/provider compatibility remains a launch acceptance gate.
 
+Approving a tool-permission prompt from the phone or console is available for Claude Code only, through the opt-out `PermissionRequest` hook installed by `gnomcode integrate claude` (SPEC 3.10, ADR 0032). The other agents are detection and notification only.
+
 ## 3. Architecture
 
 ### 3.1 Invariants
@@ -144,6 +146,8 @@ Track provider/window/model pools independently. Codex recorded `rate_limits` su
 
 Local rules, alerts and loop/budget controls are free. Hard-stop rules attempt to block only Claude Code tool calls through its installed hook; other agents receive alerts only. Hooks fail open and never bypass official permissions. Expose these limits and distinguish estimated spend from billing. Native automation acceptance remains provider/version-specific.
 
+**Phone and console approvals (Claude Code only, ADR 0032).** `gnomcode integrate claude` also registers a `PermissionRequest` handler and a `Notification` handler (matcher `permission_prompt`), both `gnomcode hook`, with the same backup, chaining and `--remove` rules as the guardrail handler; `--no-approvals` skips them. The hook reduces a prompt to the tool name and a one-line summary redacted by `core::approval` (never file contents or edit bodies) and asks the daemon over the loopback API (50 ms connect budget, 500 ms for the short request). The daemon holds a request for at most 90 seconds, in memory only, and only while a remembered phone is reachable over Remote or the console polled in the last 15 seconds; otherwise the hook exits immediately and Claude shows its own dialog. A decision names one request id: first decision wins, an identical repeat is accepted without effect, a different one is a conflict, an unknown id is rejected, and an allow after expiry or cancellation is refused. Deny works on any known request unless an allow was already delivered. Timeout, cancellation, daemon errors and a prompt answered at the terminal (the hook watches the Claude transcript for a new tool result) all end with no output, so the native dialog decides; nothing is ever allowed by default, `allow` carries no `updatedInput` or `updatedPermissions`, and Claude's deny and ask rules still apply. Codex, Antigravity and Gemini CLI keep detection and notification only; approving them from the phone needs verified screen matching and is not available. Consoles list pending requests at `GET /api/v1/approvals` and decide at `POST /api/v1/approvals/{id}/decision`.
+
 ### 3.11 Local API and shell security
 
 Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electron uses context isolation, sandboxing, no Node integration, strict CSP and sender-validated narrow preload. Navigation stays within the authenticated daemon. Allow only its exact PTY WS resources. Remote web never receives a shell or arbitrary process/window control.
@@ -208,7 +212,7 @@ Successful browser connections bookmark the selected desktop for navigation and 
 
 Directory rows contain owner/device IDs, generic labels, public keys, relay locators, availability/connection state and timestamps. Never publish conversation content, prompts, proof credentials or filesystem paths. Sessions stay on each online host and are discovered over authenticated E2EE. Directory failure prevents new enrollment and is visible in Devices. Restoring an existing connection retries transient discovery failures within the existing 30-second budget; revocation and identity mismatches do not bypass validation. The standalone migration `supabase/migrations/20261101160844_account_wide_remote_access.sql` supports both a fresh database and the earlier device directory; applying it does not enable existing native apps.
 
-Paired commands include history paging, live subsequent responses, supported CLI launch, initial/follow-up prompts and bounded directory browsing. Imported history is labeled read-only. Prompting requires unique live ownership and observed idle/approval restrictions, including the first prompt before native history exists. No remote shell, credential access or permission escalation. Chat travels only through E2EE, never metadata sync.
+Paired commands include history paging, live subsequent responses, supported CLI launch, initial/follow-up prompts, bounded directory browsing and, for integrated Claude Code installs, listing pending tool approvals (`approvals`) and answering one by id (`approval`, decision `approve` or `deny`; SPEC 3.10, ADR 0032). Approval summaries are redacted and bounded, held in memory only and travel only inside the E2EE channel. Imported history is labeled read-only. Prompting requires unique live ownership and observed idle/approval restrictions, including the first prompt before native history exists. No remote shell, credential access or permission escalation. Chat travels only through E2EE, never metadata sync.
 
 Public-relay/browser automated acceptance exists. Physical-phone, independent security review and production approval remain open. Do not imply the relay hides connection metadata or is independently certified.
 
@@ -321,6 +325,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0029](./adr/0029-api-limits-from-agent-sign-in.md) | Opt-in exact Claude and Antigravity limits from provider APIs using the agent's own local sign-in | Accepted |
 | [0030](./adr/0030-claude-signin-refresh.md) | Refresh the Claude sign-in by running the official CLI (`claude auth status`), amending 0029 | Accepted |
 | [0031](./adr/0031-console-four-places.md) | Console has four places (Home, Workspace, Usage, Settings); toggle-only grid rail, top bar under 720px | Accepted |
+| [0032](./adr/0032-phone-approvals.md) | Approve or deny Claude Code permission prompts from the phone (Remote, E2EE) and console through a fail-open `PermissionRequest` hook; Codex, Antigravity and Gemini detection only | Accepted |
 
 ## 10. Open decisions
 

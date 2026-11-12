@@ -193,6 +193,18 @@ impl AccountDevices {
         json!({"type":"error","message":"Manage account access in Profile > Devices."})
     }
 
+    /// Whether any approved phone's room is trusted with the desktop online.
+    pub(crate) async fn any_reachable(&self) -> bool {
+        let rooms: Vec<Arc<RemoteManager>> =
+            self.state.lock().await.rooms.values().cloned().collect();
+        for room in rooms {
+            if room.reachable_room_only().await {
+                return true;
+            }
+        }
+        false
+    }
+
     pub(crate) async fn view(&self) -> Value {
         let state = self.state.lock().await;
         let mut devices = Vec::new();

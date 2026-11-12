@@ -3,6 +3,7 @@
 
 mod account_devices;
 pub mod api;
+pub mod approvals;
 mod automation;
 pub mod model_catalog;
 pub mod pro;

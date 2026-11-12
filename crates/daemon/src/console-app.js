@@ -1693,6 +1693,34 @@ function cycleTheme() {
     }
 
 
+    // Tool approvals held by a Claude Code hook (ADR 0032). The daemon owns the rules;
+    // this only lists pending requests and sends the person's choice for one exact id.
+    let approvalsMarkup = null;
+    async function loadApprovals() {
+      const region = document.getElementById('approvals');
+      if (!region) return;
+      let items = [];
+      try { items = (await apiJson('/api/v1/approvals', { headers })).items || []; } catch (_) { return; }
+      const markup = items.map(item => {
+        const agent = item.agent === 'claude-code' ? 'Claude Code' : item.agent;
+        return `<article class="sp-approval" data-approval-id="${escapeHtml(item.id)}"><div class="sp-approval-body"><p class="sp-approval-title"><span class="sp-session-dot sp-session-dot--needs_you" aria-hidden="true"></span>${escapeHtml(agent)} wants to run <strong>${escapeHtml(item.tool)}</strong></p>${item.summary ? `<code class="sp-approval-summary">${escapeHtml(item.summary)}</code>` : ''}<p class="sp-approval-meta">If you do not answer, Claude asks in its own window.</p></div><div class="sp-approval-actions"><button type="button" class="btn-control" data-action="approval-decide" data-arg="${escapeHtml(item.id)}:deny" aria-label="Deny ${escapeHtml(item.tool)}">Deny</button><button type="button" class="btn-control" data-action="approval-decide" data-arg="${escapeHtml(item.id)}:allow" aria-label="Approve ${escapeHtml(item.tool)} once">Approve once</button></div></article>`;
+      }).join('');
+      if (markup === approvalsMarkup) return;
+      approvalsMarkup = markup;
+      region.innerHTML = markup;
+      region.hidden = items.length === 0;
+    }
+    async function decideApproval(arg) {
+      const [id, decision] = String(arg || '').split(':');
+      if (!id || !['allow', 'deny'].includes(decision)) return;
+      document.querySelectorAll(`[data-approval-id="${CSS.escape(id)}"] button`).forEach(button => { button.disabled = true; });
+      try {
+        await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/decision`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }) });
+      } catch (_) { /* the list shows the real state */ }
+      approvalsMarkup = null;
+      await loadApprovals();
+    }
+
     let remoteWasPaired = null;
     let remoteNoticeTimer;
     let remoteDevicesMarkup = '';
@@ -1766,7 +1794,7 @@ function cycleTheme() {
       }
     }
 
-    const actions = { 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+    const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
@@ -1823,8 +1851,10 @@ function cycleTheme() {
     void checkAuthSession();
     pollLocalData();
     if (initialView === 'sessions') loadInstalledAgents();
+    void loadApprovals();
     setInterval(() => {
       pollLocalData();
+      void loadApprovals();
       loadRemoteStatus();
       void refreshAutomation();
       if (activeView === 'sessions' && !installedAgents.length) loadInstalledAgents();

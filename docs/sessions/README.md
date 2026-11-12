@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Phone approvals for Claude Code](2026-11-13-phone-approvals.md)
 - [2026-11-13 - Usage subscription value tiles and activity cleanup](2026-11-13-usage-value-v2.md)
 - [2026-11-13 - Provider card height, missing-state fallback and logos](2026-11-13-provider-cards-logos.md)
 - [2026-11-13 - Web devices and connect page redesign](2026-11-13-web-devices-v2.md)

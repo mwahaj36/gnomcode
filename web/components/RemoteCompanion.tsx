@@ -16,7 +16,8 @@ type ChatEvent = { event_id: string; turn_index: number; created_at: string; rol
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
-type Reply = { reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
+type Reply = { items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -51,6 +52,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [routing,setRouting]=useState('ask_first');
   const [automationNotices,setAutomationNotices]=useState<AutomationNotice[]>([]);
   const [schedulePending,setSchedulePending]=useState(false);
+  const [approvals,setApprovals]=useState<PendingApproval[]>([]);
   const pendingSchedule=useRef<{id:string;session:string;text:string}|null>(null);
   const scheduleTimeout=useRef<ReturnType<typeof setTimeout>|null>(null);
   const [modelProviders,setModelProviders]=useState<ProviderCatalog[]>([]);
@@ -294,7 +296,15 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if (selectedRef.current && !loadingHistory.current) loadChat(selectedRef.current);
       if(selectedRef.current)void send({type:'schedules',session_id:selectedRef.current}).catch(()=>{});
       void send({type:'notices'}).catch(()=>{});
+      void send({type:'approvals'}).catch(()=>{});
     }, 2000);
+    void send({type:'approvals'}).catch(()=>{});
+  }
+
+  // Decisions are sent for one exact request id; the desktop decides whether it still applies.
+  function decideApproval(id:string,decision:'approve'|'deny'){
+    setApprovals(current=>current.filter(item=>item.id!==id));
+    void send({type:'approval',id,decision}).catch(()=>{setError('Could not reach your laptop. Claude will ask there instead.');});
   }
 
   async function handle(reply: Reply, epoch:number) {
@@ -311,6 +321,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         }
       }
     }
+    else if(reply.type==='approvals'){setApprovals(Array.isArray(reply.items)?reply.items:[]);}
+    else if(reply.type==='approval_ack'){setNotice(reply.decision==='deny'?'Denied.':'Approved once.');void send({type:'approvals'}).catch(()=>{});}
     else if(reply.type==='routing'){setRouting(reply.policy || 'ask_first');}
     else if(reply.type==='schedule_ack') {
       const pending=pendingSchedule.current;
@@ -363,6 +375,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
     else if (reply.type === 'error') {
+      if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
       if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
       if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
       if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
@@ -547,7 +560,12 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         <label className="subagent-filter"><input type="checkbox" checked={includeSubagents} onChange={event=>{setIncludeSubagents(event.target.checked);historyQuery.current={...historyQuery.current,page:1,include_subagents:event.target.checked};void requestSessions();}} /> Include subagents</label><div className="remote-session-list">{historyRows.filter(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())).map(session => <button type="button" key={session.id} aria-current={session.id === selected ? 'true' : undefined} onClick={() => { selectSession(session.id); if (matchMedia('(max-width: 760px)').matches) sidebarToggle.current?.focus(); }}><strong>{session.title || 'New conversation'}</strong><span>{session.agent} · {sessionStateLabel(session.state)}</span>{session.state === "ended" && <small>Session ended</small>}</button>)}</div>
         <nav aria-label="Conversation pages"><button type="button" disabled={!connected || historyPage<=1} onClick={()=>{historyQuery.current.page=historyPage-1;void requestSessions();}}>Previous</button><span>{historyPage} / {historyPages} · {historyTotal} conversations</span><button type="button" disabled={!connected || historyPage>=historyPages} onClick={()=>{historyQuery.current.page=historyPage+1;void requestSessions();}}>Next</button></nav>{!historyRows.length ? <p>No conversations yet. Start an agent here or on your desktop.</p> : !historyRows.some(session=>`${session.title || ''} ${session.agent}`.toLowerCase().includes(conversationSearch.toLowerCase())) && <p role="status">No conversations match your search.</p>}
       </aside>
-      <div className="remote-conversation">{selected ? <>
+      <div className="remote-conversation">
+        {approvals.length>0 && <section className="sp-approvals" aria-label="Waiting for your approval">{approvals.map(item=><article key={item.id} className="sp-approval">
+          <div className="sp-approval-body"><p className="sp-approval-title">{item.agent==='claude-code'?'Claude Code':item.agent} wants to run <strong>{item.tool}</strong></p>{item.summary && <code className="sp-approval-summary">{item.summary}</code>}<p className="sp-approval-meta">Then Claude asks on your laptop if you do not answer.</p></div>
+          <div className="sp-approval-actions"><button type="button" disabled={!connected} aria-label={`Deny ${item.tool}`} onClick={()=>decideApproval(item.id,'deny')}>Deny</button><button type="button" disabled={!connected} aria-label={`Approve ${item.tool} once`} onClick={()=>decideApproval(item.id,'approve')}>Approve once</button></div>
+        </article>)}</section>}
+        {selected ? <>
         {historyLoading && <p role="status">Loading messages...</p>}
         {hasEarlier && <button type="button" disabled={!connected || historyLoading} onClick={() => {
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};
