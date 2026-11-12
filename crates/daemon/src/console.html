@@ -174,7 +174,7 @@
         <label>Spend limit (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
         <label>Turn limit<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
         <label>When reached<select id="rule-action"><option value="Warn">Send an alert</option><option value="HardStop">Stop via Claude hook; alert other agents</option></select></label>
-        <button id="rule-save" class="btn-primary" type="submit">Add rule</button>
+        <button id="rule-save" class="btn-control" type="submit">Add rule</button>
         <p id="rule-status" role="status"></p>
       </form>
       <details class="sp-help-details"><summary>About usage rules</summary><p>Spend is estimated, not a billing cap. Stops require the Claude Code hook; other agents receive alerts. If Gnomcode is unavailable, hooks allow the agent to continue.</p></details>
@@ -260,14 +260,14 @@
         </div>
         <div style="margin-top: 20px;">
           <button class="btn-primary" data-action="save-settings">Save Preferences</button>
-          <span id="settings-saved-feedback" style="margin-left: 10px; font-size: 11px; color: var(--green); display: none;">Saved successfully!</span>
+          <span id="settings-saved-feedback" style="margin-left: 10px; font-size: var(--sp-fs-meta); color: var(--green); display: none;">Saved successfully!</span>
         </div>
       </div>
 
       <!-- Right Column: Database Storage & Custom Pricing -->
       <div class="card">
         <div class="section-title" style="margin-bottom: 16px;">Custom Model Pricing Overrides</div>
-        <div id="settings-pricing-list" style="margin-bottom: 14px; font-family: var(--font-mono); font-size: 11px;"></div>
+        <div id="settings-pricing-list" style="margin-bottom: 14px; font-family: var(--font-mono); font-size: var(--sp-fs-meta);"></div>
 
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
         <div class="profile-pricing-fields">
@@ -278,7 +278,7 @@
           <button class="btn-control" style="white-space: nowrap; flex: 0 0 auto;" data-action="add-pricing">+ Add</button>
         </div>
 
-        <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">
+        <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: var(--sp-fs-meta); color: var(--text-muted);">
           <div class="section-title" style="margin-bottom: 8px;">Local Flight Recorder Storage</div>
           <div>Database: ~/.gnomcode/state.db</div>
           <div id="settings-db-stats" style="margin-top: 4px;">Loading local storage stats...</div>
@@ -294,7 +294,7 @@
           <span style="color: var(--text-muted); font-size: 12px;">Active Tier:</span>
           <span id="pro-tier-badge" class="badge" style="font-weight: 700;">FREE</span>
         </div>
-        <div id="pro-license-details" style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
+        <div id="pro-license-details" style="font-size: var(--sp-fs-meta); color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
           All local features are free. Existing offline licenses can still be managed here.
         </div>
         <div id="license-entry" class="sp-license-actions">
@@ -302,12 +302,12 @@
             type="text"
             id="license-key-input"
             placeholder="Paste your signed Remote license"
-            style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text);"
+            style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: var(--sp-fs-meta); color: var(--text);"
           >
-          <button class="btn-primary" data-action="activate-license">Activate license</button>
+          <button class="btn-control" data-action="activate-license">Activate license</button>
           </div><div class="sp-license-actions"><button id="replace-license" class="btn-control" hidden data-action="replace-license">Replace license</button><button id="remove-license" class="btn-control" hidden data-action="remove-license">Remove license</button>
         </div>
-        <div id="license-feedback" style="font-size: 11px; margin-top: 8px; font-family: var(--font-mono);"></div>
+        <div id="license-feedback" style="font-size: var(--sp-fs-meta); margin-top: 8px; font-family: var(--font-mono);"></div>
       </div>
 
   </details>

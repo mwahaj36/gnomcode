@@ -180,7 +180,7 @@ The canonical logo stays an unframed solid triangle-and-square mark in `currentC
 
 ### Buttons and fields
 
-Primary actions use red fill with dark text; secondary actions use a quiet theme-aware neutral fill; ghost actions remain transparent until interaction. Shared button labels use the control role, consistent padding and restrained corners. Desktop density may use 40px controls; phone targets are at least 44px. Keyboard focus is a visible red outline, and pointer-down feedback is immediate. Disabled actions remain distinct and cannot be mistaken for available actions.
+Primary actions use red fill with dark text; secondary actions use a quiet theme-aware neutral fill; ghost actions remain transparent until interaction. Shared button labels use the control role, consistent padding and restrained corners. Desktop density may use 40px controls; phone targets are at least 44px. Keyboard focus is a visible 2px outline in the theme accent (`--sp-accent`, never brand red), and pointer-down feedback is immediate. Disabled actions remain distinct and cannot be mistaken for available actions.
 
 Fields use theme-aware surfaces, main text and subtle borders. Associate visible labels with their fields. Error, pending and successful states use readable messages rather than color alone. Never render missing values as `undefined` or `NaN`.
 
@@ -215,6 +215,26 @@ Confirmation dialogs describe the action and consequence, focus Cancel initially
 ### Command snippets
 
 Commands keep an integrated clipboard icon with a 44px target, an accessible name, keyboard focus and visible success/failure feedback. Copy the exact displayed command. Long snippets safely wrap or use a deliberate code container while the copy control remains visible.
+
+## Console overhaul system
+
+The local console uses four places, a token set, a small component vocabulary and a list of anti-clutter rules. [The overhaul plan](docs/design/console-overhaul-plan.md) and [its mockup](docs/design/console-mockup.html) are the build reference; this section is the standing contract.
+
+### Information architecture
+
+The rail has exactly four places: Home, Workspace, Usage and Settings. Home shows provider cards, sessions grouped by Needs you, Running and Recent, three stat tiles and a 12-week activity grid, in that order. Workspace opens on the conversation list; the launcher is behind New. Usage holds limits, the 53-week activity grid with stats and legend, the Today hourly strip and cost reporting. Settings holds providers, appearance, devices, automations and license. The old `#limits`, `#projects` and `#automations` addresses redirect to Usage and Settings. The rail is a toggle-only column that pushes content; labels never cover it.
+
+### Tokens
+
+`web/app/gnomcode-tokens.css` is the source. Spacing uses `--sp-1` to `--sp-7` (4, 8, 12, 16, 24, 32, 48). Type uses `--sp-fs-meta` 12, `--sp-fs-body` 14, `--sp-fs-strong` 15, `--sp-fs-title` 20 and `--sp-fs-number` 28; nothing smaller than 12px except heatmap day labels, and 16px only for phone form inputs. Cards use 12px radius, controls 6px, meters 3px. State colors `--sp-ok`, `--sp-low`, `--sp-exhausted`, `--sp-unknown` (with soft backgrounds) mean limit state only. The activity ramp `--sp-heat-0..4` is blue so it never reads as an alarm; in light theme level 0 carries a strong-border outline (at least 1.5:1 against the card) and every step is distinct. Tabular numerals apply to every number in the native console.
+
+### Components
+
+Card, section header, chip (`sp-chip` with `ok`, `low`, `exhausted`, `unknown`, `neutral` states; also used per window in the conversation header), meter row (role `meter`, pace marker), collapsible provider card (`details.sp-provider-card`, collapsed by default, equal height in a grid row), stat tile, session row, activity grid with legend, copy command button and empty state (one line plus one action).
+
+### Anti-clutter rules
+
+One primary number per card. No nested borders. Three text colors only. Color means state; brand red is reserved for the single primary button per view and user chat bubbles. No explanatory paragraphs in default views; use a chip with a tooltip or a disclosure. Trust is shown once per card footer and inline only for estimated money. Empty states are one line plus one action. Content is at most 1200px wide. Tap targets are at least 44px on phones and for rail buttons, copy buttons, session rows and clickable chips; dense desktop form controls may stay at 40px.
 
 ## Do's and Don'ts
 

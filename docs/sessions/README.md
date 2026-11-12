@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Console polish and design docs](2026-11-13-console-polish.md)
 - [2026-11-13 - Console four places and toggle rail](2026-11-13-console-nav.md)
 - [2026-11-13 - Console Home board](2026-11-13-console-home.md)
 - [2026-11-13 - PTY startup readiness for Claude Code and Gemini CLI](2026-11-13-pty-startup-readiness.md)
