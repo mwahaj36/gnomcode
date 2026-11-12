@@ -15,9 +15,6 @@ const agents = [
   { name: "Codex", icons: ["codex"] },
   { name: "Antigravity", icons: ["antigravity"] },
   { name: "Gemini CLI", icons: ["gemini"] },
-  { name: "Cline / Roo", icons: ["cline", "roocode"] },
-  { name: "Cursor", icons: ["cursor"] },
-  { name: "Aider", icons: [] },
 ];
 const tours = [
   { name: "Overview", title: "Everything happening now.", detail: "See active sessions, spend and the limits that need attention.", kind: "overview" },

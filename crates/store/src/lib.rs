@@ -850,20 +850,7 @@ impl Database {
         if !push_column_exists {
             self.conn.execute_batch(obfstr::obfstr!("BEGIN; ALTER TABLE automation_notice ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0; INSERT INTO schema_migrations(version,applied_at) VALUES (14,datetime('now')); COMMIT;"))?;
         }
-        // Older Cursor parsing treated settings JSON as empty, freshly active sessions.
         self.conn.execute_batch(obfstr::obfstr!(r#"
-            DELETE FROM session
-            WHERE agent='cursor' AND state='idle' AND model IS NULL AND title IS NULL
-              AND pid IS NULL AND parent_session_id IS NULL
-              AND NOT EXISTS (SELECT 1 FROM usage_record WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM activity_event WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM chat_event WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM conversation_member WHERE native_id=session.id OR host_id=session.id OR conversation_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM resume_queue WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM alert WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM context_relay WHERE session_id=session.id)
-              AND NOT EXISTS (SELECT 1 FROM session child WHERE child.parent_session_id=session.id);
-
             DELETE FROM usage_record
             WHERE session_id IN (
                 SELECT id FROM session
@@ -1390,17 +1377,11 @@ impl Database {
             let eligible_after = DateTime::parse_from_rfc3339(&eligible_str)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now());
-            let agent = match agent_str.as_str() {
-                "claude-code" => AgentId::ClaudeCode,
-                "codex" => AgentId::Codex,
-                "antigravity" => AgentId::Antigravity,
-                "gemini-cli" => AgentId::GeminiCli,
-                "cline" => AgentId::Cline,
-                "cursor" => AgentId::Cursor,
-                "aider" => AgentId::Aider,
-                _ => AgentId::ClaudeCode,
+            // Rows from unknown or removed agents stay stored but are never relabeled.
+            let Some(agent) = AgentId::parse(&agent_str) else {
+                return Ok(None);
             };
-            Ok(ResumeQueueEntry {
+            Ok(Some(ResumeQueueEntry {
                 session_id,
                 agent,
                 cwd,
@@ -1408,9 +1389,13 @@ impl Database {
                 max_runs,
                 runs_completed,
                 eligible_after,
-            })
+            }))
         })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+        let mut out = Vec::new();
+        for row in rows {
+            out.extend(row?);
+        }
+        Ok(out)
     }
 
     /// Updates the runs completed count for an armed session.
@@ -1845,15 +1830,9 @@ impl Database {
         let limit_i64 = i64::try_from(limit).unwrap_or(50);
         let rows = stmt.query_map(params![limit_i64], |row| {
             let agent_str: String = row.get(1)?;
-            let agent = match agent_str.as_str() {
-                "claude-code" => AgentId::ClaudeCode,
-                "codex" => AgentId::Codex,
-                "antigravity" => AgentId::Antigravity,
-                "gemini-cli" => AgentId::GeminiCli,
-                "cline" => AgentId::Cline,
-                "cursor" => AgentId::Cursor,
-                "aider" => AgentId::Aider,
-                _ => AgentId::ClaudeCode,
+            // Rows from unknown or removed agents stay stored but are never relabeled.
+            let Some(agent) = AgentId::parse(&agent_str) else {
+                return Ok(None);
             };
             let surface_str: String = row.get(2)?;
             let surface = match surface_str.as_str() {
@@ -1886,7 +1865,7 @@ impl Database {
                 other => other,
             };
 
-            Ok(Session {
+            Ok(Some(Session {
                 id: row.get(0)?,
                 agent,
                 surface,
@@ -1898,12 +1877,12 @@ impl Database {
                 pid: row.get(8)?,
                 started_at,
                 last_event_at,
-            })
+            }))
         })?;
 
         let mut out = Vec::new();
         for r in rows {
-            out.push(r?);
+            out.extend(r?);
         }
         Ok(out)
     }
@@ -1936,22 +1915,16 @@ impl Database {
 
         let rows = stmt.query_map([], |row| {
             let agent_str: String = row.get(1)?;
-            let agent = match agent_str.as_str() {
-                "claude-code" => AgentId::ClaudeCode,
-                "codex" => AgentId::Codex,
-                "antigravity" => AgentId::Antigravity,
-                "gemini-cli" => AgentId::GeminiCli,
-                "cline" => AgentId::Cline,
-                "cursor" => AgentId::Cursor,
-                "aider" => AgentId::Aider,
-                _ => AgentId::ClaudeCode,
+            // Rows from unknown or removed agents stay stored but are never relabeled.
+            let Some(agent) = AgentId::parse(&agent_str) else {
+                return Ok(None);
             };
             let in_tok: i64 = row.get(3)?;
             let read_tok: i64 = row.get(4)?;
             let out_tok: i64 = row.get(5)?;
             let turn_count: i64 = row.get(8)?;
 
-            Ok(ReportRow {
+            Ok(Some(ReportRow {
                 project_name: row.get(0)?,
                 agent,
                 model: row.get(2)?,
@@ -1961,13 +1934,13 @@ impl Database {
                 total_cost_usd: row.get(6)?,
                 total_cache_savings_usd: row.get(7)?,
                 turn_count: u64::try_from(turn_count.max(0)).unwrap_or(0),
-            })
+            }))
         })?;
 
         let custom_prices = self.get_custom_model_pricings().unwrap_or_default();
         let mut out = Vec::new();
         for r in rows {
-            let mut row = r?;
+            let Some(mut row) = r? else { continue };
             if let Some(custom) = custom_prices.iter().find(|cp| {
                 row.model
                     .to_lowercase()
@@ -2086,6 +2059,23 @@ impl Database {
             Ok(c) => c,
             Err(_) => return Ok(0),
         };
+
+        // Antigravity's own summaries are authoritative for subagent links; repair any drift.
+        if let Ok(mut links) = agy_conn
+            .prepare("SELECT conversation_id, parent_conversation_id FROM conversation_summaries")
+        {
+            let rows: Vec<(String, String)> = links
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .filter_map(Result::ok)
+                .collect();
+            for (conversation, parent) in rows {
+                let parent = (!parent.trim().is_empty()).then(|| format!("antigravity:{parent}"));
+                self.conn.execute(
+                    "UPDATE session SET parent_session_id = ?1 WHERE id = ?2 AND parent_session_id IS NOT ?1",
+                    params![parent, format!("antigravity:{conversation}")],
+                )?;
+            }
+        }
 
         let mut stmt = self.conn.prepare(
             r#"
@@ -2428,6 +2418,10 @@ impl Database {
         let stale_cutoff = (now
             - chrono::Duration::milliseconds(gnomcode_core::presence::STALE_EXECUTION_LIMIT_MS))
         .to_rfc3339();
+        // Open tool/model executions use the shorter limit so counts match presence classification.
+        let execution_cutoff = (now
+            - chrono::Duration::milliseconds(gnomcode_core::presence::OPEN_EXECUTION_LIMIT_MS))
+        .to_rfc3339();
         let agent = agent_filter
             .filter(|value| !value.is_empty())
             .unwrap_or("all");
@@ -2440,24 +2434,24 @@ impl Database {
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?5)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?5)))))
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))))
                    OR (?2 = 'idle' AND s.state = 'idle'))"#,
-            params![agent, status, cutoff, project_filter, stale_cutoff],
+            params![agent, status, cutoff, project_filter, stale_cutoff, execution_cutoff],
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
             r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))))
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))))
                     OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
@@ -2500,7 +2494,8 @@ impl Database {
                 project_filter,
                 limit as i64,
                 offset as i64,
-                stale_cutoff
+                stale_cutoff,
+                execution_cutoff
             ],
             |row| {
                 let id: String = row.get(0)?;
@@ -3234,29 +3229,29 @@ mod tests {
     };
 
     #[test]
-    fn reopening_store_removes_only_evidence_free_cursor_placeholders() {
-        let mut db = Database::open_in_memory().expect("database");
-        let project = Project::from_origin(None, "/unknown", None);
+    fn open_execution_counts_as_ongoing_only_within_the_presence_limit() {
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "/w", None);
         let now = Utc::now();
-        let sessions = [
-            "empty", "chat", "usage", "activity", "model", "title", "bound", "queue",
-        ]
-        .map(|name| Session {
-            id: format!("cursor:{name}"),
-            agent: AgentId::Cursor,
+        let session = |name: &str, age: chrono::Duration| Session {
+            id: format!("antigravity:{name}"),
+            agent: AgentId::Antigravity,
             surface: Surface::Ide,
             project_id: project.id.clone(),
             parent_session_id: None,
-            model: (name == "model").then(|| "recorded".into()),
-            title: (name == "title").then(|| "Saved conversation".into()),
-            state: SessionState::Idle,
+            model: None,
+            title: None,
+            state: SessionState::Tool,
             pid: None,
-            started_at: now,
-            last_event_at: now,
-        });
+            started_at: now - age,
+            last_event_at: now - age,
+        };
         db.commit_batch(
-            &[project],
-            &sessions,
+            std::slice::from_ref(&project),
+            &[
+                session("recent", chrono::Duration::minutes(30)),
+                session("abandoned", chrono::Duration::hours(13)),
+            ],
             &[],
             &[],
             &[],
@@ -3269,47 +3264,26 @@ mod tests {
             },
         )
         .expect("sessions");
-        db.insert_chat_event(&gnomcode_core::ChatEvent {
-            event_id: "preserve".into(),
-            session_id: "cursor:chat".into(),
-            turn_index: 0,
-            role: gnomcode_core::ChatRole::User,
-            content: "Keep history".into(),
-            tool_name: None,
-            status: None,
-            created_at: now,
-        })
-        .expect("chat");
-        db.conn.execute("INSERT INTO usage_record VALUES ('usage','cursor:usage',?1,'model',1,1,0,0,0,0,1,100,0,0,'unknown','fixture')", [now.to_rfc3339()]).expect("usage");
-        db.conn.execute("INSERT INTO activity_event(session_id,timestamp,kind) VALUES ('cursor:activity',?1,'tool_start')", [now.to_rfc3339()]).expect("activity");
-        db.conn.execute("INSERT INTO conversation_member(host_id,conversation_id,native_id,position) VALUES ('host','conversation','cursor:bound',0)", []).expect("binding");
-        db.conn.execute("INSERT INTO resume_queue VALUES ('cursor:queue','cursor','fixture','keep',1,0,?1,?1)", [now.to_rfc3339()]).expect("queue");
-        db.migrate().expect("reopen maintenance");
-        let remaining: Vec<String> = db
-            .conn
-            .prepare("SELECT id FROM session ORDER BY id")
-            .expect("query")
-            .query_map([], |row| row.get(0))
-            .expect("rows")
-            .collect::<Result<_, _>>()
-            .expect("ids");
+        for (name, age) in [("recent", 30), ("abandoned", 13 * 60)] {
+            db.conn
+                .execute(
+                    "INSERT INTO activity_event(session_id,timestamp,kind) VALUES (?1,?2,'tool_start')",
+                    rusqlite::params![
+                        format!("antigravity:{name}"),
+                        (now - chrono::Duration::minutes(age)).to_rfc3339()
+                    ],
+                )
+                .expect("activity");
+        }
+        let (rows, count) = db
+            .list_sessions_paginated(None, Some("ongoing"), 0, 10)
+            .expect("ongoing");
         assert_eq!(
-            remaining,
-            [
-                "cursor:activity",
-                "cursor:bound",
-                "cursor:chat",
-                "cursor:model",
-                "cursor:queue",
-                "cursor:title",
-                "cursor:usage"
-            ]
+            count, 1,
+            "count must match the presence rules the list uses"
         );
-        assert_eq!(
-            db.get_session_chat("cursor:chat", None).expect("history")[0].content,
-            "Keep history"
-        );
-        db.migrate().expect("idempotent maintenance");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "antigravity:recent");
     }
 
     #[test]
@@ -3900,9 +3874,6 @@ mod tests {
             AgentId::Codex,
             AgentId::Antigravity,
             AgentId::GeminiCli,
-            AgentId::Cline,
-            AgentId::Cursor,
-            AgentId::Aider,
         ] {
             let mut provider_session = session.clone();
             provider_session.agent = agent;

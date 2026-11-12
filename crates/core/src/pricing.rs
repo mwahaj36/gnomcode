@@ -765,9 +765,6 @@ pub fn format_agent_display(agent_slug: &str) -> &'static str {
         "codex" => "OpenAI Codex",
         "claude-code" => "Claude Code",
         "gemini-cli" => "Google Gemini CLI",
-        "cursor" => "Cursor",
-        "cline" => "Cline",
-        "aider" => "Aider",
         _ => "Other Agent",
     }
 }

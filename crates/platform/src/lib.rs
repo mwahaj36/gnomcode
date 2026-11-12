@@ -181,7 +181,7 @@ pub fn hostname() -> String {
 }
 
 /// Returns the candidate log root directories for supported agents, respecting
-/// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`, `AIDER_ANALYTICS_LOG`).
+/// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`).
 #[must_use]
 pub fn discover_agent_roots() -> Vec<AgentRoot> {
     let home = user_home_dir();
@@ -191,11 +191,12 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
         .map_or_else(|| home.join(".claude"), PathBuf::from)
         .join("projects");
 
-    let codex_root = env::var("CODEX_HOME")
+    let codex_home = env::var("CODEX_HOME")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map_or_else(|| home.join(".codex"), PathBuf::from)
-        .join("sessions");
+        .map_or_else(|| home.join(".codex"), PathBuf::from);
+    let codex_root = codex_home.join("sessions");
+    let codex_archive_root = codex_home.join("archived_sessions");
 
     let gemini_base = env::var("GEMINI_HOME")
         .ok()
@@ -203,12 +204,16 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
         .map_or_else(|| home.join(".gemini"), PathBuf::from);
 
     let antigravity_root = gemini_base.join("antigravity").join("brain");
+    // Older Antigravity IDE builds kept history in a separate home.
+    let antigravity_ide_root = gemini_base
+        .join(obfstr::obfstr!("antigravity-ide"))
+        .join("brain");
     let antigravity_cli_root = gemini_base
         .join(obfstr::obfstr!("antigravity-cli"))
         .join("brain");
     let gemini_cli_root = gemini_base.join("tmp");
 
-    let mut roots = vec![
+    vec![
         AgentRoot {
             agent: AgentId::ClaudeCode,
             exists: claude_root.exists(),
@@ -225,6 +230,16 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             path: antigravity_root,
         },
         AgentRoot {
+            agent: AgentId::Codex,
+            exists: codex_archive_root.exists(),
+            path: codex_archive_root,
+        },
+        AgentRoot {
+            agent: AgentId::Antigravity,
+            exists: antigravity_ide_root.exists(),
+            path: antigravity_ide_root,
+        },
+        AgentRoot {
             agent: AgentId::Antigravity,
             exists: antigravity_cli_root.exists(),
             path: antigravity_cli_root,
@@ -234,62 +249,7 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             exists: gemini_cli_root.exists(),
             path: gemini_cli_root,
         },
-    ];
-
-    // Cline / Roo Code storage across editors (Code, Code - Insiders, Cursor, Windsurf, VSCodium)
-    let appdata = app_config_dir();
-    let editors = ["Code", "Code - Insiders", "Cursor", "Windsurf", "VSCodium"];
-    let extensions = ["saoudrizwan.claude-dev", "rooveterinaryinc.roo-cline"];
-
-    for editor in editors {
-        for ext in extensions {
-            let tasks_dir = appdata
-                .join(editor)
-                .join("User")
-                .join("globalStorage")
-                .join(ext)
-                .join("tasks");
-            if tasks_dir.exists() {
-                roots.push(AgentRoot {
-                    agent: AgentId::Cline,
-                    exists: true,
-                    path: tasks_dir,
-                });
-            }
-        }
-    }
-
-    // Cursor global storage / composer sessions
-    let cursor_storage = appdata.join("Cursor").join("User").join("globalStorage");
-    let cursor_home = home.join(".cursor");
-    if cursor_storage.exists() {
-        roots.push(AgentRoot {
-            agent: AgentId::Cursor,
-            exists: true,
-            path: cursor_storage,
-        });
-    }
-    if cursor_home.exists() {
-        roots.push(AgentRoot {
-            agent: AgentId::Cursor,
-            exists: true,
-            path: cursor_home,
-        });
-    }
-
-    // Aider analytics log / history
-    if let Ok(custom_aider) = env::var("AIDER_ANALYTICS_LOG") {
-        let p = PathBuf::from(custom_aider.trim());
-        if p.exists() {
-            roots.push(AgentRoot {
-                agent: AgentId::Aider,
-                exists: true,
-                path: p,
-            });
-        }
-    }
-
-    roots
+    ]
 }
 
 /// Resolves user application configuration / roaming directory across operating systems.
@@ -627,12 +587,6 @@ fn desktop_agent_name(agent: &str, surface: &str) -> Option<&'static str> {
         }),
         ("claude-code" | "claude", "desktop_app") => Some("Claude"),
         ("antigravity", "ide") => Some("Antigravity"),
-        ("cursor", "ide") => Some("Cursor"),
-        ("cline" | "roo", "ide") => Some(if cfg!(target_os = "macos") {
-            "Visual Studio Code"
-        } else {
-            "Code"
-        }),
         _ => None,
     }
 }
@@ -655,15 +609,6 @@ mod focus_target_tests {
             None
         );
     }
-}
-
-/// Brings the target project to the foreground in VS Code / Cursor / Windsurf (`SPEC §3.13`).
-#[must_use]
-pub fn focus_project_in_editor(root_path: &str) -> bool {
-    std::process::Command::new("code")
-        .args(["-r", root_path])
-        .spawn()
-        .is_ok()
 }
 
 /// Starts a CLI agent through the independent PTY owner without shell interpolation (`SPEC §3.14.1`).

@@ -4,7 +4,7 @@ Rules for any AI agent (or human) working in this repo. Read this first, every s
 
 ## 1. What this project is
 
-Gnomcode is a local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. Observation adapters cover Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo, Cursor and opt-in Aider; control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
+Gnomcode is a local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. Observation adapters cover Claude Code, Codex, Antigravity and Gemini CLI; control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
 
 **Single source of truth: [`docs/SPEC.md`](docs/SPEC.md).** Before working on a feature, read the relevant SPEC section. If your change alters scope, architecture, the roadmap or deliverables, update SPEC.md **in the same change**. Never let code and SPEC drift apart.
 

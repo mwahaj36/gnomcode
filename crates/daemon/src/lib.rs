@@ -9,6 +9,7 @@ pub mod pro;
 pub mod remote;
 mod remote_trust;
 pub mod sync;
+pub mod vendor_limits;
 
 use chrono::Utc;
 use gnomcode_ingest::ingest_all;
@@ -997,7 +998,6 @@ mod tests {
                 .env("CODEX_HOME", root.path().join("codex"))
                 .env("CLAUDE_CONFIG_DIR", root.path().join("claude"))
                 .env("GEMINI_HOME", root.path().join("gemini"))
-                .env_remove("AIDER_ANALYTICS_LOG")
                 .status()
                 .expect("isolated ingest test");
             assert!(status.success());

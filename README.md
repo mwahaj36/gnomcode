@@ -11,7 +11,7 @@ Gnomcode is a local-first orchestrator for AI coding agents: launch Claude Code,
 
 ## Supported agents
 
-Observation adapters cover Claude Code, OpenAI Codex (including discovered desktop/IDE logs), Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider. Hosted control uses official Claude Code, Codex, Gemini and Antigravity CLIs. Editor/Aider adapters do not imply hosted takeover. Real authenticated Antigravity/model-switch acceptance remains open.
+Observation adapters cover Claude Code, OpenAI Codex (including discovered desktop/IDE logs), Gemini CLI and Antigravity. Hosted control uses the same official CLIs. Real authenticated Antigravity/model-switch acceptance remains open.
 
 ## Quick start
 
