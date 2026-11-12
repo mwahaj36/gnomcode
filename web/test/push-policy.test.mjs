@@ -29,6 +29,7 @@ test('push notification request formats redacted event payload without chat cont
  assert.equal(rich.title,'Gnomcode');
  assert.ok(rich.body.includes('Claude Code'));
  assert.ok(rich.body.includes('Needs approval'));
+ assert.ok(!rich.body.includes('secret chat content'));
  assert.ok(!rich.body.includes('\n'));
  assert.equal(ctx.exports.parsePushNotificationRequest({event_id:'bad',kind:'agent_event',event:'unknown_event'}),null);
  assert.equal(ctx.exports.parsePushNotificationRequest({event_id:'bad id!',kind:'agent_event'}),null);

@@ -235,7 +235,6 @@ async fn push_notifications(
                 "kind": "agent_event",
                 "event": payload.event,
                 "agent": payload.agent,
-                "session_title": payload.session_title,
             }),
             None => json!({"event_id": notice.id, "kind": "agent_event"}),
         };

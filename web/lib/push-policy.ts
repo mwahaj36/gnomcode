@@ -39,10 +39,9 @@ export function parsePushNotificationRequest(value:unknown):ParsedPushRequest | 
   if(typeof raw.event!=='string' || !Object.prototype.hasOwnProperty.call(EVENT_LABELS,raw.event))return null;
   const eventLabel=EVENT_LABELS[raw.event];
   const agent=cleanPushField(raw.agent,32);
-  const title=cleanPushField(raw.session_title,64);
-  if(agent===null || title===null)return null;
+  if(agent===null)return null;
   const prefix=agent?`[${agent}] `:'';
-  const body=title?`${prefix}${title}: ${eventLabel}`:`${prefix}${eventLabel}`;
+  const body=`${prefix}${eventLabel}`;
   return {
     event_id:raw.event_id,
     title:'Gnomcode',

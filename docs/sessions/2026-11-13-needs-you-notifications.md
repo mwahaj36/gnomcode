@@ -13,7 +13,7 @@
 - Exposed `quota::reset_passed` as public for deterministic reset transition tracking.
 - Added SQLite migration v15 in `crates/store` (`notification_settings` table and `automation_notice.push_payload` column) with persistence and push metadata roundtrip tests.
 - Replaced ad-hoc polling logic in `crates/daemon/src/automation.rs` with `NotificationEngine` and added `notify_approval_waiting_hook` as the integration point for live approval events.
-- Updated `crates/daemon/src/sync.rs` to forward redacted event/agent/title metadata to `/api/push/send`, and added `parsePushNotificationRequest` in `web/lib/push-policy.ts` (tested in `web/test/push-policy.test.mjs`) to validate and render push alerts while maintaining backwards compatibility with generic test pushes.
+- Updated `crates/daemon/src/sync.rs` to forward redacted event/agent metadata (session titles stay on the desktop; reviewer fix) to `/api/push/send`, and added `parsePushNotificationRequest` in `web/lib/push-policy.ts` (tested in `web/test/push-policy.test.mjs`) to validate and render push alerts while maintaining backwards compatibility with generic test pushes.
 - Added `/api/v1/settings/notifications` endpoints in `crates/daemon/src/api.rs` and the Settings -> Notifications form in `console.html`, `console-app.js`, and `gnomcode-console.css`.
 
 ## Decisions
