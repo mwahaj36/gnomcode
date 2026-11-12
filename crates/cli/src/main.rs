@@ -58,6 +58,9 @@ enum Commands {
         /// Display all network endpoints required for licensing, cloud sync, and pricing updates.
         #[arg(long)]
         network: bool,
+        /// Output diagnostic report as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Start the gnomcode background daemon and local web console.
     Daemon {
@@ -215,7 +218,7 @@ async fn main() -> Result<()> {
     match command {
         Commands::Status { limit } => cmd_status(&db_path, limit),
         Commands::Report { plan_usd, range } => cmd_report(&db_path, plan_usd, &range),
-        Commands::Doctor { network } => cmd_doctor(&db_path, network),
+        Commands::Doctor { network, json } => cmd_doctor(&db_path, network, json).await,
         Commands::Daemon { port, open } => cmd_daemon(&db_path, port, open).await,
         Commands::Console { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Open { port } => cmd_daemon(&db_path, port, true).await,
@@ -927,17 +930,40 @@ fn cmd_report(db_path: &std::path::Path, plan_usd: Option<f64>, range: &str) -> 
     Ok(())
 }
 
-fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
-    println!("=== GNOMCODE DOCTOR DIAGNOSTICS ===");
-    println!("Home Directory: {}", gnomcode_home().display());
-    println!("Database Path:  {}", db_path.display());
+async fn cmd_doctor(db_path: &std::path::Path, network: bool, json: bool) -> Result<()> {
+    use gnomcode_daemon::doctor::CheckStatus;
 
+    let report = gnomcode_daemon::doctor::run_for_cli(db_path, std::env::current_dir().ok()).await;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if report.status == CheckStatus::Fail {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    println!("=== GNOMCODE DOCTOR DIAGNOSTICS ===");
+    println!("Home Directory: {}", report.gnomcode_home);
+    println!("Database Path:  {}", report.db_path);
     let db_status = if db_path.exists() {
         "EXISTS (OK)"
     } else {
         "NOT FOUND (Will be initialized on first run)"
     };
     println!("Database File:  {}", db_status);
+
+    println!("\nChecks:");
+    for check in &report.checks {
+        let badge = match check.status {
+            CheckStatus::Ok => "OK",
+            CheckStatus::Warn => "WARN",
+            CheckStatus::Fail => "FAIL",
+        };
+        println!("  [{badge:<4}] {:<20} {}", check.label, check.summary);
+        if let Some(fix) = &check.fix {
+            println!("         Fix: {fix}");
+        }
+    }
 
     println!("\nDetected Agent Log Roots:");
     let roots = discover_agent_roots();
@@ -970,6 +996,9 @@ fn cmd_doctor(db_path: &std::path::Path, network: bool) -> Result<()> {
     }
 
     println!("\nDiagnostics complete.");
+    if report.status == CheckStatus::Fail {
+        std::process::exit(1);
+    }
     Ok(())
 }
 

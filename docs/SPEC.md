@@ -152,7 +152,7 @@ Local rules, alerts and loop/budget controls are free. Hard-stop rules attempt t
 
 ### 3.11 Local API and shell security
 
-Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electron uses context isolation, sandboxing, no Node integration, strict CSP and sender-validated narrow preload. Navigation stays within the authenticated daemon. Allow only its exact PTY WS resources. Remote web never receives a shell or arbitrary process/window control.
+Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electron uses context isolation, sandboxing, no Node integration, strict CSP and sender-validated narrow preload. Navigation stays within the authenticated daemon. Allow only its exact PTY WS resources. Remote web never receives a shell or arbitrary process/window control. `gnomcode doctor` and authenticated `GET /api/v1/doctor` report environment diagnostics (detected agent CLIs and versions, Claude sign-in expiry metadata without printing tokens, limit sources and reading ages, Claude hook/status-line integration, daemon reachability, disk free space at `GNOMCODE_HOME` and the repository drive, and keep-awake state) with `ok`, `warn`, or `fail` status and a one-line fix, exiting non-zero on `fail`.
 
 ### 3.12 Platform scope
 

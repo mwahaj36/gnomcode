@@ -952,6 +952,32 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     result.map_err(Error::from)
 }
 
+/// Returns available free bytes on the filesystem containing `path` (or its nearest existing ancestor).
+#[must_use]
+pub fn disk_free_bytes(path: &Path) -> Option<u64> {
+    let existing = path.ancestors().find(|candidate| candidate.exists())?;
+    let canonical = fs::canonicalize(existing).ok()?;
+    let target = {
+        #[cfg(windows)]
+        {
+            let text = canonical.to_string_lossy();
+            text.strip_prefix(r"\\?\")
+                .map_or_else(|| canonical.clone(), PathBuf::from)
+        }
+        #[cfg(not(windows))]
+        {
+            canonical
+        }
+    };
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    disks
+        .list()
+        .iter()
+        .filter(|disk| target.starts_with(disk.mount_point()))
+        .max_by_key(|disk| disk.mount_point().as_os_str().len())
+        .map(sysinfo::Disk::available_space)
+}
+
 /// Opens an OS-held exclusive file lock, released when the returned file closes.
 ///
 /// # Errors
@@ -1120,5 +1146,18 @@ mod gnomcode_home_tests {
                 std::fs::remove_dir(&legacy_home).expect("remove empty fixture");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod disk_space_tests {
+    #[test]
+    fn reports_free_space_for_existing_and_nonexistent_child_paths() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let existing = super::disk_free_bytes(dir.path()).expect("disk free bytes");
+        assert!(existing > 0);
+        let nested = dir.path().join("does-not-exist-yet").join("state");
+        let nested_bytes = super::disk_free_bytes(&nested).expect("ancestor disk free bytes");
+        assert!(nested_bytes > 0);
     }
 }

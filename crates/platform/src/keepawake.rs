@@ -53,6 +53,19 @@ impl SleepInhibitor {
     }
 }
 
+/// Reports whether the current platform has a sleep-inhibitor backend available.
+#[must_use]
+pub fn is_supported() -> bool {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        true
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        crate::executables::executable_available("systemd-inhibit")
+    }
+}
+
 impl Drop for SleepInhibitor {
     fn drop(&mut self) {
         if self.holds > 0 {
