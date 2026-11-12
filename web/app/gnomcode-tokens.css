@@ -84,10 +84,10 @@
     --sp-ok-soft: rgb(18 149 92 / .12);
     --sp-low-soft: rgb(184 110 0 / .12);
     --sp-exhausted-soft: rgb(212 16 46 / .10);
-    --sp-heat-0: #edf0f3;
-    --sp-heat-1: #c6dcef;
-    --sp-heat-2: #8dbde3;
-    --sp-heat-3: #4a93cc;
+    --sp-heat-0: #e4e9ee;
+    --sp-heat-1: #aecde9;
+    --sp-heat-2: #74a9d9;
+    --sp-heat-3: #3f86c4;
     --sp-heat-4: #1d5f99;
   }
 }
@@ -113,10 +113,10 @@
   --sp-ok-soft: rgb(18 149 92 / .12);
   --sp-low-soft: rgb(184 110 0 / .12);
   --sp-exhausted-soft: rgb(212 16 46 / .10);
-  --sp-heat-0: #edf0f3;
-  --sp-heat-1: #c6dcef;
-  --sp-heat-2: #8dbde3;
-  --sp-heat-3: #4a93cc;
+  --sp-heat-0: #e4e9ee;
+  --sp-heat-1: #aecde9;
+  --sp-heat-2: #74a9d9;
+  --sp-heat-3: #3f86c4;
   --sp-heat-4: #1d5f99;
 }
 
