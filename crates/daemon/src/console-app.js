@@ -90,11 +90,6 @@ function cycleTheme() {
     const pageLimit = 10;
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    const summaryState = { activeCount: null, report: null, quotaCount: null };
-    async function refreshSummary() {
-      const presentation = await import('/console-presentation.js');
-      presentation.updateSummary(document.getElementById('overview-summary'), summaryState);
-    }
     let refreshBusy = false;
     let lastSuccessfulUpdate = null;
     let activeView = 'overview';
@@ -107,13 +102,12 @@ function cycleTheme() {
     document.querySelector('.app-brand').href = consoleViewUrl('overview');
 
     function setView(view, updateUrl = true) {
-      document.getElementById('console-title').textContent = view === 'overview' ? 'Your agent fleet' : view === 'auth' ? 'Account' : view[0].toUpperCase() + view.slice(1);
       activeView = view;
       try { sessionStorage.setItem('gnomcode-active-view', view); } catch (_) {}
       document.body.dataset.consoleView = view;
       document.getElementById('chat-list-toggle').hidden = view !== 'sessions';
-      const titles = { overview: 'Dashboard', sessions: 'Workspace', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Profile', auth: 'Account' };
-      document.getElementById('console-title').textContent = titles[view] || 'Your agent fleet';
+      const titles = { overview: 'Home', sessions: 'Workspace', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Profile', auth: 'Account' };
+      document.getElementById('console-title').textContent = titles[view] || 'Home';
       if (['overview', 'sessions', 'usage', 'limits'].includes(view)) {
         document.getElementById('view-console').setAttribute('aria-labelledby', `tab-btn-${view}`);
       }
@@ -128,6 +122,7 @@ function cycleTheme() {
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
       if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); }
+      if (view === 'overview') { void loadHeatmap(); void loadToday(true); }
     }
 
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
@@ -164,7 +159,7 @@ function cycleTheme() {
         if (['overview', 'sessions', 'usage', 'limits'].includes(activeView)) {
           const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
-          if (activeView === 'usage' && !await loadHeatmap(true)) throw new Error('Activity could not be loaded');
+          if (['usage', 'overview'].includes(activeView) && !await loadHeatmap(true)) throw new Error('Activity could not be loaded');
         } else if (activeView === 'settings') {
           if (!await loadSettingsData()) throw new Error('Settings could not be loaded');
         } else if (activeView === 'projects') {
@@ -196,7 +191,7 @@ function cycleTheme() {
       pollBusy = true;
       try {
       const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
-      if (activeView === 'usage') void loadHeatmap();
+      if (['usage', 'overview'].includes(activeView)) void loadHeatmap();
       const state = document.getElementById('sync-state');
       const updated = document.getElementById('last-updated');
       if (results.every(Boolean)) {
@@ -634,7 +629,6 @@ function cycleTheme() {
 
         document.getElementById('connection-status').hidden = true;
         const tl = res.timeline;
-        summaryState.report = tl; await refreshSummary();
         const presentation = await import("/console-presentation.js");
         presentation.updateActivity(document.getElementById("daily-activity"), tl);
 
@@ -669,7 +663,6 @@ function cycleTheme() {
         lastReportJson = '';
         showConnectionError(e);
         document.getElementById('daily-activity').textContent = 'Daily activity unavailable. ' + e.message;
-        summaryState.report = null; await refreshSummary();
         document.getElementById('providers-container').innerHTML = '<p class="local-view-message">Usage data is unavailable. Retry Reload view when the local daemon is reachable.</p>';
         return false;
       }
@@ -681,16 +674,37 @@ function cycleTheme() {
       if (!force && Date.now() - lastHeatmapAt < 60000) return true;
       lastHeatmapAt = Date.now();
       const container = document.getElementById('usage-heatmap');
+      const mini = document.getElementById('home-activity');
       try {
         const data = await apiJson('/api/v1/activity/heatmap', { headers, signal: AbortSignal.timeout(15000) });
         const presentation = await import('/console-presentation.js');
         presentation.updateHeatmap(container, data);
+        presentation.updateHeatmap(mini, data, { weeks: 12, stats: false, legend: false, months: false });
         return true;
       } catch (_) {
         lastHeatmapAt = Date.now() - 50000;
         if (!container.firstChild) container.innerHTML = '<div class="sp-empty"><p>Activity could not be loaded.</p></div>';
         return false;
       }
+    }
+
+    // Today's totals feed the Home tiles; the range report is fetched at most every 10 seconds.
+    let lastTodayAt = 0;
+    let todayReport = null;
+    async function loadToday(force = false) {
+      if (!force && Date.now() - lastTodayAt < 10000) { await renderToday(); return true; }
+      lastTodayAt = Date.now();
+      try {
+        const start = new Date(); start.setHours(0, 0, 0, 0);
+        const res = await apiJson(`/api/v1/report?range=today&from=${encodeURIComponent(start.toISOString())}`, { headers, signal: AbortSignal.timeout(15000) });
+        todayReport = res?.timeline || null;
+      } catch (_) { todayReport = null; lastTodayAt = Date.now() - 5000; }
+      await renderToday();
+      return Boolean(todayReport);
+    }
+    async function renderToday() {
+      const presentation = await import('/console-presentation.js');
+      presentation.updateTodayTiles(document.getElementById('home-today'), { report: todayReport, activeCount: homeActiveCount });
     }
 
     function scrollHeatmapToToday() {
@@ -1340,8 +1354,6 @@ function cycleTheme() {
         void showChatLimits();
         if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
 
-        summaryState.activeCount = res.ongoing_count ?? res.active_count ?? null; await refreshSummary();
-
         const presentation = await import('/console-presentation.js');
         presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
         await renderIdeSessions();
@@ -1352,7 +1364,6 @@ function cycleTheme() {
         document.getElementById('chat-header-limits').textContent = 'Limits unavailable · UNKNOWN';
         lastSessionsJson = '';
         showConnectionError(e);
-        summaryState.activeCount = null; await refreshSummary();
         document.getElementById('sessions-table').textContent = 'Session data is unavailable. Retry Reload view when the local daemon is reachable.';
         document.getElementById('ide-session-list').textContent = 'Sessions unavailable. Retry Reload view.';
         return false;
@@ -1465,7 +1476,6 @@ function cycleTheme() {
         document.getElementById('cloud-sync-status').textContent = publicationText;
         document.getElementById('auth-cloud-status').textContent = res.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.';
         document.getElementById('account-entry').hidden = Boolean(res.paired);
-        document.getElementById('dashboard-signin').hidden = Boolean(res.paired);
         document.getElementById('auth-paired-card').hidden = !res.paired;
         document.getElementById('auth-unpaired-card').hidden = Boolean(res.paired);
         document.getElementById('auth-paired-email').textContent = res.email || 'Connected account';
@@ -1475,7 +1485,6 @@ function cycleTheme() {
         document.getElementById('auth-publication-status').textContent = 'Local monitoring does not require an account connection.';
         document.getElementById('cloud-sync-status').textContent = 'Account status unavailable. Retry Reload view.';
         document.getElementById('account-entry').hidden = false;
-        document.getElementById('dashboard-signin').hidden = false;
         document.getElementById('auth-paired-card').hidden = true;
         document.getElementById('auth-unpaired-card').hidden = false;
         return false;
@@ -1502,33 +1511,34 @@ function cycleTheme() {
       } finally { accountWriteBusy = false; button.disabled = false; button.textContent = 'Disconnect desktop'; }
     }
 
+    let homeActiveCount = null;
     async function loadOngoing() {
       try {
-        const response = await apiJson('/api/v1/sessions?status=ongoing&page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
+        const response = await apiJson('/api/v1/sessions?page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
         const presentation = await import('/console-presentation.js');
-        presentation.updateOngoing(document.getElementById('ongoing-sessions'), response.sessions);
         presentation.updateOngoing(document.getElementById('sessions-ongoing'), response.sessions);
+        presentation.updateHomeSessions(document.getElementById('home-sessions'), response.sessions);
+        homeActiveCount = response.sessions.filter(session => session.home_group === 'needs_you' || session.home_group === 'running').length;
+        if (activeView === 'overview') void loadToday();
         return true;
-      } catch (_) { document.getElementById('ongoing-sessions').textContent = 'Ongoing session status unavailable. Retry Reload view.'; return false; }
+      } catch (_) { document.getElementById('home-sessions').textContent = 'Session status unavailable. Retry Reload view.'; return false; }
     }
 
     async function loadQuota() {
       try {
         const res = await apiJson('/api/v1/providers/overview', { headers, signal: AbortSignal.timeout(15000) });
         if (!Array.isArray(res)) throw new Error('Invalid quota response');
-        summaryState.quotaCount = res.reduce((count, provider) => count + (provider.windows?.length || 0), 0); await refreshSummary();
         // Cards show relative times, so re-render once a minute even when the readings are unchanged.
         const jsonStr = JSON.stringify(res) + Math.floor(Date.now() / 60000);
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
         presentation.updateProviderCards(document.getElementById('quota-table'), res, { cost: true });
-        presentation.updateProviderCards(document.getElementById('overview-limits'), res, { cost: false });
+        presentation.updateProviderCards(document.getElementById('home-limits'), res, { cost: false });
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
         lastQuotaJson = '';
-        document.getElementById('overview-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
-        summaryState.quotaCount = null; await refreshSummary();
+        document.getElementById('home-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
         document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;
       }
@@ -1724,7 +1734,7 @@ function cycleTheme() {
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
-      'close-chat': showLauncher, 'new-session': showLauncher,
+      'close-chat': showLauncher, 'new-session': showLauncher, 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
       'schedule-message': scheduleDraft, 'cancel-schedule': cancelSchedule, 'save-routing': saveRouting, 'reconnect-reset': () => reconnectReset(true), 'cancel-reset': () => reconnectReset(false),
       'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat,
       'choose-workspace': chooseWorkspace,
