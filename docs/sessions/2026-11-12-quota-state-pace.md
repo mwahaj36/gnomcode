@@ -22,3 +22,6 @@
 
 ## Verification
 - `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`: see the PR description for the final summary lines.
+
+## Follow-up fix
+- `sync::tests::remote_snapshot_contains_no_local_project_path_or_pairing_token` pins the key set of synced quota rows. The new derived fields (`state`, `pace`, `stale`, `label`, `pool`, `window_label`) are metadata only, so the expected keys were extended; the Remote and web console now receive state without recomputing it.
