@@ -20,6 +20,11 @@ export function renderProjects(projects: unknown): string;
 export function renderSummary(data: { activeCount?: number | null; report?: unknown; quotaCount?: number | null }): string;
 
 export function updateOngoing(element: HTMLElement, sessions: unknown): void;
+export type HomeGroup = "needs_you" | "running" | "recent";
+export function renderHomeSessions(sessions: unknown): string;
+export function updateHomeSessions(element: HTMLElement, sessions: unknown): void;
+export function renderTodayTiles(data?: { report?: unknown; activeCount?: number | null }): string;
+export function updateTodayTiles(element: HTMLElement, data?: { report?: unknown; activeCount?: number | null }): void;
 export function renderOngoing(sessions: unknown): string;
 
 export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: string | null): void;
