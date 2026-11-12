@@ -10,8 +10,8 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | Section C | Quick actions (canned prompts, never raw argv) | PR open | [#188](https://github.com/mwahaj36/spawnt/pull/188) | Optional Worker A backend persistence |
 | 2 | Section C | Changes view (read-only diff on console and phone) | PR open | [#190](https://github.com/mwahaj36/spawnt/pull/190) | Optional Worker A Remote `changes` handler |
-| 3 | Section C | File viewer on phone and console (read-only, workspace only) | in progress | - | Optional Worker A `C file listing and reading` |
-| 4 | Section C | Artifacts alongside changes | not started | - | - |
+| 3 | Section C | File viewer on phone and console (read-only, workspace only) | PR open | [#191](https://github.com/mwahaj36/spawnt/pull/191) | Optional Worker A `C file listing and reading` |
+| 4 | Section C | Artifacts alongside changes | in progress | - | Optional Worker A `C last-turn artifacts` |
 | 5 | Section C | Phone attachments UI | not started | - | - |
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | not started | - | - |
 | 7 | B / G5 | G5 interrupt button on phone and console chat | not started | - | Worker A G5 PR |
@@ -53,3 +53,17 @@
 - **Deviations:** Remote requests `changes` only on demand and handles `Unsupported remote command` inside the sheet.
 - **Open risks/questions:** Waiting on Worker A's `C session changes/diff` PR + ADR for Remote E2EE parity.
 - **Dependencies:** Local works against existing `GET /api/v1/repos/diff`; Remote depends on Worker A `C session changes/diff` PR.
+
+### 3. Section C — File viewer on phone and console (read-only, workspace only)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/191 (`feat/file-viewer-ui`, commit `6906389`)
+- **What changed:**
+  - `web/lib/console-presentation.js`, `web/lib/console-presentation.d.ts`: exported `normalizeWorkspaceRelPath`, `renderFileEntries`, and `renderFileViewer` (`RepoFileEntry`, `RepoFileListing`, `RepoFileData`).
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: added `#chat-files-btn`, `#chat-files-panel`, `#chat-file-path-form`, `#chat-file-path-input`, `#chat-files-list`, `#chat-file-body`, calling `GET /api/v1/repos/file?repo=&path=` and optional `GET /api/v1/repos/files`, with fallback to changed files from `/api/v1/repos/diff` + manual relative path lookup.
+  - `web/components/RemoteCompanion.tsx`: added `Files` button in `.sp-remote-tools` and `.sp-files-sheet` using E2EE `{ type: 'repo_files', session_id, path }` and `{ type: 'repo_file', session_id, path }` with calm `Unsupported remote command` handling.
+  - `web/app/gnomcode-console.css`: appended `.sp-files-panel`, `.sp-file-code`, `.sp-file-entry`, `.sp-file-form` using `var(--sp-*)` tokens, 44px mobile touch targets, and 16px mobile path inputs.
+  - `web/test/file-viewer.test.mjs`, `docs/SPEC.md` (append §11), `docs/ROADMAP_1.0.md` (append status), `docs/sessions/2026-11-13-file-viewer-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap at `crates/daemon/src/api.rs:1419-1482` vs `console.html`, `console-app.js`, `RemoteCompanion.tsx`, and `remote.rs:625-920`. Tests: `web/test/file-viewer.test.mjs` (3/3 pass), `web/` `npm test` (102/102 pass). Gate: `CARGO_INCREMENTAL=0 cargo fmt --all -- --check` pass, `cargo clippy --workspace --all-targets -- -D warnings` pass, `cargo test --workspace` pass, `node scripts/check-local-console.mjs` pass, `web/` `npm run typecheck` + `npm run build` pass, encoding/LF/mojibake check pass.
+- **Verification:** Visually verified live in `chrome-headless-shell.exe` against mocked daemon endpoints at `390x844` and `1440x900` (dark & light): `overflowX=false`, `filesVisible=true`, `entriesCount=3`, `fileLines=5`. Not verified live over Remote E2EE relay (`repo_files` / `repo_file` unimplemented in daemon).
+- **Deviations:** Requests `repo_files` / `repo_file` on user open only and intercepts `Unsupported remote command` in-sheet; no Rust edits.
+- **Open risks/questions:** Waiting on Worker A's `C file listing and reading` PR + ADR for daemon-side directory listing and Remote E2EE parity.
+- **Dependencies:** Local reading works against existing `GET /api/v1/repos/file`; directory listing and Remote E2EE depend on Worker A `C file listing and reading` PR.
