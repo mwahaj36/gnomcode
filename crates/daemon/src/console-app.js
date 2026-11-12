@@ -355,13 +355,13 @@ function cycleTheme() {
           } else {
             qTable.innerHTML = queue.map(e => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(e.session_id)}</td>
+                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta);">${escapeHtml(e.session_id)}</td>
                 <td><span class="badge">${escapeHtml(e.agent)}</span></td>
-                <td style="color: var(--text-muted); font-size: 11px;">${escapeHtml(e.cwd)}</td>
+                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${escapeHtml(e.cwd)}</td>
                 <td>${escapeHtml(e.resume_prompt)}</td>
                 <td>${e.max_runs}</td>
                 <td>${e.runs_completed}</td>
-                <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(e.eligible_after)}</td>
+                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${formatRelativeTime(e.eligible_after)}</td>
                 <td><button class="btn-control" data-action="disarm" data-arg="${escapeHtml(e.session_id)}">Disarm</button></td>
               </tr>
             `).join('');
@@ -377,7 +377,7 @@ function cycleTheme() {
           } else {
             rTable.innerHTML = rules.map(r => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">${escapeHtml(r.id)}</td>
+                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta); font-weight: 600;">${escapeHtml(r.id)}</td>
                 <td>${escapeHtml(r.agent || 'All Agents')}</td>
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns : 'None'}</td>
@@ -397,10 +397,10 @@ function cycleTheme() {
           } else {
             aTable.innerHTML = alerts.map(a => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(a.session_id)}</td>
+                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta);">${escapeHtml(a.session_id)}</td>
                 <td style="font-weight: 600;">${escapeHtml(a.rule_id)}</td>
                 <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${a.action === 'hard_stop' ? 'Stop requested (Claude hook only)' : escapeHtml(a.action)}</span></td>
-                <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(a.created_at)}</td>
+                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${formatRelativeTime(a.created_at)}</td>
               </tr>
             `).join('');
           }
@@ -435,15 +435,15 @@ function cycleTheme() {
             table.innerHTML = data.relays.map(r => {
               const statusColor = r.status === 'executed' ? 'var(--green)' : (r.status === 'pending' ? 'var(--yellow)' : 'var(--text-muted)');
               const actionBtn = r.status === 'pending'
-                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-right: 6px;" data-action="execute-relay" data-arg="${escapeHtml(r.id)}">Handoff & Rotate</button><button class="btn-control" style="padding: 4px 8px; font-size: 11px;" data-action="dismiss-relay" data-arg="${escapeHtml(r.id)}">Dismiss</button>`
-                : `<span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(r.status)}</span>`;
+                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: var(--sp-fs-meta); margin-right: 6px;" data-action="execute-relay" data-arg="${escapeHtml(r.id)}">Handoff & Rotate</button><button class="btn-control" style="padding: 4px 8px; font-size: var(--sp-fs-meta);" data-action="dismiss-relay" data-arg="${escapeHtml(r.id)}">Dismiss</button>`
+                : `<span style="font-size: var(--sp-fs-meta); color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(r.status)}</span>`;
               return `<tr>
-                <td style="font-family: var(--font-mono); font-size: 11px;">${escapeHtml(r.session_id)}</td>
+                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta);">${escapeHtml(r.session_id)}</td>
                 <td style="font-weight: 600;">${escapeHtml(r.project_name)}</td>
                 <td>${escapeHtml(r.source_agent)} &rarr; ${escapeHtml(r.target_agent)}</td>
                 <td style="font-weight: 600; color: ${r.fill_pct >= 90 ? 'var(--red)' : 'var(--yellow)'};">${r.fill_pct}% <span class="trust-mark">EST</span></td>
                 <td><span class="badge" style="color: ${statusColor}; border-color: ${statusColor};">${r.status.toUpperCase()}</span></td>
-                <td style="color: var(--text-muted); font-size: 11px;">${formatRelativeTime(r.created_at)}</td>
+                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${formatRelativeTime(r.created_at)}</td>
                 <td>${actionBtn}</td>
               </tr>`;
             }).join('');
@@ -1633,7 +1633,7 @@ function cycleTheme() {
           html += `
             <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 0;">
               <span><strong>${escapeHtml(cp.model_pattern)}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
-              <button class="btn-control" style="padding: 2px 6px; font-size: 10px; color: var(--red);" data-action="delete-pricing" data-arg="${escapeHtml(cp.model_pattern)}">Remove</button>
+              <button class="btn-control" style="padding: 2px 6px; font-size: var(--sp-fs-meta); color: var(--red);" data-action="delete-pricing" data-arg="${escapeHtml(cp.model_pattern)}">Remove</button>
             </div>`;
         }
         html += '</div>';
@@ -1776,7 +1776,7 @@ function cycleTheme() {
     }
 
     const actions = { 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
-      'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': loadChat,
+      'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
