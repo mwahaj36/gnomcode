@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Diagnostics command and endpoint (`gnomcode doctor`)](2026-11-13-doctor.md)
 - [2026-11-13 - Project names and Project activity](2026-11-13-project-activity.md)
 - [2026-11-13 - Phone approvals for Claude Code](2026-11-13-phone-approvals.md)
 - [2026-11-13 - Usage subscription value tiles and activity cleanup](2026-11-13-usage-value-v2.md)
