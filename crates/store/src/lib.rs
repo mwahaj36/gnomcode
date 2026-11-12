@@ -278,6 +278,18 @@ pub struct DailyUsage {
     pub turns: u64,
     /// Bar height relative to the busiest recorded day, computed in Rust.
     pub chart_pct: f64,
+    /// Activity intensity 0..=4 for grid cells, computed in Rust.
+    #[serde(default)]
+    pub level: u8,
+}
+
+/// Intensity level 0..=4 for `value` relative to `max`, square-root scaled so outliers do not flatten the grid.
+pub(crate) fn activity_level(value: u64, max: u64) -> u8 {
+    if value == 0 || max == 0 {
+        return 0;
+    }
+    let ratio = (value as f64 / max as f64).sqrt();
+    ((ratio * 4.0).ceil() as u8).clamp(1, 4)
 }
 
 fn group_activity(rows: Vec<DailyUsage>, range: &str) -> (Vec<DailyUsage>, &'static str) {
@@ -2643,6 +2655,50 @@ impl Database {
         rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
     }
 
+    /// Per-bucket usage rows shared by the timeline report and the activity grid:
+    /// tokens including cache exactly once, recorded cost and turns per UTC day
+    /// (per UTC hour when `range_kind` is `today`).
+    fn daily_usage_rows(
+        &self,
+        range_kind: &str,
+        from: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Vec<DailyUsage>, Error> {
+        let mut statement = self.conn.prepare(obfstr::obfstr!(r#"
+            SELECT CASE WHEN ?3 = 'today' THEN strftime('%Y-%m-%dT%H:00:00Z', u.timestamp) ELSE date(u.timestamp) END,
+                SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
+                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(*),
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
+            FROM usage_record u JOIN session s ON s.id = u.session_id
+            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1)) AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
+            GROUP BY 1 ORDER BY 1
+        "#))?;
+        let rows = statement
+            .query_map(params![from, to, range_kind], |row| {
+                let tokens: i64 = row.get(1)?;
+                let turns: i64 = row.get(3)?;
+                let unknown: i64 = row.get(4)?;
+                Ok(DailyUsage {
+                    priced_turns: (turns - unknown).max(0) as u64,
+                    unpriced_turns: unknown.max(0) as u64,
+                    date: row.get(0)?,
+                    total_tokens: tokens.max(0) as u64,
+                    cost_usd: row.get(2)?,
+                    turns: turns.max(0) as u64,
+                    cost_basis: if unknown > 0 {
+                        TrustLevel::Unknown
+                    } else {
+                        TrustLevel::Estimated
+                    },
+                    chart_pct: 0.0,
+                    level: 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     /// Generates timeline-filtered report grouped by provider (Anthropic, OpenAI, Google)
     /// and model.
     ///
@@ -2908,37 +2964,7 @@ impl Database {
 
         let items_count = providers.iter().map(|p| p.models.len()).sum();
 
-        let mut daily_statement = self.conn.prepare(obfstr::obfstr!(r#"
-            SELECT CASE WHEN ?3 = 'today' THEN strftime('%Y-%m-%dT%H:00:00Z', u.timestamp) ELSE date(u.timestamp) END,
-                SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
-                    ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
-                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(*),
-                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END)
-            FROM usage_record u JOIN session s ON s.id = u.session_id
-            WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1)) AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
-            GROUP BY 1 ORDER BY 1
-        "#))?;
-        let mut daily = daily_statement
-            .query_map(params![cutoff, to_ts, range_kind], |row| {
-                let tokens: i64 = row.get(1)?;
-                let turns: i64 = row.get(3)?;
-                let unknown: i64 = row.get(4)?;
-                Ok(DailyUsage {
-                    priced_turns: (turns - unknown).max(0) as u64,
-                    unpriced_turns: unknown.max(0) as u64,
-                    date: row.get(0)?,
-                    total_tokens: tokens.max(0) as u64,
-                    cost_usd: row.get(2)?,
-                    turns: turns.max(0) as u64,
-                    cost_basis: if unknown > 0 {
-                        TrustLevel::Unknown
-                    } else {
-                        TrustLevel::Estimated
-                    },
-                    chart_pct: 0.0,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut daily = self.daily_usage_rows(range_kind, cutoff.as_deref(), to_ts)?;
         let (grouped, activity_interval) = group_activity(daily, range_kind);
         daily = grouped;
         let maximum = daily.iter().map(|day| day.total_tokens).max().unwrap_or(0);
@@ -2951,6 +2977,7 @@ impl Database {
             } else {
                 day.total_tokens as f64 / maximum as f64 * 100.0
             };
+            day.level = activity_level(day.total_tokens, maximum);
         }
 
         Ok(TimelineReport {
@@ -3303,6 +3330,7 @@ mod tests {
                 priced_turns: 1,
                 unpriced_turns: 0,
                 chart_pct: 0.0,
+                level: 0,
             })
             .to_vec();
         let (rows, unit) = group_activity(rows, "all");
@@ -3330,6 +3358,7 @@ mod tests {
             priced_turns: 1,
             unpriced_turns: 0,
             chart_pct: 0.0,
+            level: 0,
         };
         assert_eq!(
             super::group_activity(vec![row("2026-01-01"), row("2026-01-30")], "all").1,
@@ -4228,5 +4257,27 @@ mod tests {
             .get_session_chat("chat-sess-1", None)
             .expect("fetch empty");
         assert!(after.is_empty());
+    }
+
+    #[test]
+    fn activity_level_zero_for_no_tokens() {
+        assert_eq!(super::activity_level(0, 1_000), 0);
+        assert_eq!(super::activity_level(10, 0), 0);
+    }
+
+    #[test]
+    fn activity_level_four_for_max() {
+        assert_eq!(super::activity_level(1_000, 1_000), 4);
+    }
+
+    #[test]
+    fn activity_level_one_for_tiny_values() {
+        assert_eq!(super::activity_level(1, 1_000_000), 1);
+    }
+
+    #[test]
+    fn activity_level_sqrt_scaled() {
+        assert_eq!(super::activity_level(400, 1_600), 2);
+        assert_eq!(super::activity_level(100, 1_600), 1);
     }
 }
