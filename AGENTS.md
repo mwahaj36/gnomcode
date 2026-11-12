@@ -97,6 +97,7 @@ When Wahaj authorizes a product phase, keep working until that phase is complete
   - `ponytail` (`ponytail`, `ponytail-review`, `ponytail-audit`, `ponytail-debt`, `ponytail-gain`): minimalist filter ladder — write the smallest code that works, reuse stdlib/existing crates, avoid speculative abstractions.
   - `test-driven-development`, `systematic-debugging`, `verification-before-completion` (`obra/superpowers`): strict red-green-refactor TDD, root-cause debugging, and evidence-backed completion checks.
   - `rust-best-practices`, `supabase-postgres-best-practices`: domain guides for idiomatic Rust and Supabase RLS/schema design.
+  - `caveman` (`juliusbrussee/caveman`) and `ponytail`: required for all agent work to keep token usage low. caveman governs chat and reports (terse, payload verbatim; never applies to code, docs, commits or PRs); ponytail governs code size.
   - `apple-design` (`dickwu/apple-design-skill`): UI/UX review against Apple's Human Interface Guidelines plus a craft lens; `impeccable`: frontend design and polish. Use both for every console, tray, web console and PWA UI change.
   - `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`: Gnomcode-specific runbooks.
 - Don't add features that aren't in SPEC. Propose them in SPEC (and an ADR if architectural) first.
