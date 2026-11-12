@@ -11,7 +11,7 @@
 ## Decision
 
 1. **Rust daemon owns update checks, verification, and staging:**
-   - The daemon checks `{branding.base_url}/downloads/latest.json` (overridable by `GNOMCODE_UPDATE_MANIFEST_URL`) once on startup and every 6 hours unless opted out via Settings (`auto_update_enabled = false`) or `GNOMCODE_AUTO_UPDATE=0`.
+   - The daemon checks `{branding.base_url}/downloads/latest.json` (`GNOMCODE_UPDATE_MANIFEST_URL` is honoured for loopback hosts only, for tests) once on startup and every 6 hours unless opted out via Settings (`auto_update_enabled = false`) or `GNOMCODE_AUTO_UPDATE=0`.
    - `gnomcode-core::update` parses the manifest strictly, validates allowed HTTPS release origins, compares SemVer (`major.minor.patch`) without downgrading, downloads the matching platform installer in the background to a `.part` file under `GNOMCODE_HOME/updates/`, verifies its SHA-256 checksum (and Ed25519 signature when both a manifest signature and verifying key are present) before promoting the staged file to `ready`.
    - Every network, parse, verification, or I/O error fails open without interrupting running agents or the UI.
 2. **Electron desktop shell handles presentation and explicit user-triggered installation:**

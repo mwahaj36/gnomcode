@@ -53,9 +53,7 @@ pub fn spawn(db: Arc<Mutex<Database>>) -> JoinHandle<()> {
             ticker.tick().await;
             let enabled = is_update_enabled(&db).await;
             let updates_dir = gnomcode_home().join("updates");
-            let manifest_override = std::env::var("GNOMCODE_UPDATE_MANIFEST_URL")
-                .ok()
-                .filter(|s| !s.trim().is_empty());
+            let manifest_override = manifest_override_from_env();
             let mut next = check_and_stage_update(
                 &client,
                 &state,
@@ -82,9 +80,7 @@ pub(crate) async fn check_now(db: &Arc<Mutex<Database>>) -> UpdateStatus {
         return state.read().await.clone();
     };
     let updates_dir = gnomcode_home().join("updates");
-    let manifest_override = std::env::var("GNOMCODE_UPDATE_MANIFEST_URL")
-        .ok()
-        .filter(|s| !s.trim().is_empty());
+    let manifest_override = manifest_override_from_env();
     let next = check_and_stage_update(
         &client,
         &state,
@@ -96,6 +92,27 @@ pub(crate) async fn check_now(db: &Arc<Mutex<Database>>) -> UpdateStatus {
     .await;
     *state.write().await = next.clone();
     next
+}
+
+/// Reads the test-only manifest override, honouring it only for loopback hosts so the
+/// release flow can never be redirected to an arbitrary origin (AGENTS.md invariant 4).
+fn manifest_override_from_env() -> Option<String> {
+    let raw = std::env::var("GNOMCODE_UPDATE_MANIFEST_URL").ok()?;
+    loopback_url(&raw).map(str::to_owned)
+}
+
+fn loopback_url(raw: &str) -> Option<&str> {
+    let raw = raw.trim();
+    let rest = raw
+        .strip_prefix("http://")
+        .or_else(|| raw.strip_prefix("https://"))?;
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = if authority.starts_with('[') {
+        authority.split_once(']').map_or("", |(name, _)| name)
+    } else {
+        authority.split(':').next().unwrap_or_default()
+    };
+    matches!(host, "127.0.0.1" | "localhost" | "[::1").then_some(raw)
 }
 
 pub(crate) async fn is_update_enabled(db: &Arc<Mutex<Database>>) -> bool {
@@ -345,6 +362,16 @@ mod tests {
     use axum::{Router, routing::get};
     use serde_json::json;
     use sha2::{Digest, Sha256};
+
+    #[test]
+    fn manifest_override_accepts_only_loopback_hosts() {
+        assert!(loopback_url("http://127.0.0.1:8080/latest.json").is_some());
+        assert!(loopback_url("http://localhost/latest.json").is_some());
+        assert!(loopback_url("http://[::1]:9/latest.json").is_some());
+        assert!(loopback_url("https://evil.example/latest.json").is_none());
+        assert!(loopback_url("http://127.0.0.1.evil.example/latest.json").is_none());
+        assert!(loopback_url("file:///etc/passwd").is_none());
+    }
 
     #[tokio::test]
     async fn downloads_verifies_sha256_stages_installer_and_fails_open_on_tamper() {
