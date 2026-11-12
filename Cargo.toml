@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.9.3"
+version = "0.9.4"
 edition = "2024"
 rust-version = "1.87"
 license-file = "LICENSE"
@@ -53,6 +53,7 @@ portable-pty = "0.9"
 conpty-oxide = "0.1.2"
 tempfile = "3.13"
 insta = { version = "1.40", features = ["json", "yaml"] }
+ruzstd = "0.8"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

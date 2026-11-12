@@ -1,6 +1,6 @@
 {
   "name": "@gnomcode/cli-darwin-x64",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "license": "SEE LICENSE IN EULA.txt",
   "os": [
     "darwin"

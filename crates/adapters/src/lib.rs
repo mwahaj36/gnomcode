@@ -2,12 +2,9 @@
 //!
 //! See `docs/SPEC.md` §3.5 and §4.2 for the adapter architecture and invariants.
 
-pub mod aider;
 pub mod antigravity;
 pub mod claude;
-pub mod cline;
 pub mod codex;
-pub mod cursor;
 pub mod gemini;
 pub mod titles;
 
@@ -176,7 +173,6 @@ mod tests {
 {"type":"custom-title","sessionId":"native","customTitle":"Saved chat name"}
 "#),
             (Box::new(super::gemini::GeminiAdapter::new()), br#"{"sessionId":"native","summary":"Saved chat name","messages":[]}"#),
-            (Box::new(super::cursor::CursorAdapter::new()), br#"{"sessionId":"native","title":"Saved chat name","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"}]}"#),
         ];
         for (mut adapter, bytes) in cases {
             let batch = adapter.parse(&FileCtx::default(), bytes);
@@ -188,6 +184,190 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn claude_desktop_entrypoint_is_a_desktop_surface() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let line = br#"{"type":"user","sessionId":"s","entrypoint":"claude-desktop","timestamp":"2026-11-11T20:40:20Z","cwd":"/w","message":{"role":"user","content":"Hi"}}
+"#;
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), line);
+        assert_eq!(
+            batch.sessions[0].surface,
+            gnomcode_core::Surface::DesktopApp
+        );
+    }
+    #[test]
+    fn claude_status_limits_are_exact_and_missing_windows_stay_absent() {
+        let quota = super::claude::parse_status_limits(
+            br#"{"observed_at":"2026-11-12T10:00:00Z","rate_limits":{"five_hour":{"used_percentage":42.5,"resets_at":1794480000}}}"#,
+        );
+        assert_eq!(quota.len(), 1);
+        assert_eq!(quota[0].provider, "claude-code");
+        assert_eq!(quota[0].window, gnomcode_core::QuotaWindow::FiveHour);
+        assert!((quota[0].used_pct - 42.5).abs() < f64::EPSILON);
+        assert_eq!(quota[0].basis, TrustLevel::Exact);
+        assert!(quota[0].resets_at.is_some());
+        assert!(super::claude::parse_status_limits(b"not json").is_empty());
+        assert!(super::claude::parse_status_limits(br#"{"rate_limits":{}}"#).is_empty());
+    }
+
+    #[test]
+    fn claude_oauth_usage_maps_every_window_and_skips_nulls() {
+        let body = serde_json::json!({
+            "five_hour": {"utilization": 12.0, "resets_at": "2026-11-12T03:00:00+00:00"},
+            "seven_day": {"utilization": 40.5, "resets_at": "2026-11-16T08:00:00+00:00"},
+            "seven_day_opus": null,
+            "seven_day_sonnet": {"utilization": 3.0, "resets_at": null}
+        });
+        let quota = super::claude::parse_oauth_usage(&body, chrono::Utc::now());
+        let ids: Vec<_> = quota
+            .iter()
+            .map(|q| (q.limit_id.as_str(), q.window))
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                ("claude", gnomcode_core::QuotaWindow::FiveHour),
+                ("claude", gnomcode_core::QuotaWindow::Weekly),
+                ("sonnet", gnomcode_core::QuotaWindow::Weekly)
+            ]
+        );
+        assert!(quota.iter().all(|q| q.basis == TrustLevel::Exact));
+        assert!(quota[0].resets_at.is_some() && quota[2].resets_at.is_none());
+    }
+
+    #[test]
+    fn antigravity_quota_summary_maps_pools_and_windows() {
+        let body = serde_json::json!({"response": {"groups": [
+            {"displayName": "Gemini Models", "buckets": [
+                {"bucketId": "gemini-weekly", "window": "weekly", "remainingFraction": 0.47, "resetTime": "2026-11-15T17:52:22Z"},
+                {"bucketId": "gemini-5h", "window": "5h", "remainingFraction": 1, "resetTime": "2026-11-12T07:43:50Z"}
+            ]},
+            {"displayName": "Gemini 4 Argon", "buckets": [
+                {"bucketId": "gemini-argon-wtu-weekly", "window": "weekly", "remainingFraction": 0, "resetTime": "2026-11-16T09:21:14Z"}
+            ]},
+            {"displayName": "Unknown window", "buckets": [{"window": "daily", "remainingFraction": 1}]}
+        ]}});
+        let quota = super::antigravity::parse_quota_summary(&body, chrono::Utc::now());
+        let pools: Vec<_> = quota
+            .iter()
+            .map(|q| (q.limit_id.as_str(), q.window, q.used_pct.round() as i64))
+            .collect();
+        assert_eq!(
+            pools,
+            [
+                ("Gemini Models", gnomcode_core::QuotaWindow::Weekly, 53),
+                ("Gemini Models", gnomcode_core::QuotaWindow::FiveHour, 0),
+                ("Gemini 4 Argon", gnomcode_core::QuotaWindow::Weekly, 100)
+            ]
+        );
+        assert!(
+            quota
+                .iter()
+                .all(|q| q.basis == TrustLevel::Api && q.resets_at.is_some())
+        );
+    }
+
+    #[test]
+    fn antigravity_user_status_maps_model_quota() {
+        let now = chrono::Utc::now();
+        let soon = (now + chrono::Duration::hours(3)).to_rfc3339();
+        let later = (now + chrono::Duration::days(4)).to_rfc3339();
+        let body = serde_json::json!({"userStatus": {"userTier": {"name": "Pro"}, "cascadeModelConfigData": {"clientModelConfigs": [
+            {"label": "Gemini 3.8 Flash", "modelOrAlias": {"model": "m1"}, "quotaInfo": {"remainingFraction": 0.75, "resetTime": soon}},
+            {"label": "Claude Opus", "modelOrAlias": {"model": "m2"}, "quotaInfo": {"remainingFraction": 0.0, "resetTime": later}},
+            {"label": "No quota", "modelOrAlias": {"model": "m3"}}
+        ]}}});
+        let quota = super::antigravity::parse_user_status(&body, now);
+        assert_eq!(quota.len(), 2);
+        assert_eq!(quota[0].limit_id, "Gemini 3.8 Flash");
+        assert_eq!(quota[0].window, gnomcode_core::QuotaWindow::FiveHour);
+        assert!((quota[0].used_pct - 25.0).abs() < 1e-9);
+        assert_eq!(quota[1].window, gnomcode_core::QuotaWindow::Weekly);
+        assert!((quota[1].used_pct - 100.0).abs() < 1e-9);
+        assert_eq!(quota[0].plan.as_deref(), Some("Pro"));
+    }
+
+    #[test]
+    fn claude_subagent_transcript_is_a_linked_child_session() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let log = br#"{"type":"user","isSidechain":true,"agentId":"a7fe2469649710219","sessionId":"f9e0d79c-2390-4145-b072-d45b7266d56f","timestamp":"2026-11-11T22:10:13Z","cwd":"/w","message":{"role":"user","content":"Read a file"}}
+{"type":"assistant","isSidechain":true,"agentId":"a7fe2469649710219","sessionId":"f9e0d79c-2390-4145-b072-d45b7266d56f","timestamp":"2026-11-11T22:10:15Z","cwd":"/w","requestId":"r1","message":{"id":"m1","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"stable"}],"usage":{"input_tokens":10,"output_tokens":2}}}
+"#;
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), log);
+        let child = "claude-code:agent-a7fe2469649710219";
+        assert!(batch.sessions.iter().all(|s| s.id == child));
+        assert!(batch.usage_records.iter().all(|u| u.session_id == child));
+        assert_eq!(
+            batch.sessions[0].parent_session_id.as_deref(),
+            Some("claude-code:f9e0d79c-2390-4145-b072-d45b7266d56f")
+        );
+    }
+
+    #[test]
+    fn antigravity_reply_from_created_subagent_does_not_make_parent_a_child() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let parent_ctx = FileCtx {
+            source_path: "/h/.gemini/antigravity/brain/8fce098d-c9f3-405c-af14-d078f0b40115/.system_generated/logs/transcript.jsonl".into(),
+            ..FileCtx::default()
+        };
+        let parent = br#"{"step_index":0,"type":"USER_INPUT","source":"USER","created_at":"2026-10-25T21:30:00Z","content":"Design a logo"}
+{"step_index":5,"type":"SYSTEM_MESSAGE","source":"SYSTEM","created_at":"2026-10-25T21:38:30Z","content":"[Message] sender=8650dd28-1fdb-4a8d-9756-1aef8d290e08 priority=HIGH content=done"}
+"#;
+        let batch = AntigravityAdapter::new().parse(&parent_ctx, parent);
+        assert!(batch.sessions.iter().all(|s| s.parent_session_id.is_none()));
+        let child_ctx = FileCtx {
+            source_path: "/h/.gemini/antigravity/brain/8650dd28-1fdb-4a8d-9756-1aef8d290e08/.system_generated/logs/transcript.jsonl".into(),
+            ..FileCtx::default()
+        };
+        let child = br#"{"step_index":0,"type":"SYSTEM_MESSAGE","source":"SYSTEM","created_at":"2026-10-25T21:38:12Z","content":"[Message] sender=8fce098d-c9f3-405c-af14-d078f0b40115 priority=HIGH content=task"}
+"#;
+        let batch = AntigravityAdapter::new().parse(&child_ctx, child);
+        assert_eq!(
+            batch.sessions[0].parent_session_id.as_deref(),
+            Some("antigravity:8fce098d-c9f3-405c-af14-d078f0b40115")
+        );
+    }
+
+    #[test]
+    fn codex_forked_rollout_keeps_its_own_identity() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let log = br#"{"type":"session_meta","ordinal":0,"timestamp":"2026-11-09T19:56:59Z","payload":{"id":"01a1c1e2-a983-7782-a159-fb9a11f1cb56","forked_from_id":"01a1c1df-7203-7a32-97f4-1de4edf53491","parent_thread_id":"01a1c1df-7203-7a32-97f4-1de4edf53491","cwd":"/w"}}
+{"type":"session_meta","ordinal":1,"timestamp":"2026-11-09T19:56:59Z","payload":{"id":"01a1c1df-7203-7a32-97f4-1de4edf53491","cwd":"/w"}}
+{"type":"event_msg","ordinal":2,"timestamp":"2026-11-09T19:57:19Z","payload":{"type":"token_count","info":{"total_token_usage":{"output_tokens":5},"last_token_usage":{"output_tokens":5}}}}
+"#;
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), log);
+        let child = "codex:01a1c1e2-a983-7782-a159-fb9a11f1cb56";
+        assert!(batch.usage_records.iter().all(|u| u.session_id == child));
+        assert!(batch.sessions.iter().all(|s| s.id == child));
+        assert_eq!(
+            batch.sessions[0].parent_session_id.as_deref(),
+            Some("codex:01a1c1df-7203-7a32-97f4-1de4edf53491")
+        );
+    }
+
+    #[test]
+    fn codex_reemitted_token_count_is_counted_once() {
+        use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
+        let event = |ordinal: u32, total: u32, last: u32| {
+            format!(
+                r#"{{"type":"event_msg","ordinal":{ordinal},"timestamp":"2026-11-11T10:00:0{ordinal}Z","payload":{{"type":"token_count","info":{{"total_token_usage":{{"input_tokens":{total},"output_tokens":{total}}},"last_token_usage":{{"input_tokens":{last},"output_tokens":{last}}}}}}}}}"#
+            )
+        };
+        let log = format!(
+            "{{\"type\":\"session_meta\",\"timestamp\":\"2026-11-11T10:00:00Z\",\"payload\":{{\"id\":\"01a11180-e7a8-7d12-9e69-9f6fadc2399b\",\"cwd\":\"/w\"}}}}
+{}
+{}
+{}
+",
+            event(1, 10, 10),
+            event(2, 10, 10),
+            event(3, 25, 15)
+        );
+        let batch = CodexAdapter::new().parse(&FileCtx::default(), log.as_bytes());
+        let output: u64 = batch.usage_records.iter().map(|u| u.output_tokens).sum();
+        assert_eq!(output, 25);
+    }
+
     #[test]
     fn codex_injected_context_is_not_a_user_turn() {
         use super::{FileCtx, SourceAdapter, codex::CodexAdapter};
@@ -472,26 +652,6 @@ mod tests {
         });
     }
 
-    #[test]
-    fn cursor_chat_keeps_user_and_assistant_text_only() {
-        use super::{FileCtx, SourceAdapter, cursor::CursorAdapter};
-        let bytes = br#"{"sessionId":"cursor-chat","messages":[{"role":"user","timestamp":"2026-10-26T12:00:00Z","content":"Question"},{"role":"assistant","timestamp":"2026-10-26T12:00:05Z","content":"Answer","tool_calls":[{"name":"Shell","output":"secret"}]},{"role":"tool","content":"secret output"}]}"#;
-        let batch = CursorAdapter::new().parse(&FileCtx::default(), bytes);
-        assert_eq!(batch.chat_events.len(), 2);
-        assert_eq!(batch.chat_events[0].content, "Question");
-        assert_eq!(batch.chat_events[1].content, "Answer");
-    }
-
-    #[test]
-    fn cline_chat_keeps_task_feedback_and_answer_without_tools() {
-        use super::{FileCtx, SourceAdapter, cline::ClineAdapter};
-        let bytes = br#"[{"ts":1,"type":"say","say":"task","text":"Question"},{"ts":2,"type":"say","say":"text","text":"Answer"},{"ts":3,"type":"say","say":"tool","text":"secret tool output"},{"ts":4,"type":"say","say":"user_feedback","text":"Follow up"}]"#;
-        let batch = ClineAdapter::new().parse(&FileCtx::default(), bytes);
-        assert_eq!(batch.chat_events.len(), 3);
-        assert_eq!(batch.chat_events[0].content, "Question");
-        assert_eq!(batch.chat_events[1].content, "Answer");
-        assert_eq!(batch.chat_events[2].content, "Follow up");
-    }
     use super::{
         FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
         codex::CodexAdapter, gemini::GeminiAdapter,
@@ -709,14 +869,6 @@ mod tests {
                 Box::new(super::antigravity::AntigravityAdapter::new()),
                 include_bytes!("../../../fixtures/antigravity/synthetic/missing-model.jsonl"),
             ),
-            (
-                Box::new(super::aider::AiderAdapter::new()),
-                include_bytes!("../../../fixtures/aider/synthetic/missing-model.jsonl"),
-            ),
-            (
-                Box::new(super::cline::ClineAdapter::new()),
-                include_bytes!("../../../fixtures/cline/synthetic/missing-model.json"),
-            ),
         ];
         for (mut adapter, bytes) in cases {
             let batch = adapter.parse(&FileCtx::default(), bytes);
@@ -743,38 +895,12 @@ mod tests {
     }
 
     #[test]
-    fn aider_command_is_not_persisted_as_a_tool_name() {
-        let batch = super::aider::AiderAdapter::new().parse(
-            &FileCtx::default(),
-            include_bytes!("../../../fixtures/aider/synthetic/missing-model.jsonl"),
-        );
-        assert_eq!(
-            batch.activity_events[0].tool_name.as_deref(),
-            Some("command")
-        );
-        let synthetic =
-            br#"{"timestamp":"2026-10-26T10:00:00Z","command":"echo API_KEY=synthetic-secret"}
-"#;
-        let batch = super::aider::AiderAdapter::new().parse(&FileCtx::default(), synthetic);
-        assert!(
-            !batch.activity_events[0]
-                .summary_redacted
-                .as_deref()
-                .unwrap_or_default()
-                .contains("synthetic-secret")
-        );
-    }
-
-    #[test]
     fn all_adapters_reject_truncated_input_without_storing_chat() {
         let adapters: Vec<Box<dyn SourceAdapter>> = vec![
             Box::new(ClaudeAdapter::new()),
             Box::new(CodexAdapter::new()),
             Box::new(super::antigravity::AntigravityAdapter::new()),
             Box::new(super::gemini::GeminiAdapter::new()),
-            Box::new(super::cline::ClineAdapter::new()),
-            Box::new(super::cursor::CursorAdapter::new()),
-            Box::new(super::aider::AiderAdapter::new()),
         ];
         for mut adapter in adapters {
             let batch = adapter.parse(&FileCtx::default(), b"{\"truncated\":\r\n");
@@ -785,70 +911,5 @@ mod tests {
                 adapter.agent_id().as_str()
             );
         }
-    }
-
-    #[test]
-    fn cline_adapter_parses_ui_messages_and_approval() {
-        use super::cline::ClineAdapter;
-        let mut adapter = ClineAdapter::new();
-        let ctx = FileCtx {
-            source_path: "/home/dev/.config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/task-123/ui_messages.json".to_owned(),
-            ..FileCtx::default()
-        };
-        let sample = br#"[
-            {"ts": 1729900000000, "type": "say", "say": "task", "text": "start task"},
-            {"ts": 1729900010000, "type": "say", "say": "api_req_started", "text": "{\"tokensIn\":1000,\"tokensOut\":200,\"cost\":0.01,\"modelId\":\"claude-3-5-sonnet\"}"},
-            {"ts": 1729900020000, "type": "ask", "ask": "tool", "text": "execute command"}
-        ]"#;
-        let batch = adapter.parse(&ctx, sample);
-        assert_eq!(batch.parse_errors, 0);
-        assert_eq!(batch.sessions.len(), 1);
-        assert_eq!(
-            batch.sessions[0].state,
-            gnomcode_core::SessionState::AwaitingApproval
-        );
-        assert_eq!(batch.usage_records.len(), 1);
-        assert_eq!(batch.usage_records[0].input_tokens, 1000);
-        assert_eq!(batch.usage_records[0].cost_usd, 0.01);
-    }
-
-    #[test]
-    fn cursor_and_aider_adapters_parse_cleanly() {
-        use super::aider::AiderAdapter;
-        use super::cursor::CursorAdapter;
-
-        let mut cursor = CursorAdapter::new();
-        let c_ctx = FileCtx {
-            source_path: "/workspace/.cursor/transcripts/sess-abc.json".to_owned(),
-            ..FileCtx::default()
-        };
-        let c_sample = br#"{
-            "sessionId": "sess-abc",
-            "messages": [
-                {"role": "user", "timestamp": "2026-10-26T12:00:00Z"},
-                {"role": "assistant", "timestamp": "2026-10-26T12:00:05Z", "model": "gpt-4o", "usage": {"prompt_tokens": 500, "completion_tokens": 150}}
-            ]
-        }"#;
-        let c_batch = cursor.parse(&c_ctx, c_sample);
-        assert_eq!(c_batch.parse_errors, 0);
-        assert_eq!(c_batch.sessions.len(), 1);
-        assert_eq!(
-            c_batch.sessions[0].state,
-            gnomcode_core::SessionState::Ended
-        );
-        assert_eq!(c_batch.usage_records.len(), 1);
-
-        let mut aider = AiderAdapter::new();
-        let a_ctx = FileCtx {
-            source_path: "/workspace/.aider.analytics.jsonl".to_owned(),
-            ..FileCtx::default()
-        };
-        let a_sample = b"{\"timestamp\":\"2026-10-26T12:00:00Z\",\"model\":\"claude-3-5-sonnet\",\"tokens_sent\":800,\"tokens_received\":250,\"cost\":0.005,\"event\":\"chat\"}\n";
-        let a_batch = aider.parse(&a_ctx, a_sample);
-        assert_eq!(a_batch.parse_errors, 0);
-        assert_eq!(a_batch.sessions.len(), 1);
-        assert_eq!(a_batch.sessions[0].state, gnomcode_core::SessionState::Idle);
-        assert_eq!(a_batch.usage_records.len(), 1);
-        assert_eq!(a_batch.usage_records[0].cost_usd, 0.005);
     }
 }

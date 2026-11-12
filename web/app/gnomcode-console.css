@@ -467,7 +467,9 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 @media(hover:hover) and (pointer:fine){
  body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:width .16s ease}
  body.sp-native-console .sp-console-nav .rail-label,.sp-web-app .sp-console-nav button>span,.sp-web-app .web-download-link span{opacity:0!important}
- body.sp-native-console .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)),.sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)),.sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important;transition-delay:.3s}
+ /* Hover intent: a passing pointer must not cover content near the left edge. */
+ body.sp-native-console .sp-console-workspace>.sp-console-nav:has(:focus-visible),.sp-web-app .sp-console-workspace>.sp-console-nav:has(:focus-visible){transition-delay:0s}
  body.sp-native-console .sp-console-nav:is(:hover,:has(:focus-visible)) .rail-label,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) button>span,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) .web-download-link span{opacity:1!important}
  body.sp-native-console #navigation-toggle,.sp-web-app .sp-console-nav>button:first-of-type{display:none!important}
 }
@@ -655,3 +657,12 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 @media(min-width:1100px){.sp-native-console .sp-rule-form{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:760px){.sp-native-console .sp-console-content{padding-inline:20px}.sp-native-console .console-context{min-height:64px;margin-bottom:24px}.sp-summary-grid{gap:16px}.sp-summary-grid>div:nth-child(n){border:0}.sp-native-console .sp-rule-form{grid-template-columns:minmax(0,1fr)}.sp-native-console :is(.table-container,.profile-devices,.profile-appearance,.profile-data,.sp-account-row){padding-bottom:24px;margin-bottom:24px}.sp-activity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-native-console[data-console-view="sessions"] .sp-console-content{padding:0}.sp-activity-totals strong{font-size:24px}}
 @media(prefers-reduced-motion:reduce){.sp-native-console .view-content.active{animation:none}}
+/* Limit state tones: one glance tells OK, low, exhausted or awaiting a reading. */
+.sp-limit-exhausted b{color:var(--sp-primary-text)}
+.sp-limit-low b{color:#d97706}
+.sp-limit-unknown b{color:var(--sp-text-3)}
+.sp-limit-missing{display:grid;grid-template-columns:minmax(64px,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-bottom:1px solid var(--sp-border);font:13px/1.5 var(--sp-font-mono)}
+.sp-limit-missing span{color:var(--sp-text-3);font-family:var(--sp-font-sans);text-align:right}
+.sp-limits-compact>.sp-limit-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,3fr);align-items:start;gap:16px;padding:16px 0;border-bottom:1px solid var(--sp-border);font:13px/1.5 var(--sp-font-mono)}
+.sp-limits-compact>.sp-limit-row>strong,.sp-limit-missing>strong{overflow-wrap:normal;word-break:keep-all}
+.sp-limits-compact>.sp-limit-row .sp-limit-windows{justify-content:flex-end}

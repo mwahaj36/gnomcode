@@ -19,7 +19,7 @@ LicenseUrl: https://gnomcode.vercel.app/legal/eula
 ShortDescription: Mission control for AI coding agents
 Description: |
   Gnomcode is live mission control for AI coding agents (Claude Code, Codex, Gemini CLI,
-  Antigravity, Cline, Cursor). Reads agent logs, shows live state, cost and quota through
+  Antigravity). Reads agent logs, shows live state, cost and quota through
   a CLI, a local web dashboard and an Electron desktop shell.
 Installers:
   - Architecture: x64

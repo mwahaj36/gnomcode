@@ -93,8 +93,9 @@ function getAppIcon(): string {
 async function start(): Promise<void> {
   const appIconPath = getAppIcon();
   if(process.platform==='win32'){
-    repairNotificationShortcut(path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','gnomcode.lnk'),process.execPath,shell,appIconPath);
+    // Electron's toast setup (re)creates the Start Menu shortcut without an icon, so repair after it.
     Notification.isSupported();
+    repairNotificationShortcut(path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','gnomcode.lnk'),process.execPath,shell,appIconPath);
   }
   const baseUrl=await connectDaemon();
   const initial=new URL(baseUrl);initial.hash=workspaceLaunchHash(process.argv) || '';
@@ -244,7 +245,8 @@ async function start(): Promise<void> {
 }
 
 app.setName('Gnomcode');
-if (process.platform === 'win32') app.setAppUserModelId('app.gnomcode.desktop');
+// Dev runs use their own identity so electron.exe never claims the installed app's taskbar icon.
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'app.gnomcode.desktop' : 'app.gnomcode.desktop.dev');
 
 if (squirrelStartup) {
   app.quit();

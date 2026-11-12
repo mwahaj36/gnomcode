@@ -2,8 +2,7 @@
 name: add-agent-adapter
 description: >-
   Step-by-step runbook for adding or updating an AI agent log adapter in
-  crates/adapters (e.g., Claude Code, Codex, Antigravity, Gemini CLI, Cline/Roo,
-  Cursor, Aider), including log anonymization, golden fixture testing,
+  crates/adapters (e.g., Claude Code, Codex, Antigravity, Gemini CLI), including log anonymization, golden fixture testing,
   deduplication keys, and per-model quota pool mapping.
 ---
 
@@ -33,3 +32,7 @@ Follow this procedure whenever adding support for a new AI coding agent or updat
 4. **Write golden + property tests:**
    - Parse every file in `fixtures/<agent>/` and assert against a snapshot (`insta`).
    - Add tests for: (a) truncated trailing line, (b) corrupted middle line skipped cleanly, (c) duplicate lines producing identical `dedup_key`s, and (d) CRLF vs LF parity.
+
+## Verify against real logs
+
+After changing an adapter, ingest into a scratch database (`gnomcode --db <tmp>/state.db status`) and run `python scripts/verify-ingest.py <tmp>/state.db`. Every token class must print OK; investigate any MISMATCH or missing session before merging, then turn the case into a fixture test.

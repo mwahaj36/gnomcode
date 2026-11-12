@@ -25,11 +25,7 @@ export const faqGroups = [
     "questions": [
       {
         "question": "Which agents does Gnomcode observe?",
-        "answer": "Adapters cover Claude Code, Codex, Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider records. Available token, model and quota fields vary by source."
-      },
-      {
-        "question": "Can I control Cursor, Cline or Aider remotely?",
-        "answer": "Their observation adapters do not provide hosted takeover. Remote prompting and launch use supported official CLI processes owned by Gnomcode."
+        "answer": "Adapters cover Claude Code, Codex, Gemini CLI and Antigravity records. Available token, model and quota fields vary by source."
       },
       {
         "question": "Will more agents be added?",

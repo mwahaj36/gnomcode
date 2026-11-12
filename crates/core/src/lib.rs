@@ -56,12 +56,6 @@ pub enum AgentId {
     Antigravity,
     /// Google Gemini CLI.
     GeminiCli,
-    /// Cline / Roo Code VS Code extension.
-    Cline,
-    /// Cursor editor (experimental, opt-in).
-    Cursor,
-    /// Aider terminal agent (opt-in).
-    Aider,
 }
 
 impl AgentId {
@@ -73,9 +67,18 @@ impl AgentId {
             Self::Codex => "codex",
             Self::Antigravity => "antigravity",
             Self::GeminiCli => "gemini-cli",
-            Self::Cline => "cline",
-            Self::Cursor => "cursor",
-            Self::Aider => "aider",
+        }
+    }
+
+    /// Parses a stored identifier, returning `None` for unknown or removed agents.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "claude-code" => Some(Self::ClaudeCode),
+            "codex" => Some(Self::Codex),
+            "antigravity" => Some(Self::Antigravity),
+            "gemini-cli" => Some(Self::GeminiCli),
+            _ => None,
         }
     }
 }
