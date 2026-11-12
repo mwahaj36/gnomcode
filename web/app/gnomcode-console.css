@@ -602,15 +602,12 @@ body:where(.sp-native-console) {
 body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-font-sans)}
 .sp-native-console .sp-console-workspace{display:block;padding-left:64px;min-height:100dvh}
 .sp-native-console .sp-console-workspace>.sp-console-nav{position:fixed;inset:0 auto 0 0;z-index:30;width:64px;padding:12px 8px;gap:6px;border-right:1px solid var(--sp-border);background:var(--sp-surface);overflow:hidden;transition:width .18s cubic-bezier(.16,1,.3,1);align-self:stretch}
-.sp-native-console .sp-console-nav:hover,.sp-native-console .sp-console-nav:focus-within,.sp-native-console.navigation-pinned .sp-console-nav{width:208px}
-.sp-native-console.navigation-pinned .sp-console-workspace{padding-left:208px}
 .sp-native-console .sp-console-nav button,.sp-native-console .sp-console-nav .app-brand{display:flex;align-items:center;gap:14px;flex:none;min-height:44px;width:100%;padding:10px 12px;border-radius:8px;white-space:nowrap;font:500 13px/1.4 var(--sp-font-sans);color:var(--sp-text-2);text-decoration:none}
 .sp-native-console .sp-console-nav #account-entry[hidden]{display:none}
 .sp-native-console .sp-console-nav .app-brand{margin-bottom:12px;color:var(--sp-text);font-size:18px}
 .sp-native-console .sp-console-nav svg,.sp-native-console .sp-console-nav .sp-brand-mark{width:20px;height:20px;flex:0 0 20px}
 .sp-native-console .sp-console-nav svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .sp-native-console .rail-label{opacity:0;transition:opacity .12s;pointer-events:none}
-.sp-native-console .sp-console-nav:hover .rail-label,.sp-native-console .sp-console-nav:focus-within .rail-label,.sp-native-console.navigation-pinned .rail-label{opacity:1}
 .sp-native-console #tab-btn-settings{margin-top:auto}
 .sp-native-console .sp-console-content{padding:0 32px 40px;max-width:1600px;margin:auto}
 .sp-native-console .console-context{min-height:64px;display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--sp-border);margin-bottom:24px}
@@ -642,7 +639,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console.chat-list-collapsed .ide-sidebar{display:none}
 .sp-native-console .ide-expand-sidebar{display:none}
 .sp-native-console.chat-list-collapsed .ide-expand-sidebar{display:inline-flex;align-items:center;gap:8px;margin-bottom:16px}
-@media(max-width:760px){.sp-native-console .sp-console-workspace{padding-left:56px}.sp-native-console .sp-console-workspace>.sp-console-nav{width:56px;flex-direction:column;padding:8px 4px;border-bottom:0}.sp-native-console .sp-console-nav button{border-bottom:0}.sp-native-console .sp-console-content{padding:0 16px 24px}.sp-native-console .console-context{gap:8px;flex-wrap:wrap;padding:8px 0}.sp-native-console .console-context .console-status{font-size:10px}.sp-native-console .ide-layout{grid-template-columns:minmax(0,1fr)}.sp-native-console .ide-sidebar{position:absolute;inset:65px 0 0 56px;z-index:20;max-width:300px;border-right:1px solid var(--sp-border)}.sp-native-console .ide-main{padding:16px}.sp-native-console .console-context h1{font-size:16px}.sp-native-console[data-console-view="sessions"] .console-context{padding:8px 12px}.sp-native-console #chat-prompt-help{display:none}}
+@media(max-width:760px){.sp-native-console .sp-console-content{padding:0 16px 24px}.sp-native-console .console-context{gap:8px;flex-wrap:wrap;padding:8px 0}.sp-native-console .console-context .console-status{font-size:10px}.sp-native-console .ide-layout{grid-template-columns:minmax(0,1fr)}.sp-native-console .ide-sidebar{position:absolute;inset:65px 0 0 56px;z-index:20;max-width:300px;border-right:1px solid var(--sp-border)}.sp-native-console .ide-main{padding:16px}.sp-native-console .console-context h1{font-size:16px}.sp-native-console[data-console-view="sessions"] .console-context{padding:8px 12px}.sp-native-console #chat-prompt-help{display:none}}
 @media(prefers-reduced-motion:reduce){.sp-native-console .sp-console-nav,.sp-native-console .rail-label{transition:none}}
 
 .sp-native-console #console-title{font:600 17px/1.4 var(--sp-font-sans);letter-spacing:-.02em;color:var(--sp-text)}
@@ -754,7 +751,6 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console .composer-toolbar{min-height:40px}
 .sp-native-console #chat-prompt-help{padding-left:8px;font-size:10px}
 
-.sp-native-console:has(.sp-console-nav:hover) .sp-console-workspace,.sp-native-console:has(.sp-console-nav:focus-within) .sp-console-workspace{padding-left:208px}
 .sp-native-console #view-settings{max-width:1040px;margin:0 auto}
 .sp-native-console #view-settings>section,.sp-native-console .profile-disclosure{padding:24px 0;margin:0;border-bottom:1px solid var(--sp-border)}
 .sp-native-console #view-settings h2{font:600 20px/1.4 var(--sp-font-sans);margin:0 0 10px}
@@ -773,7 +769,6 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console #confirm-dialog h2{font-size:20px;margin:0 0 12px}
 .sp-native-console #confirm-dialog p{font-size:14px;line-height:1.6;color:var(--sp-text-2);margin:0 0 24px}
 .sp-native-console .dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px}
-@media(max-width:760px){.sp-native-console:has(.sp-console-nav:hover) .sp-console-workspace,.sp-native-console:has(.sp-console-nav:focus-within) .sp-console-workspace{padding-left:56px}}
 .sp-web-app:has(.sp-console-nav:hover),.sp-web-app:has(.sp-console-nav:focus-within){padding-left:240px}
 @media(max-width:760px){.sp-web-app:has(.sp-console-nav:hover),.sp-web-app:has(.sp-console-nav:focus-within){padding-left:72px}}
 
@@ -838,7 +833,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console .connection-toast{display:flex;align-items:center;gap:12px;min-width:240px;max-width:calc(100vw - 32px);padding:8px 10px 8px 16px;border-radius:6px;box-shadow:0 8px 24px rgb(0 0 0 / .18)}
 .sp-native-console .connection-toast>svg{flex:none;color:var(--sp-text-2)}
 .sp-native-console .connection-dismiss{display:flex;align-items:center;justify-content:center;margin-left:auto;width:32px;min-height:32px;padding:8px;border:0;background:transparent;color:var(--sp-text-2)}
-@media(max-width:760px){.sp-native-console .connection-dismiss{min-width:44px;min-height:44px}.sp-native-console.navigation-pinned .sp-console-workspace{padding-left:56px}.sp-native-console .rail-pin{display:none}.sp-native-console.navigation-pinned .sp-console-nav{width:56px}.sp-native-console.navigation-pinned .sp-console-nav:focus-within{width:208px}}
+@media(max-width:760px){.sp-native-console .connection-dismiss{min-width:44px;min-height:44px}}
 .sp-web-app.web-navigation-pinned .sp-console-workspace>.sp-console-nav{width:208px}
 @media(max-width:760px){.sp-web-app .sp-console-nav>button:first-of-type{display:none}.sp-web-app.web-navigation-pinned .sp-console-workspace>.sp-console-nav{width:56px}.sp-web-app.web-navigation-pinned .sp-console-nav:focus-within{width:208px}}
 
@@ -859,13 +854,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 
 .sp-native-console[data-console-view="sessions"] .view-content.active{animation:none;transform:none}
 
-/* One explicit rail toggle; focus and hover never change the layout. */
-body.sp-native-console .sp-console-workspace{padding-left:64px!important}
-body.sp-native-console .sp-console-workspace>.sp-console-nav{width:64px!important;transition:none}
-body.sp-native-console .sp-console-nav .rail-label{opacity:0!important}
-body.sp-native-console.navigation-expanded .sp-console-workspace{padding-left:208px!important}
-body.sp-native-console.navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
-body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1!important}
+/* Web console: one explicit rail toggle. */
 .sp-web-app{padding-left:96px!important}
 .sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:none}
 .sp-web-app .sp-console-nav button>span{opacity:0!important}
@@ -881,7 +870,7 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .pairing-code-form{margin:16px 0}.pairing-code-form label{display:block;font-size:13px;margin-bottom:8px}.pairing-code-form>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pairing-code-form input{min-width:0;max-width:200px;padding:10px 12px;background:var(--sp-surface);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:6px;font:18px/1.5 var(--sp-font-mono);letter-spacing:.1em}
 :is(.sp-native-console,.sp-console-app,.sp-remote) select{color-scheme:inherit}
 :is(.sp-native-console,.sp-console-app,.sp-remote) :is(option,optgroup){background:var(--sp-surface);color:var(--sp-text)}
-@media(max-width:760px){body.sp-native-console .sp-console-workspace,body.sp-native-console.navigation-expanded .sp-console-workspace{padding-left:56px!important}body.sp-native-console .sp-console-workspace>.sp-console-nav{width:56px!important}.sp-web-app,.sp-web-app.web-navigation-expanded{padding-left:72px!important}.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
+@media(max-width:760px){.sp-web-app,.sp-web-app.web-navigation-expanded{padding-left:72px!important}.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
 
 .workspace-field{position:relative}.workspace-field #launch-repo-input{padding-right:52px}.workspace-field #launch-workspace-browse{position:absolute;right:3px;top:3px;width:40px;min-height:38px;padding:8px;background:transparent;display:flex;align-items:center;justify-content:center}
 .sp-chat-waiting{align-self:flex-start;color:var(--sp-text-2);max-width:100%}.sp-chat-waiting header{display:none}.sp-chat-waiting .sp-chat-body{font-size:13px}.sp-chat-waiting .sp-chat-body::before{content:'';display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:10px;animation:chat-pulse 1s ease-in-out infinite alternate}@keyframes chat-pulse{to{opacity:.3}}@media(prefers-reduced-motion:reduce){.sp-chat-waiting .sp-chat-body::before{animation:none}}
@@ -926,17 +915,17 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .sp-remote .remote-folder-modal footer{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--sp-border);flex:none}
 .sp-remote .remote-folder-modal footer button{margin:0;min-height:44px}
 @media(max-width:760px){.sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:0}.sp-remote .remote-conversation{padding:12px 12px max(12px,env(safe-area-inset-bottom))}.sp-remote .show-sessions .remote-session-sidebar{width:100%;border:0}.sp-remote .remote-heading :is(h1,h2){font-size:15px}.sp-remote .remote-heading{min-height:60px}}
-/* Desktop hover reveals labels without moving the conversation. */
+/* Web console only: desktop hover reveals labels. The local console rail is toggle-only (Phase 6 block at the end). */
 @media(hover:hover) and (pointer:fine){
- body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:width .16s ease}
- body.sp-native-console .sp-console-nav .rail-label,.sp-web-app .sp-console-nav button>span,.sp-web-app .web-download-link span{opacity:0!important}
- body.sp-native-console .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)),.sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important;transition-delay:.3s}
+ .sp-web-app .sp-console-workspace>.sp-console-nav{width:64px!important;transition:width .16s ease}
+ .sp-web-app .sp-console-nav button>span,.sp-web-app .web-download-link span{opacity:0!important}
+ .sp-web-app .sp-console-workspace>.sp-console-nav:is(:hover,:has(:focus-visible)){width:208px!important;transition-delay:.3s}
  /* Hover intent: a passing pointer must not cover content near the left edge. */
- body.sp-native-console .sp-console-workspace>.sp-console-nav:has(:focus-visible),.sp-web-app .sp-console-workspace>.sp-console-nav:has(:focus-visible){transition-delay:0s}
- body.sp-native-console .sp-console-nav:is(:hover,:has(:focus-visible)) .rail-label,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) button>span,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) .web-download-link span{opacity:1!important}
- body.sp-native-console #navigation-toggle,.sp-web-app .sp-console-nav>button:first-of-type{display:none!important}
+ .sp-web-app .sp-console-workspace>.sp-console-nav:has(:focus-visible){transition-delay:0s}
+ .sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) button>span,.sp-web-app .sp-console-nav:is(:hover,:has(:focus-visible)) .web-download-link span{opacity:1!important}
+ .sp-web-app .sp-console-nav>button:first-of-type{display:none!important}
 }
-@media(prefers-reduced-motion:reduce){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.sp-web-app .sp-console-workspace>.sp-console-nav{transition:none!important}}
 .sp-chat-notice{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
 .sp-remote.is-reconnecting{display:flex;flex-direction:column;max-width:none;margin:0;min-height:0}
 .sp-remote.is-reconnecting .remote-workspace{min-height:0}
@@ -980,7 +969,7 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .ide-sidebar-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}.ide-sidebar-title h2{font:600 14px/1.4 var(--sp-font-sans);margin:0}.ide-sidebar-title button{padding:8px;min-width:36px;min-height:36px;background:transparent}
 .sp-remote .remote-sidebar-toggle{display:flex;align-items:center;justify-content:center;flex:none;min-width:44px;height:44px;background:transparent;border:0;padding:8px;margin:0}
 @media(min-width:761px){.sp-remote .remote-workspace:not(.show-sessions){grid-template-columns:minmax(0,1fr)}.sp-remote .remote-workspace:not(.show-sessions)>.remote-session-sidebar{display:none}}
-@media(hover:hover) and (pointer:fine) and (max-width:760px){body.sp-native-console .sp-console-workspace>.sp-console-nav,.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
+@media(hover:hover) and (pointer:fine) and (max-width:760px){.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important}}
 .sp-activity-heading{flex-wrap:wrap}.sp-activity-heading>div{min-width:0;max-width:100%}.sp-activity-totals{min-width:0;max-width:100%}
 .sp-remote .remote-folder-modal footer button.sp-primary-action{background:var(--sp-primary);color:var(--sp-on-primary);border-color:transparent}
 
@@ -1297,3 +1286,56 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 :root[data-theme="light"] .sp-heat { outline-color: rgb(12 17 25 / .06); }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .sp-heat { outline-color: rgb(12 17 25 / .06); } }
 @media (max-width: 480px) { .sp-heatmap-card { padding: var(--sp-4); } .sp-heatmap-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-5); } }
+
+/* Phase 6 (local console): four places and a toggle-only rail. The rail is a grid column, so content moves and nothing is covered. */
+body.sp-native-console{--rail-w:64px;--rail-h:57px}
+body.sp-native-console[data-rail="expanded"]{--rail-w:208px}
+body.sp-native-console .sp-console-workspace{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);gap:0;padding-left:0;align-items:start;min-height:100dvh}
+body.sp-native-console .sp-console-workspace>.sp-console-nav{position:sticky;inset:auto;top:0;z-index:30;display:flex;flex-direction:column;width:auto;height:100dvh;padding:var(--sp-3) var(--sp-2);gap:var(--sp-1);overflow:hidden auto;transition:none;align-self:start}
+body.sp-native-console .sp-rail-tabs{display:contents}
+body.sp-native-console[data-rail] .rail-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);opacity:1;pointer-events:none}
+body.sp-native-console[data-rail="expanded"] .rail-label{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+body.sp-native-console .sp-console-nav .tab-btn,body.sp-native-console .sp-console-nav #navigation-toggle{position:relative;color:var(--sp-text-3);background:transparent;border:0;text-transform:none;letter-spacing:0}
+body.sp-native-console .sp-console-nav :is(.tab-btn,#navigation-toggle):hover{color:var(--sp-text-2);background:var(--sp-surface)}
+body.sp-native-console .sp-console-nav .tab-btn.active,body.sp-native-console .sp-console-nav .tab-btn[aria-selected="true"]{color:var(--sp-text);background:var(--sp-surface-2);font-weight:500}
+body.sp-native-console .sp-console-nav .tab-btn.active::after{content:"";position:absolute;inset:10px auto 10px calc(-1 * var(--sp-2));width:3px;height:auto;border-radius:2px;background:var(--sp-text)}
+body.sp-native-console #tab-btn-settings{margin-top:auto}
+body.sp-native-console .sp-console-content{min-width:0;max-width:none;margin:0;padding:0 var(--sp-gutter) var(--sp-6)}
+body.sp-native-console:not([data-console-view="sessions"]) .sp-console-content>*{width:100%;max-width:var(--sp-content-max);margin-inline:auto}
+body.sp-native-console #view-settings{max-width:720px;margin-left:max(0px,calc((100% - var(--sp-content-max)) / 2));margin-right:auto}
+body.sp-native-console #view-settings h3{font:600 var(--sp-fs-strong)/1.4 var(--sp-font-sans);margin:0 0 var(--sp-2)}
+body.sp-native-console .sp-settings-section .table-container{margin-bottom:var(--sp-5)}
+body.sp-native-console .sp-muted-cell{text-align:center;color:var(--sp-text-3)}
+body.sp-native-console .sp-table-caption{font-weight:600;font-size:var(--sp-fs-meta);margin-bottom:var(--sp-2)}
+body.sp-native-console .sp-roi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-4);margin-top:var(--sp-3)}
+body.sp-native-console #providers-container{align-items:start}
+body.sp-native-console #view-console>[data-local-view="usage"]+[data-local-view="usage"]{margin-top:var(--sp-6)}
+body.sp-native-console .sp-source-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--sp-2)}
+body.sp-native-console .sp-source-list li{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3);min-height:44px}
+body.sp-native-console .sp-source-list .sp-provider-name{flex:1}
+body.sp-native-console .sp-source-label{color:var(--sp-text-2);font-size:var(--sp-fs-meta)}
+body.sp-native-console #ide-empty{max-width:420px;margin:var(--sp-7) auto;justify-items:center;text-align:center}
+body.sp-native-console .ide-main:has(#ide-launcher:not([hidden])) #ide-empty,body.sp-native-console .ide-main:has(#session-chat-panel:not([hidden])) #ide-empty{display:none}
+body.sp-native-console .ide-sidebar .sp-group-label{margin:var(--sp-3) var(--sp-1) var(--sp-1);font:600 var(--sp-fs-meta)/1.4 var(--sp-font-sans);color:var(--sp-text-3)}
+@media(min-width:721px){body.sp-native-console .ide-layout{grid-template-columns:300px minmax(0,1fr)}}
+@media(min-width:721px) and (max-width:760px){body.sp-native-console .ide-layout{grid-template-columns:minmax(0,1fr)}}
+/* Under 720px the rail becomes a top bar with the four places. */
+@media(max-width:720px){
+ body.sp-native-console .sp-console-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{width:100%;height:auto;flex-direction:row;align-items:stretch;padding:var(--sp-1) var(--sp-2);border-right:0;border-bottom:1px solid var(--sp-border);overflow:visible}
+ body.sp-native-console .sp-console-nav :is(.app-brand,#account-entry,#navigation-toggle){display:none}
+ body.sp-native-console .sp-rail-tabs{display:flex;flex:1;gap:var(--sp-1)}
+ body.sp-native-console .sp-console-nav .tab-btn{flex:1;justify-content:center;width:auto;min-height:48px;padding:0}
+ body.sp-native-console #tab-btn-settings{margin-top:0}
+ body.sp-native-console[data-rail] .rail-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ body.sp-native-console .sp-console-nav .tab-btn.active::after{inset:auto var(--sp-4) 0;width:auto;height:3px}
+ body.sp-native-console .sp-console-content{padding:0 var(--sp-4) var(--sp-5)}
+ body.sp-native-console #view-settings{margin-left:0}
+ body.sp-native-console[data-console-view="sessions"] .sp-console-workspace{height:100dvh}
+ body.sp-native-console[data-console-view="sessions"] .sp-console-content{height:auto;min-height:0}
+ body.sp-native-console .ide-layout{height:100%}
+ body.sp-native-console .ide-sidebar{position:fixed;inset:var(--rail-h) auto 0 0;top:var(--rail-h);width:min(320px,100vw);max-width:none}
+ body.sp-native-console[data-console-view="sessions"] #chat-list-toggle{top:calc(var(--rail-h) + var(--sp-2));left:var(--sp-2)}
+ body.sp-native-console.chat-list-collapsed .ide-expand-sidebar{display:none}
+ body.sp-native-console #ide-empty{margin-top:var(--sp-7)}
+}
