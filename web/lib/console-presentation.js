@@ -917,3 +917,62 @@ export function renderFileViewer(fileData) {
   const body = lines.map((line, index) => `<span class="sp-file-line"><span class="sp-file-ln">${index + 1}</span><span>${escape(line) || ' '}</span></span>`).join('');
   return `<div class="sp-changes-meta">${badges}</div><pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
 }
+const IMAGE_DATA_URL_RE = /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i;
+const IMAGE_LOCAL_API_RE = /^\/api\/v1\/[^\s"'<>]+$/;
+
+export function classifyArtifactKind(item) {
+  const explicit = String(item?.kind || '').toLowerCase();
+  if (explicit === 'html' || explicit === 'markdown' || explicit === 'image') return explicit;
+  const mime = String(item?.mime_type || '').toLowerCase();
+  if (mime === 'text/html') return 'html';
+  if (mime === 'text/markdown') return 'markdown';
+  if (mime.startsWith('image/')) return 'image';
+  const path = String(item?.path || item?.title || '').toLowerCase();
+  if (/\.(html?|xhtml)$/.test(path)) return 'html';
+  if (/\.(md|markdown|mdx)$/.test(path)) return 'markdown';
+  if (/\.(png|jpe?g|webp|gif|svg)$/.test(path)) return 'image';
+  return 'other';
+}
+
+export function isSafeArtifactImageSrc(src) {
+  const value = String(src || '').trim();
+  return IMAGE_DATA_URL_RE.test(value) || IMAGE_LOCAL_API_RE.test(value);
+}
+
+const ARTIFACT_BADGE = { html: '[HTML]', markdown: '[MD]', image: '[IMG]', other: '[FILE]' };
+
+export function renderArtifactsList(items = [], selectedId = '') {
+  if (!Array.isArray(items) || !items.length) {
+    return '<p class="sp-empty">No artifacts recorded for this session yet.</p>';
+  }
+  return items.map((item, idx) => {
+    const id = String(item?.id || item?.path || idx);
+    const kind = classifyArtifactKind(item);
+    const label = item?.title || item?.path || `Artifact ${idx + 1}`;
+    const selected = id === String(selectedId);
+    const status = item?.status ? `<span class="sp-artifact-status">${escape(item.status)}</span>` : '';
+    return `<button type="button" class="sp-artifact-item${selected ? ' is-selected' : ''}" data-artifact-id="${escape(id)}" aria-pressed="${selected ? 'true' : 'false'}"><span class="sp-artifact-badge">${ARTIFACT_BADGE[kind] || '[FILE]'}</span><span class="sp-artifact-name">${escape(label)}</span>${status}</button>`;
+  }).join('');
+}
+
+export function renderArtifactPreview(artifact) {
+  if (!artifact || typeof artifact !== 'object') {
+    return '<p class="sp-empty">Select an artifact to preview.</p>';
+  }
+  const kind = classifyArtifactKind(artifact);
+  const title = String(artifact.title || artifact.path || 'Artifact preview');
+  if (kind === 'html') {
+    return `<div class="sp-artifact-html-wrap"><p class="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe class="sp-artifact-frame" title="${escape(title)}" sandbox="" referrerpolicy="no-referrer" srcdoc="${escape(String(artifact.content || ''))}"></iframe></div>`;
+  }
+  if (kind === 'markdown') {
+    return `<div class="sp-artifact-markdown sp-chat-body">${chatMarkdown(String(artifact.content || ''))}</div>`;
+  }
+  if (kind === 'image') {
+    const src = artifact.data_url || artifact.url || '';
+    if (!isSafeArtifactImageSrc(src)) {
+      return '<p class="sp-empty">Image preview unavailable for untrusted or empty source.</p>';
+    }
+    return `<div class="sp-artifact-image-wrap"><img class="sp-artifact-image" src="${escape(src)}" alt="${escape(title)}" /></div>`;
+  }
+  return `<pre class="sp-artifact-code"><code>${escape(String(artifact.content || 'Preview unavailable.'))}</code></pre>`;
+}

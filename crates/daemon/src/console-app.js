@@ -1467,6 +1467,106 @@ function cycleTheme() {
       panel.hidden = !panel.hidden;
       if (!panel.hidden) void loadSessionFileListing('');
     }
+    let artifactsOpen = false;
+    let artifactItems = [];
+    let selectedArtifactId = '';
+
+    function resetArtifactsPanel() {
+      artifactsOpen = false;
+      artifactItems = [];
+      selectedArtifactId = '';
+      const panel = document.getElementById('chat-artifacts-panel');
+      const btn = document.getElementById('chat-artifacts-btn');
+      if (panel) panel.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    async function renderArtifactsState() {
+      const presentation = await import('/console-presentation.js');
+      const list = document.getElementById('chat-artifacts-list');
+      const preview = document.getElementById('chat-artifact-preview');
+      if (!list || !preview) return;
+      list.innerHTML = presentation.renderArtifactsList(artifactItems, selectedArtifactId);
+      const selected = artifactItems.find((item, idx) => String(item.id || item.path || idx) === String(selectedArtifactId)) || null;
+      preview.innerHTML = presentation.renderArtifactPreview(selected);
+    }
+
+    async function loadArtifacts() {
+      const sessionId = activeChatSession;
+      if (!sessionId) return;
+      const list = document.getElementById('chat-artifacts-list');
+      const preview = document.getElementById('chat-artifact-preview');
+      const changesBadge = document.getElementById('chat-artifacts-changes');
+      if (list) list.innerHTML = '<p class="sp-empty">Loading artifacts...</p>';
+      if (preview) preview.innerHTML = '';
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const session = ideSessions.find(s => s.id === sessionId);
+      const hosted = hostedSessions.find(s => s.session_id === sessionId);
+      const repoPath = session?.repo_path || hosted?.repo_path || '';
+      let items = [];
+      let changedPaths = [];
+      try {
+        const res = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts`, { headers, signal: AbortSignal.timeout(10000) });
+        if (res.ok) {
+          const data = await res.json();
+          items = Array.isArray(data.artifacts) ? data.artifacts : Array.isArray(data.items) ? data.items : [];
+          if (Array.isArray(data.changed_files)) changedPaths = data.changed_files;
+          else if (typeof data.changes_count === 'number' && changesBadge) changesBadge.textContent = `${data.changes_count} workspace change${data.changes_count === 1 ? '' : 's'}`;
+        }
+      } catch (_) {}
+      if (repoPath) {
+        try {
+          const diff = await apiJson(`/api/v1/repos/diff?repo=${encodeURIComponent(repoPath)}`, { headers, signal: AbortSignal.timeout(10000) });
+          const lines = String(diff?.status || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+          if (changesBadge && !changesBadge.textContent) {
+            changesBadge.textContent = lines.length ? `${lines.length} workspace change${lines.length === 1 ? '' : 's'}` : 'No uncommitted changes';
+          }
+          if (!items.length && lines.length) {
+            const candidateRows = lines.map(line => {
+              const status = line.slice(0, 2).trim() || 'M';
+              const path = line.slice(3).trim().replace(/^"(.*)"$/, '$1');
+              return { status, path };
+            }).filter(row => /\.(md|markdown|mdx|html?|png|jpe?g|webp|gif|svg)$/i.test(row.path)).slice(0, 8);
+            for (const row of candidateRows) {
+              if (/\.(png|jpe?g|webp|gif|svg)$/i.test(row.path)) {
+                items.push({ id: row.path, path: row.path, status: row.status, kind: 'image' });
+              } else {
+                try {
+                  const fileData = await apiJson(`/api/v1/repos/file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(row.path)}`, { headers, signal: AbortSignal.timeout(8000) });
+                  items.push({ id: row.path, path: row.path, status: row.status, content: String(fileData?.content || '') });
+                } catch (_) {
+                  items.push({ id: row.path, path: row.path, status: row.status, content: '' });
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      if (sessionId !== activeChatSession) return;
+      if (changesBadge && !changesBadge.textContent) {
+        changesBadge.textContent = changedPaths.length ? `${changedPaths.length} workspace changes` : 'Artifacts';
+      }
+      artifactItems = items;
+      selectedArtifactId = items[0] ? String(items[0].id || items[0].path || 0) : '';
+      await renderArtifactsState();
+    }
+
+    function toggleArtifacts(forceOpen) {
+      const panel = document.getElementById('chat-artifacts-panel');
+      const btn = document.getElementById('chat-artifacts-btn');
+      if (!panel || !btn) return;
+      artifactsOpen = typeof forceOpen === 'boolean' ? forceOpen : !artifactsOpen;
+      panel.hidden = !artifactsOpen;
+      btn.setAttribute('aria-expanded', String(artifactsOpen));
+      if (artifactsOpen) void loadArtifacts();
+    }
+
+    document.getElementById('chat-artifacts-list')?.addEventListener('click', event => {
+      const item = event.target.closest('[data-artifact-id]');
+      if (!item) return;
+      selectedArtifactId = item.dataset.artifactId || '';
+      void renderArtifactsState();
+    });
 
     async function loadChat(sessionId, earlier = false, silent = false) {
       if (!sessionId) return;
@@ -1477,6 +1577,7 @@ function cycleTheme() {
           closeChangesPanel();
           closeFilesPanel();
         }
+        if (activeChatSession !== sessionId) { selectChatSession(sessionId); resetArtifactsPanel(); }
         chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
@@ -2168,6 +2269,7 @@ function cycleTheme() {
 
     const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-tour-tip': dismissTourTip, 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
+      'toggle-artifacts': () => toggleArtifacts(), 'refresh-artifacts': () => { void loadArtifacts(); }, 'close-artifacts': () => toggleArtifacts(false),
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
