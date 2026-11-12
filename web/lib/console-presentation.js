@@ -134,6 +134,7 @@ const PROVIDERS = {
 const limitTone = pool => pool.reset_passed || !Number.isFinite(pool.remaining_pct) ? 'unknown' : pool.remaining_pct <= 0 ? 'exhausted' : pool.remaining_pct < 20 ? 'low' : 'ok';
 const limitHeadline = pool => pool.reset_passed ? 'Reset' : Number.isFinite(pool.remaining_pct) ? (pool.remaining_pct <= 0 ? 'Exhausted' : `${Math.round(pool.remaining_pct)}% left`) : 'Unknown';
 function limitDetail(pool) {
+  if (pool.source_issue) return `${pool.source_issue} · ${observedLabel(pool.observed_at).toLowerCase()}`;
   if (pool.reset_passed) return 'Awaiting next reading';
   const reset = Date.parse(pool.resets_at);
   if (!Number.isFinite(reset)) return 'Reset time unknown';

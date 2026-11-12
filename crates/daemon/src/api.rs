@@ -2177,7 +2177,7 @@ async fn quota_handler(
     let quota = db
         .get_latest_quota_snapshots()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(quota_views(quota)))
+    Ok(Json(quota_views_with_issues(quota)))
 }
 
 #[derive(Serialize)]
@@ -2200,6 +2200,18 @@ pub(crate) struct QuotaPoolView {
     pool: Option<String>,
     /// Window label: "Session", "Weekly" or "Monthly".
     window_label: String,
+    /// Why the opt-in live source is not refreshing this reading (e.g. expired Claude sign-in).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_issue: Option<String>,
+}
+
+/// Quota views for the local API, annotated with why an opt-in live source has stopped updating.
+fn quota_views_with_issues(snapshots: Vec<gnomcode_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
+    let mut views = quota_views(snapshots);
+    for view in &mut views {
+        view.source_issue = crate::vendor_limits::issue(&view.snapshot.provider);
+    }
+    views
 }
 
 /// Display name for a pool id. Snake or kebab ids (`gemini_pro`) are title-cased
@@ -2292,6 +2304,7 @@ pub(crate) fn quota_views_at(
                 pool,
                 window_label: window.to_owned(),
                 snapshot,
+                source_issue: None,
             }
         })
         .collect()
@@ -2348,6 +2361,9 @@ pub(crate) struct ProviderOverview {
     enable_command: Option<String>,
     /// `None` when nothing was recorded in the last 30 days.
     cost: Option<ProviderCost>,
+    /// Why the opt-in live source is not refreshing this provider's readings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_issue: Option<String>,
 }
 
 const CORE_PROVIDERS: [&str; 3] = ["claude-code", "codex", "antigravity"];
@@ -2500,6 +2516,7 @@ fn provider_overviews(
                     .unwrap_or(gnomcode_core::quota::QuotaState::Unknown),
                 updated_at: windows.iter().map(|w| w.snapshot.observed_at).max(),
                 cost: costs.remove(&slug),
+                source_issue: crate::vendor_limits::issue(&slug),
                 provider: slug,
                 display_name,
                 windows,
@@ -3108,7 +3125,7 @@ async fn automation_handler(
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, build_router, quota_views};
+    use super::{AppState, build_router, quota_views, quota_views_with_issues};
 
     #[test]
     fn pty_query_token_does_not_bypass_host_or_origin_validation() {
@@ -3825,6 +3842,33 @@ mod tests {
     }
 
     #[test]
+    fn overview_cards_carry_the_source_issue() {
+        let quota: gnomcode_core::QuotaSnapshot = serde_json::from_value(json!({
+            "provider": "overview-issue-test", "limit_id": "claude", "window": "weekly", "used_pct": 2.0,
+            "resets_at": null, "plan": null, "basis": "exact", "observed_at": "2026-11-12T03:37:17Z"
+        })).expect("quota");
+        crate::vendor_limits::record_issue(
+            "overview-issue-test",
+            Some("Claude sign-in expired".to_owned()),
+        );
+        let list = overviews(vec![quota], chrono::Utc::now(), true, false);
+        crate::vendor_limits::record_issue("overview-issue-test", None);
+        let card = list
+            .iter()
+            .find(|o| o.provider == "overview-issue-test")
+            .expect("card");
+        assert_eq!(card.source_issue.as_deref(), Some("Claude sign-in expired"));
+        let json = serde_json::to_value(card).expect("json");
+        assert_eq!(json["source_issue"], "Claude sign-in expired");
+        assert!(
+            serde_json::to_value(&list[1])
+                .expect("json")
+                .get("source_issue")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn overview_lists_core_providers_without_data() {
         let list = overviews(Vec::new(), chrono::Utc::now(), false, false);
         let slugs: Vec<_> = list.iter().map(|o| o.provider.as_str()).collect();
@@ -4198,6 +4242,22 @@ mod tests {
         assert_eq!(json["state"], "ok");
         assert_eq!(json["label"], "Weekly");
         assert_eq!(json["remaining_pct"], 20.0);
+    }
+
+    #[test]
+    fn quota_pools_say_why_their_live_source_is_stale() {
+        let quota: gnomcode_core::QuotaSnapshot = serde_json::from_value(json!({
+            "provider": "issue-test", "limit_id": "claude", "window": "weekly", "used_pct": 2.0,
+            "resets_at": null, "plan": null, "basis": "exact", "observed_at": "2026-11-12T03:37:17Z"
+        }))
+        .expect("quota");
+        let plain = serde_json::to_value(quota_views(vec![quota.clone()])).expect("json");
+        assert!(plain[0].get("source_issue").is_none());
+        crate::vendor_limits::record_issue("issue-test", Some("Claude sign-in expired".to_owned()));
+        let views = serde_json::to_value(quota_views_with_issues(vec![quota])).expect("json");
+        crate::vendor_limits::record_issue("issue-test", None);
+        assert_eq!(views[0]["source_issue"], "Claude sign-in expired");
+        assert_eq!(views[0]["remaining_pct"], 98.0);
     }
 
     #[test]
