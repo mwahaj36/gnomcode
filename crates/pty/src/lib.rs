@@ -118,6 +118,7 @@ pub fn resume_command(agent: &str, repo: &Path, native_id: &str) -> Result<Launc
     let verb = match agent {
         "codex" => "resume",
         "claude" | "claude-code" | "gemini" | "gemini-cli" => "--resume",
+        "antigravity" | "agy" => "--conversation",
         _ => return Err(Error::UnsupportedAgent(agent.to_owned())),
     };
     command.arguments = vec![verb.to_owned(), native_id.to_owned()];
@@ -1354,6 +1355,25 @@ mod tests {
                 .arguments,
             ["--resume", "saved-123"]
         );
+        for agent in ["antigravity", "agy"] {
+            assert_eq!(
+                resume_command(agent, repo.path(), "saved-123").expect("agy native resume"),
+                LaunchCommand {
+                    executable: "agy".into(),
+                    arguments: vec!["--conversation".into(), "saved-123".into()]
+                }
+            );
+            for id in [
+                "",
+                "--last",
+                "--yolo",
+                "saved\r/exit",
+                "saved another",
+                "../saved",
+            ] {
+                assert!(resume_command(agent, repo.path(), id).is_err());
+            }
+        }
         for id in ["", "--last", "--yolo", "saved\r/exit", "saved another"] {
             assert!(resume_command("codex", repo.path(), id).is_err());
         }

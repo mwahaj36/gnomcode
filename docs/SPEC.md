@@ -178,6 +178,8 @@ Cross-provider changes attach a new official CLI to the same local conversation.
 
 Desktop Resume conversation, local `POST /api/v1/sessions/{id}/continue` and encrypted Remote `resume_session` reuse a live hosted agent or reopen the exact recorded native ID in its recorded workspace: `codex resume <id>`, `claude --resume <id>` or `gemini --resume <id>`. Strictly validate native IDs, preserve CLI permission/login controls and do not inject a task until the user sends a message. Desktop Send can also resume before delivery. Serialize resume, switch and prompt control to avoid duplicate hosts during concurrent local/Remote actions. Keep the conversation ID/history stable and replace only the dead host binding. A provider switch with no native history yet can restart its saved launch and retain pending context. Unsupported native resume remains read-only; do not silently replace a saved native session with an unrelated fresh one.
 
+**G6 draft, mode policy pending.** Antigravity CLI 1.5.7 on Windows restores saved turns with `agy --conversation <id>`, verified interactively in a disposable workspace. However, the bare command reopened a previously Plan conversation in the native Auto default. G6 must not be accepted until the owner chooses an explicit restrictive resume mode or reliable prior-mode restoration is proven. The prototype command and capability retain existing strict ID/workspace validation and no-injected-prompt behavior; imported history stays read-only. No broader model-switch capability is proposed. Other native CLI versions and macOS/Linux remain unverified.
+
 The laptop must be awake, connected and running Gnomcode for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy; keep the conversation visible during device discovery and reconnection. Scheduled messages acknowledged by the laptop persist locally and run when it is awake with Gnomcode running; the phone may disconnect afterward. No cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
 
 ### 3.14.3 Laptop-owned scheduled messages and automatic failover
@@ -253,6 +255,7 @@ Follow [AGENTS](../AGENTS.md), installed engineering skills and relevant ADRs. R
 | M9 encrypted Remote | Account-wide consent, automatic signed-in access, durable trust and bounded commands | Physical phone, independent security and owner production approval |
 | Marketing/documentation | Outcome-first positioning, guide/legal routes and SEO in this phase | Production crawl checks and legal approval |
 | 1.0 G5 interrupt backend | State-gated, idempotent Esc delivery over local API and E2EE Remote | Worker B button, native-provider cancellation and physical-phone acceptance |
+| 1.0 G6 Antigravity native resume | Draft exact-ID command/capability; native history restoration verified with agy 1.5.7 on Windows | Owner mode-policy decision: bare resume changed Plan to Auto; packaged Gnomcode and macOS/Linux acceptance |
 
 v1.0 criteria are not met. See [LAUNCH_CHECKLIST](LAUNCH_CHECKLIST.md) for blockers, causes, closure steps and evidence. Historical green checks are not new verification for this phase.
 
