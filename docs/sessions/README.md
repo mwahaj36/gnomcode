@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-12 - Console overhaul plan](2026-11-12-console-overhaul-plan.md)
+
 - [2026-11-10 - Fix lifecycle, notification spam, and Antigravity IDE visibility](2026-11-10-fix-lifecycle-notifications-antigravity-ux.md)
 
 - [2026-11-07 - Calm, consistent application UI](2026-11-07-calm-consistent-app-ui.md)
