@@ -736,6 +736,7 @@ impl DaemonOrchestrator {
                         }
                     }
                     let _ = ingest_db.reconcile_antigravity_projects();
+                    let _ = gnomcode_ingest::reproject_all(&mut ingest_db);
                     if let Err(error) = pro::run_guardrails(&ingest_db) {
                         tracing::warn!("guardrail evaluation failed: {error}");
                     }
@@ -800,6 +801,7 @@ impl DaemonOrchestrator {
             let mut db = Database::open(&db_path).map_err(Error::Store)?;
             ingest_all(&mut db)?;
             db.reconcile_antigravity_projects().map_err(Error::Store)?;
+            gnomcode_ingest::reproject_all(&mut db)?;
             if let Err(error) = pro::run_guardrails(&db) {
                 tracing::warn!("guardrail evaluation failed: {error}");
             }

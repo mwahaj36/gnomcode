@@ -486,6 +486,15 @@ pub struct ProjectUsage {
     pub cost_basis: TrustLevel,
     /// Number of sessions with recorded usage in the selected period.
     pub sessions: u64,
+    /// Local folder of the project; empty for shared scratch buckets. Never synced to cloud.
+    #[serde(default)]
+    pub repo_root: String,
+    /// Timestamp of the latest recorded usage in the selected period.
+    #[serde(default)]
+    pub last_active: Option<String>,
+    /// Agent identifiers with recorded usage in the selected period.
+    #[serde(default)]
+    pub agents: Vec<String>,
 }
 
 /// Filtered timeline report with date spans and per-provider ROI comparison.
@@ -2152,6 +2161,80 @@ impl Database {
         Ok(out)
     }
 
+    /// Every stored project, so derived identity can be recomputed.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the query fails.
+    pub fn list_projects(&self) -> Result<Vec<gnomcode_core::Project>, Error> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT id, canonical_key, repo_root, name, git_branch FROM project")?;
+        let rows = statement.query_map([], |row| {
+            Ok(gnomcode_core::Project {
+                id: row.get(0)?,
+                canonical_key: row.get(1)?,
+                repo_root: row.get(2)?,
+                name: row.get(3)?,
+                git_branch: row.get(4)?,
+            })
+        })?;
+        rows.collect::<Result<_, _>>().map_err(Error::from)
+    }
+
+    /// Moves every session of project `old_id` to `project`, merging into an existing row with
+    /// the same canonical key. Only derived project fields change; sessions, usage and chat are kept.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the transaction fails.
+    pub fn reassign_project(
+        &mut self,
+        old_id: &str,
+        project: &gnomcode_core::Project,
+    ) -> Result<(), Error> {
+        let tx = self.conn.transaction()?;
+        let target: Option<String> = tx
+            .query_row(
+                "SELECT id FROM project WHERE canonical_key = ?1",
+                params![project.canonical_key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match target {
+            Some(id) if id == old_id => {
+                tx.execute(
+                    "UPDATE project SET name = ?2, repo_root = ?3 WHERE id = ?1",
+                    params![old_id, project.name, project.repo_root],
+                )?;
+            }
+            Some(id) => {
+                tx.execute(
+                    "UPDATE session SET project_id = ?1 WHERE project_id = ?2",
+                    params![id, old_id],
+                )?;
+                tx.execute("DELETE FROM project WHERE id = ?1", params![old_id])?;
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO project (id, canonical_key, repo_root, name, git_branch) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        project.id,
+                        project.canonical_key,
+                        project.repo_root,
+                        project.name,
+                        project.git_branch
+                    ],
+                )?;
+                tx.execute(
+                    "UPDATE session SET project_id = ?1 WHERE project_id = ?2",
+                    params![project.id, old_id],
+                )?;
+                tx.execute("DELETE FROM project WHERE id = ?1", params![old_id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Reconciles Antigravity session projects by querying the local Antigravity
     /// metadata SQLite database (`~/.gemini/antigravity/conversation_summaries.db`).
     ///
@@ -2207,7 +2290,7 @@ impl Database {
 
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT s.id, s.project_id
+            SELECT s.id, p.name
             FROM session s
             LEFT JOIN project p ON s.project_id = p.id
             WHERE s.agent = 'antigravity'
@@ -2215,7 +2298,7 @@ impl Database {
             "#,
         )?;
 
-        let sessions: Vec<(String, String)> = stmt
+        let sessions: Vec<(String, Option<String>)> = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .filter_map(Result::ok)
             .collect();
@@ -2228,7 +2311,7 @@ impl Database {
             Err(_) => return Ok(0),
         };
 
-        for (sid, _curr_pid) in sessions {
+        for (sid, current_project) in sessions {
             let conv_id = sid.strip_prefix("antigravity:").unwrap_or(&sid);
             if let Ok(mut rows) = agy_stmt.query(params![conv_id]) {
                 if let Ok(Some(row)) = rows.next() {
@@ -2251,7 +2334,11 @@ impl Database {
                         }
                     }
 
-                    if let Some(ws) = detected_ws {
+                    // A session that already has a project keeps it; ingest resolves it to the repo root.
+                    let unassigned = current_project
+                        .as_deref()
+                        .is_none_or(|name| name == "unknown");
+                    if let Some(ws) = detected_ws.filter(|_| unassigned) {
                         let project = gnomcode_core::Project::from_origin(None, &ws, None);
                         let _ = self.conn.execute(
                             r#"
@@ -2740,9 +2827,10 @@ impl Database {
             SELECT p.id, p.name,
                 SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
-                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(DISTINCT s.id), SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END), COUNT(*)
+                SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END), COUNT(DISTINCT s.id), SUM(CASE WHEN u.cost_basis = 'unknown' THEN 1 ELSE 0 END), COUNT(*),
+                CASE WHEN p.canonical_key LIKE 'scratch/%' THEN '' ELSE p.repo_root END, MAX(u.timestamp), GROUP_CONCAT(DISTINCT s.agent)
             FROM usage_record u JOIN session s ON s.id = u.session_id JOIN project p ON p.id = s.project_id
-            WHERE s.surface <> 'cloud' AND julianday(u.timestamp) >= julianday(?1) AND julianday(u.timestamp) <= julianday(?2)
+            WHERE s.surface <> 'cloud' AND p.canonical_key <> '/unknown' AND julianday(u.timestamp) >= julianday(?1) AND julianday(u.timestamp) <= julianday(?2)
             GROUP BY p.id ORDER BY SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END) DESC, p.id
         "#))?;
         let rows =
@@ -2750,7 +2838,15 @@ impl Database {
                 let tokens: i64 = row.get(2)?;
                 let sessions: i64 = row.get(4)?;
                 let unpriced: i64 = row.get(5)?;
+                let agents: Option<String> = row.get(9)?;
                 Ok(ProjectUsage {
+                    repo_root: row.get(7)?,
+                    last_active: row.get(8)?,
+                    agents: agents
+                        .iter()
+                        .flat_map(|list| list.split(','))
+                        .map(str::to_owned)
+                        .collect(),
                     priced_turns: (row.get::<_, i64>(6)? - unpriced).max(0) as u64,
                     unpriced_turns: unpriced.max(0) as u64,
                     id: row.get(0)?,
@@ -4648,5 +4744,69 @@ mod tests {
         assert_eq!(on("2026-11-11"), Some(110));
         assert_eq!(map.first_recorded.as_deref(), Some("2026-11-10"));
         assert_eq!(map.stats.longest_streak, 2);
+    }
+
+    #[test]
+    fn project_report_lists_folder_agents_and_last_activity_but_not_unassigned_sessions() {
+        let db = heatmap_db(&["2026-11-10T10:00:00Z", "2026-11-11T12:00:00Z"]);
+        let unassigned = Project::from_origin(None, "C:/", None);
+        assert!(unassigned.is_unassigned());
+        db.conn
+            .execute(
+                "INSERT INTO project(id,canonical_key,repo_root,name) VALUES (?1,?2,?3,?4)",
+                rusqlite::params![
+                    unassigned.id,
+                    unassigned.canonical_key,
+                    unassigned.repo_root,
+                    unassigned.name
+                ],
+            )
+            .expect("unassigned project");
+        db.conn
+            .execute(
+                "INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at) VALUES ('codex:none','codex','cli',?1,'idle','2026-11-11T00:00:00Z','2026-11-11T00:00:00Z')",
+                rusqlite::params![unassigned.id],
+            )
+            .expect("unassigned session");
+        db.conn
+            .execute(
+                "INSERT INTO usage_record VALUES ('none:1','codex:none','2026-11-11T00:00:00Z','gpt',5,5,0,0,0,0,10,NULL,1.0,0.0,'exact','v')",
+                [],
+            )
+            .expect("unassigned usage");
+        let projects = db
+            .generate_project_report("all", None, None)
+            .expect("project rollups");
+        assert_eq!(
+            projects.len(),
+            1,
+            "sessions without a folder are not a project"
+        );
+        assert_eq!(projects[0].repo_root, "/workspace/gnomcode");
+        assert_eq!(projects[0].agents, ["antigravity"]);
+        assert!(
+            projects[0]
+                .last_active
+                .as_deref()
+                .is_some_and(|stamp| stamp.starts_with("2026-11-11T12:00:00"))
+        );
+    }
+
+    #[test]
+    fn reassigning_a_project_merges_sessions_and_keeps_them() {
+        let mut db = heatmap_db(&["2026-11-10T10:00:00Z"]);
+        let old = db.list_projects().expect("projects").remove(0);
+        let renamed = Project::from_origin(None, "/workspace/renamed", None);
+        db.reassign_project(&old.id, &renamed).expect("move");
+        let projects = db.list_projects().expect("projects");
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "renamed");
+        let (rows, total) = db
+            .list_sessions_filtered(None, None, Some(&renamed.id), 0, 10)
+            .expect("sessions");
+        assert_eq!((total, rows[0].project_name.as_str()), (1, "renamed"));
+        db.reassign_project(&renamed.id, &renamed)
+            .expect("same key");
+        assert_eq!(db.list_projects().expect("projects").len(), 1);
     }
 }
