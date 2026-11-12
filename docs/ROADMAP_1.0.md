@@ -13,7 +13,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] Push notifications for Needs you: approval waiting, turn finished, limit low, limit reset
 - [x] In-app auto-update from the allowed update manifest
 - [x] `gnomcode doctor`: agents, sign-in expiry, limit sources, hooks, disk
-- [ ] First-run tour refresh for the four places and list-first Workspace
+- [x] First-run tour refresh for the four places and list-first Workspace
 
 ## B. Research gaps (docs/research/2026-11-13-dialpad-cao-comparison.md)
 - [ ] Batch: G5 phone interrupt, G6 agy native resume, G7 agy limits via `/usage`, G11 env scrub, G12 Unix process-group stop, G13 Codex/Gemini native-install discovery
