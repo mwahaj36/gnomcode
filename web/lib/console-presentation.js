@@ -56,7 +56,8 @@ export function renderSessions(sessions, { focus = false, rotate = false, illust
   }).join('')}</tbody></table>`;
 }
 
-export function renderActivity(report) {
+// `totals: false` drops the token total when the page already shows it elsewhere (the local Usage grid).
+export function renderActivity(report, { totals = true } = {}) {
   if (!Array.isArray(report?.daily)) return '<section class="sp-activity"><h2>Activity</h2><p>Measurements are unavailable. Update the paired desktop app to publish this view.</p></section>';
   if (!report.daily.length) return '<section class="sp-activity"><h2>Activity</h2><p>No recorded usage in this period. Unobserved intervals are not counted as zero.</p></section>';
   const hours = report.range_label === 'Today';
@@ -67,7 +68,7 @@ export function renderActivity(report) {
   const weekLabel = value => { const date=new Date(value+'T00:00:00Z'); date.setUTCDate(date.getUTCDate()+3); const year=date.getUTCFullYear(); const first=new Date(Date.UTC(year,0,4)); const firstMonday=new Date(first); firstMonday.setUTCDate(first.getUTCDate()-((first.getUTCDay()+6)%7)); return year+' · Week '+(Math.floor((date-firstMonday)/604800000)+1); };
   const label = day => interval === 'week' ? weekLabel(day.date) : interval === 'year' ? day.date.slice(0,4) : interval === 'month' ? new Date(day.date).toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'}) : hours ? new Date(day.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}) : day.date.slice(5);
   return `<section class="sp-activity" aria-label="Recorded token activity">
-    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · local time' : `${escape(report.range_label || 'Selected period')} · ${interval === 'week' ? 'weekly' : interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · UTC`}</p></div><div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-unit">Recorded tokens</span></div></div></div>
+    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · hours in your local time' : `${escape(report.range_label || 'Selected period')} · ${interval === 'week' ? 'weekly' : interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · days in UTC`}</p></div>${totals ? `<div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-unit">Recorded tokens</span></div></div>` : ''}</div>
     <p class="sp-activity-caption">${escape(chartWindow)}</p>
     ${hours ? renderHourStrip(report) : ''}
     <details class="sp-activity-breakdown"><summary>Activity details</summary><p>Recorded totals; gaps are not counted as zero. Costs are estimated. ${days.length < report.daily.length ? 'Showing the latest 84 intervals; the total covers the full period.' : ''}</p><div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(label(day))}</time><strong>${escape(tokens(day.total_tokens))}</strong></summary><div><span>API equivalent</span><strong>${cost(day, day.cost_usd)}</strong><span>${priced(day) ? coverage(day) : 'Price unavailable'}</span><span>${escape(day.turns)} recorded invocations</span></div></details>`).join('')}</div>
@@ -84,7 +85,7 @@ const heatFigures = day => {
   const turns = Number.isFinite(day.turns) ? ` · ${day.turns} ${day.turns === 1 ? 'turn' : 'turns'}` : '';
   return `${tokens(day.total_tokens)} tokens${spend}${turns}`;
 };
-const heatEmpty = (label, text) => `<section class="sp-section sp-heatmap" aria-label="${escape(label)}"><header class="sp-section-head"><h2>Activity</h2><span class="sp-section-meta">UTC days</span></header><div class="sp-empty"><p>${escape(text)}</p></div></section>`;
+const heatEmpty = (label, text) => `<section class="sp-section sp-heatmap" aria-label="${escape(label)}"><header class="sp-section-head"><h2>Activity</h2><span class="sp-section-meta">Days in UTC</span></header><div class="sp-empty"><p>${escape(text)}</p></div></section>`;
 
 export function renderHeatmap(data, { weeks = 53, stats = true, legend = true, months = true } = {}) {
   const label = 'Token activity, last year';
@@ -115,7 +116,7 @@ export function renderHeatmap(data, { weeks = 53, stats = true, legend = true, m
   const figures = stats && summary ? `<div class="sp-heatmap-stats"><div><strong>${escape(tokens(summary.total_tokens))}</strong><span>tokens, past year</span></div><div><strong>${escape(summary.active_days ?? 'Unknown')}</strong><span>active days</span></div><div${streakTitle}><strong>${escape(summary.current_streak ?? 'Unknown')}</strong><span>day streak</span></div><div${busiest ? ` title="${escape(tokens(busiest.total_tokens))} tokens"` : ''}><strong>${busiest ? escape(monthDay(busiest.date)) : 'None'}</strong><span>busiest day</span></div></div>` : '';
   const description = summary ? `${tokens(summary.total_tokens)} tokens over ${summary.active_days} active days. Details below.` : 'Token activity by day.';
   const key = legend ? '<div class="sp-heatmap-legend" aria-hidden="true"><span>Less</span><i class="sp-heat" data-level="0"></i><i class="sp-heat" data-level="1"></i><i class="sp-heat" data-level="2"></i><i class="sp-heat" data-level="3"></i><i class="sp-heat" data-level="4"></i><span>More</span></div>' : '';
-  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>${weeks < 53 ? `Last ${weeks} weeks` : 'Activity'}</h2><span class="sp-section-meta">UTC days</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" tabindex="0" role="group" aria-label="Activity grid, scrollable">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
+  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>${weeks < 53 ? `Last ${weeks} weeks` : 'Activity'}</h2><span class="sp-section-meta">Days in UTC</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" tabindex="0" role="group" aria-label="Activity grid, scrollable">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
 }
 
 export function renderHourStrip(report) {
@@ -201,7 +202,24 @@ export function renderTodayTiles({ report = null, activeCount = null } = {}) {
   }</div>`;
 }
 
+/** Totals for the selected period on the web Usage page: tokens, estimated spend and cache savings. */
+export function renderPeriodTiles(report = null) {
+  const tile = (label, value, meta = '') => `<div class="sp-tile"><span class="sp-tile-label">${label}</span><strong class="sp-tile-value">${escape(value)}</strong>${meta ? `<span class="sp-tile-meta">${escape(meta)}</span>` : ''}</div>`;
+  const saved = priced(report) && Number.isFinite(report?.total_cache_savings_usd) ? '$' + report.total_cache_savings_usd.toFixed(2) : 'Unknown';
+  return `<header class="sp-section-head"><h2>Totals for ${escape(period(report))}</h2></header><div class="sp-tiles">${
+    tile('Tokens', Number.isFinite(report?.total_tokens) ? tokens(report.total_tokens) : 'Unknown') +
+    tile('Est. spend', cost(report, report?.total_cost_usd), priced(report) ? (report.unpriced_turns > 0 ? 'Partial estimate' : 'API equivalent') : 'Price unavailable') +
+    tile('Cache saved', saved, 'Estimated')
+  }</div>`;
+}
+
 const homeMarkup = new WeakMap();
+export function updatePeriodTiles(element, report) {
+  const markup = renderPeriodTiles(report);
+  if (homeMarkup.get(element) === markup) return;
+  element.innerHTML = markup;
+  homeMarkup.set(element, markup);
+}
 export function updateTodayTiles(element, data) {
   const markup = renderTodayTiles(data);
   if (homeMarkup.get(element) === markup) return;
@@ -210,8 +228,8 @@ export function updateTodayTiles(element, data) {
 }
 
 const activityMarkup = new WeakMap();
-export function updateActivity(element, report) {
-  const markup = renderActivity(report);
+export function updateActivity(element, report, options) {
+  const markup = renderActivity(report, options);
   updateMarkup(element, markup);
 }
 
@@ -562,6 +580,13 @@ export function updateChat(element, events) {
     if (!previous.has(node.dataset.chatId) && (previous.size || events.some(event=>event.local_pending)) && !matchMedia('(prefers-reduced-motion: reduce)').matches) node.animate([{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.16,1,.3,1)'});
   });
   element.scrollTop = follow ? element.scrollHeight : previousTop;
+}
+
+/** The limits sheet in Remote: one collapsed provider card for the conversation's agent. Windows come from Rust as sent. */
+export function renderConversationLimitCard(limits = [], agent = '') {
+  if (!Array.isArray(limits) || !limits.length) return '<p class="sp-provider-empty">Limits unavailable</p>';
+  const windows = limits.map(({ label, ...win }) => ({ ...win, provider: agent }));
+  return `<div class="sp-card-grid">${renderProviderCard(quotaOverviews(windows)[0], { cost: false })}</div>`;
 }
 
 export function renderConversationLimits(limits = []) {
