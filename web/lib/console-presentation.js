@@ -68,14 +68,26 @@ export function renderActivity(report, { totals = true } = {}) {
   const chartWindow = `${chartDate(report.earliest_at || days[0].date)} – ${chartDate(report.latest_at || days.at(-1).date)}`;
   const weekLabel = value => { const date=new Date(value+'T00:00:00Z'); date.setUTCDate(date.getUTCDate()+3); const year=date.getUTCFullYear(); const first=new Date(Date.UTC(year,0,4)); const firstMonday=new Date(first); firstMonday.setUTCDate(first.getUTCDate()-((first.getUTCDay()+6)%7)); return year+' · Week '+(Math.floor((date-firstMonday)/604800000)+1); };
   const label = day => interval === 'week' ? weekLabel(day.date) : interval === 'year' ? day.date.slice(0,4) : interval === 'month' ? new Date(day.date).toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'}) : hours ? new Date(day.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}) : day.date.slice(5);
-  return `<section class="sp-activity" aria-label="Recorded token activity">
-    <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · hours in your local time' : `${escape(report.range_label || 'Selected period')} · ${interval === 'week' ? 'weekly' : interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · days in UTC`}</p></div>${totals ? `<div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-unit">Recorded tokens</span></div></div>` : ''}</div>
-    <p class="sp-activity-caption">${escape(chartWindow)}</p>
+  return `<section class="sp-activity${totals || hours ? '' : ' sp-activity--merged'}" aria-label="Recorded token activity">
+    ${totals || hours ? `<div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · hours in your local time' : `${escape(report.range_label || 'Selected period')} · ${interval === 'week' ? 'weekly' : interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · days in UTC`}</p></div>${totals ? `<div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-unit">Recorded tokens</span></div></div>` : ''}</div>
+    <p class="sp-activity-caption">${escape(chartWindow)}</p>` : `<p class="sp-activity-note">${escape(report.range_label || 'Selected period')} · ${interval === 'week' ? 'weekly' : interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · ${escape(chartWindow)} · days in UTC</p>`}
     ${hours ? renderHourStrip(report) : ''}
     <details class="sp-activity-breakdown"><summary>Activity details</summary><p>Recorded totals; gaps are not counted as zero. Costs are estimated. ${days.length < report.daily.length ? 'Showing the latest 84 intervals; the total covers the full period.' : ''}</p><div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(label(day))}</time><strong>${escape(tokens(day.total_tokens))}</strong></summary><div><span>API equivalent</span><strong>${cost(day, day.cost_usd)}</strong><span>${priced(day) ? coverage(day) : 'Price unavailable'}</span><span>${escape(day.turns)} recorded invocations</span></div></details>`).join('')}</div>
     </details>
   </section>`;
 }
+
+const usd = value => Number.isFinite(value) ? '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Unknown';
+const multiple = value => Number.isFinite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'x' : 'Unknown';
+
+/** Subscription value: one tile per provider plus a combined tile. Rust supplies every figure; this only formats. */
+export function renderValue(byProvider = [], combined = null) {
+  const rows = (Array.isArray(byProvider) ? byProvider : []).filter(row => row?.spend_usd > 0);
+  const tile = (row, label, total = false) => `<div class="sp-tile sp-tile--value${total ? ' sp-tile--total' : ''}"><span class="sp-tile-label">${escape(label)}</span><strong class="sp-tile-value">${escape(multiple(row.multiplier))}<span class="sp-tile-unit">est.</span></strong><span class="sp-tile-meta">${escape(usd(row.spend_usd))} value · ${escape(usd(row.plan_usd))} plan</span></div>`;
+  const total = rows.length > 1 && combined?.spend_usd > 0 ? tile(combined, 'All providers', true) : '';
+  return `<header class="sp-section-head"><h2>Subscription value</h2><button type="button" class="sp-link-quiet" data-action="view:settings" data-manage-plans>Manage plans</button></header><p class="sp-section-note">API-equivalent estimate, not an invoice.</p>${rows.length ? `<div class="sp-tiles sp-tiles--value">${rows.map(row => tile(row, row.provider)).join('')}${total}</div>` : '<p class="sp-section-note">No subscription usage recorded in this period.</p>'}`;
+}
+export function updateValue(element, byProvider, combined) { updateMarkup(element, renderValue(byProvider, combined)); }
 
 // ---- Activity grid (SPEC 3.16) ----
 // Rust supplies every day, level and statistic. This code lays the cells out and formats dates and numbers.

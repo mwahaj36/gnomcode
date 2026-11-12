@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { renderActivity, renderConversationLimitCard, renderPeriodTiles } from '../lib/console-presentation.js';
+import { renderActivity, renderConversationLimitCard, renderPeriodTiles, renderValue } from '../lib/console-presentation.js';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const client = read('../app/console/Client.tsx');
@@ -48,4 +48,16 @@ test('remote limits sheet renders one collapsed card with Rust fields', () => {
 test('pricing and license markup carry no inline styles', () => {
   const settings = html.slice(html.indexOf('Local profile and subscriptions'), html.indexOf('</details>', html.indexOf('license-feedback')));
   assert.doesNotMatch(settings, /style="/);
+});
+
+test('subscription value renders labeled estimate tiles with a combined tile', () => {
+  const row = (provider, spend, plan, multiplier) => ({ provider, spend_usd: spend, plan_usd: plan, multiplier });
+  const html = renderValue([row('Claude Code', 1423.94, 53.33, 26.7), row('OpenAI Codex', 0, 10, 0), row('Google Antigravity', 80, 20, 4)], row('All', 1503.94, 73.33, 20.5));
+  assert.match(html, /\$1,423\.94 value · \$53\.33 plan/);
+  assert.match(html, /26\.7x<span class="sp-tile-unit">est\./);
+  assert.equal(html.match(/sp-tile--value/g).length, 3 + 0);
+  assert.match(html, /All providers/);
+  assert.doesNotMatch(html, /OpenAI Codex|text-red|text-green/);
+  assert.doesNotMatch(renderValue([row('Claude Code', 10, 5, 2)], row('All', 10, 5, 2)), /All providers/);
+  assert.match(renderValue([], null), /No subscription usage/);
 });
