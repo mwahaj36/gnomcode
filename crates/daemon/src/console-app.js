@@ -11,14 +11,23 @@
     }
     function startOnboarding() {
       const dialog = document.getElementById('onboarding-dialog');
+      const tip = document.getElementById('tour-tip');
+      if (tip) tip.hidden = true;
       if (dialog.open) return;
       onboardingReturnFocus = document.activeElement;
       onboardingStep = 0;
       dialog.showModal();
       renderOnboarding();
     }
+    function dismissTourTip() {
+      try { localStorage.setItem('gnomcode-onboarding-v1', 'dismissed'); } catch (_) {}
+      const tip = document.getElementById('tour-tip');
+      if (tip) tip.hidden = true;
+    }
     function finishOnboarding(launch) {
       try { localStorage.setItem('gnomcode-onboarding-v1', 'dismissed'); } catch (_) {}
+      const tip = document.getElementById('tour-tip');
+      if (tip) tip.hidden = true;
       document.getElementById('onboarding-dialog').close();
       if (launch) {
         setView('sessions');
@@ -36,11 +45,29 @@
       event.preventDefault();
       finishOnboarding(false);
     });
-    function offerOnboarding() {
+    function offerOnboarding(sessionCount) {
       try { if (localStorage.getItem('gnomcode-onboarding-v1')) return; } catch (_) {}
-      startOnboarding();
+      if (sessionCount === 0) {
+        startOnboarding();
+      } else if (typeof sessionCount === 'number' && sessionCount > 0) {
+        const tip = document.getElementById('tour-tip');
+        if (tip) tip.hidden = false;
+      }
     }
     // End first-run guide
+
+    async function checkOnboardingOffer() {
+      try { if (localStorage.getItem('gnomcode-onboarding-v1')) return; } catch (_) {}
+      try {
+        const res = await apiJson('/api/v1/sessions?page=1&limit=1', { headers });
+        const count = typeof res?.total_count === 'number'
+          ? res.total_count
+          : Array.isArray(res?.sessions)
+            ? res.sessions.length
+            : null;
+        if (typeof count === 'number') offerOnboarding(count);
+      } catch {}
+    }
 
 function showNotice(message) {
       document.getElementById('app-notice-message').textContent = String(message);
@@ -1909,7 +1936,7 @@ function cycleTheme() {
       }
     }
 
-    const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
+    const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-tour-tip': dismissTourTip, 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
@@ -1964,7 +1991,7 @@ function cycleTheme() {
     if (VIEWS.includes(initialView)) setView(initialView, Boolean(hashView));
     else setView('overview', false);
     openExplorerWorkspace();
-    offerOnboarding();
+    void checkOnboardingOffer();
     void checkAuthSession();
     pollLocalData();
     if (initialView === 'sessions') loadInstalledAgents();

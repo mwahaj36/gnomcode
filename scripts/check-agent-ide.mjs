@@ -71,6 +71,9 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?token=test#sessions`);
   const guide = page.locator('#onboarding-dialog');
+  await page.locator('#tour-tip').waitFor({state:'visible'});
+  assert.equal(await guide.isVisible(),false,'existing sessions show the tip, not the modal');
+  await page.getByRole('button',{name:'Open guide',exact:true}).click();
   await guide.waitFor({state:'visible'});
   assert.equal(await page.locator('#onboarding-progress').textContent(), 'Step 1 of 4');
   await page.getByRole('button',{name:'Continue',exact:true}).click();
@@ -98,6 +101,7 @@ try {
   for (const theme of ['light','dark']) {
     const narrow=await browser.newPage({viewport:{width:390,height:650},colorScheme:theme});
     await narrow.goto(`http://127.0.0.1:${server.address().port}/?token=test`);
+    await narrow.getByRole('button',{name:'Open guide',exact:true}).click();
     for (let step=0;step<4;step++) {
       const dialog=narrow.locator('#onboarding-dialog');
       await dialog.waitFor({state:'visible'});
