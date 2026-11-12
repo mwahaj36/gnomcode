@@ -647,15 +647,21 @@ mod tests {
             quota_keys,
             [
                 "basis",
+                "label",
                 "limit_id",
                 "observed_at",
+                "pace",
                 "plan",
+                "pool",
                 "provider",
                 "remaining_pct",
                 "reset_passed",
                 "resets_at",
+                "stale",
+                "state",
                 "used_pct",
-                "window"
+                "window",
+                "window_label"
             ]
         );
         assert!(!encoded.contains("/private/client"));
