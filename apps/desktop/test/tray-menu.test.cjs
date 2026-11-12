@@ -113,3 +113,23 @@ test('tooltip names the tightest limit and never exceeds 127 characters', () => 
   const tooltip = formatTrayTooltip(many);
   assert.ok(tooltip.length <= 127 && tooltip.endsWith('...'));
 });
+
+test('update available adds Settings item and ready update adds Restart to update', () => {
+  const availableMenu = formatTrayMenu([claude], [running], NOW, {
+    ...OPTIONS,
+    update: { state: 'available', available_version: '0.2.0' },
+  });
+  const availableItem = availableMenu.find((item) => item.label === 'Update available: v0.2.0');
+  assert.ok(availableItem);
+  assert.deepEqual(availableItem.action, { kind: 'open-view', view: 'settings' });
+  assert.equal(availableMenu.some((item) => item.label === 'Restart to update'), false);
+
+  const readyMenu = formatTrayMenu([claude], [running], NOW, {
+    ...OPTIONS,
+    update: { state: 'ready', available_version: '0.2.0' },
+  });
+  const readyItem = readyMenu.find((item) => item.label === 'Update available: v0.2.0');
+  const restartItem = readyMenu.find((item) => item.label === 'Restart to update');
+  assert.ok(readyItem && restartItem);
+  assert.deepEqual(restartItem.action, { kind: 'restart-to-update' });
+});

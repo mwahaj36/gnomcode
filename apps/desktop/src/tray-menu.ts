@@ -34,7 +34,8 @@ export interface TraySession {
 
 export type TrayAction =
   | { kind: 'focus-session'; id: string }
-  | { kind: 'open-view'; view: 'usage' | 'sessions' }
+  | { kind: 'open-view'; view: 'usage' | 'sessions' | 'settings' }
+  | { kind: 'restart-to-update' }
   | { kind: 'copy'; text: string }
   | { kind: 'open' }
   | { kind: 'quit' };
@@ -47,9 +48,16 @@ export interface TrayItem {
   action?: TrayAction;
 }
 
+export interface TrayUpdateStatus {
+  state: string;
+  available_version?: string | null;
+}
+
 export interface TrayFormatOptions {
   /** IANA zone for reset times; the local zone when omitted. */
   timeZone?: string;
+  /** Desktop update availability reported by the daemon. */
+  update?: TrayUpdateStatus | null;
 }
 
 const MAX_SESSIONS_PER_SECTION = 3;
@@ -263,6 +271,12 @@ export function formatTrayMenu(
 
   const stamps = providers.map(provider => Date.parse(provider.updated_at ?? '')).filter(Number.isFinite);
   if (stamps.length) items.push(disabled(`Updated ${ago(new Date(Math.max(...stamps)), now)}`));
+  if (options.update?.available_version && ['available', 'downloading', 'ready'].includes(options.update.state)) {
+    items.push(act(`Update available: v${options.update.available_version}`, { kind: 'open-view', view: 'settings' }));
+    if (options.update.state === 'ready') {
+      items.push(act('Restart to update', { kind: 'restart-to-update' }));
+    }
+  }
   items.push(act('New session', { kind: 'open-view', view: 'sessions' }), open, SEPARATOR, quit);
   return items;
 }

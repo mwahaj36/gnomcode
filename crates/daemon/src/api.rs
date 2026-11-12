@@ -179,6 +179,9 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(auth_session_delete_handler),
         )
         .route("/api/v1/stats", get(stats_handler))
+        .route("/api/v1/update/status", get(update_status_handler))
+        .route("/api/v1/update/check", post(update_check_handler))
+        .route("/api/v1/settings/update", post(update_settings_handler))
         .route("/api/v1/supabase-config", get(supabase_config_handler))
         .route("/api/v1/live", get(live_snapshot_handler))
         .route("/api/v1/reconcile", post(reconcile_handler))
@@ -2239,6 +2242,62 @@ async fn stats_handler(
         .get_database_stats()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(stats))
+}
+
+#[derive(Deserialize)]
+struct UpdatePreferenceBody {
+    enabled: bool,
+}
+
+async fn update_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let enabled = crate::update::is_update_enabled(&state.db).await;
+    let mut snapshot = crate::update::shared_state().read().await.clone();
+    snapshot.auto_update_enabled = enabled;
+    if !enabled {
+        snapshot.state = gnomcode_core::update::UpdateStateKind::Disabled;
+        snapshot.available_version = None;
+        snapshot.downloaded_path = None;
+        snapshot.sha256 = None;
+    }
+    Ok(Json(snapshot))
+}
+
+async fn update_check_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let status = crate::update::check_now(&state.db).await;
+    Ok(Json(status))
+}
+
+async fn update_settings_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(body): Json<UpdatePreferenceBody>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = Arc::clone(&state.db);
+    let enabled = body.enabled;
+    tokio::task::spawn_blocking(move || db.blocking_lock().set_auto_update_enabled(enabled))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut snapshot = crate::update::shared_state().write().await;
+    snapshot.auto_update_enabled = enabled;
+    if !enabled {
+        snapshot.state = gnomcode_core::update::UpdateStateKind::Disabled;
+        snapshot.available_version = None;
+        snapshot.downloaded_path = None;
+        snapshot.sha256 = None;
+    } else if snapshot.state == gnomcode_core::update::UpdateStateKind::Disabled {
+        snapshot.state = gnomcode_core::update::UpdateStateKind::UpToDate;
+    }
+    Ok(Json(snapshot.clone()))
 }
 
 async fn quota_handler(
@@ -5264,5 +5323,55 @@ mod tests {
         assert_eq!(parsed.turn_finished_min_minutes, 7);
         assert!(!parsed.limit_low);
         assert!(parsed.limit_reset);
+    }
+
+    #[tokio::test]
+    async fn update_status_and_opt_out_endpoints_enforce_auth_and_persist() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "update-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+
+        let unauth = Request::builder()
+            .uri("/api/v1/update/status")
+            .header("Host", "127.0.0.1")
+            .body(Body::empty())
+            .expect("req");
+        assert_eq!(
+            app.clone().oneshot(unauth).await.expect("res").status(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        let opt_out = Request::builder()
+            .method("POST")
+            .uri("/api/v1/settings/update")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer update-token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"enabled":false}"#))
+            .expect("req");
+        let save_res = app.clone().oneshot(opt_out).await.expect("res");
+        assert_eq!(save_res.status(), StatusCode::OK);
+
+        let status_req = Request::builder()
+            .uri("/api/v1/update/status")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer update-token")
+            .body(Body::empty())
+            .expect("req");
+        let status_res = app.oneshot(status_req).await.expect("res");
+        assert_eq!(status_res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(status_res.into_body(), 4096)
+            .await
+            .expect("bytes");
+        let parsed: gnomcode_core::update::UpdateStatus =
+            serde_json::from_slice(&body).expect("json");
+        assert!(!parsed.auto_update_enabled);
+        assert_eq!(
+            parsed.state,
+            gnomcode_core::update::UpdateStateKind::Disabled
+        );
     }
 }
