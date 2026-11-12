@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Keep-awake sleep inhibitor](2026-11-13-keep-awake.md)
 - [2026-11-13 - Git viewer hardening](2026-11-13-git-viewer-hardening.md)
 - [2026-11-13 - Approval-wait staleness limit](2026-11-13-presence-approval-staleness.md)
 - [2026-11-12 - Collapsible provider limit cards](2026-11-12-console-provider-cards.md)
