@@ -7,7 +7,7 @@ import DesktopDevices from "../../components/DesktopDevices";
 import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue, mountProjectList, projectsFromSessions } from "../../lib/console-presentation.js";
 
 // The four places of the console. `sessions` is the synced history reached from Home, so it keeps Home highlighted.
 const PLACES: [string, string][] = [["overview", "Home"], ["chat", "Workspace"], ["usage", "Usage"], ["settings", "Settings"]];
@@ -63,6 +63,12 @@ function ProvidersPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
   useEffect(() => { if (element.current) updateProviders(element.current, report); }, [report]);
   return <div ref={element} />;
+}
+
+function ProjectsPanel({ sessions, onOpen }: { sessions: SessionItem[] | null; onOpen: (project: string) => void }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) mountProjectList(element.current, projectsFromSessions(sessions), { heading: true, helper: "Most recent first. Open a project to see its synced sessions." }); }, [sessions]);
+  return <div ref={element} onClick={event => { const row = (event.target as HTMLElement).closest<HTMLElement>("[data-project-id]"); if (row?.dataset.projectId) onOpen(row.dataset.projectId); }} />;
 }
 
 function SessionsPanel({ sessions }: { sessions: SessionItem[] }) {
@@ -470,8 +476,8 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       {activeView === "usage" && <ValuePanel byProvider={roiByProvider} combined={combinedRoi} onManage={() => changeConsoleView("settings")} />}
 
       {activeView === "usage" && <ActivityPanel report={report} />}
-      {activeView === "usage" && <section className="sp-activity sp-usage-projects"><h2>Project activity</h2>
-        {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
+      {activeView === "usage" && <section className="sp-usage-projects" aria-label="Project activity">
+        {projectsFromSessions(homeSessions).length > 0 ? <ProjectsPanel sessions={homeSessions} onOpen={project => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }} /> : <><header className="sp-section-head"><h2>Project activity</h2></header><div className="sp-empty"><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><div><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</div></div></>}
       </section>}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
 

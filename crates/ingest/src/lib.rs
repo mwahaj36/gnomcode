@@ -9,7 +9,7 @@ use gnomcode_adapters::{
     codex::{CodexAdapter, codex_session_id_from_path},
     gemini::GeminiAdapter,
 };
-use gnomcode_core::{AgentId, Session};
+use gnomcode_core::{AgentId, Project, Session};
 use gnomcode_platform::{
     AgentRoot, detect_local_subscriptions, discover_agent_roots, read_antigravity_fallback_model,
     read_from_offset,
@@ -147,11 +147,117 @@ fn complete_jsonl_prefix_len(bytes: &[u8]) -> usize {
         .map_or(0, |i| i + 1)
 }
 
+/// Resolves a session folder to its repository: the Git remote when there is one, otherwise the
+/// repository root (worktrees and subfolders share their repository). Scratch folders, unassigned
+/// folders and folders outside any usable repository keep their path identity.
+#[must_use]
+pub fn resolve_project(project: &Project) -> Project {
+    if project.is_unassigned() || project.is_scratch() {
+        return project.clone();
+    }
+    let (root, remote) =
+        gnomcode_platform::resolve_git_repo_and_remote(Path::new(&project.repo_root));
+    let Some(root) = root else {
+        return project.clone();
+    };
+    // A project already keyed by its remote keeps that key even when the folder has none.
+    let remote = if project.has_remote_key() {
+        Some(project.canonical_key.clone())
+    } else {
+        remote
+    };
+    let mut resolved = Project::from_origin(
+        remote.as_deref(),
+        &root.to_string_lossy(),
+        project.git_branch.as_deref(),
+    );
+    if resolved.is_unassigned() || resolved.is_scratch() {
+        return project.clone();
+    }
+    // People know a project by its folder; a renamed remote would otherwise show an old name.
+    if let Some(folder) = root.file_name().and_then(|name| name.to_str()) {
+        folder.clone_into(&mut resolved.name);
+    }
+    resolved
+}
+
+/// Resolves the projects of a freshly parsed batch and points its sessions at the resolved ids.
+///
+/// Returns each session's own folder (before resolution; none for Unassigned), so resume can start
+/// the agent where the session ran even when its project merges several folders.
+fn resolve_batch_projects(batch: &mut gnomcode_adapters::ParsedBatch) -> Vec<(String, String)> {
+    let cwds = batch
+        .sessions
+        .iter()
+        .filter_map(|session| {
+            let project = batch.projects.iter().find(|p| p.id == session.project_id)?;
+            (!project.is_unassigned()).then(|| (session.id.clone(), project.repo_root.clone()))
+        })
+        .collect();
+    for project in &mut batch.projects {
+        let resolved = resolve_project(project);
+        if resolved.id == project.id {
+            *project = resolved;
+            continue;
+        }
+        for session in batch
+            .sessions
+            .iter_mut()
+            .filter(|session| session.project_id == project.id)
+        {
+            session.project_id.clone_from(&resolved.id);
+        }
+        *project = resolved;
+    }
+    cwds
+}
+
+fn record_cwds(db: &Database, cwds: &[(String, String)]) {
+    for (session, cwd) in cwds {
+        if let Err(error) = db.record_session_cwd(session, cwd) {
+            tracing::warn!("session folder could not be recorded: {error}");
+        }
+    }
+}
+
+/// Recomputes the derived identity of every stored project (names, merged spellings, repository
+/// roots). Sessions, usage and chat are untouched; only project rows are merged or renamed.
+///
+/// # Errors
+/// Returns [`Error`] if the store fails.
+pub fn reproject_all(db: &mut Database) -> Result<usize, Error> {
+    let mut changed = 0;
+    for project in db.list_projects()? {
+        // A remote-keyed project keeps its key (the stored key is already normalized).
+        let remote = project
+            .has_remote_key()
+            .then_some(project.canonical_key.as_str());
+        let target = resolve_project(&Project::from_origin(
+            remote,
+            &project.repo_root,
+            project.git_branch.as_deref(),
+        ));
+        if target.id != project.id
+            || target.name != project.name
+            || target.repo_root != project.repo_root
+        {
+            if target.id != project.id && !target.is_unassigned() {
+                // Before the merge a stored project is one folder: each session's own.
+                db.backfill_session_cwd(&project.id, &project.repo_root)?;
+            }
+            db.reassign_project(&project.id, &target)?;
+            changed += 1;
+        }
+    }
+    Ok(changed)
+}
+
 /// Ingests all available agent logs across discovered roots in one synchronous pass.
 ///
 /// # Errors
 /// Returns [`Error`] if database commit or reading fails.
 pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
+    reproject_all(db)?;
     let roots = discover_agent_roots();
     let discovered = scan_log_files(&roots);
     let repair_chat_format = db.chat_format_needs_repair()?;
@@ -315,10 +421,12 @@ fn ingest_files(
         if parsed_len == 0 {
             continue;
         }
-        let batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
+        let mut batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
+        let cwds = resolve_batch_projects(&mut batch);
         if repair_chat_format {
             db.repair_chat_contents(&batch.chat_events)?;
             db.repair_session_metadata(&batch.projects, &batch.sessions)?;
+            record_cwds(db, &cwds);
             continue;
         }
         if is_rewritten
@@ -350,6 +458,8 @@ fn ingest_files(
             &batch.chat_events,
         ) {
             tracing::warn!("failed to commit batch for {path_str}: {e}");
+        } else {
+            record_cwds(db, &cwds);
         }
         import_native_titles(db, file.agent, &read_result.bytes[..parsed_len])?;
     }
@@ -406,6 +516,9 @@ fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod project_tests;
 
 #[cfg(test)]
 mod tests {

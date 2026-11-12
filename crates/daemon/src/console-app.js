@@ -735,7 +735,7 @@ function cycleTheme() {
         const projects = await apiJson(url, { headers, signal: AbortSignal.timeout(15000) });
         if (range !== currentTimeline) return true;
         const presentation = await import('/console-presentation.js');
-        container.innerHTML = presentation.renderProjects(projects);
+        presentation.mountProjectList(container, projects, { heading: false, helper: 'Most recent first. Select a project to filter sessions.' });
         projectsLoaded = true;
         const select = document.getElementById('project-filter'); const selected = select.value; select.innerHTML = '<option value="">All projects</option>'; for (const project of projects) { const option = document.createElement('option'); option.value = project.id; option.textContent = project.name; select.append(option); } select.value = selected;
         return true;
