@@ -771,9 +771,11 @@ impl DaemonOrchestrator {
             let mut states = automation::Observations::default();
             let mut ticker = tokio::time::interval(Duration::from_secs(1));
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut awake = gnomcode_platform::keepawake::SleepInhibitor::default();
             loop {
                 ticker.tick().await;
                 automation::tick(&db, &mut states).await;
+                automation::sync_keep_awake(&db, &mut awake).await;
             }
         })
     }
