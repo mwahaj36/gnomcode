@@ -36,7 +36,7 @@ const cacheDeclarations=file.statements.filter(ts.isVariableStatement).filter(no
 let failQuota=false;
 const quotaNodes=new Map();
 const quotaDocument={getElementById(id){if(!quotaNodes.has(id))quotaNodes.set(id,{set textContent(value){this.innerHTML=value;}});return quotaNodes.get(id);}};
-const quotaLoad=new Function('document','fetch',`const headers={};const summaryState={};const refreshSummary=async()=>{};${cacheDeclarations}\n${fn('apiJson')}\n${fn('loadQuota').replace("import('/console-presentation.js')", "Promise.resolve({updateQuota:(element)=>{element.innerHTML='<div>quota loaded</div>'}})")}\nreturn loadQuota;`)(quotaDocument,async()=>({ok:!failQuota,status:failQuota?503:200,json:async()=>[]}));
+const quotaLoad=new Function('document','fetch',`const headers={};const summaryState={};const refreshSummary=async()=>{};${cacheDeclarations}\n${fn('apiJson')}\n${fn('loadQuota').replace("import('/console-presentation.js')", "Promise.resolve({updateProviderCards:(element)=>{element.innerHTML='<div>quota loaded</div>'}})")}\nreturn loadQuota;`)(quotaDocument,async()=>({ok:!failQuota,status:failQuota?503:200,json:async()=>[]}));
 assert.equal(await quotaLoad(),true,'a healthy quota response must not fail on undeclared render caches');
 failQuota=true;
 assert.equal(await quotaLoad(),false);

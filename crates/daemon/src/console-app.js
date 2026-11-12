@@ -1478,14 +1478,15 @@ function cycleTheme() {
 
     async function loadQuota() {
       try {
-        const res = await apiJson('/api/v1/quota', { headers, signal: AbortSignal.timeout(15000) });
+        const res = await apiJson('/api/v1/providers/overview', { headers, signal: AbortSignal.timeout(15000) });
         if (!Array.isArray(res)) throw new Error('Invalid quota response');
-        summaryState.quotaCount = res.length; await refreshSummary();
-        const jsonStr = JSON.stringify(res);
+        summaryState.quotaCount = res.reduce((count, provider) => count + (provider.windows?.length || 0), 0); await refreshSummary();
+        // Cards show relative times, so re-render once a minute even when the readings are unchanged.
+        const jsonStr = JSON.stringify(res) + Math.floor(Date.now() / 60000);
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
-        presentation.updateQuota(document.getElementById('quota-table'), res, new Date().toISOString());
-        presentation.updateQuota(document.getElementById('overview-limits'), res, new Date().toISOString());
+        presentation.updateProviderCards(document.getElementById('quota-table'), res, { cost: true });
+        presentation.updateProviderCards(document.getElementById('overview-limits'), res, { cost: false });
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
@@ -1652,6 +1653,15 @@ function cycleTheme() {
       }catch{document.getElementById('remote-status').textContent='Could not update account access. Refresh Devices and retry.';}
       finally{target.disabled=false;}
     }
+
+    document.addEventListener('click', async event => {
+      const copy = event.target.closest('[data-copy]');
+      if (!copy) return;
+      const label = copy.querySelector('span');
+      try { await navigator.clipboard.writeText(copy.dataset.copy); if (label) label.textContent = 'Copied'; }
+      catch (_) { if (label) label.textContent = 'Select and copy'; }
+      setTimeout(() => { if (label) label.textContent = 'Copy'; }, 1500);
+    });
 
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-action]');
