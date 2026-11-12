@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-12, owner decision).
+Accepted (2026-11-12, owner decision). Amended by [0030](./0030-claude-signin-refresh.md): the official CLI, not Gnomcode, may refresh the Claude sign-in.
 
 ## Context
 
