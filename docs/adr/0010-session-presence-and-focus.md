@@ -5,7 +5,7 @@
 
 ## Decision
 
-All agents use the same pure Rust presence classifier. A recent running observation or an unmatched execution start consistent with the source state establishes running. Approval waits and unmatched execution starts remain ongoing for up to 24 hours after the last event; older unresolved observations become inactive, never implicitly ended. Idle remains ongoing for two minutes. Only source-reported closure establishes ended. SQL filters, totals, CLI, tray and desktop snapshots use this projection; clients render supplied classifications.
+All agents use the same pure Rust presence classifier. A recent running observation or an unmatched execution start consistent with the source state establishes running. Approval waits and unmatched execution starts remain ongoing for up to two hours after the last event (amended 2026-11-13: approval waits were previously allowed 24 hours); older unresolved observations become inactive, never implicitly ended. Idle remains ongoing for two minutes. Only source-reported closure establishes ended. SQL filters, totals, CLI, tray and desktop snapshots use this projection; clients render supplied classifications.
 
 Focus targets the recorded PID/host or known application, with blocking OS calls outside the database lock and async worker. The endpoint reports the actual result rather than unconditional success. Windows restores minimized windows and verifies foreground ownership; macOS and X11 use available OS controls. Unsupported focus offers a local workspace-copy fallback. Opening a window does not claim exact chat selection.
 
