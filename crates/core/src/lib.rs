@@ -5,6 +5,7 @@
 pub mod approval;
 pub mod branding;
 pub mod license;
+pub mod notifications;
 pub mod presence;
 pub mod pricing;
 mod project_path;
