@@ -1,4 +1,4 @@
-//! SQLite storage schema, migrations, queries, and rollups (`SPEC Â§3.6`, `Â§4.3`).
+//! SQLite storage schema, migrations, queries, and rollups (`SPEC §3.6`, `§4.3`).
 
 use chrono::{DateTime, Datelike, Utc};
 use gnomcode_core::rules::{GuardrailRule, ResumeQueueEntry};
@@ -78,7 +78,7 @@ pub struct SourceCheckpoint {
     pub last_ingested_at: DateTime<Utc>,
 }
 
-/// Aggregated report row grouped by project, agent, and model (`SPEC Â§3.6`).
+/// Aggregated report row grouped by project, agent, and model (`SPEC §3.6`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReportRow {
     /// Logical project name.
@@ -624,7 +624,7 @@ pub struct Database {
     conn: Connection,
 }
 
-/// Target process or repository path for session window focus (`SPEC Â§3.13`).
+/// Target process or repository path for session window focus (`SPEC §3.13`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionFocusTarget {
     /// Agent identifier for application targeting.
@@ -662,7 +662,7 @@ impl Database {
         }))
     }
     /// Opens or creates the SQLite database at `path` and runs schema migrations.
-    /// Configures WAL mode, normal synchronous, and 5-second busy timeout (`SPEC Â§4.3`).
+    /// Configures WAL mode, normal synchronous, and 5-second busy timeout (`SPEC §4.3`).
     ///
     /// # Errors
     /// Returns [`Error`] if opening the connection or applying migrations fails.
@@ -3191,7 +3191,7 @@ impl Database {
         })
     }
 
-    /// Returns the session PID and project root path for focus dispatch (`SPEC Â§3.13`).
+    /// Returns the session PID and project root path for focus dispatch (`SPEC §3.13`).
     ///
     /// # Errors
     /// Returns [`Error`] if query execution fails.
