@@ -1,4 +1,5 @@
 import MarkdownIt from "./markdown-it.mjs";
+import { PROVIDER_LOGOS } from "./provider-logos.js";
 
 export const sessionStateLabel = state => ({ thinking: 'Running', tool: 'Running', running: 'Running', awaiting_approval: 'Waiting', waiting: 'Waiting', idle: 'Idle', error: 'Error', ended: 'Ended' }[state] || 'Unknown');
 // Shared presentation only. Rust supplies totals, pricing, and chart proportions.
@@ -264,11 +265,12 @@ export function updateQuota(element, pools, publishedAt) { updateProviderCards(e
 // Rust supplies every state, label, pace, pool and headline window. Nothing below decides what is low,
 // exhausted or on pace; it only formats those fields into markup.
 const WINDOW_STATES = ['ok', 'low', 'exhausted', 'reset_awaiting', 'unknown'];
-const stateOf = value => WINDOW_STATES.includes(value?.state) ? value.state : 'unknown';
+// No Rust state (older desktop or synced payload): a window with a reading renders neutral ("plain"), not as No data.
+const stateOf = value => WINDOW_STATES.includes(value?.state) ? value.state : Number.isFinite(value?.remaining_pct) ? 'plain' : 'unknown';
 // Payloads synced from an older desktop have no state but still say whether the reset has passed.
 const awaiting = win => stateOf(win) === 'reset_awaiting' || win.reset_passed === true;
 const CHIP_TEXT = { ok: 'OK', low: 'Low', exhausted: 'Out', reset_awaiting: 'Resetting', unknown: 'No data' };
-const CHIP_CLASS = { ok: 'ok', low: 'low', exhausted: 'exhausted', reset_awaiting: 'unknown', unknown: 'unknown' };
+const CHIP_CLASS = { ok: 'ok', low: 'low', exhausted: 'exhausted', reset_awaiting: 'unknown', unknown: 'unknown', plain: 'neutral' };
 const WINDOW_NAMES = { five_hour: 'Session', weekly: 'Weekly', monthly: 'Monthly' };
 const titleCase = text => String(text ?? '').replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()).trim();
 const windowName = win => win.window_label || WINDOW_NAMES[win.window] || titleCase(win.window) || 'Window';
@@ -351,7 +353,7 @@ function renderMiniRow(win) {
 /** Multi-pool providers: windows grouped under their Rust-supplied pool name as compact rows. */
 export function renderPoolGroup(windows) {
   const groups = new Map();
-  for (const win of windows) {
+  for (const win of withPools(windows)) {
     const key = win.pool || '';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(win);
@@ -361,8 +363,17 @@ export function renderPoolGroup(windows) {
 
 const CHEVRON = '<svg class="sp-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const providerName = p => p.display_name || titleCase(p.provider);
-const providerMark = p => `<span class="sp-provider-mark" aria-hidden="true">${escape(Array.from(providerName(p))[0]?.toUpperCase() || '?')}</span>`;
-const chip = state => `<span class="sp-chip sp-chip--${CHIP_CLASS[state]}">${CHIP_TEXT[state]}</span>`;
+const providerMark = p => {
+  const path = Object.hasOwn(PROVIDER_LOGOS, p.provider) ? PROVIDER_LOGOS[p.provider] : null;
+  const glyph = path ? `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false"><path d="${path}"/></svg>` : escape(Array.from(providerName(p))[0]?.toUpperCase() || '?');
+  return `<span class="sp-provider-mark${path ? ' sp-provider-mark--logo' : ''}" aria-hidden="true">${glyph}</span>`;
+};
+const chip = state => state === 'plain' ? '' : `<span class="sp-chip sp-chip--${CHIP_CLASS[state]}">${CHIP_TEXT[state]}</span>`;
+// Multi-limit providers (Antigravity) without a Rust pool name: group by limit_id. Formatting only.
+function withPools(windows) {
+  if (windows.some(win => win.pool) || new Set(windows.map(win => win.limit_id).filter(Boolean)).size < 2) return windows;
+  return windows.map(win => win.limit_id ? { ...win, pool: titleCase(win.limit_id) } : win);
+}
 const money = (value, basis) => Number.isFinite(value) && !(basis === 'unknown' && value === 0) ? `$${value.toFixed(2)}${basis === 'exact' ? '' : ' est.'}` : 'Unknown';
 
 function summaryLine(p, windows) {
@@ -390,9 +401,9 @@ function emptyCard(p) {
 
 /** One provider as a `<details>` card, collapsed by default; the summary is the one-line overview. */
 export function renderProviderCard(p, { compact = false, cost = true } = {}) {
-  const windows = Array.isArray(p?.windows) ? p.windows : [];
+  const windows = Array.isArray(p?.windows) ? withPools(p.windows) : [];
   if (!windows.length) return emptyCard(p || {});
-  const state = stateOf(p);
+  const state = WINDOW_STATES.includes(p.state) ? p.state : windows.every(win => stateOf(win) === 'plain') ? 'plain' : 'unknown';
   const multiPool = windows.some(win => win.pool);
   const strip = windows.map(win => `<i class="is-${stateOf(win)}"></i>`).join('');
   const body = multiPool ? renderPoolGroup(windows) : `<div class="sp-windows">${windows.map(win => renderMeterRow(win, { detail: !compact })).join('')}</div>`;
@@ -454,7 +465,7 @@ export function updateProviderCards(element, list, options) {
 
 // Raw pools (web console, Remote, tour) carry per-window Rust fields but no provider overview.
 // Group them by provider and pick the headline from the Rust-supplied states.
-const WORST_FIRST = ['exhausted', 'low', 'unknown', 'reset_awaiting', 'ok'];
+const WORST_FIRST = ['exhausted', 'low', 'unknown', 'reset_awaiting', 'ok', 'plain'];
 function quotaOverviews(pools) {
   const groups = new Map();
   for (const pool of Array.isArray(pools) ? pools : []) {
