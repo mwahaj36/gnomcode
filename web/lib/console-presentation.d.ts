@@ -7,6 +7,15 @@ export function updateActivity(element: HTMLElement, report: unknown): void;
 export function updateSessions(element: HTMLElement, sessions: unknown, options?: { focus?: boolean; rotate?: boolean; illustrative?: boolean }): void;
 export function renderSessions(sessions: unknown, options?: { focus?: boolean; rotate?: boolean; illustrative?: boolean }): string;
 export function renderQuota(pools: unknown, publishedAt?: string | null, options?: { illustrative?: boolean }): string;
+export type QuotaState = "ok" | "low" | "exhausted" | "reset_awaiting" | "unknown";
+export type QuotaWindowView = { provider?: string; window?: string; basis?: string; remaining_pct?: number | null; resets_at?: string | null; observed_at?: string; state?: QuotaState; stale?: boolean; label?: string; pool?: string | null; window_label?: string; reset_label?: string; source_issue?: string; pace?: { pace_remaining_pct: number; delta_pct: number; verdict: "on_pace" | "ahead" | "behind"; runs_out_at?: string | null } | null };
+export type ProviderOverview = { provider: string; display_name?: string; plan?: string | null; state?: QuotaState; windows: QuotaWindowView[]; headline_window?: number | null; updated_at?: string | null; source_label?: string; enable_hint?: string | null; enable_command?: string | null; source_issue?: string; cost?: { today_usd: number; last_30_days_usd: number; basis: string } | null };
+export type ProviderCardOptions = { compact?: boolean; cost?: boolean; publishedAt?: string | null };
+export function renderMeterRow(win: QuotaWindowView, options?: { detail?: boolean }): string;
+export function renderPoolGroup(windows: QuotaWindowView[]): string;
+export function renderProviderCard(provider: ProviderOverview, options?: ProviderCardOptions): string;
+export function renderProviderCards(list: ProviderOverview[], options?: ProviderCardOptions): string;
+export function updateProviderCards(element: HTMLElement, list: ProviderOverview[], options?: ProviderCardOptions): void;
 export function renderProjects(projects: unknown): string;
 export function renderSummary(data: { activeCount?: number | null; report?: unknown; quotaCount?: number | null }): string;
 
@@ -16,7 +25,7 @@ export function renderOngoing(sessions: unknown): string;
 export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: string | null): void;
 
 export function renderChatCards(events: unknown): string;
-export type ConversationLimit = {label:string; remaining_pct:number | null; basis:string; observed_at?:string; stale?:boolean};
+export type ConversationLimit = {label:string; remaining_pct:number | null; basis:string; observed_at?:string; stale?:boolean; state?:QuotaState};
 export function renderConversationLimits(limits?:ConversationLimit[]):string;
 export function renderSessionList(sessions: unknown[], selected?: string, query?: string): string;
 export function updateChat(element: HTMLElement, events: unknown): void;
