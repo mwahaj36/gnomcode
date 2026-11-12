@@ -127,6 +127,7 @@ function cycleTheme() {
       document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
+      if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); }
     }
 
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
@@ -163,6 +164,7 @@ function cycleTheme() {
         if (['overview', 'sessions', 'usage', 'limits'].includes(activeView)) {
           const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
+          if (activeView === 'usage' && !await loadHeatmap(true)) throw new Error('Activity could not be loaded');
         } else if (activeView === 'settings') {
           if (!await loadSettingsData()) throw new Error('Settings could not be loaded');
         } else if (activeView === 'projects') {
@@ -194,6 +196,7 @@ function cycleTheme() {
       pollBusy = true;
       try {
       const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
+      if (activeView === 'usage') void loadHeatmap();
       const state = document.getElementById('sync-state');
       const updated = document.getElementById('last-updated');
       if (results.every(Boolean)) {
@@ -671,6 +674,39 @@ function cycleTheme() {
         return false;
       }
     }
+
+    // The trailing-year grid changes slowly, so it is fetched at most once a minute, never on the 2-second poll.
+    let lastHeatmapAt = 0;
+    async function loadHeatmap(force = false) {
+      if (!force && Date.now() - lastHeatmapAt < 60000) return true;
+      lastHeatmapAt = Date.now();
+      const container = document.getElementById('usage-heatmap');
+      try {
+        const data = await apiJson('/api/v1/activity/heatmap', { headers, signal: AbortSignal.timeout(15000) });
+        const presentation = await import('/console-presentation.js');
+        presentation.updateHeatmap(container, data);
+        return true;
+      } catch (_) {
+        lastHeatmapAt = Date.now() - 50000;
+        if (!container.firstChild) container.innerHTML = '<div class="sp-empty"><p>Activity could not be loaded.</p></div>';
+        return false;
+      }
+    }
+
+    function scrollHeatmapToToday() {
+      const scroller = document.querySelector('#usage-heatmap .sp-heatmap-scroll');
+      if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+    }
+
+    document.addEventListener('click', event => {
+      const cell = event.target.closest?.('.sp-heatmap-grid .sp-heat[data-date]');
+      if (!cell) return;
+      const day = [...document.querySelectorAll('.sp-activity-breakdown [data-date]')].find(item => item.dataset.date === cell.dataset.date);
+      if (!day) return;
+      day.closest('.sp-activity-breakdown').open = true;
+      day.open = true;
+      day.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    });
 
     async function loadProjects() {
       const container = document.getElementById('project-rollups');

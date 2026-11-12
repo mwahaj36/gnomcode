@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Console activity grid on Usage](2026-11-13-console-activity-grid.md)
 - [2026-11-13 - Keep-awake sleep inhibitor](2026-11-13-keep-awake.md)
 - [2026-11-13 - Git viewer hardening](2026-11-13-git-viewer-hardening.md)
 - [2026-11-13 - Approval-wait staleness limit](2026-11-13-presence-approval-staleness.md)
