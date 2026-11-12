@@ -1226,3 +1226,37 @@ Also in each PR: SPEC section 5 roadmap status if there is a matching row; `docs
 - Ctrl+K command palette.
 - Tray popover with the compact provider cards.
 - Local-time day boundaries for the grid (needs a timezone offset parameter end to end).
+
+---
+
+## 15. Addendum (2026-11-12): collapsible cards, tray, mobile, web console and PWA
+
+Visual reference for everything in this plan: [`console-mockup.html`](console-mockup.html). Open it in a browser and match it. Where the mockup and sections 5-7 differ, the mockup and this addendum win.
+
+### 15.1 Collapsible provider cards (replaces the outer markup of 5.5)
+
+- Every provider card is a native `<details class="sp-card sp-provider-card">`, **collapsed by default** on Home, Usage, the tray, the web console and Remote. No JS is needed to toggle.
+- The `<summary>` is the one-line overview: provider mark, name, one line of the tightest window (`Weekly 98% left · resets Thu`, `Weekly exhausted · back Mon 1:20 PM`), a strip of tiny bars (one per window, colored by state), the state chip and a chevron. Rust supplies which window is tightest: add `headline_window` (index into `windows`) to `ProviderOverview` in 8.4, chosen as the window with the highest `severity`, ties broken by lowest `remaining_pct`.
+- The body (`.sp-provider-body`) holds the meter rows from 5.4. Multi-pool providers (more than one distinct `pool`) group windows under a pool heading with compact one-line meters (`.sp-pool`, `.sp-mini` in the mockup).
+- Remember open/closed per provider in `localStorage` key `gnomcode-provider-open` (JSON object of slug to boolean, try/catch). Default closed.
+- On cards narrower than 400px (container query) hide the strip so the summary text fits.
+
+### 15.2 Tray popover (new Phase 8, branch `feat/tray-popover`)
+
+- `apps/desktop/src/main.ts`: left-click on the tray icon toggles a frameless, non-resizable `BrowserWindow` (360px wide, height fits content up to 560px, `skipTaskbar`, `alwaysOnTop`, hidden on blur). Right-click keeps the existing context menu. Position it with `tray.getBounds()` and `screen.getDisplayNearestPoint(...).workArea`, so it sits above the taskbar on Windows and below the menu bar on macOS. On Linux, where tray click events are unreliable, add a "Show overview" context-menu item that opens the same window near the cursor.
+- The window loads a new daemon route `/tray` (a small HTML page embedded in the daemon like `console.html`). It uses the same tokens, `gnomcode-console.css`, `console-presentation.js` and `renderProviderCard(p, { tray: true })`. It shows the Needs you and Running sessions (max 3 rows), collapsed provider rows, and "New session" / "Open gnomcode" buttons. Electron handles the buttons via IPC from preload.
+- Security is the same as the main window: `sandbox`, `contextIsolation`, no `nodeIntegration`, DevTools off in release, and the bearer token passed through preload, never in the URL. The page polls `/api/v1/providers/overview` every 10 s only while visible.
+- The tray tooltip keeps working and adds the tightest limit, for example `Gnomcode · Claude weekly 98% · Codex out`.
+
+### 15.3 Mobile
+
+- Under 720px the rail becomes a bottom-safe top bar with 4 icons (mockup), cards stack in one column collapsed, and tiles become a two-column grid with the third tile spanning the full width.
+- All tap targets stay at least 44px, summary rows at least 64px. No horizontal page scroll; only the heatmap scrolls inside its own box.
+
+### 15.4 Web console and PWA (new Phase 9, branch `feat/web-console-v2`)
+
+- `web/app/console/Client.tsx` and the Remote/PWA surfaces (`web/components/RemoteCompanion.tsx`, `web/app/remote`) must use the same presenters and CSS, so the account console and the installed PWA match the local console.
+- Synced and Remote payloads must carry the Rust fields the UI needs (`state`, `pace`, `label`, `pool`, `window_label`, `stale`). Add them where the desktop publishes quota (`crates/daemon/src/sync.rs` and the encrypted Remote payload in `remote.rs`), all optional, so older desktops still render as `unknown` without colors. Do not add chat content to sync (invariant 1).
+- Replace `QuotaPanel`, `SummaryPanel`, `OngoingPanel` and `ActivityPanel` in `Client.tsx` with the new provider cards, grouped session rows and tiles. The heatmap stays local-only (section 14).
+- PWA polish: `manifest` `theme_color` and `background_color` set to `--sp-bg` for dark (`#070708`), `viewport-fit=cover` with `env(safe-area-inset-*)` padding, a standalone display mode, an app-like top bar, and no 300ms tap delay (`touch-action: manipulation`). Verify at 390x844 in both themes, installed (standalone) and in the browser.
+- The Remote conversation header uses the compact chips from 5.5/Phase 3 step 4.
