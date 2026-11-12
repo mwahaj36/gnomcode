@@ -593,11 +593,8 @@ async fn relay_execute_post_handler(
                 .and_then(|t| t.repo_root)
                 .filter(|p| !p.trim().is_empty())
                 .or_else(|| db.find_antigravity_workspace(&s.id))
-                .unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|_| ".".to_owned())
-                });
+                // No recorded folder (Codex chat, temporary, unassigned): never start the agent somewhere else.
+                .ok_or(StatusCode::CONFLICT)?;
             let entry = gnomcode_store::ContextRelayEntry {
                 id: format!("relay-{}", s.id),
                 session_id: s.id.clone(),

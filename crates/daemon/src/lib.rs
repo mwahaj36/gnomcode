@@ -61,7 +61,9 @@ pub enum HandoffError {
     )]
     NotReady,
     /// The source session or its repository is unavailable.
-    #[error("session or repository not found")]
+    #[error(
+        "session not found, or it has no recorded folder to continue in (Codex chats, temporary and unassigned sessions cannot be resumed from here)"
+    )]
     MissingSession,
     /// The session store could not be read.
     #[error("store error: {0}")]
@@ -202,6 +204,8 @@ mod switch_tests {
                 &checkpoint,
             )
             .expect("session");
+            db.record_session_cwd(&session.id, &repo.path().to_string_lossy())
+                .expect("session folder");
             assert_eq!(
                 super::prepare_switch(&db, &session.id, "@default", Some("antigravity")).is_ok(),
                 allowed,
@@ -736,6 +740,7 @@ impl DaemonOrchestrator {
                         }
                     }
                     let _ = ingest_db.reconcile_antigravity_projects();
+                    let _ = gnomcode_ingest::reproject_all(&mut ingest_db);
                     if let Err(error) = pro::run_guardrails(&ingest_db) {
                         tracing::warn!("guardrail evaluation failed: {error}");
                     }
@@ -800,6 +805,7 @@ impl DaemonOrchestrator {
             let mut db = Database::open(&db_path).map_err(Error::Store)?;
             ingest_all(&mut db)?;
             db.reconcile_antigravity_projects().map_err(Error::Store)?;
+            gnomcode_ingest::reproject_all(&mut db)?;
             if let Err(error) = pro::run_guardrails(&db) {
                 tracing::warn!("guardrail evaluation failed: {error}");
             }
@@ -929,6 +935,8 @@ mod tests {
         };
         db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
             .expect("session");
+        db.record_session_cwd("codex:test", &repo.path().to_string_lossy())
+            .expect("session folder");
         db.insert_chat_event(&ChatEvent {
             event_id: "event".into(),
             session_id: "codex:test".into(),
