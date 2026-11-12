@@ -106,7 +106,15 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 details.sp-provider-card { container-type: inline-size; }
 @container (max-width: 400px) { .sp-provider-card .sp-strip { display: none; } .sp-provider-card > summary { padding-inline: var(--sp-4); } }
 
-/* tray popover (Electron frameless window, 360px wide) */
+/* tray: approximation of the native Windows 11 context menu (rendered by the OS, not HTML) */
+.ctx { min-width: 300px; padding: 4px; border: 1px solid #3a3a3a; border-radius: 8px; background: #2c2c2c; color: #fff; font: 13px "Segoe UI", sans-serif; box-shadow: 0 8px 24px rgb(0 0 0 / .4); }
+.ctx-item { display: flex; justify-content: space-between; gap: 24px; padding: 6px 12px; border-radius: 4px; }
+.ctx-item span { color: #c8c8c8; }
+.ctx-item.ctx-sub::after { content: ">"; margin-left: 8px; color: #c8c8c8; }
+.ctx-hot { background: #3d3d3d; }
+.ctx-dis { color: #8a8a8a; }
+.ctx-sep { height: 1px; margin: 4px 0; background: #444; }
+/* (legacy popover styles below are unused) */
 .tray-demo { display: flex; flex-wrap: wrap; gap: var(--sp-6); align-items: flex-start; }
 .tray { width: 360px; max-width: 100%; border: 1px solid var(--sp-border-strong); border-radius: 14px; background: var(--sp-bg); box-shadow: 0 24px 48px rgb(0 0 0 / .45); overflow: hidden; }
 .tray-head { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--sp-border); }
@@ -306,39 +314,27 @@ details.sp-provider-card { container-type: inline-size; }
     </section>
 
     <section class="sp-section">
-      <header class="sp-section-head"><h2>Tray popover <small>left-click the tray icon</small></h2></header>
+      <header class="sp-section-head"><h2>Tray menu <small>right-click the tray icon; native menu, text only</small></h2></header>
       <div class="tray-demo">
-        <div class="tray" role="dialog" aria-label="Gnomcode quick overview">
-          <div class="tray-head"><strong>gnomcode</strong><span>Updated 1m ago</span></div>
-          <div class="tray-sessions">
-            <p>Running</p>
-            <div class="tray-session"><span class="sp-session-dot sp-session-dot--running"></span><strong>Console UI overhaul plan</strong><span>2m</span></div>
-          </div>
-          <div class="tray-list">
-            <details>
-              <summary><span class="sp-provider-mark">C</span><span class="sp-provider-sum"><h3>Claude Code</h3><span>Weekly <b>98%</b> · Thu</span></span><span class="sp-strip" aria-hidden="true"><i class="is-unk"></i><i></i></span><svg class="sp-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary>
-              <div class="tray-body">
-                <div class="sp-mini is-reset"><span>Session</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:100%"></i></div><span class="sp-mini-value"><b>Reset</b></span></div>
-                <div class="sp-mini"><span>Weekly</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:98%"></i><i class="sp-meter-pace" style="--pace:86%"></i></div><span class="sp-mini-value"><b>98%</b>Thu</span></div>
-              </div>
-            </details>
-            <details>
-              <summary><span class="sp-provider-mark">C</span><span class="sp-provider-sum"><h3>Codex</h3><span>Weekly <b>out</b> · Mon 1:20 PM</span></span><span class="sp-strip" aria-hidden="true"><i class="is-unk"></i><i class="is-out"></i></span><svg class="sp-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary>
-              <div class="tray-body">
-                <div class="sp-mini is-reset"><span>Session</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:100%"></i></div><span class="sp-mini-value"><b>Reset</b></span></div>
-                <div class="sp-mini is-exhausted"><span>Weekly</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:0%"></i></div><span class="sp-mini-value"><b>Out</b>Mon</span></div>
-              </div>
-            </details>
-            <details>
-              <summary><span class="sp-provider-mark">A</span><span class="sp-provider-sum"><h3>Antigravity</h3><span>Gemini weekly <b>47%</b> · 1 pool out</span></span><span class="sp-strip" aria-hidden="true"><i></i><i></i><i></i><i class="is-low"></i><i class="is-out"></i></span><svg class="sp-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></summary>
-              <div class="tray-body">
-                <div class="sp-mini"><span>Claude 5h</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:100%"></i></div><span class="sp-mini-value"><b>100%</b>4h 58m</span></div>
-                <div class="sp-mini"><span>Gemini wk</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:47%"></i></div><span class="sp-mini-value"><b>47%</b>Sun</span></div>
-                <div class="sp-mini is-exhausted"><span>Argon wk</span><div class="sp-meter"><i class="sp-meter-fill" style="--fill:0%"></i></div><span class="sp-mini-value"><b>Out</b>Mon</span></div>
-              </div>
-            </details>
-          </div>
-          <div class="tray-foot"><button type="button">New session</button><button type="button" class="primary">Open gnomcode</button></div>
+        <div class="ctx">
+          <div class="ctx-item ctx-dis">Running (1)</div>
+          <div class="ctx-item">Console UI overhaul plan · Claude Code</div>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item ctx-sub">Claude Code<span>Weekly 98% left · Thu</span></div>
+          <div class="ctx-item ctx-sub ctx-hot">Codex<span>Weekly out · back Mon 1:20 PM</span></div>
+          <div class="ctx-item ctx-sub">Antigravity<span>1 pool out</span></div>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item ctx-dis">Updated 1m ago</div>
+          <div class="ctx-item">New session</div>
+          <div class="ctx-item">Open Gnomcode</div>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item">Quit Gnomcode</div>
+        </div>
+        <div class="ctx">
+          <div class="ctx-item ctx-dis">Session: reset, awaiting reading</div>
+          <div class="ctx-item ctx-dis">Weekly: exhausted, back Mon 1:20 PM</div>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item">Open limits</div>
         </div>
       </div>
     </section>
