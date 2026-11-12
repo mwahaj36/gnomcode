@@ -15,6 +15,8 @@ export function renderMeterRow(win: QuotaWindowView, options?: { detail?: boolea
 export function renderPoolGroup(windows: QuotaWindowView[]): string;
 export function renderProviderCard(provider: ProviderOverview, options?: ProviderCardOptions): string;
 export function renderProviderCards(list: ProviderOverview[], options?: ProviderCardOptions): string;
+export function renderProviderSources(list: ProviderOverview[]): string;
+export function updateProviderSources(element: HTMLElement, list: ProviderOverview[]): void;
 export function updateProviderCards(element: HTMLElement, list: ProviderOverview[], options?: ProviderCardOptions): void;
 export function renderProjects(projects: unknown): string;
 export function renderSummary(data: { activeCount?: number | null; report?: unknown; quotaCount?: number | null }): string;
