@@ -873,6 +873,9 @@ mod tests {
             .commit_batch(&[project], &[session.clone()], &[], &[], &[], &checkpoint)
             .expect("session");
         database
+            .record_session_cwd(&session.id, &repo.path().to_string_lossy())
+            .expect("session folder");
+        database
             .bind_conversation_host("test-host", &session.id)
             .expect("bind");
         database

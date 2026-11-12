@@ -204,6 +204,8 @@ mod switch_tests {
                 &checkpoint,
             )
             .expect("session");
+            db.record_session_cwd(&session.id, &repo.path().to_string_lossy())
+                .expect("session folder");
             assert_eq!(
                 super::prepare_switch(&db, &session.id, "@default", Some("antigravity")).is_ok(),
                 allowed,
@@ -933,6 +935,8 @@ mod tests {
         };
         db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
             .expect("session");
+        db.record_session_cwd("codex:test", &repo.path().to_string_lossy())
+            .expect("session folder");
         db.insert_chat_event(&ChatEvent {
             event_id: "event".into(),
             session_id: "codex:test".into(),
