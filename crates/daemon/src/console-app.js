@@ -351,17 +351,17 @@ function cycleTheme() {
           const queue = await qRes.json();
           const qTable = document.getElementById('resume-queue-table');
           if (!queue || queue.length === 0) {
-            qTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections scheduled.</td></tr>';
+            qTable.innerHTML = '<tr><td colspan="8" class="sp-muted-cell">No reconnections scheduled.</td></tr>';
           } else {
             qTable.innerHTML = queue.map(e => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta);">${escapeHtml(e.session_id)}</td>
+                <td class="sp-mono-meta sp-mono-meta--text">${escapeHtml(e.session_id)}</td>
                 <td><span class="badge">${escapeHtml(e.agent)}</span></td>
-                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${escapeHtml(e.cwd)}</td>
+                <td class="sp-mono-meta sp-mono-meta--sans">${escapeHtml(e.cwd)}</td>
                 <td>${escapeHtml(e.resume_prompt)}</td>
                 <td>${e.max_runs}</td>
                 <td>${e.runs_completed}</td>
-                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${formatRelativeTime(e.eligible_after)}</td>
+                <td class="sp-mono-meta sp-mono-meta--sans">${formatRelativeTime(e.eligible_after)}</td>
                 <td><button class="btn-control" data-action="disarm" data-arg="${escapeHtml(e.session_id)}">Disarm</button></td>
               </tr>
             `).join('');
@@ -373,15 +373,15 @@ function cycleTheme() {
           const rules = await rulesRes.json();
           const rTable = document.getElementById('rules-table');
           if (!rules || rules.length === 0) {
-            rTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No usage rules yet.</td></tr>';
+            rTable.innerHTML = '<tr><td colspan="6" class="sp-muted-cell">No usage rules yet.</td></tr>';
           } else {
             rTable.innerHTML = rules.map(r => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta); font-weight: 600;">${escapeHtml(r.id)}</td>
+                <td class="sp-mono-meta sp-mono-meta--text sp-strong-cell">${escapeHtml(r.id)}</td>
                 <td>${escapeHtml(r.agent || 'All Agents')}</td>
                 <td>${r.max_spend_usd ? '$' + r.max_spend_usd.toFixed(2) : 'None'}</td>
                 <td>${r.max_turns ? r.max_turns : 'None'}</td>
-                <td><span class="badge" style="color: ${r.action === 'HardStop' ? 'var(--red)' : 'var(--accent)'};">${r.action === 'HardStop' ? 'Claude hook stop; other agents alert' : escapeHtml(r.action)}</span></td>
+                <td><span class="badge ${r.action === 'HardStop' ? 'sp-tone-red' : 'sp-tone-accent'}">${r.action === 'HardStop' ? 'Claude hook stop; other agents alert' : escapeHtml(r.action)}</span></td>
                 <td><button class="btn-control" data-action="delete-rule" data-arg="${escapeHtml(r.id)}">Delete</button></td>
               </tr>
             `).join('');
@@ -393,14 +393,14 @@ function cycleTheme() {
           const alerts = await alertsRes.json();
           const aTable = document.getElementById('alerts-table');
           if (!alerts || alerts.length === 0) {
-            aTable.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No alerts yet.</td></tr>';
+            aTable.innerHTML = '<tr><td colspan="4" class="sp-muted-cell">No alerts yet.</td></tr>';
           } else {
             aTable.innerHTML = alerts.map(a => `
               <tr>
-                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta);">${escapeHtml(a.session_id)}</td>
-                <td style="font-weight: 600;">${escapeHtml(a.rule_id)}</td>
-                <td><span class="badge" style="color: ${a.action === 'hard_stop' ? 'var(--red)' : 'var(--accent)'};">${a.action === 'hard_stop' ? 'Stop requested (Claude hook only)' : escapeHtml(a.action)}</span></td>
-                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${formatRelativeTime(a.created_at)}</td>
+                <td class="sp-mono-meta sp-mono-meta--text">${escapeHtml(a.session_id)}</td>
+                <td class="sp-strong-cell">${escapeHtml(a.rule_id)}</td>
+                <td><span class="badge ${a.action === 'hard_stop' ? 'sp-tone-red' : 'sp-tone-accent'}">${a.action === 'hard_stop' ? 'Stop requested (Claude hook only)' : escapeHtml(a.action)}</span></td>
+                <td class="sp-mono-meta sp-mono-meta--sans">${formatRelativeTime(a.created_at)}</td>
               </tr>
             `).join('');
           }
@@ -430,20 +430,20 @@ function cycleTheme() {
         const table = document.getElementById('relay-table');
         if (table) {
           if (!data.relays || data.relays.length === 0) {
-            table.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No context handoffs recorded. Open a supported session to switch agents.</td></tr>';
+            table.innerHTML = '<tr><td colspan="7" class="sp-muted-cell">No context handoffs recorded. Open a supported session to switch agents.</td></tr>';
           } else {
             table.innerHTML = data.relays.map(r => {
-              const statusColor = r.status === 'executed' ? 'var(--green)' : (r.status === 'pending' ? 'var(--yellow)' : 'var(--text-muted)');
+              const statusTone = r.status === 'executed' ? 'sp-tone-green' : (r.status === 'pending' ? 'sp-tone-yellow' : 'sp-tone-muted');
               const actionBtn = r.status === 'pending'
-                ? `<button class="btn-primary" style="padding: 4px 10px; font-size: var(--sp-fs-meta); margin-right: 6px;" data-action="execute-relay" data-arg="${escapeHtml(r.id)}">Handoff & Rotate</button><button class="btn-control" style="padding: 4px 8px; font-size: var(--sp-fs-meta);" data-action="dismiss-relay" data-arg="${escapeHtml(r.id)}">Dismiss</button>`
-                : `<span style="font-size: var(--sp-fs-meta); color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(r.status)}</span>`;
+                ? `<button class="btn-primary sp-row-action sp-row-action--gap" data-action="execute-relay" data-arg="${escapeHtml(r.id)}">Handoff & Rotate</button><button class="btn-control sp-row-action" data-action="dismiss-relay" data-arg="${escapeHtml(r.id)}">Dismiss</button>`
+                : `<span class="sp-mono-meta">${escapeHtml(r.status)}</span>`;
               return `<tr>
-                <td style="font-family: var(--font-mono); font-size: var(--sp-fs-meta);">${escapeHtml(r.session_id)}</td>
-                <td style="font-weight: 600;">${escapeHtml(r.project_name)}</td>
+                <td class="sp-mono-meta sp-mono-meta--text">${escapeHtml(r.session_id)}</td>
+                <td class="sp-strong-cell">${escapeHtml(r.project_name)}</td>
                 <td>${escapeHtml(r.source_agent)} &rarr; ${escapeHtml(r.target_agent)}</td>
-                <td style="font-weight: 600; color: ${r.fill_pct >= 90 ? 'var(--red)' : 'var(--yellow)'};">${r.fill_pct}% <span class="trust-mark">EST</span></td>
-                <td><span class="badge" style="color: ${statusColor}; border-color: ${statusColor};">${r.status.toUpperCase()}</span></td>
-                <td style="color: var(--text-muted); font-size: var(--sp-fs-meta);">${formatRelativeTime(r.created_at)}</td>
+                <td class="sp-strong-cell ${r.fill_pct >= 90 ? 'sp-tone-red' : 'sp-tone-yellow'}">${r.fill_pct}% <span class="trust-mark">EST</span></td>
+                <td><span class="badge ${statusTone}">${r.status.toUpperCase()}</span></td>
+                <td class="sp-mono-meta sp-mono-meta--sans">${formatRelativeTime(r.created_at)}</td>
                 <td>${actionBtn}</td>
               </tr>`;
             }).join('');
@@ -643,7 +643,7 @@ function cycleTheme() {
         document.getElementById('connection-status').hidden = true;
         const tl = res.timeline;
         const presentation = await import("/console-presentation.js");
-        presentation.updateActivity(document.getElementById("daily-activity"), tl);
+        presentation.updateActivity(document.getElementById("daily-activity"), tl, { totals: false });
 
 
         // Date range header
@@ -1625,15 +1625,15 @@ function cycleTheme() {
         const res = await apiJson('/api/v1/pricing/custom', { headers });
         const container = document.getElementById('settings-pricing-list');
         if (!res || !res.custom_pricing || res.custom_pricing.length === 0) {
-          container.innerHTML = '<span style="color: var(--text-muted);">No custom rate overrides configured (using default catalog).</span>';
+          container.innerHTML = '<span class="sp-tone-muted">No custom rate overrides configured (using default catalog).</span>';
           return;
         }
-        let html = '<div style="display: flex; flex-direction: column; gap: 4px;">';
+        let html = '<div class="sp-pricing-rows">';
         for (const cp of res.custom_pricing) {
           html += `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 5px 8px; border: 1px solid var(--border); border-radius: 0;">
+            <div class="sp-pricing-row">
               <span><strong>${escapeHtml(cp.model_pattern)}</strong>: In $${cp.input_per_mtok_usd.toFixed(2)} | Out $${cp.output_per_mtok_usd.toFixed(2)} | Cache $${cp.cache_read_per_mtok_usd.toFixed(2)}</span>
-              <button class="btn-control" style="padding: 2px 6px; font-size: var(--sp-fs-meta); color: var(--red);" data-action="delete-pricing" data-arg="${escapeHtml(cp.model_pattern)}">Remove</button>
+              <button class="btn-control sp-row-action sp-tone-red" data-action="delete-pricing" data-arg="${escapeHtml(cp.model_pattern)}">Remove</button>
             </div>`;
         }
         html += '</div>';

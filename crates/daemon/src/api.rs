@@ -2336,7 +2336,7 @@ pub(crate) fn conversation_quota(
         let label = if pools.len()>1 {format!("{} {window}",pool.snapshot.limit_id.replace(['-','_']," "))}else{window.to_owned()};
         let expired = pool.snapshot.resets_at.is_some_and(|reset|reset<=now);
         let stale = expired || now.signed_duration_since(pool.snapshot.observed_at)>chrono::Duration::minutes(2);
-        json!({"label":label,"state":pool.state,"remaining_pct":if expired {None}else{pool.remaining_pct},"basis":pool.snapshot.basis,"observed_at":pool.snapshot.observed_at,"stale":stale})
+        json!({"label":label,"state":pool.state,"remaining_pct":if expired {None}else{pool.remaining_pct},"basis":pool.snapshot.basis,"observed_at":pool.snapshot.observed_at,"stale":stale,"window":pool.snapshot.window,"window_label":pool.window_label,"pool":pool.pool,"resets_at":pool.snapshot.resets_at,"reset_passed":pool.reset_passed,"pace":pool.pace})
     }).collect()
 }
 
@@ -4330,6 +4330,9 @@ mod tests {
         let views = super::conversation_quota(std::slice::from_ref(&snapshot), "codex", now);
         assert_eq!(views[0]["remaining_pct"], 75.0);
         assert_eq!(views[0]["label"], "5h");
+        assert_eq!(views[0]["window_label"], "Session");
+        assert!(views[0]["resets_at"].is_string());
+        assert!(views[0].get("pool").is_some() && views[0].get("pace").is_some());
         assert_eq!(views[0]["stale"], false);
         snapshot.used_pct = 40.0;
         assert_eq!(

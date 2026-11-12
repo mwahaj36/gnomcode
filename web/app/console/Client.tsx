@@ -7,23 +7,43 @@ import DesktopDevices from "../../components/DesktopDevices";
 import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, renderQuota, updateSummary, updateOngoing, updateQuota } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles } from "../../lib/console-presentation.js";
 
-function SummaryPanel({ activeCount, report, quotaCount }: { activeCount: number | null; report: unknown; quotaCount: number | null }) {
+// The four places of the console. `sessions` is the synced history reached from Home, so it keeps Home highlighted.
+const PLACES: [string, string][] = [["overview", "Home"], ["chat", "Workspace"], ["usage", "Usage"], ["settings", "Settings"]];
+const PLACE_ICONS: Record<string, string> = {
+  overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
+  chat: "M4 4h16v12H9l-5 4V4Z",
+  usage: "M4 20V10m8 10V4m8 16v-7",
+  settings: "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3",
+};
+const VIEW_ALIASES: Record<string, string> = { limits: "usage", projects: "usage", automations: "settings" };
+const VIEW_KEYS = ["overview", "sessions", "chat", "usage", "settings"];
+const VIEW_TITLES: Record<string, string> = { overview: "Home", sessions: "Sessions", chat: "Workspace", usage: "Usage", settings: "Settings" };
+const normalizeView = (view: string | null) => { const key = VIEW_ALIASES[view || ""] || view || ""; return VIEW_KEYS.includes(key) ? key : ""; };
+
+// Presenter panels only hand synced data to the shared formatters; every state, label and group comes from the desktop.
+function HomeSessionsPanel({ sessions, onAction }: { sessions: SessionItem[] | null; onAction: (action: string) => void }) {
   const element = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (element.current) updateSummary(element.current, { activeCount, report, quotaCount }); }, [activeCount, report, quotaCount]);
+  useEffect(() => { if (element.current) updateHomeSessions(element.current, sessions); }, [sessions]);
+  return <div ref={element} onClick={event => { const target = (event.target as HTMLElement).closest<HTMLElement>("[data-action]"); if (target?.dataset.action) onAction(target.dataset.action); }} />;
+}
+
+function TodayPanel({ report, activeCount }: { report: unknown; activeCount: number | null }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (element.current) updateTodayTiles(element.current, { report, activeCount }); }, [report, activeCount]);
   return <div ref={element} />;
 }
 
-function OngoingPanel({ sessions }: { sessions: SessionItem[] | null }) {
+function PeriodTilesPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (element.current) updateOngoing(element.current, sessions); }, [sessions]);
+  useEffect(() => { if (element.current) updatePeriodTiles(element.current, report); }, [report]);
   return <div ref={element} />;
 }
 
 function ActivityPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (element.current) updateActivity(element.current, report); }, [report]);
+  useEffect(() => { if (element.current) updateActivity(element.current, report, { totals: false }); }, [report]);
   return <div ref={element} />;
 }
 
@@ -54,6 +74,7 @@ interface SessionItem {
   state: string;
   is_active: boolean;
   is_ongoing?: boolean;
+  home_group?: "needs_you" | "running" | "recent" | null;
   started_at: string;
   last_event_at: string;
   input_tokens?: number;
@@ -162,7 +183,8 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
   // Live Metrics
   const [report, setReport] = useState<TimelineReport | null>(null);
-  const [ongoing, setOngoing] = useState<SessionItem[] | null>(null);
+  const [homeSessions, setHomeSessions] = useState<SessionItem[] | null>(null);
+  const [todayReport, setTodayReport] = useState<TimelineReport | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quota, setQuota] = useState<QuotaItem[]>([]);
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
@@ -188,7 +210,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
   useEffect(() => {
     lastDesktopSnapshot.current = null;
     setProjectNames([]); setProjectFilter('all');
-    setOngoing(null); setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
+    setHomeSessions(null); setTodayReport(null); setSessions([]); setQuota([]); setReport(null); setRoiByProvider([]);
     setCombinedRoi(null); setSnapshotGeneratedAt(null);
     setSnapshotLoaded(false); setActiveCount(null); setLastSuccessfulUpdate(null);
     setRefreshMessage(""); setConnectedSource(user?.id ? "Loading account snapshot" : "Sign in to monitor your desktop remotely");
@@ -197,17 +219,23 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
   useEffect(() => {
     const restore = () => {
-      const view = new URLSearchParams(window.location.search).get("view") || (window.location.pathname === '/remote' ? 'chat' : 'overview');
-      if (["overview", "sessions", "chat", "usage", "limits", "projects", "automations", "settings"].includes(view)) setActiveView(view);
+      const view = normalizeView(new URLSearchParams(window.location.search).get("view")) || (window.location.pathname === '/remote' ? 'chat' : 'overview');
+      setActiveView(view);
     };
     restore();
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  const changeConsoleView = (view: string) => {
+  const changeConsoleView = (requested: string) => {
+    const view = normalizeView(requested) || "overview";
     setActiveView(view);
     window.history.pushState(null, "", view === "overview" ? "/console" : `/console?view=${view}`);
+    window.scrollTo?.({ top: 0 });
+  };
+  const homeAction = (action: string) => {
+    if (action === "view:sessions") changeConsoleView("sessions");
+    else changeConsoleView("chat");
   };
 
   useEffect(() => {
@@ -252,8 +280,10 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         if (refreshed) setLastSuccessfulUpdate(new Date());
         const allSessions: SessionItem[] = [...(snap?.sessions || [])];
         setProjectNames([...new Set(allSessions.map((session: SessionItem) => session.project_name))].sort());
-        setOngoing(allSessions.filter((session: SessionItem) => (session.is_ongoing ?? session.is_active)));
-        const filtered = allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at)).filter((session) =>
+        allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at));
+        setHomeSessions(snap ? allSessions : null);
+        setTodayReport(snap?.timelines?.today || snap?.timeline || null);
+        const filtered = allSessions.filter((session) =>
           (projectFilter === "all" || session.project_name === projectFilter) &&
           (agentFilter === "all" || session.agent === agentFilter) &&
           (statusFilter === "all" || (statusFilter === "ongoing" ? (session.is_ongoing ?? session.is_active) : statusFilter === "active" ? session.is_active : statusFilter === "ended" ? session.state === "ended" : session.state === "idle")));
@@ -264,7 +294,9 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         setRoiByProvider(snap?.roi_by_timeline?.[timeline]?.roi_by_provider || []);
         setCombinedRoi(snap?.roi_by_timeline?.[timeline]?.combined_roi || null);
         setSnapshotLoaded(Boolean(snap));
-        setActiveCount(snap?.ongoing_count ?? snap?.active_count ?? null);
+        // Sessions carry the desktop's own home_group; desktops that predate it fall back to their reported count.
+        const grouped = allSessions.some((session: SessionItem) => session.home_group);
+        setActiveCount(grouped ? allSessions.filter((session: SessionItem) => session.home_group === "needs_you" || session.home_group === "running").length : snap?.ongoing_count ?? snap?.active_count ?? null);
         setSnapshotTotal(typeof snap?.total_count === "number" ? snap.total_count : null);
         setTotalCount(filtered.length);
         setTotalPages(Math.max(1, Math.ceil(filtered.length / 10)));
@@ -283,6 +315,8 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       setSnapshotTotal(null);
       setActiveCount(null);
       setSessions([]);
+      setHomeSessions(null);
+      setTodayReport(null);
       setQuota([]);
       setReport(null);
       setRoiByProvider([]);
@@ -372,7 +406,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
   return (
     <main className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
-      <header className="web-context"><h1 aria-live="polite">{activeView === "overview" ? "Dashboard" : activeView === "chat" ? "Workspace" : activeView === "settings" ? "Profile" : activeView[0].toUpperCase() + activeView.slice(1)}</h1></header>
+      <header className="web-context"><h1 aria-live="polite">{VIEW_TITLES[activeView] || "Home"}</h1>{activeView === "sessions" && <button type="button" className="sp-link" onClick={() => changeConsoleView("overview")}>Back to Home</button>}</header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
         <p>Sign in to view activity from your paired desktop.</p>
         <div className="sp-console-connect-actions">
@@ -389,23 +423,23 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       <div className="sp-console-workspace">
       <nav className="sp-console-nav" aria-label="Console views">
         <Link href="/console" className="web-rail-brand" aria-label="Gnomcode dashboard"><span className="sp-brand-mark" /></Link>
-        <button type="button" aria-label={navigationExpanded ? "Collapse navigation" : "Expand navigation"} aria-expanded={navigationExpanded} onClick={() => setNavigationExpanded(!navigationExpanded)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8l-1 7 4 4H5l4-4-1-7Zm4 11v7" /></svg><span>{navigationExpanded ? "Collapse navigation" : "Expand navigation"}</span></button>
-        {["overview", "chat", "sessions", "usage", "limits", "projects", "automations", "settings"].map((view, index) => <button key={view} type="button" aria-current={activeView === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={[
-          "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z", "M4 4h16v12H9l-5 4V4Z", "M4 4h16v16H4z M8 9h8 M8 14h8", "M4 20V10m8 10V4m8 16v-7", "M4 12a8 8 0 0 1 16 0 M12 12l5-5 M4 20h16", "M3 6h7l2 3h9v11H3V6Z", "m13 2-9 12h7l-1 8 10-13h-8l1-7Z", "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3"
-        ][index]} /></svg><span>{view === "overview" ? "Dashboard" : view === "chat" ? "Workspace" : view === "settings" ? "Profile" : view[0].toUpperCase() + view.slice(1)}</span></button>)}
-        <Link className="web-download-link" href="/downloads" aria-label="Download desktop app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Download app</span></Link>
+        {PLACES.map(([view, label]) => <button key={view} type="button" data-place={view} aria-label={label} title={label} aria-current={(activeView === "sessions" ? "overview" : activeView) === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={PLACE_ICONS[view]} /></svg><span>{label}</span></button>)}
+        <Link className="web-download-link" href="/downloads" aria-label="Download desktop app" title="Download app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Download app</span></Link>
+        <button type="button" className="web-rail-toggle" aria-label={navigationExpanded ? "Collapse navigation" : "Expand navigation"} title={navigationExpanded ? "Collapse navigation" : "Expand navigation"} aria-expanded={navigationExpanded} onClick={() => setNavigationExpanded(!navigationExpanded)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" /></svg><span>{navigationExpanded ? "Collapse navigation" : "Expand navigation"}</span></button>
       </nav>
       <div className="sp-console-content">
-      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Account sync shares session metadata without end-to-end encryption. Linked desktops are available to every device signed into your account.</p><details><summary>What gets shared</summary><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Sign in on your desktop to make it available here. Linking the native app allows every device signed in to this account to open its available sessions. No phone pairing or per-desktop approval is required.</p></details><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button></div>{user && <details><summary>Connect an existing browser account</summary><p>Use this option in the native app when you signed in through a provider. Treat the copied connection like a password.</p><button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy account connection</button></details>}</section><DesktopDevices /><SettingsPanel embedded /></>}
+      {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Account sync shares session metadata without end-to-end encryption. Linked desktops are available to every device signed into your account.</p><details><summary>What gets shared</summary><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Sign in on your desktop to make it available here. Linking the native app allows every device signed in to this account to open its available sessions. No phone pairing or per-desktop approval is required.</p></details><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button></div>{user && <details><summary>Connect an existing browser account</summary><p>Use this option in the native app when you signed in through a provider. Treat the copied connection like a password.</p><button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy account connection</button></details>}</section><section className="web-profile-section"><h2>Automations</h2><p>Schedule messages, reconnect after a limit, or choose automatic model switching from Workspace. Manage usage rules in the desktop app.</p><button type="button" className="sp-console-action" onClick={()=>changeConsoleView('chat')}>Open workspace</button></section><DesktopDevices /><SettingsPanel embedded /></>}
       <div hidden={activeView !== "chat"}><RemoteCompanion embedded visible={activeView === "chat"} /></div>
-      {activeView === "projects" && <section className="sp-activity"><h2>Project activity</h2>
-        {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
-      </section>}
-      {activeView === "automations" && <section className="sp-activity"><h2>Conversation automation</h2><p>Schedule messages, reconnect after a limit, or choose automatic model switching from Workspace. Manage usage rules in the desktop app.</p><button type="button" className="sp-console-action" onClick={()=>changeConsoleView('chat')}>Open workspace</button></section>}
+      {activeView === "overview" && <div className="sp-home">
+        <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />
+        <HomeSessionsPanel sessions={homeSessions} onAction={homeAction} />
+        <section className="sp-section"><TodayPanel report={todayReport} activeCount={activeCount} /></section>
+      </div>}
+      {activeView === "usage" && <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />}
 
       {/* Timeline Filter Bar */}
       {user && desktopChoices.length>0 && activeView!=="chat" && <label className="sp-console-timeline-filter">Desktop<select value={desktopId || desktopChoices[0].id} onChange={event=>{lastDesktopSnapshot.current=null;setDesktopId(event.target.value);setPage(1);}}>{desktopChoices.map(desktop=><option key={desktop.id} value={desktop.id}>{desktop.name}</option>)}</select></label>}
-      {["overview", "usage"].includes(activeView) && <div className="sp-console-timeline-filter">
+      {activeView === "usage" && <div className="sp-console-timeline-filter">
         <div className="text-xs text-muted">
           <span className="text-foreground">{report?.range_label || "Activity"}</span>
           {report?.earliest_at && report?.latest_at && (
@@ -424,9 +458,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       </div>
 
       }
-      {(activeView === "overview" || activeView === "usage") && <ActivityPanel report={report} />}
-      {activeView === "overview" && <SummaryPanel activeCount={activeCount} report={report} quotaCount={snapshotLoaded ? quota.length : null} />}
-      {activeView === "overview" && <div className="sp-overview-live"><section className="sp-overview-limits"><QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} /></section><OngoingPanel sessions={ongoing} /></div>}
+      {activeView === "usage" && <PeriodTilesPanel report={report} />}
 
       {activeView === "usage" && <ProvidersPanel report={report} />}
 
@@ -477,10 +509,12 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         </div>
       </div>}
 
-      {activeView === "limits" && <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />}
+      {activeView === "usage" && <ActivityPanel report={report} />}
+      {activeView === "usage" && <section className="sp-activity sp-usage-projects"><h2>Project activity</h2>
+        {projectNames.length > 0 ? <><p>Projects from the latest desktop snapshot. Open a project to view its synced sessions. Detailed usage totals remain on your desktop.</p><div className="web-project-list">{projectNames.map(project => <button type="button" className="sp-console-action" key={project} onClick={() => { setProjectFilter(project); setPage(1); changeConsoleView('sessions'); }}>{project}</button>)}</div></> : <><p>{!user ? 'Sign in and connect your desktop to see projects from your session history.' : snapshotLoaded ? 'No projects are present in the latest desktop snapshot. Start an agent in a project on your desktop, then reload activity.' : 'No desktop activity has been received yet. Connect your desktop to publish your project and session metadata.'}</p><button type="button" className="sp-console-action" onClick={() => changeConsoleView('settings')}>Connect your desktop</button>{user && <button type="button" className="sp-console-action" disabled={refreshing} onClick={refreshCloudSnapshot}>{refreshing ? 'Reloading...' : 'Reload activity'}</button>}</>}
+      </section>}
       {viewError && <div className="sp-console-notice" role="alert">{viewError}</div>}
 
-      {activeView === "sessions" && <OngoingPanel sessions={ongoing} />}
       {activeView === "sessions" && snapshotTotal !== null && snapshotTotal >= 200 && <p role="status">The account view contains up to 200 recent or active sessions. The desktop reports {snapshotTotal} recorded sessions; older desktop versions may undercount. Filters and counts below cover only the published sessions. Open the local console for full history.</p>}
       {/* Session history */}
       {activeView === "sessions" && <div className="bg-card border border-border rounded-lg p-5 font-mono">
