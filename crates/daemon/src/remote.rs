@@ -310,6 +310,20 @@ impl RemoteManager {
         }
     }
 
+    /// Whether a remembered phone could answer right now: some room is trusted and the
+    /// desktop is connected to the relay (the phone itself may not have opened the page).
+    pub(crate) async fn reachable(&self) -> bool {
+        self.reachable_room_only().await || self.devices.any_reachable().await
+    }
+
+    pub(crate) async fn reachable_room_only(&self) -> bool {
+        let room = self.current.lock().await.clone();
+        match room {
+            Some(room) => room.is_reachable().await,
+            None => false,
+        }
+    }
+
     /// Wakes metadata publication when the public pairing offer changes.
     pub(crate) async fn discovery_changed(&self) {
         self.discovery_changed.notified().await;
@@ -339,6 +353,16 @@ impl RemoteManager {
 }
 
 impl Room {
+    async fn is_reachable(&self) -> bool {
+        self.connected.load(Ordering::Acquire)
+            && self
+                .trusted
+                .lock()
+                .await
+                .as_ref()
+                .is_some_and(|trust| trust.valid(chrono::Utc::now().timestamp()))
+    }
+
     async fn establish_trust(&self) -> Result<(), RemoteError> {
         let mut trusted = self.trusted.lock().await;
         let _gate = self.persistence.lock().await;
@@ -570,7 +594,7 @@ async fn run_connection(
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
-                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset")) {room.activity().await;}
+                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
@@ -768,6 +792,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             "schedule" | "schedules" | "cancel_schedule" | "notices" | "routing"
             | "resume_on_reset",
         ) => crate::automation::command(db, request.clone()).await,
+        Some("approvals" | "approval") => crate::approvals::remote_command(&request),
         Some("prompt") => {
             let Some(session_id) = request.get("session_id").and_then(Value::as_str) else {
                 return json!({"type":"error","message":"Missing session"});

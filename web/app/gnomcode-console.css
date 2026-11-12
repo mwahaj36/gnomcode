@@ -1458,3 +1458,14 @@ html{touch-action:manipulation}
 @media (max-width: 420px) {
   .sp-tiles--value { grid-template-columns: minmax(0, 1fr); }
 }
+.sp-approvals{display:grid;gap:var(--sp-3);margin:0 0 var(--sp-4)}
+.sp-approvals[hidden]{display:none}
+.sp-approval{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:var(--sp-radius-card)}
+.sp-approval-body{min-width:0;display:grid;gap:var(--sp-1)}
+.sp-approval-body p{margin:0}
+.sp-approval-title{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--sp-fs-strong);color:var(--sp-text)}
+.sp-approval-summary{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:var(--sp-fs-meta)/1.5 var(--sp-font-mono);color:var(--sp-text-2)}
+.sp-approval-meta{font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
+.sp-approval-actions{display:flex;gap:var(--sp-2);flex-shrink:0}
+.sp-approval-actions .btn-control{min-height:40px}
+@media (max-width:720px){.sp-approval{flex-direction:column;align-items:stretch}.sp-approval-actions .btn-control{flex:1;min-height:44px}}
