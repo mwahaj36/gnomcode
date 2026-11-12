@@ -396,6 +396,15 @@ export function renderProviderCards(list, options = {}) {
   return `<section class="sp-section sp-limits" aria-label="Provider limits"><header class="sp-section-head"><h2>Limits</h2><span class="sp-section-meta">${escape(meta)}</span></header>${grid}</section>`;
 }
 
+/** Settings > Providers: one row per provider with its limit source (text from Rust) and, when off, the enable command. */
+export function renderProviderSources(list) {
+  const items = Array.isArray(list) ? list : [];
+  if (!items.length) return '<p class="sp-provider-empty">No providers reported.</p>';
+  return `<ul class="sp-source-list">${items.map(p => `<li><span class="sp-provider-name">${escape(providerName(p))}</span><span class="sp-source-label">${escape(p.source_label || 'Unknown')}</span>${p.enable_command ? `<button type="button" class="sp-copy" data-copy="${escape(p.enable_command)}"><code>${escape(p.enable_command)}</code><span>Copy</span></button>` : ''}</li>`).join('')}</ul>`;
+}
+
+export function updateProviderSources(element, list) { updateMarkup(element, renderProviderSources(list)); }
+
 const PROVIDER_OPEN_KEY = 'gnomcode-provider-open';
 function readProviderOpen() {
   try { const stored = JSON.parse(localStorage.getItem(PROVIDER_OPEN_KEY)); return stored && typeof stored === 'object' ? stored : {}; } catch (_) { return {}; }
@@ -447,9 +456,17 @@ export function renderQuota(pools, publishedAt) { return renderProviderCards(quo
 
 export function renderSessionList(sessions, selected = '', query = '') {
   const matching = sessions.filter(session => `${session.title || ''} ${session.agent} ${session.repo_path || session.project_name || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
-  return matching.map(session => {
+  // Headings use the Rust-derived home_group; with nothing waiting or running the list stays flat.
+  const grouped = matching.some(session => session.home_group === 'needs_you' || session.home_group === 'running');
+  const rank = session => Math.max(0, HOME_GROUPS.findIndex(([name]) => name === session.home_group));
+  const ordered = grouped ? [...matching].sort((a, b) => rank(a) - rank(b)) : matching;
+  let lastGroup = '';
+  return ordered.map(session => {
     const isSubagent = Boolean(session.parent_session_id || session.title?.toLowerCase().includes('subagent'));
-    return `<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>`;
+    const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
+    const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
+    lastGroup = group;
+    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 

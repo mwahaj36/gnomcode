@@ -13,22 +13,20 @@
 <body class="sp-native-console">
       <div class="sp-console-workspace"><nav class="nav-tabs sp-console-nav" aria-label="Console views">
         <a class="app-brand" href="#" data-action="view:overview" aria-label="Gnomcode home"><span class="sp-brand-mark" aria-hidden="true"></span><span class="rail-label">gnomcode</span></a>
-        <button type="button" id="navigation-toggle" data-action="toggle-navigation" aria-label="Expand navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16"/></svg><span class="rail-label">Expand navigation</span></button>
-        <div role="tablist" aria-label="Console views" aria-orientation="vertical" style="display: contents"><button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v10H3z M9 21v-6h6v6"/></svg><span class="rail-label">Home</span></button>
-        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span class="rail-label">Workspace</span></button>
-        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:usage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7"/></svg><span class="rail-label">Usage</span></button>
-        <button class="tab-btn" id="tab-btn-limits" data-view="limits" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:limits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 16 0 M12 12l5-5 M4 20h16"/></svg><span class="rail-label">Limits</span></button>
-        <button class="tab-btn" id="tab-btn-projects" data-view="projects" role="tab" aria-selected="false" aria-controls="view-projects" tabindex="-1" data-action="view:projects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg><span class="rail-label">Projects</span></button>
-        <button class="tab-btn" id="tab-btn-automations" data-view="automations" role="tab" aria-selected="false" aria-controls="view-automations" tabindex="-1" data-action="view:automations"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/></svg><span class="rail-label">Automations</span></button>
-        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" data-action="view:settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3"/></svg><span class="rail-label">Profile</span></button></div>
+        <div role="tablist" aria-label="Console views" aria-orientation="vertical" class="sp-rail-tabs"><button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview" title="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v10H3z M9 21v-6h6v6"/></svg><span class="rail-label">Home</span></button>
+        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions" title="Workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span class="rail-label">Workspace</span></button>
+        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:usage" title="Usage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7"/></svg><span class="rail-label">Usage</span></button>
+        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" data-action="view:settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="rail-label">Settings</span></button></div>
         <button type="button" class="tab-btn" id="account-entry" data-action="view:auth" aria-label="Sign in to Gnomcode" title="Sign in to Gnomcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg><span class="rail-label" id="account-entry-label">Sign in</span></button>
+        <button type="button" id="navigation-toggle" data-action="toggle-navigation" aria-label="Expand navigation" title="Expand navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16"/></svg><span class="rail-label">Expand navigation</span></button>
       </nav><div class="sp-console-content">
   <div class="console-context"><h1 id="console-title">Home</h1><div class="console-status visually-hidden" aria-live="polite"><span id="sync-state">Connecting</span></div><div id="remote-connection-state" class="connection-toast" role="status" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span id="remote-connection-message">Phone connected</span><button type="button" class="connection-dismiss" data-action="dismiss-connection" aria-label="Dismiss connection notification"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div><button type="button" class="btn-control" data-action="toggle-chat-list" aria-controls="ide-session-sidebar" aria-expanded="true" id="chat-list-toggle" aria-label="Toggle conversations" title="Toggle conversations" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button></div>
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
     <!-- Timeline Filter Bar -->
-    <div class="timeline-bar" data-local-view="usage,projects"><div class="timeline-label" id="timeline-label">All time</div><div class="sp-period-actions"><select id="timeline-select" aria-label="Reporting period" data-change="timeline"><option value="today">Today</option><option value="month">This month</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all" selected>All time</option></select><details class="sp-export-menu"><summary>Export</summary><div><button type="button" class="btn-control" data-action="export:csv">CSV</button><button type="button" class="btn-control" data-action="export:json">JSON</button></div></details></div></div>
+    <div class="timeline-bar" data-local-view="usage"><div class="timeline-label" id="timeline-label">All time</div><div class="sp-period-actions"><select id="timeline-select" aria-label="Reporting period" data-change="timeline"><option value="today">Today</option><option value="month">This month</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all" selected>All time</option></select><details class="sp-export-menu"><summary>Export</summary><div><button type="button" class="btn-control" data-action="export:csv">CSV</button><button type="button" class="btn-control" data-action="export:json">JSON</button></div></details></div></div>
 
   <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
+    <div id="quota-table" data-local-view="usage"><p>Loading provider limits...</p></div>
     <div id="usage-heatmap" data-local-view="usage"></div>
     <div id="daily-activity" data-local-view="usage"><p>Loading daily activity...</p></div>
     <div data-local-view="overview" class="sp-home">
@@ -38,27 +36,27 @@
       <div id="home-activity"></div>
     </div>
     <!-- Spend by Agent (Click to View Models) -->
-    <div data-local-view="usage" id="providers-container" style="align-items: start;">
+    <div data-local-view="usage" id="providers-container">
       <!-- Injected dynamically -->
     </div>
 
     <!-- Multi-Plan ROI Comparison Card -->
-    <div class="card" data-local-view="usage" style="margin-bottom: 20px;">
+    <div class="card" data-local-view="usage">
       <div class="card-title">
         <span>Estimated subscription value</span>
         <button type="button" class="btn-control" data-action="view:settings">Edit subscriptions</button>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 10px;" id="roi-cards-container">
+      <div class="sp-roi-grid" id="roi-cards-container">
         <!-- Injected dynamically -->
       </div>
     </div>
 
-    <div id="quota-table" data-local-view="limits"><p>Loading provider limits...</p></div>
+    <section class="sp-section" data-local-view="usage" id="usage-projects"><header class="sp-section-head"><h2>Projects</h2></header><div id="project-rollups">Loading project usage...</div></section>
     <div id="sessions-ongoing" hidden></div>
     <section class="ide-layout" data-local-view="sessions" aria-label="Agent workspace">
       <aside class="ide-sidebar" id="ide-session-sidebar" aria-label="Session history">
         <div class="ide-sidebar-title"><h2>Conversations</h2><button type="button" class="btn-control" data-action="toggle-chat-list" aria-label="Collapse conversations" title="Collapse conversations"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2"/></svg></button></div>
-        <button class="btn-primary" type="button" data-action="new-session">New conversation</button>
+        <button class="btn-control" type="button" data-action="new-session">New</button>
         <label for="conversation-source">History<select id="conversation-source"><option value="all">All sessions</option><option value="managed">Gnomcode conversations</option><option value="imported">Imported sessions (view-only)</option></select></label>
         <label for="ide-session-search" class="visually-hidden">Search conversations</label>
         <input id="ide-session-search" type="search" placeholder="Search conversations" />
@@ -73,7 +71,8 @@
       </aside>
       <div class="ide-main">
         <button type="button" class="btn-control ide-expand-sidebar" data-action="toggle-chat-list" aria-label="Expand conversations" title="Expand conversations"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16 m-4-7 2 2-2 2"/></svg><span>Conversations</span></button>
-        <section id="ide-launcher" class="ide-launcher" aria-labelledby="launcher-heading">
+        <div id="ide-empty" class="sp-empty"><p>Pick a conversation or start a new one.</p><button type="button" class="btn-primary" data-action="new-session">New session</button></div>
+        <section id="ide-launcher" class="ide-launcher" aria-labelledby="launcher-heading" hidden>
           <h2 id="launcher-heading">New agent session</h2>
           <p>Choose an agent and the folder it should work in.</p>
           <form id="launch-agent-form" data-submit="launch-agent">
@@ -129,24 +128,117 @@
     </section>
   </main>
 
-  <main id="view-projects" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-projects">
-    <div id="project-rollups">Loading project usage...</div>
-  </main>
-
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <p id="app-build" role="status">Checking installed version...</p>
-    <div class="sp-settings-resources"><button type="button" class="btn-control" data-action="onboarding-start">Getting started</button><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div>
-    <div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div>
-    <section class="profile-devices" aria-labelledby="remote-heading">
-      <h2 id="remote-heading">Devices</h2>
-      <p>Manage devices connected to your account.</p>
+    <section class="sp-settings-section" id="settings-providers"><h2>Providers</h2><div id="settings-provider-list" class="sp-provider-sources">Loading providers...</div></section>
+    <section class="profile-appearance sp-settings-section"><h2>Appearance</h2><button class="theme-control" id="theme-control" type="button" data-action="theme" aria-label="Theme: system. Switch mode">Theme / system</button></section>
+    <section class="profile-devices sp-settings-section" aria-labelledby="remote-heading">
+      <h2 id="remote-heading">Devices and Remote</h2>
       <div id="remote-status" role="status">Checking devices...</div>
       <div id="remote-link"></div>
     </section>
-    <section class="profile-appearance"><h2>Appearance</h2><p>Choose the appearance for this device.</p><button class="theme-control" id="theme-control" type="button" data-action="theme" aria-label="Theme: system. Switch mode">Theme / system</button></section>
-    <section class="profile-data"><h2>Data and sync</h2><p id="last-updated" aria-live="polite">Last successful update: not yet</p><div class="console-hero-actions"><button class="btn-control" id="reload-view" type="button" data-action="reload">Reload view</button><button class="btn-control" id="resync-data" type="button" data-action="resync">Resync local data</button><button type="button" class="btn-control" data-action="export:csv">Export CSV</button><button type="button" class="btn-control" data-action="export:json">Export JSON</button></div><p>Exports use the reporting period selected in Usage.</p></section>
-    <details class="profile-disclosure"><summary>Plans and model pricing</summary>    <div class="settings-grid">
+    <section class="sp-settings-section" id="settings-automations">
+    <h2>Automations</h2>
+    <div class="table-container">
+      <div class="table-header-controls">
+        <h3>Reconnect after a limit</h3>
+      </div>
+      <p>Set up reconnection or scheduling from a conversation.</p><details class="sp-help-details"><summary>How it works</summary><p>Open Schedule and automation in your conversation. Gnomcode can reconnect when fresh quota confirms a reset; send your next message to continue. Your laptop must stay awake and the agent must be signed in.</p></details>
+      <button type="button" class="btn-control" data-action="automation-chat">Open conversations</button>
+      <table>
+        <thead>
+          <tr>
+            <th>Session ID</th>
+            <th>Agent</th>
+            <th>Working Dir</th>
+            <th>Prompt</th>
+            <th>Max Runs</th>
+            <th>Runs Done</th>
+            <th>Eligible After</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="resume-queue-table">
+          <tr><td colspan="8" class="sp-muted-cell">No reconnections scheduled.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Guardrails Rules Section -->
+    <div class="table-container">
+      <div class="table-header-controls">
+        <div><h3>Usage rules</h3><p>Get an alert when a session reaches a spend or turn limit.</p></div>
+      </div>
+      <form id="guardrail-form" class="sp-rule-form">
+        <label>Agent<select id="rule-agent"><option value="">All agents</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="gemini-cli">Gemini CLI</option></select></label>
+        <label>Spend limit (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
+        <label>Turn limit<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
+        <label>When reached<select id="rule-action"><option value="Warn">Send an alert</option><option value="HardStop">Stop via Claude hook; alert other agents</option></select></label>
+        <button id="rule-save" class="btn-primary" type="submit">Add rule</button>
+        <p id="rule-status" role="status"></p>
+      </form>
+      <details class="sp-help-details"><summary>About usage rules</summary><p>Spend is estimated, not a billing cap. Stops require the Claude Code hook; other agents receive alerts. If Gnomcode is unavailable, hooks allow the agent to continue.</p></details>
+      <table>
+        <thead>
+          <tr>
+            <th>Rule ID</th>
+            <th>Agent Scope</th>
+            <th>Max Spend (USD)</th>
+            <th>Max Turns</th>
+            <th>Enforcement</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="rules-table">
+          <tr><td colspan="6" class="sp-muted-cell">No usage rules yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Breach Alerts Section -->
+    <details class="sp-alert-history"><summary>Recent alerts</summary>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Rule ID</th>
+            <th>Enforcement</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="alerts-table">
+          <tr><td colspan="4" class="sp-muted-cell">No alerts yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    </details>
+    <details class="sp-help-details">
+      <summary>Rotation history</summary>
+      <p>Providers manage their own context compaction. Gnomcode no longer suggests rotations based on context fill. To change model or provider, use the selector in your Gnomcode conversation.</p>
+      <div hidden><select id="relay-policy-select"><option value="disabled">Disabled</option></select><select id="relay-strategy-select"><option value="same_agent">Same agent</option></select><select id="relay-threshold-select"><option value="90">90</option></select></div>
+      <!-- Pending & Recent Relays Table -->
+      <div class="sp-table-caption">Rotation history</div>
+      <div class="table-container"><table>
+        <thead>
+          <tr>
+            <th>Session ID</th>
+            <th>Project</th>
+            <th>Source -> Target</th>
+            <th>Context Fill</th>
+            <th>Status</th>
+            <th>Triggered</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="relay-table">
+          <tr><td colspan="7" class="sp-muted-cell">No context handoffs recorded. Open a supported session to switch agents.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+    </section>
+    <details class="profile-disclosure sp-settings-section"><summary>Pricing</summary>    <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
         <div class="section-title" style="margin-bottom: 16px;">Local profile and subscriptions</div>
@@ -219,6 +311,9 @@
       </div>
 
   </details>
+    <section class="profile-data sp-settings-section"><h2>Data</h2><p id="last-updated" aria-live="polite">Last successful update: not yet</p><div class="console-hero-actions"><button class="btn-control" id="reload-view" type="button" data-action="reload">Reload view</button><button class="btn-control" id="resync-data" type="button" data-action="resync">Resync local data</button></div></section>
+    <section class="sp-settings-section" id="settings-account"><div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div></section>
+    <section class="sp-settings-section" id="settings-guide"><h2>Guide</h2><p id="app-build" role="status">Checking installed version...</p><div class="sp-settings-resources"><button type="button" class="btn-control" data-action="onboarding-start">Getting started</button><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div></section>
   </main>
 
   <!-- ==================== VIEW 3: ACCOUNT ==================== -->
@@ -237,109 +332,6 @@
     </section>
   </main>
 
-  <!-- ==================== VIEW 4: AUTOMATIONS & GUARDRAILS ==================== -->
-  <main id="view-automations" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-automations">
-    <div class="table-container" style="margin-bottom: 20px;">
-      <div class="table-header-controls">
-        <h2>Reconnect after a limit</h2>
-
-      </div>
-      <p>Set up reconnection or scheduling from a conversation.</p><details class="sp-help-details"><summary>How it works</summary><p>Open Schedule and automation in your conversation. Gnomcode can reconnect when fresh quota confirms a reset; send your next message to continue. Your laptop must stay awake and the agent must be signed in.</p></details>
-      <button type="button" class="btn-control" data-action="automation-chat">Open conversations</button>
-      <table>
-        <thead>
-          <tr>
-            <th>Session ID</th>
-            <th>Agent</th>
-            <th>Working Dir</th>
-            <th>Prompt</th>
-            <th>Max Runs</th>
-            <th>Runs Done</th>
-            <th>Eligible After</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="resume-queue-table">
-          <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No reconnections scheduled.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Guardrails Rules Section -->
-    <div class="table-container" style="margin-bottom: 20px;">
-      <div class="table-header-controls">
-        <div><h2>Usage rules</h2><p>Get an alert when a session reaches a spend or turn limit.</p></div>
-      </div>
-      <form id="guardrail-form" class="sp-rule-form">
-        <label>Agent<select id="rule-agent"><option value="">All agents</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="gemini-cli">Gemini CLI</option></select></label>
-        <label>Spend limit (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
-        <label>Turn limit<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
-        <label>When reached<select id="rule-action"><option value="Warn">Send an alert</option><option value="HardStop">Stop via Claude hook; alert other agents</option></select></label>
-        <button id="rule-save" class="btn-primary" type="submit">Add rule</button>
-        <p id="rule-status" role="status"></p>
-      </form>
-      <details class="sp-help-details"><summary>About usage rules</summary><p>Spend is estimated, not a billing cap. Stops require the Claude Code hook; other agents receive alerts. If Gnomcode is unavailable, hooks allow the agent to continue.</p></details>
-      <table>
-        <thead>
-          <tr>
-            <th>Rule ID</th>
-            <th>Agent Scope</th>
-            <th>Max Spend (USD)</th>
-            <th>Max Turns</th>
-            <th>Enforcement</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="rules-table">
-          <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No usage rules yet.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Breach Alerts Section -->
-    <details class="sp-alert-history"><summary>Recent alerts</summary>
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Session</th>
-            <th>Rule ID</th>
-            <th>Enforcement</th>
-            <th>Timestamp</th>
-          </tr>
-        </thead>
-        <tbody id="alerts-table">
-          <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No alerts yet.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    </details>
-    <details class="sp-help-details">
-      <summary>Rotation history</summary>
-      <p>Providers manage their own context compaction. Gnomcode no longer suggests rotations based on context fill. To change model or provider, use the selector in your Gnomcode conversation.</p>
-      <div hidden><select id="relay-policy-select"><option value="disabled">Disabled</option></select><select id="relay-strategy-select"><option value="same_agent">Same agent</option></select><select id="relay-threshold-select"><option value="90">90</option></select></div>
-      <!-- Pending & Recent Relays Table -->
-      <div style="font-weight: 600; font-size: 12px; margin-bottom: 8px;">Rotation history</div>
-      <div class="table-container"><table>
-        <thead>
-          <tr>
-            <th>Session ID</th>
-            <th>Project</th>
-            <th>Source -> Target</th>
-            <th>Context Fill</th>
-            <th>Status</th>
-            <th>Triggered</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="relay-table">
-          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No context handoffs recorded. Open a supported session to switch agents.</td></tr>
-        </tbody>
-      </table></div>
-    </details>
-  </main>
-
   </div></div>
   <p id="connection-status" role="alert" hidden class="local-view-message"></p>
   <div id="app-notice" class="app-notice" role="status" hidden><p id="app-notice-message"></p><button type="button" class="btn-control" data-action="dismiss-notice">Dismiss</button></div>
@@ -350,7 +342,7 @@
       <section data-onboarding-step><h2 tabindex="-1">Your agents. One workspace.</h2><p>Launch your coding agents, return to saved conversations and understand your usage from one place.</p><ol><li>Prepare an agent and sign in with its provider.</li><li>Choose a project folder and launch a session.</li><li>Send your first request and follow the work.</li></ol><p class="onboarding-note">Local features are free and do not require a Gnomcode account. You bring your own agent CLI and provider access.</p></section>
       <section data-onboarding-step hidden><h2 tabindex="-1">Prepare your coding agent</h2><p>Install at least one supported official CLI: Claude Code, Codex, Gemini CLI or Antigravity CLI. Open it in your terminal and complete its sign-in or configuration first.</p><dl><dt>Already using an agent?</dt><dd>The session launcher checks installed CLIs and shows setup guidance. If you just installed one, restart Gnomcode so it can see the updated environment.</dd><dt>Using Cursor, Cline or Roo?</dt><dd>Supported local records can appear in history. These editor agents cannot be launched or controlled here.</dd></dl><p class="onboarding-note">Your agent manages its credentials and permissions. Gnomcode does not supply a model subscription or automatically approve agent actions.</p></section>
       <section data-onboarding-step hidden><h2 tabindex="-1">Start with a real project</h2><p>In <strong>Workspace</strong>, choose <strong>New</strong>, then select your agent and the folder it should work in. Use the folder button in the desktop app, or enter the folder's full path.</p><ol><li>Keep the default model unless you need a specific one.</li><li>Select <strong>Launch Agent</strong>.</li><li>Open the session's terminal if the agent asks you to sign in, trust the folder or approve an action.</li></ol><p class="onboarding-note">Choose a folder you are comfortable letting your agent work in. Gnomcode preserves the agent's native permission checks.</p></section>
-      <section data-onboarding-step hidden><h2 tabindex="-1">Give your agent a first task</h2><p>Try a focused request in the conversation:</p><blockquote>Explain this project's structure and suggest where I should start. Ask before making changes.</blockquote><p>Press <strong>Enter</strong> to send; use <strong>Shift + Enter</strong> for a new line. Return to saved conversations from the Workspace list. Use the model selector beside the composer to request a supported model or provider change.</p><dl><dt>Understand your usage</dt><dd>Home, Usage and Limits show recorded activity. Exact, estimated and unknown labels describe the evidence; estimated cost is not your provider's bill.</dd><dt>Connect another device later</dt><dd>Profile contains optional account and Devices setup. Remote needs this desktop online and explicit account-access confirmation. Local history stays on this machine by default; account setup explains optional metadata sync separately.</dd></dl><p class="onboarding-note">You can reopen this guide anytime from Profile.</p></section>
+      <section data-onboarding-step hidden><h2 tabindex="-1">Give your agent a first task</h2><p>Try a focused request in the conversation:</p><blockquote>Explain this project's structure and suggest where I should start. Ask before making changes.</blockquote><p>Press <strong>Enter</strong> to send; use <strong>Shift + Enter</strong> for a new line. Return to saved conversations from the Workspace list. Use the model selector beside the composer to request a supported model or provider change.</p><dl><dt>Understand your usage</dt><dd>Home and Usage show recorded activity. Exact, estimated and unknown labels describe the evidence; estimated cost is not your provider's bill.</dd><dt>Connect another device later</dt><dd>Settings contains optional account and Devices setup. Remote needs this desktop online and explicit account-access confirmation. Local history stays on this machine by default; account setup explains optional metadata sync separately.</dd></dl><p class="onboarding-note">You can reopen this guide anytime from Settings.</p></section>
     </div>
     <div class="onboarding-footer"><button id="onboarding-back" type="button" class="btn-control" data-action="onboarding-back">Back</button><button id="onboarding-next" type="button" class="btn-primary" data-action="onboarding-next">Continue</button></div>
   </dialog>
