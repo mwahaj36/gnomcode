@@ -1,5 +1,14 @@
 # Worker A handoff
 
+## 2026-11-13: G5 rebased and green; proceeding to G6
+
+- G5 PR https://github.com/mwahaj36/spawnt/pull/187 is ready for review and explicitly depends on #189. GitHub base is `fix/restore-green-baseline`; final feature head `beabfe28843631bd34b6556d29008bc78358ff33`, branch `feat/remote-interrupt` (implementation rebased as `e4b7380`).
+- Fresh full quality gate PASS with CARGO_INCREMENTAL=0 and isolated GNOMCODE_HOME/CLAUDE_CONFIG_DIR/CODEX_HOME: fmt, workspace clippy with -D warnings, workspace tests including all four G5 tests, cargo-deny and core purity. No remaining baseline gate blocker. Roadmap ticks G5 backend only; native cancellation/phone/macOS/Linux acceptance remains unverified.
+- Only rebase conflict was the session index; retained both G5 and baseline links. A failed Windows editor command was corrected using the verified Git true.exe; no source/commit-message changes resulted from that issue. Final whitespace/LF/UTF-8/no-mojibake checks passed.
+- Existing daemon/shared-file diff against the baseline branch contains additions only. Handler, endpoint, JSON, receipt limits and ADR remain as documented in the earlier G5 section. No new setting or dependency in G5.
+- Baseline #189 must merge before #187; neither merged by Worker A. Worker B has the baseline instructions at the #186 comment linked above. Reporting PR #185 is independent.
+- G5 worktree and target removed after pushing the verified update. Next item: G6 interactive agy native-resume verification before any implementation. Historical blocker sections below no longer describe the current state.
+
 ## 2026-11-13: baseline fixed in PR #189
 
 - PR: https://github.com/mwahaj36/spawnt/pull/189, title `fix: restore green baseline`; branch `fix/restore-green-baseline`, commit `0d439e6d07c02e814f4f4d0cb050e17d88d7c9d1`, based on origin/main `fee3c8e`.
