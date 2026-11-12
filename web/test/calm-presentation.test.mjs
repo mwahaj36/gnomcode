@@ -19,7 +19,9 @@ test('conversation quotas keep provenance in their accessible detail, without ex
  assert.match(html,/Provider measured/);
  assert.doesNotMatch(html,/<small>EXACT/);
 });
-test('activity breakdown is optional while the chart is available immediately',()=>{
+test('activity breakdown is an optional disclosure and the bar chart is gone',()=>{
  const html=renderActivity({total_tokens:100,daily:[{date:'2026-11-07',total_tokens:100,chart_pct:100}]});
  assert.match(html,/<details class="sp-activity-breakdown"><summary>Activity details/);
+ assert.doesNotMatch(html,/sp-activity-bars/);
+ assert.doesNotMatch(html,/sp-heatstrip/,'only the Today period draws the hour strip');
 });

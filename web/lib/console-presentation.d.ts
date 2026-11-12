@@ -32,3 +32,10 @@ export function updateChat(element: HTMLElement, events: unknown): void;
 
 export type PendingChat = {id:string; text:string; created_at:string; baseline:string[]; delivered:boolean};
 export function reconcileChat(events:unknown[],pending:PendingChat[],state?:string): {events:unknown[];pending:PendingChat[]};
+
+export type HeatmapDay = { date: string; total_tokens: number; cost_usd: number; cost_basis: string; turns: number; level: number };
+export type ActivityHeatmap = { from: string; to: string; first_recorded: string | null; days: HeatmapDay[]; stats: { total_tokens: number; active_days: number; busiest: { date: string; total_tokens: number } | null; current_streak: number; longest_streak: number } };
+export type HeatmapOptions = { weeks?: number; stats?: boolean; legend?: boolean; months?: boolean };
+export function renderHeatmap(data: ActivityHeatmap | null | undefined, options?: HeatmapOptions): string;
+export function renderHourStrip(report: unknown): string;
+export function updateHeatmap(element: HTMLElement, data: ActivityHeatmap | null | undefined, options?: HeatmapOptions): void;

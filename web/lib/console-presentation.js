@@ -69,10 +69,76 @@ export function renderActivity(report) {
   return `<section class="sp-activity" aria-label="Recorded token activity">
     <div class="sp-activity-heading"><div><h2>${hours ? 'Today, by hour' : 'Recorded activity'}</h2><p>${hours ? 'Since local midnight · local time' : `${escape(report.range_label || 'Selected period')} · ${interval === 'week' ? 'weekly' : interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'daily'} totals · UTC`}</p></div><div class="sp-activity-totals"><div><strong>${escape(Number.isFinite(report.total_tokens) ? new Intl.NumberFormat('en', {notation:'compact', compactDisplay:'long', maximumFractionDigits:1}).format(report.total_tokens) : 'Unknown')}</strong><span class="sp-data-unit">Recorded tokens</span></div></div></div>
     <p class="sp-activity-caption">${escape(chartWindow)}</p>
-    <div class="sp-activity-bars" role="img" aria-label="Recorded token volumes; measurements below">${days.map((day, index) => `<i style="--day-delay:${Math.min(index, 20) * 25}ms;--day-height:${Number.isFinite(day.chart_pct) ? Math.min(100, Math.max(0, day.chart_pct)) : 0}%" title="${escape(label(day))}: ${escape(tokens(day.total_tokens))} tokens"></i>`).join('')}</div>
-    <details class="sp-activity-breakdown"><summary>Activity details</summary><p>Recorded totals; gaps are not counted as zero. Costs are estimated. ${days.length < report.daily.length ? 'The chart shows the latest 84 intervals; the total covers the full period.' : ''}</p><div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(label(day))}</time><strong>${escape(tokens(day.total_tokens))}</strong></summary><div><span>API equivalent</span><strong>${cost(day, day.cost_usd)}</strong><span>${priced(day) ? coverage(day) : 'Price unavailable'}</span><span>${escape(day.turns)} recorded invocations</span></div></details>`).join('')}</div>
+    ${hours ? renderHourStrip(report) : ''}
+    <details class="sp-activity-breakdown"><summary>Activity details</summary><p>Recorded totals; gaps are not counted as zero. Costs are estimated. ${days.length < report.daily.length ? 'Showing the latest 84 intervals; the total covers the full period.' : ''}</p><div class="sp-activity-grid">${days.map(day => `<details data-date="${escape(day.date)}"><summary><time datetime="${escape(day.date)}">${escape(label(day))}</time><strong>${escape(tokens(day.total_tokens))}</strong></summary><div><span>API equivalent</span><strong>${cost(day, day.cost_usd)}</strong><span>${priced(day) ? coverage(day) : 'Price unavailable'}</span><span>${escape(day.turns)} recorded invocations</span></div></details>`).join('')}</div>
     </details>
   </section>`;
+}
+
+// ---- Activity grid (SPEC 3.16) ----
+// Rust supplies every day, level and statistic. This code lays the cells out and formats dates and numbers.
+const heatLevel = value => [0, 1, 2, 3, 4].includes(value) ? value : 0;
+const monthDay = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const heatFigures = day => {
+  const spend = priced(day) && Number.isFinite(day.cost_usd) ? ` · $${day.cost_usd.toFixed(2)} est.` : '';
+  const turns = Number.isFinite(day.turns) ? ` · ${day.turns} ${day.turns === 1 ? 'turn' : 'turns'}` : '';
+  return `${tokens(day.total_tokens)} tokens${spend}${turns}`;
+};
+const heatEmpty = (label, text) => `<section class="sp-section sp-heatmap" aria-label="${escape(label)}"><header class="sp-section-head"><h2>Activity</h2><span class="sp-section-meta">UTC days</span></header><div class="sp-empty"><p>${escape(text)}</p></div></section>`;
+
+export function renderHeatmap(data, { weeks = 53, stats = true, legend = true, months = true } = {}) {
+  const label = 'Token activity, last year';
+  if (!Array.isArray(data?.days)) return heatEmpty(label, 'Activity is unavailable.');
+  if (!data.first_recorded || !data.days.length) return heatEmpty(label, 'No activity recorded yet.');
+  let days = data.days;
+  if (weeks < 53) {
+    const weekday = (new Date(days.at(-1).date + 'T00:00:00Z').getUTCDay() + 6) % 7;
+    days = days.slice(Math.max(0, days.length - ((weeks - 1) * 7 + weekday + 1)));
+  }
+  const cells = days.map(day => day.date >= data.first_recorded
+    ? `<i class="sp-heat" data-level="${heatLevel(day.level)}" data-date="${escape(day.date)}" title="${escape(monthDay(day.date))}: ${day.total_tokens > 0 ? escape(heatFigures(day)) : 'no recorded activity'}"></i>`
+    : '<i class="sp-heat sp-heat--before"></i>').join('');
+  const marks = [];
+  if (months) {
+    let last = '';
+    for (let index = 0; index < days.length; index += 7) {
+      const month = days[index].date.slice(0, 7);
+      if (days[Math.min(index + 6, days.length - 1)].date < data.first_recorded) continue;
+      if (month !== last) { marks.push({ col: index / 7, text: new Date(days[index].date + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }) }); last = month; }
+    }
+  }
+  // Drop a label that would collide with the next one (a partial first month).
+  const labels = marks.filter((mark, index) => !marks[index + 1] || marks[index + 1].col - mark.col >= 3);
+  const summary = data.stats;
+  const busiest = summary?.busiest;
+  const streakTitle = Number.isFinite(summary?.longest_streak) ? ` title="Longest streak: ${escape(summary.longest_streak)} days"` : '';
+  const figures = stats && summary ? `<div class="sp-heatmap-stats"><div><strong>${escape(tokens(summary.total_tokens))}</strong><span>tokens, past year</span></div><div><strong>${escape(summary.active_days ?? 'Unknown')}</strong><span>active days</span></div><div${streakTitle}><strong>${escape(summary.current_streak ?? 'Unknown')}</strong><span>day streak</span></div><div${busiest ? ` title="${escape(tokens(busiest.total_tokens))} tokens"` : ''}><strong>${busiest ? escape(monthDay(busiest.date)) : 'None'}</strong><span>busiest day</span></div></div>` : '';
+  const description = summary ? `${tokens(summary.total_tokens)} tokens over ${summary.active_days} active days. Details below.` : 'Token activity by day.';
+  const key = legend ? '<div class="sp-heatmap-legend" aria-hidden="true"><span>Less</span><i class="sp-heat" data-level="0"></i><i class="sp-heat" data-level="1"></i><i class="sp-heat" data-level="2"></i><i class="sp-heat" data-level="3"></i><i class="sp-heat" data-level="4"></i><span>More</span></div>' : '';
+  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>Activity</h2><span class="sp-section-meta">UTC days</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" tabindex="0" role="group" aria-label="Activity grid, scrollable">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
+}
+
+export function renderHourStrip(report) {
+  const rows = Array.isArray(report?.daily) ? report.daily : [];
+  const byHour = new Map(rows.map(row => [new Date(row.date).getHours(), row]));
+  const cells = Array.from({ length: 24 }, (_, hour) => {
+    const row = byHour.get(hour);
+    const name = `${String(hour).padStart(2, '0')}:00`;
+    return `<i class="sp-heat" data-level="${row ? heatLevel(row.level) : 0}" title="${name}: ${row && row.total_tokens > 0 ? escape(heatFigures(row)) : 'no recorded activity'}"></i>`;
+  }).join('');
+  return `<div class="sp-heatmap sp-heatmap--hours"><div class="sp-heatstrip" role="img" aria-label="Token activity by local hour">${cells}</div><div class="sp-heatstrip-hours" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span></div></div>`;
+}
+
+const heatmapMarkup = new WeakMap();
+export function updateHeatmap(element, data, options) {
+  const markup = renderHeatmap(data, options);
+  if (heatmapMarkup.get(element) === markup) return;
+  const scroller = element.querySelector('.sp-heatmap-scroll');
+  const kept = scroller ? scroller.scrollLeft : null;
+  element.innerHTML = markup;
+  const next = element.querySelector('.sp-heatmap-scroll');
+  if (next) next.scrollLeft = kept === null ? next.scrollWidth : kept;
+  heatmapMarkup.set(element, markup);
 }
 
 export function renderOngoing(sessions) {
@@ -108,12 +174,10 @@ function updateMarkup(element, markup) {
   const open = new Set([...element.querySelectorAll('details[open]')].map(key));
   const focused = element.contains(document.activeElement) ? key(document.activeElement.closest('details') || { dataset: {} }) : null;
   const focusedAction = element.contains(document.activeElement) ? document.activeElement.dataset.sessionAction : null;
-  const entering = !element.querySelector('.sp-activity-bars');
   element.innerHTML = markup;
   element.querySelectorAll('strong').forEach((value, index) => {
     if (previousValues[index] !== undefined && previousValues[index] !== value.textContent) value.classList.add('sp-value-changed');
   });
-  if (entering) element.querySelector('.sp-activity')?.setAttribute('data-enter', '');
   for (const day of element.querySelectorAll('details')) {
     day.open = open.has(key(day));
     if (focused && focused === key(day)) {
