@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.4 — 2026-11-12
+
+- Read every Claude Code, Codex and Antigravity surface: Codex archived and compressed (`.jsonl.zst`) sessions, the legacy Antigravity IDE history folder, and Claude subagents as linked child sessions. Fix Codex double-counted turns, forked-session identity and inverted Antigravity subagent links.
+- Show limits for all three providers: Codex from its logs; Claude Code from its status line or, opt-in, Anthropic's usage endpoint with Claude Code's own sign-in; Antigravity pooled 5-hour and weekly limits (including Gemini Argon) from its running language server. Percent left, reset countdowns, exhausted and reset-passed states.
+- Detect Claude Code bundled with the Claude desktop app; label desktop-app sessions; stop showing stale sessions as Running and make tray, summary and list counts agree.
+- Cut a steady-state ingest pass from about 1.3 s to about 75 ms on large Antigravity histories; keep the Gnomcode icon on the taskbar and notification shortcut; stop the nav rail covering content.
+- Remove the Cline/Roo, Cursor and Aider adapters.
+
 ## 0.9.3 — 2026-11-07
 
 - Simplify application pages with system typography, consistent spacing, aligned responsive forms and compact checkboxes.
