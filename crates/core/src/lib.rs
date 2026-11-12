@@ -7,6 +7,7 @@ pub mod branding;
 pub mod license;
 pub mod presence;
 pub mod pricing;
+mod project_path;
 pub mod quota;
 pub mod redact;
 pub mod remote_crypto;
@@ -16,6 +17,8 @@ pub mod rules;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+pub use project_path::{CODEX_CHATS_KEY, TEMPORARY_KEY, UNASSIGNED_KEY};
 
 /// How much a reported number can be trusted (SPEC §3.1, invariant 6).
 ///
@@ -161,32 +164,62 @@ impl Project {
     /// Construct a [`Project`] by normalizing the Git remote URL first (so clones and
     /// worktrees of the same repository share one project ID), falling back to the
     /// normalized `repo_root` directory path when no remote is available.
+    ///
+    /// A directory that is not a project (drive or home folder, Codex chat folder, temporary
+    /// directory) maps to a shared key, see [`UNASSIGNED_KEY`], [`CODEX_CHATS_KEY`], [`TEMPORARY_KEY`].
     #[must_use]
     pub fn from_origin(
         git_remote: Option<&str>,
         repo_root: &str,
         git_branch: Option<&str>,
     ) -> Self {
-        let canonical_key = git_remote
+        let path = project_path::from_path(repo_root);
+        let (canonical_key, name) = match git_remote
             .map(normalize_git_remote)
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| normalize_path_key(repo_root));
-
-        let name = canonical_key
-            .rsplit('/')
-            .find(|seg| !seg.is_empty())
-            .unwrap_or("unknown")
-            .to_owned();
+        {
+            Some(key) => {
+                let name = key
+                    .rsplit('/')
+                    .find(|seg| !seg.is_empty())
+                    .unwrap_or("unknown")
+                    .to_owned();
+                (key, name)
+            }
+            None => (path.key, path.name),
+        };
 
         let id = short_sha256_hex(&canonical_key);
 
         Self {
             id,
             canonical_key,
-            repo_root: repo_root.to_owned(),
+            repo_root: path.repo_root,
             name,
             git_branch: git_branch.map(str::to_owned),
         }
+    }
+
+    /// True when the project is keyed by a Git remote (`host/owner/repo`) rather than a folder path.
+    #[must_use]
+    pub fn has_remote_key(&self) -> bool {
+        let mut parts = self.canonical_key.split('/');
+        let host = parts.next().unwrap_or_default();
+        host.contains('.')
+            && !host.eq_ignore_ascii_case("wsl.localhost")
+            && self.canonical_key.matches('/').count() >= 2
+    }
+
+    /// True when the sessions have no usable working directory and belong to no project.
+    #[must_use]
+    pub fn is_unassigned(&self) -> bool {
+        self.canonical_key == UNASSIGNED_KEY
+    }
+
+    /// True for a shared bucket of scratch folders (Codex chats, temporary directories).
+    #[must_use]
+    pub fn is_scratch(&self) -> bool {
+        self.canonical_key == CODEX_CHATS_KEY || self.canonical_key == TEMPORARY_KEY
     }
 }
 
@@ -208,12 +241,6 @@ fn normalize_git_remote(raw: &str) -> String {
         .trim_end_matches('/')
         .trim_end_matches(".git")
         .to_ascii_lowercase()
-}
-
-fn normalize_path_key(raw: &str) -> String {
-    let replaced = raw.trim().replace('\\', "/");
-    let trimmed = replaced.trim_end_matches('/');
-    trimmed.to_ascii_lowercase()
 }
 
 fn short_sha256_hex(input: &str) -> String {
@@ -760,7 +787,7 @@ mod tests {
         let p1 = Project::from_origin(None, "C:\\Work\\MyApp\\", None);
         let p2 = Project::from_origin(None, "c:/work/myapp", None);
         assert_eq!(p1.id, p2.id);
-        assert_eq!(p1.name, "myapp");
+        assert_eq!(p1.name, "MyApp");
     }
 
     #[test]

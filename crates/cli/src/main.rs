@@ -1418,7 +1418,9 @@ async fn cmd_resume(session_id: &str, prompt: Option<String>, db_path: &Path) ->
         "codex" => gnomcode_core::AgentId::Codex,
         _ => anyhow::bail!("Agent does not support resume"),
     };
-    let cwd = target.repo_root.context("Session has no repository path")?;
+    let cwd = target.repo_root.context(
+        "Session has no recorded folder to resume in (Codex chats, temporary and unassigned sessions cannot be resumed)",
+    )?;
     let entry = gnomcode_core::rules::ResumeQueueEntry {
         session_id: session_id.to_owned(),
         agent,
