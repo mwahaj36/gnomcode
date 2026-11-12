@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-12 - Claude sign-in refresh through the official CLI](2026-11-12-claude-signin-refresh.md)
+
 - [2026-11-12 - Stale Claude Code limits](2026-11-12-claude-limits-refresh.md)
 
 - [2026-11-12 - Quota state, pace and provider overview API](2026-11-12-quota-state-pace.md)
