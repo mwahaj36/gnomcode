@@ -25,7 +25,7 @@ fn read_consent(path: &Path) -> Option<serde_json::Value> {
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
 }
 
-fn enabled_in(path: &Path, provider: &str) -> bool {
+pub(crate) fn enabled_in(path: &Path, provider: &str) -> bool {
     read_consent(path)
         .is_some_and(|value| value.get(provider) == Some(&serde_json::Value::Bool(true)))
 }
@@ -160,7 +160,7 @@ fn run_hidden(mut command: std::process::Command, timeout: Duration) -> Result<(
     }
 }
 
-fn claude_config_dir() -> PathBuf {
+pub(crate) fn claude_config_dir() -> PathBuf {
     std::env::var_os("CLAUDE_CONFIG_DIR")
         .filter(|dir| !dir.is_empty())
         .map_or_else(
