@@ -101,14 +101,21 @@ function cycleTheme() {
     function consoleViewUrl(view) { const url = new URL(window.location.href); url.hash = view === 'overview' ? '' : view; return url.pathname + url.search + url.hash; }
     document.querySelector('.app-brand').href = consoleViewUrl('overview');
 
+    // Old links keep working: Limits and Projects moved into Usage, Automations into Settings.
+    const VIEW_ALIASES = { limits: 'usage', projects: 'usage', automations: 'settings' };
+    const VIEWS = ['overview', 'sessions', 'usage', 'settings', 'auth'];
+    const CONSOLE_VIEWS = ['overview', 'sessions', 'usage'];
+    const resolveView = name => VIEW_ALIASES[name] || name;
+
     function setView(view, updateUrl = true) {
+      view = resolveView(view);
       activeView = view;
       try { sessionStorage.setItem('gnomcode-active-view', view); } catch (_) {}
       document.body.dataset.consoleView = view;
       document.getElementById('chat-list-toggle').hidden = view !== 'sessions';
-      const titles = { overview: 'Home', sessions: 'Workspace', usage: 'Usage', limits: 'Limits', projects: 'Projects', automations: 'Automations', settings: 'Profile', auth: 'Account' };
+      const titles = { overview: 'Home', sessions: 'Workspace', usage: 'Usage', settings: 'Settings', auth: 'Account' };
       document.getElementById('console-title').textContent = titles[view] || 'Home';
-      if (['overview', 'sessions', 'usage', 'limits'].includes(view)) {
+      if (CONSOLE_VIEWS.includes(view)) {
         document.getElementById('view-console').setAttribute('aria-labelledby', `tab-btn-${view}`);
       }
       document.querySelectorAll('.tab-btn').forEach(button => {
@@ -119,9 +126,10 @@ function cycleTheme() {
       });
       document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
       document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
-      document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && ['overview', 'sessions', 'usage', 'limits'].includes(view))));
+      document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && CONSOLE_VIEWS.includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
-      if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); }
+      if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); void loadProjects(); }
+      if (view === 'settings') { void loadProData(); }
       if (view === 'overview') { void loadHeatmap(); void loadToday(true); }
     }
 
@@ -142,9 +150,15 @@ function cycleTheme() {
     });
 
     function navigateView(view) { setView(view); refreshCurrentView(); }
+    // Rewrites an old #limits/#projects/#automations hash in place, so Back does not bounce through the old name.
+    function normalizeHash() {
+      const target = VIEW_ALIASES[window.location.hash.slice(1)];
+      if (target) history.replaceState(null, '', consoleViewUrl(target));
+    }
     window.addEventListener('hashchange', () => {
-      const view = window.location.hash.slice(1) || 'overview';
-      if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(view)) { setView(view, false); refreshCurrentView(); }
+      normalizeHash();
+      const view = resolveView(window.location.hash.slice(1) || 'overview');
+      if (VIEWS.includes(view)) { setView(view, false); refreshCurrentView(); }
     });
 
     async function refreshCurrentView() {
@@ -156,16 +170,14 @@ function cycleTheme() {
       button.textContent = 'Refreshing...';
       try {
         while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
-        if (['overview', 'sessions', 'usage', 'limits'].includes(activeView)) {
+        if (CONSOLE_VIEWS.includes(activeView)) {
           const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
           if (['usage', 'overview'].includes(activeView) && !await loadHeatmap(true)) throw new Error('Activity could not be loaded');
+          if (activeView === 'usage' && !await loadProjects()) throw new Error('Projects could not be loaded');
         } else if (activeView === 'settings') {
-          if (!await loadSettingsData()) throw new Error('Settings could not be loaded');
-        } else if (activeView === 'projects') {
-          if (!await loadProjects()) throw new Error('Projects could not be loaded');
-        } else if (activeView === 'automations') {
-          if (!await loadProData()) throw new Error('Automation data could not be loaded');
+          const results = await Promise.all([loadSettingsData(), loadProData(), loadQuota()]);
+          if (results.some(result => !result)) throw new Error('Settings could not be loaded');
         } else if (activeView === 'auth') {
           if (!await checkAuthSession()) throw new Error('Account status could not be loaded');
         }
@@ -187,10 +199,11 @@ function cycleTheme() {
     let pollBusy = false;
     async function pollLocalData() {
       if (refreshBusy || pollBusy || document.hidden) return;
-      if (!['overview', 'sessions', 'usage', 'limits'].includes(activeView)) return;
+      if (!CONSOLE_VIEWS.includes(activeView) && activeView !== 'settings') return;
       pollBusy = true;
       try {
-      const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
+      // Settings only needs the provider overview; the other sources are not on screen.
+      const results = activeView === 'settings' ? [await loadQuota()] : await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
       if (['usage', 'overview'].includes(activeView)) void loadHeatmap();
       const state = document.getElementById('sync-state');
       const updated = document.getElementById('last-updated');
@@ -588,7 +601,7 @@ function cycleTheme() {
       document.getElementById('timeline-select').value = range;
       lastReportJson = '';
       loadReport();
-      if (activeView === 'projects') loadProjects();
+      if (activeView === 'usage') loadProjects();
     }
 
     function onFilterChange() {
@@ -778,16 +791,30 @@ function cycleTheme() {
 
     async function renderIdeSessions() {
       const presentation = await import('/console-presentation.js');
-      document.getElementById('ide-session-list').innerHTML = presentation.renderSessionList(conversationRows, activeChatSession);
+      document.getElementById('ide-session-list').innerHTML = presentation.renderSessionList(conversationRows.map(row => ({ ...row, home_group: row.home_group || homeGroups.get(row.id) })), activeChatSession);
     }
 
-    function showLauncher() {
+    // Workspace lands on the last conversation opened in the past 24 hours, once per visit; otherwise on the empty state.
+    let reopenTried = false;
+    function reopenLastChat() {
+      if (reopenTried || activeView !== 'sessions') return;
+      reopenTried = true;
+      if (activeChatSession) return;
+      try {
+        const last = JSON.parse(storedFlag('gnomcode-last-chat'));
+        if (last && Date.now() - last.at < 864e5 && ideSessions.some(session => session.id === last.id)) void loadChat(last.id);
+      } catch (_) { /* no remembered conversation */ }
+    }
+
+    // The launcher opens only from "New"; closing a chat leaves the empty state (CSS shows it when nothing else is open).
+    function showLauncher(open = true) {
+      reopenTried = true;
       selectChatSession(''); chatEvents = []; chatRequest++;
       if (chatWs) { chatWs.close(); chatWs = null; }
       document.getElementById('session-chat-panel').hidden = true;
-      document.getElementById('ide-launcher').hidden = false;
+      document.getElementById('ide-launcher').hidden = !open;
       document.getElementById('launch-status').textContent = '';
-      renderIdeSessions(); loadInstalledAgents();
+      renderIdeSessions(); if (open) loadInstalledAgents();
     }
 
     function openExplorerWorkspace() {
@@ -1211,6 +1238,7 @@ function cycleTheme() {
         document.getElementById('chat-toggle-stream').textContent = 'Agent terminal';
       }
       const request = ++chatRequest;
+      if (!silent && !earlier) storeFlag('gnomcode-last-chat', JSON.stringify({ id: sessionId, at: Date.now() }));
       document.getElementById('ide-launcher').hidden = true;
       const session = ideSessions.find(session => session.id === sessionId);
       const hosted = hostedSessions.find(session => session.session_id === sessionId);
@@ -1281,20 +1309,33 @@ function cycleTheme() {
       } catch { document.getElementById('chat-status').textContent = 'Could not delete local chat history.'; }
     }
 
-    if (matchMedia('(max-width: 760px)').matches) {
-      document.body.classList.add('chat-list-collapsed');
-      document.getElementById('chat-list-toggle').setAttribute('aria-expanded', 'false');
+    // Conversation list: open on desktop unless the person collapsed it; phones start collapsed.
+    function storedFlag(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+    function storeFlag(key, value) { try { localStorage.setItem(key, value); } catch (_) { /* storage unavailable */ } }
+    function applyChatList(collapsed) {
+      document.body.classList.toggle('chat-list-collapsed', collapsed);
+      document.getElementById('chat-list-toggle').setAttribute('aria-expanded', String(!collapsed));
     }
-    function toggleNavigation() {
-      const expanded = document.body.classList.toggle('navigation-expanded');
+    applyChatList(matchMedia('(max-width: 760px)').matches || storedFlag('gnomcode-chat-list-collapsed') === '1');
+    // The rail is a grid column: body[data-rail] drives its width, so content moves and nothing is covered.
+    function applyRail(expanded) {
+      document.body.dataset.rail = expanded ? 'expanded' : 'collapsed';
       const toggle = document.getElementById('navigation-toggle');
       toggle.setAttribute('aria-expanded', String(expanded));
       toggle.setAttribute('aria-label', expanded ? 'Collapse navigation' : 'Expand navigation');
-      toggle.querySelector('.rail-label').textContent = expanded ? 'Collapse navigation' : 'Expand navigation';
+      toggle.title = toggle.getAttribute('aria-label');
+      toggle.querySelector('.rail-label').textContent = toggle.getAttribute('aria-label');
     }
+    function toggleNavigation() {
+      const expanded = document.body.dataset.rail !== 'expanded';
+      applyRail(expanded);
+      storeFlag('gnomcode-rail-expanded', expanded ? '1' : '0');
+    }
+    applyRail(storedFlag('gnomcode-rail-expanded') === '1');
     function toggleChatList() {
-      const collapsed = document.body.classList.toggle('chat-list-collapsed');
-      document.getElementById('chat-list-toggle').setAttribute('aria-expanded', String(!collapsed));
+      const collapsed = !document.body.classList.contains('chat-list-collapsed');
+      applyChatList(collapsed);
+      if (!matchMedia('(max-width: 760px)').matches) storeFlag('gnomcode-chat-list-collapsed', collapsed ? '1' : '0');
     }
 
     document.addEventListener('click', event => {
@@ -1344,6 +1385,7 @@ function cycleTheme() {
         conversationRows = Array.isArray(conversations) ? conversations : (conversations.sessions || []);
         ideSessions = [...conversationRows];
         if(selected && !ideSessions.some(session=>session.id===selected.id))ideSessions.push(selected);
+        reopenLastChat();
         currentPage = (conversations && conversations.page) || requestedPage || 1;
         const totalPages = (conversations && conversations.total_pages) || 1;
         const totalCount = (conversations && conversations.total_count) != null ? conversations.total_count : conversationRows.length;
@@ -1512,12 +1554,14 @@ function cycleTheme() {
     }
 
     let homeActiveCount = null;
+    const homeGroups = new Map();
     async function loadOngoing() {
       try {
         const response = await apiJson('/api/v1/sessions?page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
         const presentation = await import('/console-presentation.js');
         presentation.updateOngoing(document.getElementById('sessions-ongoing'), response.sessions);
         presentation.updateHomeSessions(document.getElementById('home-sessions'), response.sessions);
+        homeGroups.clear(); response.sessions.forEach(session => homeGroups.set(session.id, session.home_group));
         homeActiveCount = response.sessions.filter(session => session.home_group === 'needs_you' || session.home_group === 'running').length;
         if (activeView === 'overview') void loadToday();
         return true;
@@ -1534,6 +1578,7 @@ function cycleTheme() {
         const presentation = await import('/console-presentation.js');
         presentation.updateProviderCards(document.getElementById('quota-table'), res, { cost: true });
         presentation.updateProviderCards(document.getElementById('home-limits'), res, { cost: false });
+        presentation.updateProviderSources(document.getElementById('settings-provider-list'), res);
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
@@ -1734,7 +1779,7 @@ function cycleTheme() {
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': loadChat,
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
-      'close-chat': showLauncher, 'new-session': showLauncher, 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
+      'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
       'schedule-message': scheduleDraft, 'cancel-schedule': cancelSchedule, 'save-routing': saveRouting, 'reconnect-reset': () => reconnectReset(true), 'cancel-reset': () => reconnectReset(false),
       'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat,
       'choose-workspace': chooseWorkspace,
@@ -1774,12 +1819,13 @@ function cycleTheme() {
       else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
     });
 
-    const hashView = window.location.hash.slice(1);
+    normalizeHash();
+    const hashView = resolveView(window.location.hash.slice(1));
     let initialView = hashView;
     if (!initialView) {
-      try { initialView = sessionStorage.getItem('gnomcode-active-view') || ''; } catch (_) {}
+      try { initialView = resolveView(sessionStorage.getItem('gnomcode-active-view') || ''); } catch (_) {}
     }
-    if (['overview', 'sessions', 'usage', 'limits', 'projects', 'automations', 'settings', 'auth'].includes(initialView)) setView(initialView, Boolean(hashView));
+    if (VIEWS.includes(initialView)) setView(initialView, Boolean(hashView));
     else setView('overview', false);
     openExplorerWorkspace();
     offerOnboarding();
