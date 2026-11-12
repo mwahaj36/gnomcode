@@ -230,6 +230,21 @@
       </table></div>
     </details>
     </section>
+    <section class="sp-settings-section" id="settings-notifications" aria-labelledby="notifications-heading">
+      <h2 id="notifications-heading">Notifications</h2>
+      <p class="sp-field-note">Choose which local desktop and paired phone alerts are enabled. Alerts include only agent name, session title, and event.</p>
+      <div class="sp-notify-list">
+        <label class="sp-notify-toggle"><input type="checkbox" id="notify-approval-waiting" checked><span>Needs approval (agent waiting on permission)</span></label>
+        <label class="sp-notify-toggle"><input type="checkbox" id="notify-turn-finished" checked><span>Turn finished after long work</span></label>
+        <div class="sp-notify-minutes"><label for="notify-turn-minutes">Minimum turn duration (minutes)</label><input type="number" id="notify-turn-minutes" min="0" max="1440" step="1" value="2"></div>
+        <label class="sp-notify-toggle"><input type="checkbox" id="notify-limit-low" checked><span>Limit low (under 20% capacity left)</span></label>
+        <label class="sp-notify-toggle"><input type="checkbox" id="notify-limit-reset" checked><span>Limit reset (fresh capacity after reset)</span></label>
+      </div>
+      <div class="sp-form-actions">
+        <button type="button" class="btn-primary" data-action="save-notifications">Save notifications</button>
+        <span id="notify-saved-feedback" class="sp-saved-feedback" role="status">Saved notification preferences.</span>
+      </div>
+    </section>
     <details class="profile-disclosure sp-settings-section"><summary>Pricing</summary>    <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">

@@ -81,7 +81,9 @@ pub fn window_length(window: QuotaWindow) -> Duration {
     }
 }
 
-fn reset_passed(s: &QuotaSnapshot, now: DateTime<Utc>) -> bool {
+/// Returns true when the recorded reset timestamp is at or before `now`.
+#[must_use]
+pub fn reset_passed(s: &QuotaSnapshot, now: DateTime<Utc>) -> bool {
     s.resets_at.is_some_and(|reset| reset <= now)
 }
 
