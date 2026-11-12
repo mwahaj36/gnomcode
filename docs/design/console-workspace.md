@@ -10,7 +10,7 @@ Mode: Operate. Primary artifact: `crates/daemon/src/console.html`. Related surfa
 
 **STORY:** Find a readable conversation, choose a desktop workspace, prompt the actual CLI and read formatted replies. Track usage separately. Pair by entering the desktop code in web Profile, without links or QR and followed by the phone six-digit security code entered on desktop and confirmed on phone. Remembered devices resume after reload/background through challenge-bound proof, expire after seven inactive days and can be revoked.
 
-**FIRST VIEWPORT:** Far-left desktop hover/focus rail with a touch toggle, independently collapsible conversation list, compact conversation title/actions, readable center transcript and a one-line composer growing to 160px. Phone uses one title toolbar and a drawer; content wraps within bubbles.
+**FIRST VIEWPORT:** Far-left toggle-only rail (Home, Workspace, Usage, Settings) that widens on demand and pushes content instead of covering it, and a list-first Workspace that opens on the conversation list with the launcher behind New. The list collapses independently with one toolbar toggle; the conversation shows a compact title, per-window limit chips and actions, a readable center transcript and a one-line composer growing to 160px. Phone uses a top icon bar, one title toolbar and a drawer that closes when a conversation is chosen; content wraps within bubbles.
 
 **FORM:** Code-led application panes prescribed by the user's Codex/Antigravity references. Signature interaction: desktop rail reveals labels without shifting content; touch uses its toggle; composer grows with input. Reduced motion removes nonessential transitions. seed: none (unavailable).
 
