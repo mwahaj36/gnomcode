@@ -92,3 +92,6 @@ assert.match(ongoingWithTokens, /parent-1/);
 const windows=renderQuota([{provider:'codex',window:'five_hour',used_pct:50,remaining_pct:50,basis:'exact'},{provider:'codex',window:'weekly',used_pct:8,remaining_pct:92,basis:'exact'}],new Date().toISOString());
 assert.equal((windows.match(/class="sp-limit-windows"/g)||[]).length,1,'one compact row groups both provider windows');
 assert.match(windows,/50.0%/);assert.match(windows,/8.0%/);
+const stale=renderQuota([{provider:'claude-code',limit_id:'claude',window:'weekly',used_pct:2,remaining_pct:98,resets_at:'2099-01-01T00:00:00Z',basis:'exact',observed_at:new Date(Date.now()-9*3600000).toISOString(),source_issue:'Claude sign-in expired; run `claude` in a terminal to refresh it'}],new Date().toISOString());
+assert.match(stale,/Claude sign-in expired/,'a stale live source is named instead of showing a current-looking reset time');
+assert.match(stale,/seen 9h ago/);
