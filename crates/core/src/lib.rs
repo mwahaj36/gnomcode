@@ -2,6 +2,7 @@
 //!
 //! See `docs/SPEC.md` §3.6–§3.9 for the data model and invariants.
 
+pub mod approval;
 pub mod branding;
 pub mod license;
 pub mod presence;

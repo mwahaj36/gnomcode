@@ -7,6 +7,8 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+mod integrate;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use gnomcode_core::pricing::calculate_plan_roi;
@@ -87,13 +89,16 @@ enum Commands {
     },
     /// Install gnomcode to the local system, create Desktop/Start Menu shortcuts, and configure autostart.
     Install,
-    /// Add or remove the optional Claude Code guardrail hook.
+    /// Add or remove the optional Claude Code hooks (guardrail and phone approvals).
     Integrate {
         /// Agent to integrate (currently `claude`).
         agent: String,
-        /// Remove gnomcode's hook without changing other hooks.
+        /// Remove gnomcode's hooks without changing other hooks.
         #[arg(long)]
         remove: bool,
+        /// Do not install the approval hooks (phone and console approve/deny).
+        #[arg(long)]
+        no_approvals: bool,
     },
     /// Manage gnomcode offline Pro / Team license.
     License {
@@ -216,7 +221,11 @@ async fn main() -> Result<()> {
         Commands::Open { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Dashboard { port } => cmd_daemon(&db_path, port, true).await,
         Commands::Install => cmd_install(&db_path),
-        Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
+        Commands::Integrate {
+            agent,
+            remove,
+            no_approvals,
+        } => cmd_integrate(&agent, remove, !no_approvals),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
         Commands::Limits {
@@ -347,14 +356,24 @@ fn cmd_hook() -> Result<()> {
     {
         return Ok(());
     }
-    let Some(id) = serde_json::from_str::<serde_json::Value>(&input)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("session_id")
-                .and_then(|id| id.as_str())
-                .map(str::to_owned)
-        })
+    let Ok(payload) = serde_json::from_str::<serde_json::Value>(&input) else {
+        return Ok(());
+    };
+    match payload.get("hook_event_name").and_then(|e| e.as_str()) {
+        Some("PermissionRequest") => {
+            hook_permission_request(&payload);
+            return Ok(());
+        }
+        Some("Notification") => {
+            hook_notification(&payload);
+            return Ok(());
+        }
+        _ => {}
+    }
+    let Some(id) = payload
+        .get("session_id")
+        .and_then(|id| id.as_str())
+        .map(str::to_owned)
     else {
         return Ok(());
     };
@@ -392,6 +411,133 @@ fn cmd_hook() -> Result<()> {
         std::process::exit(2);
     }
     Ok(())
+}
+
+/// `PermissionRequest` hook: ask the daemon whether a phone or the console can answer.
+///
+/// Prints a decision only when one arrives in time. Every other path (no daemon, slow
+/// daemon, nobody watching, timeout, error) prints nothing and exits 0, so Claude shows its
+/// own prompt (invariants 3 and 7). Nothing is ever allowed by default.
+fn hook_permission_request(payload: &serde_json::Value) {
+    use gnomcode_core::approval::{self, Decision};
+    use gnomcode_daemon::approvals::client::{Endpoint, REPLY_BUDGET, call};
+    let (Some(session), Some(tool)) = (
+        payload.get("session_id").and_then(|v| v.as_str()),
+        payload.get("tool_name").and_then(|v| v.as_str()),
+    ) else {
+        return;
+    };
+    let Some(endpoint) = Endpoint::from_daemon_info() else {
+        return;
+    };
+    let summary = approval::summarize_tool(
+        tool,
+        payload
+            .get("tool_input")
+            .unwrap_or(&serde_json::Value::Null),
+    );
+    let request = serde_json::json!({
+        "agent": "claude-code", "session_id": session, "tool": tool, "summary": summary
+    });
+    let Some(created) = call(
+        &endpoint,
+        "POST",
+        "/api/v1/approvals",
+        Some(&request),
+        REPLY_BUDGET,
+    ) else {
+        return;
+    };
+    let Some(id) = created.get("id").and_then(|v| v.as_str()).filter(|id| {
+        created.get("hold") == Some(&serde_json::Value::Bool(true)) && approval::valid_id(id)
+    }) else {
+        return;
+    };
+    let wait = std::time::Duration::from_secs(approval::HOLD_SECS + 5);
+    let path = format!("/api/v1/approvals/{id}/wait");
+    let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = reply_tx.send(call(&endpoint, "GET", &path, None, wait));
+    });
+    let mut transcript = TranscriptWatch::new(payload.get("transcript_path"));
+    let outcome = loop {
+        match reply_rx.recv_timeout(std::time::Duration::from_millis(500)) {
+            Ok(reply) => {
+                break reply
+                    .and_then(|r| r.get("outcome").and_then(|v| v.as_str()).map(str::to_owned));
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Answered at the terminal: stop waiting. Exiting closes the socket, which
+                // cancels the request in the daemon. Claude keeps its own result.
+                if transcript.answered() {
+                    std::process::exit(0);
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break None,
+        }
+    };
+    match outcome.as_deref() {
+        Some("allow") => println!("{}", approval::claude_hook_output(Decision::Allow)),
+        Some("deny") => println!("{}", approval::claude_hook_output(Decision::Deny)),
+        _ => {}
+    }
+}
+
+/// Follows the agent transcript from where it was when the prompt appeared.
+struct TranscriptWatch {
+    path: Option<PathBuf>,
+    offset: u64,
+}
+
+impl TranscriptWatch {
+    fn new(path: Option<&serde_json::Value>) -> Self {
+        let path = path.and_then(|v| v.as_str()).map(PathBuf::from);
+        let offset = path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .map_or(0, |meta| meta.len());
+        Self { path, offset }
+    }
+
+    /// True once a tool result was appended after the prompt appeared.
+    fn answered(&mut self) -> bool {
+        use std::io::Seek as _;
+        let Some(path) = &self.path else { return false };
+        let Ok(mut file) = std::fs::File::open(path) else {
+            return false;
+        };
+        let len = file.metadata().map_or(0, |meta| meta.len());
+        if len <= self.offset || file.seek(std::io::SeekFrom::Start(self.offset)).is_err() {
+            return false;
+        }
+        let mut chunk = Vec::new();
+        if file.take(256 * 1024).read_to_end(&mut chunk).is_err() {
+            return false;
+        }
+        self.offset += chunk.len() as u64;
+        gnomcode_core::approval::transcript_shows_answer(&String::from_utf8_lossy(&chunk))
+    }
+}
+
+/// `Notification` hook for permission prompts: detection only, no decision.
+fn hook_notification(payload: &serde_json::Value) {
+    use gnomcode_daemon::approvals::client::{Endpoint, REPLY_BUDGET, call};
+    if payload.get("notification_type").and_then(|v| v.as_str()) != Some("permission_prompt") {
+        return;
+    }
+    let (Some(session), Some(endpoint)) = (
+        payload.get("session_id").and_then(|v| v.as_str()),
+        Endpoint::from_daemon_info(),
+    ) else {
+        return;
+    };
+    let _ = call(
+        &endpoint,
+        "POST",
+        "/api/v1/approvals/notify",
+        Some(&serde_json::json!({"session_id": session})),
+        REPLY_BUDGET,
+    );
 }
 
 async fn cmd_limits(action: &str, provider: &str, no_refresh: bool) -> Result<()> {
@@ -519,7 +665,7 @@ fn is_gnomcode_status_line(settings: &serde_json::Value) -> bool {
         .is_some_and(|command| command.contains("gnomcode") && command.ends_with(" statusline"))
 }
 
-fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
+fn cmd_integrate(agent: &str, remove: bool, approvals: bool) -> Result<()> {
     anyhow::ensure!(agent == "claude", "only Claude Code hooks are supported");
     let config_dir = std::env::var("CLAUDE_CONFIG_DIR")
         .ok()
@@ -541,45 +687,7 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
         "Claude settings must be a JSON object"
     );
     let exe = std::env::current_exe()?.to_string_lossy().into_owned();
-    let entries = settings.pointer_mut("/hooks/PreToolUse");
-    if let Some(entries) = entries {
-        let hooks = entries
-            .as_array_mut()
-            .context("Claude PreToolUse hooks must be an array")?;
-        hooks.retain(|entry| {
-            !entry
-                .get("hooks")
-                .and_then(|h| h.as_array())
-                .is_some_and(|handlers| {
-                    handlers.iter().any(|handler| {
-                        let cmd = handler
-                            .get("command")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        let is_gnomcode_hook = cmd == exe
-                            || std::path::Path::new(cmd)
-                                .file_name()
-                                .and_then(|name| name.to_str())
-                                .is_some_and(|name| ["gnomcode", "gnomcode.exe"].contains(&name));
-                        is_gnomcode_hook
-                            && handler.get("args") == Some(&serde_json::json!(["hook"]))
-                    })
-                })
-        });
-    }
-    if !remove {
-        let entry = serde_json::json!({"hooks": [{"type": "command", "command": exe, "args": ["hook"], "timeout": 1, "onFailure": "continue"}]});
-        if settings.get("hooks").is_none() {
-            settings["hooks"] = serde_json::json!({});
-        }
-        if settings["hooks"].get("PreToolUse").is_none() {
-            settings["hooks"]["PreToolUse"] = serde_json::json!([]);
-        }
-        settings["hooks"]["PreToolUse"]
-            .as_array_mut()
-            .context("Claude PreToolUse hooks must be an array")?
-            .push(entry);
-    }
+    integrate::apply_hooks(&mut settings, &exe, remove, approvals)?;
     let status_line = if remove {
         if is_gnomcode_status_line(&settings) {
             settings
@@ -603,6 +711,16 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
         "Claude Code guardrail hook {}. Limits status line {status_line}.",
         if remove { "removed" } else { "installed" }
     );
+    if !remove {
+        println!(
+            "{}",
+            if approvals {
+                "Phone and console approvals installed. They wait only while a paired phone or the console is available; otherwise Claude's own prompt appears. Use --no-approvals to skip."
+            } else {
+                "Phone and console approvals not installed (--no-approvals)."
+            }
+        );
+    }
     Ok(())
 }
 
