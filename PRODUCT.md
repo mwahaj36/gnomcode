@@ -23,7 +23,7 @@ The intended user is a developer already using one or more supported coding agen
 
 ## Agent support is not uniform
 
-Source contains observation adapters for Claude Code, Codex, Gemini CLI, Antigravity, Cline/Roo, Cursor and opt-in Aider. The launcher accepts Claude, Codex, Gemini and Antigravity CLI names; observation does not establish hosted control, complete history, model switching or quota coverage for each. Installed CLI versions, authentication and available provider entitlements govern what actually works. Test real versions before making support claims.
+Source contains observation adapters for Claude Code, Codex, Gemini CLI and Antigravity (Cline/Roo, Cursor and Aider were removed 2026-11-12). The launcher accepts Claude, Codex, Gemini and Antigravity CLI names; observation does not establish hosted control, complete history, model switching or quota coverage for each. Installed CLI versions, authentication and available provider entitlements govern what actually works. Test real versions before making support claims.
 
 ## Why someone might choose it
 

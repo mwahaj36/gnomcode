@@ -4,12 +4,9 @@
 use chrono::Utc;
 use gnomcode_adapters::{
     FileCtx, SourceAdapter,
-    aider::AiderAdapter,
     antigravity::{AntigravityAdapter, extract_conversation_id},
     claude::ClaudeAdapter,
-    cline::ClineAdapter,
     codex::{CodexAdapter, codex_session_id_from_path},
-    cursor::CursorAdapter,
     gemini::GeminiAdapter,
 };
 use gnomcode_core::{AgentId, Session};
@@ -61,6 +58,21 @@ pub fn scan_log_files(roots: &[AgentRoot]) -> Vec<DiscoveredFile> {
                     path: root.path.clone(),
                 });
             }
+        } else if root.agent == AgentId::Antigravity {
+            // Brain folders hold thousands of artifacts; transcripts sit at a fixed depth.
+            for conversation in fs::read_dir(&root.path).into_iter().flatten().flatten() {
+                let path = conversation
+                    .path()
+                    .join(".system_generated")
+                    .join("logs")
+                    .join("transcript.jsonl");
+                if path.is_file() {
+                    files.push(DiscoveredFile {
+                        agent: root.agent,
+                        path,
+                    });
+                }
+            }
         } else {
             collect_files_recursively(root.agent, &root.path, &mut files);
         }
@@ -94,6 +106,7 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
                     .file_name()
                     .and_then(|s| s.to_str())
                     .is_some_and(|n| n.starts_with("rollout-"))
+                || is_archived_codex_rollout(path)
         }
         AgentId::Antigravity => {
             ext.eq_ignore_ascii_case("jsonl")
@@ -103,16 +116,28 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
                     .is_some_and(|n| n == "transcript.jsonl")
         }
         AgentId::GeminiCli => ext.eq_ignore_ascii_case("json"),
-        AgentId::Cline => {
-            ext.eq_ignore_ascii_case("json")
-                && path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .is_some_and(|n| n == "ui_messages.json")
-        }
-        AgentId::Cursor => ext.eq_ignore_ascii_case("json") || ext.eq_ignore_ascii_case("jsonl"),
-        AgentId::Aider => ext.eq_ignore_ascii_case("jsonl") || ext.eq_ignore_ascii_case("json"),
     }
+}
+
+/// Newer Codex versions compress finished rollouts to `rollout-*.jsonl.zst`.
+fn is_archived_codex_rollout(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|n| n.starts_with("rollout-") && n.ends_with(".jsonl.zst"))
+}
+
+/// Upper bound for one decompressed archive; larger ones are skipped rather than exhausting memory.
+const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+
+fn decompress_archive(bytes: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    let decoder = ruzstd::decoding::StreamingDecoder::new(bytes).ok()?;
+    let mut out = Vec::new();
+    decoder
+        .take(MAX_ARCHIVE_BYTES + 1)
+        .read_to_end(&mut out)
+        .ok()?;
+    (out.len() as u64 <= MAX_ARCHIVE_BYTES).then_some(out)
 }
 
 fn complete_jsonl_prefix_len(bytes: &[u8]) -> usize {
@@ -130,7 +155,47 @@ pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     let roots = discover_agent_roots();
     let discovered = scan_log_files(&roots);
     let repair_chat_format = db.chat_format_needs_repair()?;
-    ingest_files(db, &roots, &discovered, repair_chat_format)
+    let total = ingest_files(db, &roots, &discovered, repair_chat_format)?;
+    ingest_claude_status_limits(
+        db,
+        &gnomcode_platform::gnomcode_home().join(CLAUDE_LIMITS_FILE),
+    )?;
+    Ok(total)
+}
+
+/// Written by `gnomcode statusline` from Claude Code's status line input.
+pub const CLAUDE_LIMITS_FILE: &str = "claude-limits.json";
+
+fn ingest_claude_status_limits(db: &mut Database, path: &Path) -> Result<(), Error> {
+    let Ok(bytes) = fs::read(path) else {
+        return Ok(());
+    };
+    let path_str = path.to_string_lossy().into_owned();
+    // The file is a few hundred bytes of limits only, so its content is the fingerprint.
+    let fingerprint = String::from_utf8_lossy(&bytes).into_owned();
+    if db
+        .get_checkpoint(&path_str)?
+        .is_some_and(|checkpoint| checkpoint.fingerprint == fingerprint)
+    {
+        return Ok(());
+    }
+    let quota = gnomcode_adapters::claude::parse_status_limits(&bytes);
+    let size = bytes.len() as u64;
+    db.commit_batch(
+        &[],
+        &[],
+        &[],
+        &[],
+        &quota,
+        &SourceCheckpoint {
+            file_path: path_str,
+            last_read_offset: size,
+            file_size: size,
+            fingerprint,
+            last_ingested_at: Utc::now(),
+        },
+    )?;
+    Ok(())
 }
 
 fn ingest_files(
@@ -155,10 +220,8 @@ fn ingest_files(
             }
         };
         let start_offset = checkpoint.as_ref().map_or(0, |c| c.last_read_offset);
-        let is_rewritten = matches!(
-            file.agent,
-            AgentId::GeminiCli | AgentId::Cline | AgentId::Cursor
-        );
+        let archived = is_archived_codex_rollout(&file.path);
+        let is_rewritten = file.agent == AgentId::GeminiCli || archived;
 
         let file_fingerprint = if is_rewritten {
             fs::metadata(&file.path).ok().and_then(|meta| {
@@ -183,10 +246,17 @@ fn ingest_files(
         } else {
             start_offset
         };
-        let Ok(read_result) = read_from_offset(&file.path, read_offset) else {
+        let Ok(mut read_result) = read_from_offset(&file.path, read_offset) else {
             repair_complete = false;
             continue;
         };
+        if archived {
+            let Some(bytes) = decompress_archive(&read_result.bytes) else {
+                tracing::warn!("skipping unreadable Codex archive");
+                continue;
+            };
+            read_result.bytes = bytes;
+        }
         if read_result.bytes.is_empty() && read_offset == read_result.file_size {
             continue;
         }
@@ -235,9 +305,6 @@ fn ingest_files(
             AgentId::Codex => Box::new(CodexAdapter::new()),
             AgentId::Antigravity => Box::new(AntigravityAdapter::new()),
             AgentId::GeminiCli => Box::new(GeminiAdapter::new()),
-            AgentId::Cline => Box::new(ClineAdapter::new()),
-            AgentId::Cursor => Box::new(CursorAdapter::new()),
-            AgentId::Aider => Box::new(AiderAdapter::new()),
         };
 
         let parsed_len = if is_rewritten {
@@ -352,7 +419,7 @@ mod tests {
                 .env(CHILD,root.path()).env("HOME",root.path()).env("USERPROFILE",root.path())
                 .env("APPDATA",root.path()).env("LOCALAPPDATA",root.path()).env("XDG_CONFIG_HOME",root.path()).env("XDG_DATA_HOME",root.path())
                 .env("CODEX_HOME",root.path().join("codex")).env("CLAUDE_CONFIG_DIR",root.path().join("claude")).env("GEMINI_HOME",root.path().join("gemini"))
-                .env_remove("AIDER_ANALYTICS_LOG").status().expect("isolated test");
+                .status().expect("isolated test");
             assert!(status.success());
             return;
         }
@@ -580,21 +647,6 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn scan_includes_an_explicit_aider_log_file() {
-        let dir = tempdir().expect("temp dir");
-        let path = dir.path().join("aider.jsonl");
-        fs::write(&path, b"{}\n").expect("fixture");
-        let roots = [AgentRoot {
-            agent: AgentId::Aider,
-            path: path.clone(),
-            exists: true,
-        }];
-        let files = scan_log_files(&roots);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, path);
-    }
-
-    #[test]
     fn scan_log_files_filters_proper_extensions_and_names() {
         let dir = tempdir().expect("temp dir");
         let claude_dir = dir.path().join("claude");
@@ -609,19 +661,66 @@ mod tests {
                 exists: true,
             },
             AgentRoot {
-                agent: AgentId::Cline,
-                path: dir.path().join("cline"),
+                agent: AgentId::GeminiCli,
+                path: dir.path().join("gemini"),
                 exists: true,
             },
         ];
-        let cline_dir = dir.path().join("cline");
-        fs::create_dir_all(&cline_dir).expect("create cline dir");
-        fs::write(cline_dir.join("ui_messages.json"), b"[]").expect("write cline");
+        let gemini_dir = dir.path().join("gemini");
+        fs::create_dir_all(&gemini_dir).expect("create gemini dir");
+        fs::write(gemini_dir.join("session.json"), b"{}").expect("write gemini");
 
         let files = scan_log_files(&roots);
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|f| f.agent == AgentId::ClaudeCode));
-        assert!(files.iter().any(|f| f.agent == AgentId::Cline));
+        assert!(files.iter().any(|f| f.agent == AgentId::GeminiCli));
+    }
+
+    #[test]
+    fn antigravity_scan_reads_only_fixed_transcript_paths() {
+        let dir = tempdir().expect("temp dir");
+        let logs = dir
+            .path()
+            .join("conv")
+            .join(".system_generated")
+            .join("logs");
+        fs::create_dir_all(&logs).expect("logs");
+        fs::write(logs.join("transcript.jsonl"), b"{}").expect("transcript");
+        fs::write(dir.path().join("conv").join("artifact.jsonl"), b"{}").expect("artifact");
+        let files = scan_log_files(&[AgentRoot {
+            agent: AgentId::Antigravity,
+            path: dir.path().to_path_buf(),
+            exists: true,
+        }]);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].path.ends_with("transcript.jsonl"));
+    }
+
+    #[test]
+    fn archived_codex_rollouts_are_discovered_and_decompressed() {
+        let name = "rollout-2026-10-06T18-57-03-01a11180-e7a8-7d12-9e69-9f6fadc2399b.jsonl.zst";
+        assert!(super::is_agent_log_file(
+            AgentId::Codex,
+            std::path::Path::new(name)
+        ));
+        assert_eq!(
+            gnomcode_adapters::codex::codex_session_id_from_path(name),
+            "01a11180-e7a8-7d12-9e69-9f6fadc2399b"
+        );
+        let plain = b"{\"type\":\"session_meta\"}
+"
+        .repeat(100);
+        let mut packed = Vec::new();
+        ruzstd::encoding::compress(
+            &plain[..],
+            &mut packed,
+            ruzstd::encoding::CompressionLevel::Fastest,
+        );
+        assert_eq!(
+            super::decompress_archive(&packed).as_deref(),
+            Some(&plain[..])
+        );
+        assert!(super::decompress_archive(b"not zstd").is_none());
     }
 
     #[test]

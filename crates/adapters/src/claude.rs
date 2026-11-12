@@ -7,8 +7,8 @@
 use crate::{FileCtx, FileKind, ParsedBatch, SourceAdapter};
 use chrono::{DateTime, Utc};
 use gnomcode_core::{
-    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, Session, SessionState,
-    Surface, UsageRecord,
+    ActivityEvent, ActivityKind, AgentId, ChatEvent, ChatRole, Project, QuotaSnapshot, QuotaWindow,
+    Session, SessionState, Surface, TrustLevel, UsageRecord,
     pricing::{TokenBreakdown, calculate_cost},
     redact::{redact_chat_content, redact_summary},
 };
@@ -78,7 +78,21 @@ impl SourceAdapter for ClaudeAdapter {
                 .get("sessionId")
                 .and_then(Value::as_str)
                 .unwrap_or_else(|| fallback_id_from_path(&ctx.source_path));
-            let session_id = Session::compose_id(AgentId::ClaudeCode, raw_sid);
+            // Subagent transcripts repeat the parent's sessionId; their own identity is agentId.
+            let sidechain_agent = obj
+                .get("agentId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty() && obj.get("isSidechain") == Some(&Value::Bool(true)));
+            let session_id = match sidechain_agent {
+                Some(agent) => {
+                    if self.parent_session_id.is_none() {
+                        self.parent_session_id =
+                            Some(Session::compose_id(AgentId::ClaudeCode, raw_sid));
+                    }
+                    Session::compose_id(AgentId::ClaudeCode, &format!("agent-{agent}"))
+                }
+                None => Session::compose_id(AgentId::ClaudeCode, raw_sid),
+            };
 
             let cwd = obj
                 .get("cwd")
@@ -93,6 +107,7 @@ impl SourceAdapter for ClaudeAdapter {
                 {
                     Surface::Ide
                 }
+                Some(ep) if ep.contains("desktop") => Surface::DesktopApp,
                 _ => Surface::Cli,
             };
 
@@ -365,8 +380,84 @@ pub(crate) fn fallback_id_from_path(path: &str) -> &str {
     path.rsplit(['/', '\\'])
         .next()
         .and_then(|name| {
+            let name = name.strip_suffix(".zst").unwrap_or(name);
             name.strip_suffix(".jsonl")
                 .or_else(|| name.strip_suffix(".json"))
         })
         .unwrap_or("unknown")
+}
+
+/// Converts the limits file written by `gnomcode statusline` into exact account-wide quota rows.
+///
+/// Claude reports `rate_limits.{five_hour,seven_day}.{used_percentage,resets_at}` (epoch seconds)
+/// for Pro/Max plans; absent windows stay absent rather than becoming zero.
+#[must_use]
+pub fn parse_status_limits(bytes: &[u8]) -> Vec<QuotaSnapshot> {
+    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+        return Vec::new();
+    };
+    let Some(observed_at) = value
+        .get("observed_at")
+        .and_then(Value::as_str)
+        .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+        .map(|at| at.with_timezone(&Utc))
+    else {
+        return Vec::new();
+    };
+    [
+        ("five_hour", QuotaWindow::FiveHour),
+        ("seven_day", QuotaWindow::Weekly),
+    ]
+    .into_iter()
+    .filter_map(|(key, window)| {
+        let limit = value.get("rate_limits")?.get(key)?;
+        let used_pct = limit.get("used_percentage")?.as_f64()?;
+        Some(QuotaSnapshot {
+            provider: AgentId::ClaudeCode.as_str().to_owned(),
+            limit_id: "claude".to_owned(),
+            window,
+            used_pct: used_pct.clamp(0.0, 100.0),
+            resets_at: limit
+                .get("resets_at")
+                .and_then(Value::as_i64)
+                .and_then(|at| DateTime::from_timestamp(at, 0)),
+            plan: None,
+            basis: TrustLevel::Exact,
+            observed_at,
+        })
+    })
+    .collect()
+}
+
+/// Converts Anthropic's OAuth usage response into exact account-wide quota rows.
+///
+/// Windows: `five_hour`, `seven_day` and per-model weeklies (`seven_day_opus`, `seven_day_sonnet`),
+/// each `{utilization: 0..=100, resets_at: RFC3339}`. Null or missing windows stay absent.
+#[must_use]
+pub fn parse_oauth_usage(value: &Value, observed_at: DateTime<Utc>) -> Vec<QuotaSnapshot> {
+    [
+        ("five_hour", "claude", QuotaWindow::FiveHour),
+        ("seven_day", "claude", QuotaWindow::Weekly),
+        ("seven_day_opus", "opus", QuotaWindow::Weekly),
+        ("seven_day_sonnet", "sonnet", QuotaWindow::Weekly),
+    ]
+    .into_iter()
+    .filter_map(|(key, limit_id, window)| {
+        let limit = value.get(key)?;
+        Some(QuotaSnapshot {
+            provider: AgentId::ClaudeCode.as_str().to_owned(),
+            limit_id: limit_id.to_owned(),
+            window,
+            used_pct: limit.get("utilization")?.as_f64()?.clamp(0.0, 100.0),
+            resets_at: limit
+                .get("resets_at")
+                .and_then(Value::as_str)
+                .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+                .map(|at| at.with_timezone(&Utc)),
+            plan: None,
+            basis: TrustLevel::Exact,
+            observed_at,
+        })
+    })
+    .collect()
 }

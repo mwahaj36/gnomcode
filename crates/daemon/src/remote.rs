@@ -1092,6 +1092,19 @@ fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord])
     visible
 }
 
+/// Live hosts report their own state; observed logs go through the shared presence rules.
+fn displayed_state(session: &Session, hosted: bool) -> &'static str {
+    let state = session.state.as_str();
+    let age = (chrono::Utc::now() - session.last_event_at).num_milliseconds();
+    let stale = gnomcode_core::presence::classify_presence(state, Some(age), false)
+        == gnomcode_core::presence::SessionPresence::Inactive;
+    if !hosted && stale && matches!(state, "thinking" | "tool" | "awaiting_approval") {
+        "idle"
+    } else {
+        state
+    }
+}
+
 pub(crate) fn conversation_sessions(
     db: &Database,
     sessions: &[Session],
@@ -1170,7 +1183,7 @@ pub(crate) fn conversation_sessions(
         row["agent"] = json!(agent);
         if let Some(session) = observed {
             row["model"] = json!(session.model);
-            row["state"] = json!(session.state);
+            row["state"] = json!(displayed_state(session, host.is_some()));
         }
         row["id"] = json!(root);
         row["hosted"] = json!(host.is_some());
@@ -1312,16 +1325,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stale_observed_execution_is_not_shown_as_running() {
+        let mut session = Session {
+            id: "antigravity:old".into(),
+            agent: gnomcode_core::AgentId::Antigravity,
+            surface: gnomcode_core::Surface::Ide,
+            project_id: "p".into(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: gnomcode_core::SessionState::Tool,
+            pid: None,
+            started_at: chrono::Utc::now(),
+            last_event_at: chrono::Utc::now() - chrono::Duration::hours(13),
+        };
+        assert_eq!(displayed_state(&session, false), "idle");
+        assert_eq!(displayed_state(&session, true), "tool");
+        session.last_event_at = chrono::Utc::now();
+        assert_eq!(displayed_state(&session, false), "tool");
+    }
+
+    #[test]
     fn every_provider_separates_owned_imported_and_subagent_history() {
-        let agents = [
-            "claude-code",
-            "codex",
-            "gemini-cli",
-            "antigravity",
-            "cursor",
-            "cline",
-            "aider",
-        ];
+        let agents = ["claude-code", "codex", "gemini-cli", "antigravity"];
         let mut rows = Vec::new();
         for agent in agents {
             for source in ["managed", "imported"] {
@@ -1755,7 +1781,8 @@ mod tests {
             ))
             .await
             .expect("send confirm");
-        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        // Pairing takes several seconds on a loaded machine; the deadline only guards against hangs.
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 if manager.status().await.paired {
                     break;

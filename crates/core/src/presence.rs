@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 
 /// Grace duration for recent observations and brief idle gaps (15 minutes).
 pub const RECENT_ACTIVITY_GRACE_MS: i64 = 900_000;
-/// Maximum age of an unresolved source observation without live process evidence.
+/// Maximum age of an unresolved approval request without live process evidence.
 pub const STALE_EXECUTION_LIMIT_MS: i64 = 86_400_000;
+/// Maximum age of an open tool/model execution without new log lines (2 hours).
+pub const OPEN_EXECUTION_LIMIT_MS: i64 = 7_200_000;
 
 /// What the last source observation establishes about a session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -47,10 +49,11 @@ pub fn classify_presence(
 ) -> SessionPresence {
     let recent = age_millis.is_some_and(|age| (0..=RECENT_ACTIVITY_GRACE_MS).contains(&age));
     let unresolved = age_millis.is_some_and(|age| (0..=STALE_EXECUTION_LIMIT_MS).contains(&age));
+    let executing = age_millis.is_some_and(|age| (0..=OPEN_EXECUTION_LIMIT_MS).contains(&age));
     match state {
         "ended" => SessionPresence::Ended,
         "awaiting_approval" if unresolved => SessionPresence::AwaitingApproval,
-        "thinking" | "tool" if recent || (open_execution && unresolved) => SessionPresence::Running,
+        "thinking" | "tool" if recent || (open_execution && executing) => SessionPresence::Running,
         "idle" if recent => SessionPresence::RecentlyIdle,
         _ => SessionPresence::Inactive,
     }
@@ -86,6 +89,10 @@ mod tests {
         );
         assert_eq!(
             classify_presence("unknown", None, false),
+            SessionPresence::Inactive
+        );
+        assert_eq!(
+            classify_presence("tool", Some(13 * 3_600_000), true),
             SessionPresence::Inactive
         );
         assert_eq!(

@@ -103,6 +103,16 @@ enum Commands {
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
+    /// Opt in or out of exact limits read from a provider API with the agent's own sign-in.
+    Limits {
+        /// `enable`, `disable`, `status` or `check` (fetch once and print).
+        action: String,
+        /// Provider (`claude`).
+        provider: String,
+    },
+    /// Internal Claude Code status line: records account limits and prints them.
+    #[command(hide = true)]
+    Statusline,
     /// Launch an agent in a workspace using an independently owned PTY session.
     Launch {
         /// Agent to launch (claude, codex, gemini).
@@ -206,6 +216,11 @@ async fn main() -> Result<()> {
         Commands::Integrate { agent, remove } => cmd_integrate(&agent, remove),
         Commands::License { action } => cmd_license(action),
         Commands::Hook => cmd_hook(),
+        Commands::Limits { action, provider } => cmd_limits(&action, &provider).await,
+        Commands::Statusline => {
+            cmd_statusline();
+            Ok(())
+        }
         Commands::Launch { agent, repo, model } => cmd_launch(&agent, repo, model).await,
         Commands::Stop { session_id } => cmd_stop(&session_id).await,
         Commands::Attach { session_id } => cmd_attach(&session_id).await,
@@ -372,6 +387,106 @@ fn cmd_hook() -> Result<()> {
     Ok(())
 }
 
+async fn cmd_limits(action: &str, provider: &str) -> Result<()> {
+    use gnomcode_daemon::vendor_limits;
+    anyhow::ensure!(
+        vendor_limits::PROVIDERS.contains(&provider),
+        "supported providers: {}",
+        vendor_limits::PROVIDERS.join(", ")
+    );
+    match action {
+        "enable" | "disable" => {
+            vendor_limits::set_enabled(provider, action == "enable")?;
+            println!(
+                "{provider} API limits {action}d. When enabled, Gnomcode reads {provider}'s local sign-in only to request your limits from the provider every 5 minutes; the token is never stored, logged or refreshed."
+            );
+        }
+        "status" => println!(
+            "{provider} API limits {}",
+            if vendor_limits::enabled(provider) {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        ),
+        "check" => match vendor_limits::check(provider).await {
+            Ok(quota) if quota.is_empty() => {
+                println!("{provider}: signed in, but no limit windows reported")
+            }
+            Ok(quota) => {
+                for pool in quota {
+                    println!(
+                        "{provider} {} {:?}: {:.0}% left{}",
+                        pool.limit_id,
+                        pool.window,
+                        100.0 - pool.used_pct,
+                        pool.resets_at
+                            .map(|at| format!(
+                                ", resets {}",
+                                at.with_timezone(&chrono::Local).format("%a %H:%M")
+                            ))
+                            .unwrap_or_default()
+                    );
+                }
+            }
+            Err(reason) => println!("{provider}: {reason}"),
+        },
+        _ => anyhow::bail!("action must be enable, disable, status or check"),
+    }
+    Ok(())
+}
+
+/// Fail open: any problem prints nothing, so Claude Code's status line never breaks.
+fn cmd_statusline() {
+    use std::io::Read as _;
+    let mut input = Vec::new();
+    if std::io::stdin()
+        .take(1024 * 1024)
+        .read_to_end(&mut input)
+        .is_err()
+    {
+        return;
+    }
+    let Some(limits) = serde_json::from_slice::<serde_json::Value>(&input)
+        .ok()
+        .and_then(|status| status.get("rate_limits").cloned())
+    else {
+        return;
+    };
+    // Persist only the limits, never the session, cwd or cost fields of the status input.
+    let record = serde_json::json!({
+        "observed_at": chrono::Utc::now().to_rfc3339(),
+        "rate_limits": limits,
+    });
+    let path = gnomcode_home().join(gnomcode_ingest::CLAUDE_LIMITS_FILE);
+    let temp = path.with_extension("json.tmp");
+    if std::fs::create_dir_all(gnomcode_home()).is_ok()
+        && std::fs::write(&temp, record.to_string()).is_ok()
+    {
+        let _ = std::fs::rename(&temp, &path);
+    }
+    let window = |key: &str, label: &str| {
+        let used = limits.get(key)?.get("used_percentage")?.as_f64()?;
+        Some(format!(
+            "{label} {:.0}% left",
+            (100.0 - used).clamp(0.0, 100.0)
+        ))
+    };
+    let line: Vec<_> = [window("five_hour", "5h"), window("seven_day", "week")]
+        .into_iter()
+        .flatten()
+        .collect();
+    println!("{}", line.join(" · "));
+}
+
+/// Gnomcode owns the status line only when it installed it.
+fn is_gnomcode_status_line(settings: &serde_json::Value) -> bool {
+    settings
+        .pointer("/statusLine/command")
+        .and_then(|command| command.as_str())
+        .is_some_and(|command| command.contains("gnomcode") && command.ends_with(" statusline"))
+}
+
 fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
     anyhow::ensure!(agent == "claude", "only Claude Code hooks are supported");
     let config_dir = std::env::var("CLAUDE_CONFIG_DIR")
@@ -433,12 +548,27 @@ fn cmd_integrate(agent: &str, remove: bool) -> Result<()> {
             .context("Claude PreToolUse hooks must be an array")?
             .push(entry);
     }
+    let status_line = if remove {
+        if is_gnomcode_status_line(&settings) {
+            settings
+                .as_object_mut()
+                .context("Claude settings must be a JSON object")?
+                .remove("statusLine");
+        }
+        "removed"
+    } else if settings.get("statusLine").is_none() || is_gnomcode_status_line(&settings) {
+        settings["statusLine"] =
+            serde_json::json!({"type": "command", "command": format!("\"{exe}\" statusline")});
+        "installed"
+    } else {
+        "skipped: you already have a custom status line, so Claude limits stay unavailable"
+    };
     if path.exists() {
         std::fs::copy(&path, config_dir.join("settings.json.gnomcode.bak"))?;
     }
     std::fs::write(&path, serde_json::to_vec_pretty(&settings)?)?;
     println!(
-        "Claude Code guardrail hook {}.",
+        "Claude Code guardrail hook {}. Limits status line {status_line}.",
         if remove { "removed" } else { "installed" }
     );
     Ok(())
@@ -743,6 +873,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
             .context("failed to initialize daemon orchestrator")?;
     let _reconciler_handle = orchestrator.spawn_reconciler();
     let _automation_handle = orchestrator.spawn_automation();
+    let _vendor_limits_handle = gnomcode_daemon::vendor_limits::spawn(orchestrator.db());
     let remote = Arc::new(gnomcode_daemon::remote::RemoteManager::new());
     let restore_remote = remote.clone();
     let restore_db = orchestrator.db();

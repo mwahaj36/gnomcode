@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -858,7 +858,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-adapters"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "chrono",
  "gnomcode-core",
@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-core"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "aes-gcm",
  "chrono",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-daemon"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "axum",
  "chrono",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-ingest"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "chrono",
  "gnomcode-adapters",
@@ -928,6 +928,7 @@ dependencies = [
  "gnomcode-store",
  "notify",
  "obfstr",
+ "ruzstd",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
@@ -937,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-platform"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "gnomcode-core",
  "libc",
@@ -951,7 +952,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-pty"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "axum",
  "chrono",
@@ -972,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-store"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "chrono",
  "gnomcode-core",
@@ -988,7 +989,7 @@ dependencies = [
 
 [[package]]
 name = "gnomcode-tray"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "gnomcode-core",
  "gnomcode-daemon",
@@ -2071,6 +2072,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "ruzstd"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2685,6 +2695,12 @@ dependencies = [
  "sha1",
  "thiserror 2.0.21",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
 
 [[package]]
 name = "typenum"

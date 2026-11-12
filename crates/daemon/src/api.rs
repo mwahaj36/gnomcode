@@ -734,13 +734,6 @@ async fn focus_session_handler(
         if gnomcode_platform::focus_agent_application(&target.agent, &target.surface) {
             return (true, "application");
         }
-        if matches!(target.agent.as_str(), "cline" | "roo") {
-            if let Some(path) = target.repo_root {
-                if gnomcode_platform::focus_project_in_editor(&path) {
-                    return (false, "project_requested");
-                }
-            }
-        }
         (false, "unavailable")
     })
     .await
@@ -2172,18 +2165,46 @@ pub(crate) struct QuotaPoolView {
     #[serde(flatten)]
     snapshot: gnomcode_core::QuotaSnapshot,
     remaining_pct: Option<f64>,
+    /// The recorded window has reset; its old reading no longer describes capacity.
+    reset_passed: bool,
 }
 
 pub(crate) fn quota_views(snapshots: Vec<gnomcode_core::QuotaSnapshot>) -> Vec<QuotaPoolView> {
+    let now = chrono::Utc::now();
+    // Every source reports all of a provider's pools at once, so rows older than the provider's
+    // latest snapshot belong to renamed or regrouped pools and are superseded.
+    let mut latest = std::collections::HashMap::new();
+    for snapshot in &snapshots {
+        let seen = latest
+            .entry(snapshot.provider.clone())
+            .or_insert(snapshot.observed_at);
+        *seen = (*seen).max(snapshot.observed_at);
+    }
     snapshots
         .into_iter()
+        .filter(|snapshot| {
+            latest
+                .get(&snapshot.provider)
+                .is_none_or(|at| *at - snapshot.observed_at <= chrono::Duration::minutes(10))
+        })
+        // A pool whose window reset over a week ago without a new reading is retired, not "awaiting".
+        .filter(|snapshot| {
+            snapshot
+                .resets_at
+                .is_none_or(|reset| now - reset < chrono::Duration::days(7))
+        })
         .map(|snapshot| {
-            let remaining_pct = (snapshot.basis != gnomcode_core::TrustLevel::Unknown
+            let reset_passed = snapshot
+                .resets_at
+                .is_some_and(|reset| reset <= chrono::Utc::now());
+            let remaining_pct = (!reset_passed
+                && snapshot.basis != gnomcode_core::TrustLevel::Unknown
                 && snapshot.used_pct.is_finite())
             .then(|| (100.0 - snapshot.used_pct).clamp(0.0, 100.0));
             QuotaPoolView {
                 snapshot,
                 remaining_pct,
+                reset_passed,
             }
         })
         .collect()
