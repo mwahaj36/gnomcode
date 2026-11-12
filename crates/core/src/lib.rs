@@ -6,6 +6,7 @@ pub mod branding;
 pub mod license;
 pub mod presence;
 pub mod pricing;
+pub mod quota;
 pub mod redact;
 pub mod remote_crypto;
 pub mod routing;

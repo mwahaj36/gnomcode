@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-12 - Quota state, pace and provider overview API](2026-11-12-quota-state-pace.md)
+
 - [2026-11-12 - Activity heatmap API](2026-11-12-activity-heatmap-api.md)
 
 - [2026-11-12 - Home board group from session presence](2026-11-12-home-group.md)
