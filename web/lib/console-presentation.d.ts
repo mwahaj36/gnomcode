@@ -70,3 +70,7 @@ export function toWireQuickActions(items: unknown): { id: string; label: string;
 export function loadStoredQuickActions(storage?: Storage | null): QuickAction[];
 export function saveStoredQuickActions(items: unknown, storage?: Storage | null): QuickAction[];
 export function renderQuickActionsStrip(actions?: QuickAction[], options?: { disabled?: boolean }): string;
+export type GitStatusRow = { code: string; label: string; path: string };
+export type ChangesViewInput = { loading?: boolean; error?: string; repo?: string; status?: string; diff?: string; lossy?: boolean } | null | undefined;
+export function parseGitStatusLines(statusText?: string): GitStatusRow[];
+export function renderChangesView(data: ChangesViewInput): string;

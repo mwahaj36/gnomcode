@@ -1348,11 +1348,65 @@ function cycleTheme() {
       requestAnimationFrame(resize);
     }
 
+    function activeSessionRepoPath() {
+      const hosted = hostedSessions.find(row => row.session_id === activeChatSession);
+      const session = ideSessions.find(row => row.id === activeChatSession);
+      return hosted?.repo_path || session?.repo_path || session?.repo_root || document.getElementById('session-action-copy')?.dataset.path || '';
+    }
+
+    function closeChangesPanel() {
+      const panel = document.getElementById('chat-changes-panel');
+      if (panel) panel.hidden = true;
+    }
+
+    async function loadSessionChanges() {
+      const panel = document.getElementById('chat-changes-panel');
+      const body = document.getElementById('chat-changes-body');
+      const btn = document.getElementById('chat-changes-btn');
+      if (!panel || !body || !activeChatSession) return;
+      const presentation = await import('/console-presentation.js');
+      const repo = activeSessionRepoPath();
+      if (!repo) {
+        body.innerHTML = presentation.renderChangesView({ error: 'Workspace repository path is unavailable for this session.' });
+        return;
+      }
+      body.innerHTML = presentation.renderChangesView({ loading: true });
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(`/api/v1/repos/diff?repo=${encodeURIComponent(repo)}`, { headers });
+        if (!res.ok) {
+          const message = res.status === 413
+            ? 'Diff exceeded the 1 MiB read limit on this desktop.'
+            : res.status === 504
+              ? 'Git diff timed out after 10 seconds.'
+              : 'No active git repository found for this workspace.';
+          body.innerHTML = presentation.renderChangesView({ error: message });
+          return;
+        }
+        const data = await res.json();
+        body.innerHTML = presentation.renderChangesView(data);
+      } catch {
+        body.innerHTML = presentation.renderChangesView({ error: 'Could not read git changes from the local daemon.' });
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function toggleChangesPanel() {
+      const panel = document.getElementById('chat-changes-panel');
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) void loadSessionChanges();
+    }
+
     async function loadChat(sessionId, earlier = false, silent = false) {
       if (!sessionId) return;
       if (silent && activeChatSession !== sessionId) return;
       if (!silent && !earlier) {
-        if (activeChatSession !== sessionId) selectChatSession(sessionId);
+        if (activeChatSession !== sessionId) {
+          selectChatSession(sessionId);
+          closeChangesPanel();
+        }
         chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
@@ -2059,6 +2113,7 @@ function cycleTheme() {
         'quick-action': sendQuickAction, 'manage-quick-actions': openQuickActionsDialog,
         'remove-quick-action': removeQuickAction, 'reset-quick-actions': resetQuickActions,
         'close-quick-actions': () => document.getElementById('quick-actions-dialog')?.close(),
+        'toggle-changes': toggleChangesPanel, 'refresh-changes': loadSessionChanges, 'close-changes': closeChangesPanel,
  };
       if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
