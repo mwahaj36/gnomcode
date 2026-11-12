@@ -28,6 +28,15 @@ pub struct AutomationNotice {
     pub created_at: i64,
 }
 
+/// Pending push notice metadata queued for opt-in background phone delivery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingPushNotice {
+    /// Deduplication event ID.
+    pub id: String,
+    /// Redacted notification metadata (`event`, `agent`, `session_title`), if recorded.
+    pub payload: Option<gnomcode_core::notifications::RedactedNotificationPayload>,
+}
+
 impl Database {
     /// Persists a redacted message once, returning false for an existing key.
     pub fn schedule_message(
@@ -150,6 +159,21 @@ impl Database {
         Ok(self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at) VALUES (?1,?2,?3,?4)"),params![id,self.conversation_id(conversation)?,message,Utc::now().timestamp()])? == 1)
     }
 
+    /// Records a redacted notification once alongside structured push metadata.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if serialization or SQLite insert fails.
+    pub fn automation_notice_with_push(
+        &self,
+        id: &str,
+        conversation: &str,
+        message: &str,
+        payload: &gnomcode_core::notifications::RedactedNotificationPayload,
+    ) -> Result<bool, Error> {
+        let encoded = serde_json::to_string(payload)?;
+        Ok(self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at,push_payload) VALUES (?1,?2,?3,?4,?5)"),params![id,self.conversation_id(conversation)?,message,Utc::now().timestamp(),encoded])? == 1)
+    }
+
     /// Returns recent generic lifecycle notifications for desktop and Remote.
     pub fn automation_notices(&self) -> Result<Vec<AutomationNotice>, Error> {
         let mut query = self.conn.prepare(obfstr::obfstr!("SELECT id,conversation_id,message,created_at FROM automation_notice WHERE id NOT LIKE 'reset-ready:%' ORDER BY created_at DESC,rowid DESC LIMIT 100"))?;
@@ -167,14 +191,97 @@ impl Database {
 }
 
 impl Database {
+    /// Returns persisted notification preferences or [`NotificationSettings::default`].
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn get_notification_settings(
+        &self,
+    ) -> Result<gnomcode_core::notifications::NotificationSettings, Error> {
+        let mut query = self.conn.prepare(obfstr::obfstr!(
+            "SELECT approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset FROM notification_settings WHERE id = 1 LIMIT 1"
+        ))?;
+        let row = query
+            .query_row([], |row| {
+                Ok(gnomcode_core::notifications::NotificationSettings {
+                    approval_waiting: row.get::<_, i64>(0)? != 0,
+                    turn_finished: row.get::<_, i64>(1)? != 0,
+                    turn_finished_min_minutes: row
+                        .get::<_, i64>(2)?
+                        .clamp(0, 1440)
+                        .try_into()
+                        .unwrap_or(2),
+                    limit_low: row.get::<_, i64>(3)? != 0,
+                    limit_reset: row.get::<_, i64>(4)? != 0,
+                })
+            })
+            .optional()?;
+        Ok(row.unwrap_or_default())
+    }
+
+    /// Saves notification preferences atomically.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite update failure.
+    pub fn save_notification_settings(
+        &self,
+        settings: &gnomcode_core::notifications::NotificationSettings,
+    ) -> Result<(), Error> {
+        let s = settings.clone().sanitized();
+        self.conn.execute(
+            obfstr::obfstr!(
+                r#"INSERT INTO notification_settings(id, approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset, updated_at)
+                   VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
+                   ON CONFLICT(id) DO UPDATE SET
+                       approval_waiting = excluded.approval_waiting,
+                       turn_finished = excluded.turn_finished,
+                       turn_finished_min_minutes = excluded.turn_finished_min_minutes,
+                       limit_low = excluded.limit_low,
+                       limit_reset = excluded.limit_reset,
+                       updated_at = excluded.updated_at"#
+            ),
+            params![
+                i64::from(s.approval_waiting),
+                i64::from(s.turn_finished),
+                i64::from(s.turn_finished_min_minutes),
+                i64::from(s.limit_low),
+                i64::from(s.limit_reset),
+                Utc::now().to_rfc3339()
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Lists recent generic notices awaiting opt-in background delivery.
     ///
     /// # Errors
     /// Returns an error if pending notices cannot be read.
     pub fn pending_push_notices(&self) -> Result<Vec<String>, Error> {
-        let mut query=self.conn.prepare(obfstr::obfstr!("SELECT id FROM automation_notice WHERE pushed=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5"))?;
+        Ok(self
+            .pending_push_notices_with_meta()?
+            .into_iter()
+            .map(|n| n.id)
+            .collect())
+    }
+
+    /// Lists recent notices with redacted structured metadata awaiting Web Push delivery.
+    ///
+    /// # Errors
+    /// Returns an error if pending notices cannot be read.
+    pub fn pending_push_notices_with_meta(&self) -> Result<Vec<PendingPushNotice>, Error> {
+        let mut query = self.conn.prepare(obfstr::obfstr!("SELECT id, push_payload FROM automation_notice WHERE pushed=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5"))?;
         Ok(query
-            .query_map([Utc::now().timestamp() - 120], |row| row.get(0))?
+            .query_map([Utc::now().timestamp() - 120], |row| {
+                let id: String = row.get(0)?;
+                let raw_payload: Option<String> = row.get(1)?;
+                let payload = raw_payload.and_then(|json| {
+                    serde_json::from_str::<
+                            gnomcode_core::notifications::RedactedNotificationPayload,
+                        >(&json)
+                        .ok()
+                });
+                Ok(PendingPushNotice { id, payload })
+            })?
             .collect::<Result<Vec<_>, _>>()?)
     }
 
@@ -262,6 +369,41 @@ mod tests {
         assert_eq!(db.pending_push_notices().expect("retry").len(), 1);
         db.mark_notice_pushed("completed:test").expect("accepted");
         assert!(db.pending_push_notices().expect("once").is_empty());
+    }
+    #[test]
+    fn notification_settings_persist_and_push_metadata_roundtrips() {
+        let db = Database::open_in_memory().expect("db");
+        let defaults = db.get_notification_settings().expect("defaults");
+        assert!(defaults.approval_waiting);
+        assert_eq!(defaults.turn_finished_min_minutes, 2);
+
+        let updated = gnomcode_core::notifications::NotificationSettings {
+            approval_waiting: false,
+            turn_finished: true,
+            turn_finished_min_minutes: 5,
+            limit_low: false,
+            limit_reset: true,
+        };
+        db.save_notification_settings(&updated).expect("save");
+        assert_eq!(db.get_notification_settings().expect("reload"), updated);
+
+        let payload = gnomcode_core::notifications::RedactedNotificationPayload {
+            event: gnomcode_core::notifications::NotificationEventKind::TurnFinished,
+            agent: "Codex".into(),
+            session_title: "Build suite".into(),
+        };
+        assert!(
+            db.automation_notice_with_push(
+                "completed:codex:s1",
+                "",
+                "[Codex] Build suite: Turn finished",
+                &payload,
+            )
+            .expect("insert")
+        );
+        let pending = db.pending_push_notices_with_meta().expect("pending");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].payload, Some(payload));
     }
     #[test]
     fn native_notices_are_claimed_once_and_internal_reset_markers_stay_hidden() {

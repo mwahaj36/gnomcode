@@ -1602,6 +1602,7 @@ function cycleTheme() {
         }
         else document.getElementById('settings-db-stats').textContent = 'Storage measurements unavailable · UNKNOWN';
         await loadCustomPricingSettings();
+        await loadNotificationSettings();
         await loadRemoteStatus();
         return true;
       } catch (e) {
@@ -1690,6 +1691,44 @@ function cycleTheme() {
       fb.style.display = 'inline';
       setTimeout(() => fb.style.display = 'none', 3000);
       loadReport();
+    }
+
+    async function loadNotificationSettings() {
+      try {
+        const cfg = await apiJson('/api/v1/settings/notifications', { headers });
+        if (!cfg) return;
+        document.getElementById('notify-approval-waiting').checked = Boolean(cfg.approval_waiting);
+        document.getElementById('notify-turn-finished').checked = Boolean(cfg.turn_finished);
+        document.getElementById('notify-turn-minutes').value = Number.isFinite(cfg.turn_finished_min_minutes) ? cfg.turn_finished_min_minutes : 2;
+        document.getElementById('notify-limit-low').checked = Boolean(cfg.limit_low);
+        document.getElementById('notify-limit-reset').checked = Boolean(cfg.limit_reset);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function saveNotificationSettings() {
+      const minutesRaw = parseInt(document.getElementById('notify-turn-minutes').value, 10);
+      const body = {
+        approval_waiting: document.getElementById('notify-approval-waiting').checked,
+        turn_finished: document.getElementById('notify-turn-finished').checked,
+        turn_finished_min_minutes: Number.isFinite(minutesRaw) ? Math.max(0, Math.min(1440, minutesRaw)) : 2,
+        limit_low: document.getElementById('notify-limit-low').checked,
+        limit_reset: document.getElementById('notify-limit-reset').checked
+      };
+      try {
+        const res = await fetch('/api/v1/settings/notifications', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) return;
+        const fb = document.getElementById('notify-saved-feedback');
+        fb.style.display = 'inline';
+        setTimeout(() => fb.style.display = 'none', 3000);
+      } catch (e) {
+        console.error(e);
+      }
     }
 
 
@@ -1803,7 +1842,7 @@ function cycleTheme() {
       'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat,
       'choose-workspace': chooseWorkspace,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
-        'save-settings': saveSettings, 'add-pricing': addCustomPricingSettings,
+        'save-settings': saveSettings, 'save-notifications': saveNotificationSettings, 'add-pricing': addCustomPricingSettings,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,

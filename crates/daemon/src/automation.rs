@@ -242,117 +242,73 @@ fn provider(agent: &str) -> &str {
 
 #[derive(Default)]
 pub(crate) struct Observations {
-    sessions: std::collections::HashMap<String, gnomcode_core::SessionState>,
-    quotas: std::collections::HashMap<String, (f64, chrono::DateTime<chrono::Utc>)>,
+    engine: gnomcode_core::notifications::NotificationEngine,
+}
+
+/// HOOK POINT (phone-approvals feature): External live approval hooks
+/// (e.g. `PermissionRequest` hook handlers) should call this helper so desktop
+/// and paired-phone notifications fire immediately, share burst grouping, and
+/// deduplicate against subsequent polling.
+#[allow(dead_code)]
+pub(crate) async fn notify_approval_waiting_hook(
+    db: &Arc<Mutex<Database>>,
+    observations: &mut Observations,
+    session: &gnomcode_core::Session,
+) {
+    let settings = store(db, Database::get_notification_settings)
+        .await
+        .unwrap_or_default();
+    if let Some(batch) =
+        observations
+            .engine
+            .record_approval_waiting_hint(session, &settings, chrono::Utc::now())
+    {
+        record_batch_notice(db, batch).await;
+    }
+}
+
+async fn record_batch_notice(
+    db: &Arc<Mutex<Database>>,
+    batch: gnomcode_core::notifications::NotificationBatch,
+) {
+    let conversation = if batch.decisions.len() == 1 {
+        batch.decisions[0].conversation_id.clone()
+    } else {
+        String::new()
+    };
+    let push_payload = gnomcode_core::notifications::RedactedNotificationPayload {
+        event: batch.push_event,
+        agent: batch.push_agent,
+        session_title: batch.push_session_title,
+    };
+    let dedup_id = batch.push_event_id;
+    let message = batch.desktop_message;
+    if store(db, move |db| {
+        db.automation_notice_with_push(&dedup_id, &conversation, &message, &push_payload)
+    })
+    .await
+    .is_err()
+    {
+        tracing::warn!("automation notification could not be recorded");
+    }
 }
 
 pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations) {
     let _ = store(db, Database::expire_automation_records).await;
-    if let Ok(sessions) = store(db, |db| db.list_active_sessions(1000)).await {
-        let mut current = std::collections::HashMap::new();
-        let now = chrono::Utc::now();
-        for session in sessions
-            .into_iter()
-            .filter(|session| session.parent_session_id.is_none())
-        {
-            if session.state == gnomcode_core::SessionState::Idle {
-                let was_busy = previous.sessions.get(&session.id).is_some_and(|state| {
-                    matches!(
-                        state,
-                        gnomcode_core::SessionState::Thinking | gnomcode_core::SessionState::Tool
-                    )
-                });
-                if was_busy {
-                    // Debounce: ensure the session has settled in Idle for at least 8 seconds
-                    // to prevent intermediate output chunks and tool executions from spamming alerts.
-                    if now - session.last_event_at >= chrono::Duration::seconds(8) {
-                        notice(
-                            db,
-                            &format!(
-                                "completed:{}:{}",
-                                session.id,
-                                session.last_event_at.to_rfc3339()
-                            ),
-                            &session.id,
-                            "Agent finished its response. The conversation is ready.",
-                        )
-                        .await;
-                        current.insert(session.id.clone(), session.state);
-                    } else if let Some(prev) = previous.sessions.get(&session.id) {
-                        // Keep previous busy state so we re-evaluate after settling
-                        current.insert(session.id.clone(), *prev);
-                    }
-                    continue;
-                }
-            }
-            if session.state == gnomcode_core::SessionState::AwaitingApproval
-                && previous.sessions.get(&session.id) != Some(&session.state)
-                && now - session.last_event_at <= chrono::Duration::minutes(5)
-            {
-                notice(
-                    db,
-                    &format!(
-                        "approval:{}:{}",
-                        session.id,
-                        session.last_event_at.to_rfc3339()
-                    ),
-                    &session.id,
-                    "Agent needs approval. Review it on your laptop.",
-                )
-                .await;
-            }
-            current.insert(session.id, session.state);
-        }
-        previous.sessions = current;
-    }
-    if let Ok(quotas) = store(db, Database::get_latest_quota_snapshots).await {
-        let now = chrono::Utc::now();
-        let mut current = std::collections::HashMap::new();
-        for quota in quotas.into_iter().filter(|q| {
-            q.basis != gnomcode_core::TrustLevel::Unknown
-                && q.observed_at <= now
-                && now - q.observed_at <= chrono::Duration::minutes(5)
-                && (0.0..=100.0).contains(&q.used_pct)
-        }) {
-            let key = format!("{}:{}:{:?}", quota.provider, quota.limit_id, quota.window);
-            if previous.quotas.get(&key).is_some_and(|(used, observed)| {
-                *used >= 100.0 && quota.used_pct < 100.0 && quota.observed_at > *observed
-            }) {
-                notice(
-                    db,
-                    &format!("quota-reset:{key}:{}", quota.observed_at.to_rfc3339()),
-                    "",
-                    &format!(
-                        "{} quota has reset. Check Limits or reconnect the conversation.",
-                        provider(&quota.provider)
-                    ),
-                )
-                .await;
-            }
-            let threshold = if quota.used_pct >= 100.0 {
-                100
-            } else if quota.used_pct >= 95.0 {
-                95
-            } else if quota.used_pct >= 80.0 {
-                80
-            } else {
-                0
-            };
-            if threshold > 0
-                && previous
-                    .quotas
-                    .get(&key)
-                    .is_none_or(|(used, _)| *used < f64::from(threshold))
-            {
-                let cycle = quota
-                    .resets_at
-                    .map(|time| time.to_rfc3339())
-                    .unwrap_or_else(|| now.date_naive().to_string());
-                notice(db,&format!("quota-warning:{key}:{cycle}:{threshold}"),"",&format!("{} quota is running low or exhausted. Open Limits for source and reset details.",provider(&quota.provider))).await;
-            }
-            current.insert(key, (quota.used_pct, quota.observed_at));
-        }
-        previous.quotas = current;
+    let settings = store(db, Database::get_notification_settings)
+        .await
+        .unwrap_or_default();
+    let sessions = store(db, |db| db.list_active_sessions(1000))
+        .await
+        .unwrap_or_default();
+    let quotas = store(db, Database::get_latest_quota_snapshots)
+        .await
+        .unwrap_or_default();
+    if let Some(batch) = previous
+        .engine
+        .evaluate(&sessions, &quotas, &settings, chrono::Utc::now())
+    {
+        record_batch_notice(db, batch).await;
     }
     deliver_due(db).await;
     route_limited(db).await;
