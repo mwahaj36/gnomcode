@@ -7,7 +7,7 @@ import DesktopDevices from "../../components/DesktopDevices";
 import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles } from "../../lib/console-presentation.js";
+import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue } from "../../lib/console-presentation.js";
 
 // The four places of the console. `sessions` is the synced history reached from Home, so it keeps Home highlighted.
 const PLACES: [string, string][] = [["overview", "Home"], ["chat", "Workspace"], ["usage", "Usage"], ["settings", "Settings"]];
@@ -45,6 +45,12 @@ function ActivityPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
   useEffect(() => { if (element.current) updateActivity(element.current, report, { totals: false }); }, [report]);
   return <div ref={element} />;
+}
+
+function ValuePanel({ byProvider, combined, onManage }: { byProvider: unknown[]; combined: unknown; onManage: () => void }) {
+  const element = useRef<HTMLElement>(null);
+  useEffect(() => { if (element.current) updateValue(element.current, byProvider, combined); }, [byProvider, combined]);
+  return <section ref={element} className="sp-section" onClick={event => { if ((event.target as HTMLElement).closest("[data-manage-plans]")) onManage(); }} />;
 }
 
 function QuotaPanel({ pools, publishedAt }: { pools: QuotaItem[]; publishedAt: string | null }) {
@@ -394,7 +400,6 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
     }
   };
 
-  const activeRoi = roiByProvider.filter((roi) => (roi.spend_usd ?? 0) > 0);
 
   if (!authChecked) {
     return (
@@ -462,52 +467,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
       {activeView === "usage" && <ProvidersPanel report={report} />}
 
-      {/* Estimated subscription value */}
-      {activeView === "usage" && <div className="bg-card border border-border rounded-lg p-5 mb-6 font-mono">
-        <div className="flex justify-between items-center mb-3">
-          <div className="text-xs text-muted uppercase font-semibold">Estimated subscription value</div>
-          <button type="button" onClick={() => changeConsoleView("settings")} className="text-xs text-foreground underline underline-offset-4">
-            Manage plans
-          </button>
-        </div>
-        <p className="sp-section-note">API-equivalent estimates, not invoices. Plan prices are recorded amounts.</p><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-          {activeRoi.map((roi) => (
-              <div key={roi.provider} className="bg-bg border border-border rounded p-3.5">
-              <div className="text-[11px] text-muted uppercase font-semibold">{roi.provider}</div>
-              <div className="text-lg font-bold text-foreground my-1">
-                {typeof roi.multiplier === "number" ? `${roi.multiplier.toFixed(1)}x` : "Unknown"} Return
-              </div>
-              <div className={`text-[11px] font-semibold ${(roi.net_savings_usd ?? 0) >= 0 ? "text-green" : "text-red"}`}>
-                {typeof roi.net_savings_usd === "number" ? `${roi.net_savings_usd >= 0 ? "+" : ""}$${roi.net_savings_usd.toFixed(2)}` : "Unknown"} vs API
-              </div>
-              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Plan: <span className="text-foreground">{typeof roi.monthly_plan_usd === "number" ? `$${roi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"}</span> · {typeof roi.plan_usd === "number" ? `$${roi.plan_usd.toFixed(2)}` : "Unknown"} ({roi.period_label || "period"})</div>
-                <div>Delivered value: <span className="text-accent font-semibold">{typeof roi.spend_usd === "number" ? `$${roi.spend_usd.toFixed(2)}` : "Unknown"}</span></div>
-              </div>
-            </div>
-          ))}
-          {combinedRoi && (combinedRoi.spend_usd ?? 0) > 0 && (
-            <div className="bg-bg border border-accent/40 rounded p-3.5">
-              <div className="text-[11px] text-accent uppercase font-semibold">Combined Fleet ROI</div>
-              <div className="text-lg font-bold text-accent my-1">
-                {typeof combinedRoi.multiplier === "number" ? `${combinedRoi.multiplier.toFixed(1)}x` : "Unknown"} Return
-              </div>
-              <div className={`text-[11px] font-semibold ${typeof combinedRoi.net_savings_usd !== "number" ? "text-muted" : combinedRoi.net_savings_usd >= 0 ? "text-green" : "text-red"}`}>
-                {typeof combinedRoi.net_savings_usd === "number" ? `${combinedRoi.net_savings_usd >= 0 ? "+" : ""}$${combinedRoi.net_savings_usd.toFixed(2)}` : "Unknown"} Net
-              </div>
-              <div className="text-[10px] text-muted mt-2 border-t border-border/40 pt-1.5 space-y-0.5">
-                <div>Total plan: <span className="text-foreground">{typeof combinedRoi.monthly_plan_usd === "number" ? `$${combinedRoi.monthly_plan_usd.toFixed(0)}/mo` : "Unknown"}</span></div>
-                <div>Fleet value: <span className="text-accent font-semibold">{typeof combinedRoi.spend_usd === "number" ? `$${combinedRoi.spend_usd.toFixed(2)}` : "Unknown"}</span></div>
-              </div>
-            </div>
-          )}
-          {activeRoi.length === 0 && (!combinedRoi || (combinedRoi.spend_usd ?? 0) === 0) && (
-            <div className="col-span-full text-xs text-muted py-2">
-              No subscription usage recorded for this timeframe.
-            </div>
-          )}
-        </div>
-      </div>}
+      {activeView === "usage" && <ValuePanel byProvider={roiByProvider} combined={combinedRoi} onManage={() => changeConsoleView("settings")} />}
 
       {activeView === "usage" && <ActivityPanel report={report} />}
       {activeView === "usage" && <section className="sp-activity sp-usage-projects"><h2>Project activity</h2>
