@@ -9,8 +9,8 @@
 | Order | Area | Item | Status | PR | Depends on |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | Section C | Quick actions (canned prompts, never raw argv) | PR open | [#188](https://github.com/mwahaj36/spawnt/pull/188) | Optional Worker A backend persistence |
-| 2 | Section C | Changes view (read-only diff on console and phone) | in progress | - | Optional Worker A Remote `changes` handler |
-| 3 | Section C | File viewer on phone and console (read-only, workspace only) | not started | - | - |
+| 2 | Section C | Changes view (read-only diff on console and phone) | PR open | [#190](https://github.com/mwahaj36/spawnt/pull/190) | Optional Worker A Remote `changes` handler |
+| 3 | Section C | File viewer on phone and console (read-only, workspace only) | in progress | - | Optional Worker A `C file listing and reading` |
 | 4 | Section C | Artifacts alongside changes | not started | - | - |
 | 5 | Section C | Phone attachments UI | not started | - | - |
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | not started | - | - |
@@ -39,3 +39,17 @@
 - **Deviations:** Stored locally (`gnomcode-quick-actions-v1` in `localStorage`) instead of calling unimplemented `quick_prompts` Remote RPCs (which would trigger `Unsupported remote command`).
 - **Open risks/questions:** Waiting on Worker A's `C quick actions` PR + ADR if cross-device quick-prompt storage is needed.
 - **Dependencies:** Independent UI PR; optional sync depends on Worker A `C quick actions` PR.
+
+### 2. Section C — Changes view (read-only diff on console and phone)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/190 (`feat/changes-view-ui`, commit `5afec50`)
+- **What changed:**
+  - `web/lib/console-presentation.js`, `web/lib/console-presentation.d.ts`: exported `parseGitStatusLines`, `renderChangesView`.
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: added `#chat-changes-btn` and `#chat-changes-panel` calling `GET /api/v1/repos/diff?repo=<path>` (1 MiB / 10 s cap, `lossy` banner, auto-close on session switch).
+  - `web/components/RemoteCompanion.tsx`: added `.sp-remote-tools` (`Changes` button) and `.sp-changes-sheet` bottom sheet requesting `{ type: 'changes', session_id }` with calm `Unsupported remote command` fallback.
+  - `web/app/gnomcode-console.css`: appended `--sp-*` token styles for `.sp-changes-panel`, `.sp-changes-files`, `.sp-diff-code`, `.sp-changes-sheet`, 44px mobile controls, hidden tools bar on `max-height: 450px`.
+  - `web/test/changes-view.test.mjs`, `docs/SPEC.md` (append §11), `docs/ROADMAP_1.0.md` (append status), `docs/sessions/2026-11-13-changes-view-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap at `crates/daemon/src/api.rs:1485-1513` vs `console.html:87` and `RemoteCompanion.tsx`. Tests: `web/test/changes-view.test.mjs` (3/3 pass). Gate: `CARGO_INCREMENTAL=0 cargo fmt --all -- --check` pass, `cargo clippy --workspace --all-targets -- -D warnings` pass, `cargo test --workspace` pass, `node scripts/check-local-console.mjs` pass, `web/` `npm ci` + `npm test` (102/102) + `npm run typecheck` + `npm run build` pass.
+- **Verification:** Browser UI verified live in `chrome-headless-shell.exe` against mocked `/api/v1/repos/diff` at `390x844` and `1440x900` (dark & light): zero horizontal overflow, clean status pills, unified diff lines, 44px mobile buttons. Not verified live over Remote E2EE relay (`{ type: 'changes' }` unimplemented in daemon).
+- **Deviations:** Remote requests `changes` only on demand and handles `Unsupported remote command` inside the sheet.
+- **Open risks/questions:** Waiting on Worker A's `C session changes/diff` PR + ADR for Remote E2EE parity.
+- **Dependencies:** Local works against existing `GET /api/v1/repos/diff`; Remote depends on Worker A `C session changes/diff` PR.
