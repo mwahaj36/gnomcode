@@ -1241,12 +1241,23 @@ Visual reference for everything in this plan: [`console-mockup.html`](console-mo
 - Remember open/closed per provider in `localStorage` key `gnomcode-provider-open` (JSON object of slug to boolean, try/catch). Default closed.
 - On cards narrower than 400px (container query) hide the strip so the summary text fits.
 
-### 15.2 Tray popover (new Phase 8, branch `feat/tray-popover`)
+### 15.2 Tray right-click menu (new Phase 8, branch `feat/tray-menu`)
 
-- `apps/desktop/src/main.ts`: left-click on the tray icon toggles a frameless, non-resizable `BrowserWindow` (360px wide, height fits content up to 560px, `skipTaskbar`, `alwaysOnTop`, hidden on blur). Right-click keeps the existing context menu. Position it with `tray.getBounds()` and `screen.getDisplayNearestPoint(...).workArea`, so it sits above the taskbar on Windows and below the menu bar on macOS. On Linux, where tray click events are unreliable, add a "Show overview" context-menu item that opens the same window near the cursor.
-- The window loads a new daemon route `/tray` (a small HTML page embedded in the daemon like `console.html`). It uses the same tokens, `gnomcode-console.css`, `console-presentation.js` and `renderProviderCard(p, { tray: true })`. It shows the Needs you and Running sessions (max 3 rows), collapsed provider rows, and "New session" / "Open gnomcode" buttons. Electron handles the buttons via IPC from preload.
-- Security is the same as the main window: `sandbox`, `contextIsolation`, no `nodeIntegration`, DevTools off in release, and the bearer token passed through preload, never in the URL. The page polls `/api/v1/providers/overview` every 10 s only while visible.
-- The tray tooltip keeps working and adds the tightest limit, for example `Gnomcode · Claude weekly 98% · Codex out`.
+"Tray" means the native menu shown when the user right-clicks the system tray icon (Windows notification area; also the menu bar icon on macOS and the indicator menu on Linux). It is a native `Menu`, not an HTML window, so it shows text only: no bars and no custom colors.
+
+- `apps/desktop/src/main.ts`: replace the static `tray.setContextMenu(...)` with `buildTrayMenu(overview, sessions)`. Call it once at startup and again whenever the data changes. Poll `GET /api/v1/providers/overview` and the sessions list every 30 s from the main process using the existing `daemon-client.ts`, and rebuild only when the rendered labels changed. Rebuilding the menu while it is open is unsafe on Windows, so skip the rebuild if the menu is open (track `menu-will-show` / `menu-will-close`).
+- Menu layout, top to bottom:
+  1. `Needs you (1)` header (disabled) followed by up to 3 session items, `Fix quota parser · Claude Code`. Clicking one focuses the session (existing focus endpoint) or opens it in the main window. Omit the section when empty.
+  2. `Running (2)`, same pattern. Omit when empty.
+  3. Separator.
+  4. One item per provider, collapsed into a submenu: label `Claude Code    Weekly 98% left · Thu`, `Codex    Weekly out · back Mon 1:20 PM`, `Antigravity    1 pool out`. The text after the name is the Rust `headline_window` (15.1), formatted exactly like the card summary. The submenu lists every window as a disabled item: `Session: reset, awaiting reading`, `Weekly: 98% left, resets Thu 8:00 AM`. Multi-pool providers group items under disabled pool headers with a separator between pools. The last submenu item is `Open limits` (opens Usage in the main window). When a provider has no data, the label is `Claude Code    Limits off` and the submenu has a single `Copy enable command` item that copies `enable_command` to the clipboard.
+  5. Separator. `Updated 1m ago` (disabled).
+  6. `New session`, `Open Gnomcode`, separator, `Quit Gnomcode` (existing behavior).
+- State without color: prefix nothing; write the state in words (`out`, `low`, `reset`). No emojis or pictographs. Plain ASCII and the middle dot only.
+- Tooltip (`tray.setToolTip`) adds the tightest limit: `Gnomcode · Claude weekly 98% · Codex out`, max 127 characters (Windows limit).
+- Labels are built in TypeScript from Rust fields only (formatting, no thresholds), so add a pure `formatTrayMenu(overview, sessions, now)` in `apps/desktop/src/` returning a template array, and unit-test it in `apps/desktop/test` (headline text, empty provider, multi-pool grouping, tooltip truncation, no non-ASCII except the middle dot).
+- The left-click behavior stays as today (open the main window).
+- Fail open: if the daemon is unreachable, the menu shows `Daemon unavailable` (disabled) plus Open/Quit, as today.
 
 ### 15.3 Mobile
 
