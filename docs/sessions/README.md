@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-12 - Collapsible provider limit cards](2026-11-12-console-provider-cards.md)
 - [2026-11-12 - Tray menu with limits and sessions overview](2026-11-12-tray-menu.md)
 - [2026-11-12 - Console CSS consolidation](2026-11-12-console-css-consolidation.md)
 - [2026-11-12 - Claude sign-in refresh through the official CLI](2026-11-12-claude-signin-refresh.md)

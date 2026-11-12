@@ -124,43 +124,209 @@ function updateMarkup(element, markup) {
   activityMarkup.set(element, markup);
 }
 
-export function updateQuota(element, pools, publishedAt) { updateMarkup(element, renderQuota(pools, publishedAt)); }
+export function updateQuota(element, pools, publishedAt) { updateProviderCards(element, quotaOverviews(pools), { cost: false, publishedAt }); }
 
-const PROVIDERS = {
-  'claude-code': { name: 'Claude Code', missing: 'Run `gnomcode limits enable claude`. Covers the desktop app, terminal and claude.ai chats.' },
-  codex: { name: 'Codex', missing: 'Appears after your next Codex request.' },
-  antigravity: { name: 'Antigravity', missing: 'Run `gnomcode limits enable antigravity`; readings appear while an Antigravity agent is running.' },
+// ---- Provider limit cards (SPEC 3.9) ----
+// Rust supplies every state, label, pace, pool and headline window. Nothing below decides what is low,
+// exhausted or on pace; it only formats those fields into markup.
+const WINDOW_STATES = ['ok', 'low', 'exhausted', 'reset_awaiting', 'unknown'];
+const stateOf = value => WINDOW_STATES.includes(value?.state) ? value.state : 'unknown';
+// Payloads synced from an older desktop have no state but still say whether the reset has passed.
+const awaiting = win => stateOf(win) === 'reset_awaiting' || win.reset_passed === true;
+const CHIP_TEXT = { ok: 'OK', low: 'Low', exhausted: 'Out', reset_awaiting: 'Resetting', unknown: 'No data' };
+const CHIP_CLASS = { ok: 'ok', low: 'low', exhausted: 'exhausted', reset_awaiting: 'unknown', unknown: 'unknown' };
+const WINDOW_NAMES = { five_hour: 'Session', weekly: 'Weekly', monthly: 'Monthly' };
+const titleCase = text => String(text ?? '').replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()).trim();
+const windowName = win => win.window_label || WINDOW_NAMES[win.window] || titleCase(win.window) || 'Window';
+const windowLabel = win => win.label || windowName(win);
+const percent = value => `${Math.round(value)}%`;
+const barWidth = win => awaiting(win) ? 100 : Number.isFinite(win.remaining_pct) ? Math.min(100, Math.max(0, win.remaining_pct)) : 0;
+const seenText = win => {
+  if (!Number.isFinite(Date.parse(win.observed_at))) return win.stale ? 'Last seen' : '';
+  return `${win.stale ? 'Last seen' : 'Seen'} ${relativeActivity(win.observed_at)}`;
 };
-const limitTone = pool => pool.reset_passed || !Number.isFinite(pool.remaining_pct) ? 'unknown' : pool.remaining_pct <= 0 ? 'exhausted' : pool.remaining_pct < 20 ? 'low' : 'ok';
-const limitHeadline = pool => pool.reset_passed ? 'Reset' : Number.isFinite(pool.remaining_pct) ? (pool.remaining_pct <= 0 ? 'Exhausted' : `${Math.round(pool.remaining_pct)}% left`) : 'Unknown';
-function limitDetail(pool) {
-  if (pool.source_issue) return `${pool.source_issue} · ${observedLabel(pool.observed_at).toLowerCase()}`;
-  if (pool.reset_passed) return 'Awaiting next reading';
-  const reset = Date.parse(pool.resets_at);
-  if (!Number.isFinite(reset)) return 'Reset time unknown';
-  const minutes = Math.max(0, Math.round((reset - Date.now()) / 60000));
-  if (minutes >= 2880) return `Resets ${new Date(reset).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`;
-  return `Resets in ${minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`}`;
-}
-const observedLabel = at => Number.isFinite(Date.parse(at)) ? `Seen ${relativeActivity(at)}` : 'Observation time unknown';
-export function renderQuota(pools, publishedAt, { illustrative = false, compact = true } = {}) {
-  if (compact && pools?.length) {
-    const grouped = new Map();
-    for (const provider of illustrative ? [] : Object.keys(PROVIDERS)) grouped.set(provider, []);
-    for (const pool of pools) { const list = grouped.get(pool.provider) || []; list.push(pool); grouped.set(pool.provider, list); }
-    return `<section class="sp-limits-compact" aria-label="Provider limits"><div class="sp-panel-heading"><h2>Provider limits</h2><p>${illustrative ? 'Illustrative limits' : 'Percent left in each window, from the latest provider reading'}</p></div>${[...grouped].map(([provider, windows])=>!windows.length ? `<div class="sp-limit-missing"><strong>${escape(PROVIDERS[provider]?.name || provider)}</strong><span>${escape(PROVIDERS[provider]?.missing || 'No reading yet')}</span></div>` : `<div class="sp-limit-row" data-key="${escape(provider)}"><strong>${escape(PROVIDERS[provider]?.name || provider)}</strong><div class="sp-limit-windows">${windows.map(pool=>`<span class="sp-limit-${limitTone(pool)}" title="${escape(trust(pool.basis))} · ${escape(observedLabel(pool.observed_at))}"><small>${escape((new Set(windows.map(w=>w.limit_id)).size > 1 ? pool.limit_id.replaceAll('_',' ') + ' · ' : '') + (pool.window?.replaceAll('_',' ') || 'Window'))}</small><b>${escape(limitHeadline(pool))}</b><small>${escape(limitDetail(pool))}</small></span>`).join('')}</div></div>`).join('')}</section>`;
+
+// "in 2h 14m" within 48 hours, otherwise a weekday and clock time. `bare` drops the "in".
+function whenPart(iso, { short = false, bare = false } = {}) {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return null;
+  const minutes = Math.max(0, Math.round((at - Date.now()) / 60000));
+  if (minutes < 2880) {
+    const left = minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+    return bare ? left : `in ${left}`;
   }
-  const publication = publishedAt ? new Date(publishedAt).getTime() : NaN;
-  const stale = !Number.isFinite(publication) || Date.now() - publication > 120000;
-  return `<section class="sp-quota-section" aria-label="Provider limits"><div class="sp-activity-heading"><div><h2>Provider limits</h2><p>${illustrative ? 'Illustrative quota samples. Not connected to your account.' : stale ? 'Snapshot stale or publication time unknown. Values below are last observed.' : 'Latest received snapshot. Providers update limits when they emit usage.'}</p></div><span class="sp-data-trust">${illustrative ? 'Sample' : stale ? 'Last received reading' : ''}</span></div>
-    ${pools?.length ? `<div class="sp-quota-grid">${pools.map(pool => {
-      const known = pool.basis && pool.basis !== 'unknown' && typeof pool.used_pct === 'number' && Number.isFinite(pool.used_pct);
-      const used = known ? Math.min(100, Math.max(0, pool.used_pct)) : 0;
-      const reset = pool.resets_at ? new Date(pool.resets_at).getTime() : NaN;
-      const observation = pool.observed_at ? new Date(pool.observed_at) : null;
-      return `<article><header><strong>${escape(pool.provider)} / ${escape(pool.limit_id)}</strong><span>${escape(pool.window?.replaceAll('_', ' '))}</span></header><div class="sp-quota-number">${known ? used.toFixed(1) + '%' : 'Unknown'}<span class="sp-data-trust">${known ? 'used' + (pool.basis === 'estimated' ? ' · estimated' : '') : ''}</span></div><div class="sp-quota-track" aria-hidden="true"><i style="width:${used}%"></i></div><p>${Number.isFinite(pool.remaining_pct) ? pool.remaining_pct.toFixed(1) + '% remaining' : 'Remaining capacity unknown'}</p><p>${illustrative ? "Resets " + escape(pool.reset_label || "unknown") : Number.isFinite(reset) ? reset <= Date.now() ? 'Reset passed · awaiting provider update' : 'Resets ' + escape(new Date(reset).toLocaleString()) : 'Reset time unknown'}</p><small title="${escape(trust(pool.basis))}">${escape(trust(pool.basis))} · Updated ${illustrative ? "sample" : observation && Number.isFinite(observation.getTime()) ? escape(observation.toLocaleString()) : 'unknown'}</small></article>`;
-    }).join('')}</div>` : '<p>No measured quota pools are available. Remaining capacity is unknown.</p>'}</section>`;
+  return new Date(at).toLocaleString(undefined, short ? { weekday: 'short' } : { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
+
+function valueText(win) {
+  const state = stateOf(win);
+  if (state === 'exhausted') return 'Exhausted';
+  if (awaiting(win)) return 'Reset';
+  return Number.isFinite(win.remaining_pct) && win.basis !== 'unknown' ? `${percent(win.remaining_pct)} left` : 'Unknown';
+}
+
+function detailText(win) {
+  const seen = seenText(win).toLowerCase();
+  if (win.source_issue) return seen ? `${win.source_issue} · ${seen}` : win.source_issue;
+  const state = stateOf(win);
+  if (awaiting(win)) return 'Awaiting next reading';
+  const when = whenPart(win.resets_at);
+  if (state === 'exhausted') return when ? `Back ${when}` : 'Reset time unknown';
+  return when ? `Resets ${when}` : win.reset_label ? `Resets ${win.reset_label}` : 'Reset time unknown';
+}
+
+function paceText(win) {
+  const pace = win.pace;
+  if (!pace) return '';
+  if (pace.verdict === 'on_pace') return 'On pace';
+  if (pace.verdict === 'behind') return `${Math.round(Math.abs(pace.delta_pct))}% in reserve`;
+  const runsOut = pace.runs_out_at ? whenPart(pace.runs_out_at) : null;
+  return runsOut ? `Runs out ${runsOut}` : `${Math.round(Math.abs(pace.delta_pct))}% ahead of pace`;
+}
+
+function meterTitle(win) {
+  const parts = [`${trust(win.basis)}.`];
+  const seen = seenText(win);
+  if (seen) parts.push(`${seen}.`);
+  if (win.source_issue) parts.push(`${win.source_issue}.`);
+  return parts.join(' ');
+}
+
+const meterBar = (win, name) => {
+  const known = Number.isFinite(win.remaining_pct);
+  const width = Number(barWidth(win).toFixed(1));
+  const pace = Number.isFinite(win.pace?.pace_remaining_pct) ? `<i class="sp-meter-pace" style="--pace:${Number(Math.min(100, Math.max(0, win.pace.pace_remaining_pct)).toFixed(1))}%"></i>` : '';
+  const aria = known ? `role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(win.remaining_pct)}"` : 'role="img"';
+  return `<div class="sp-meter" ${aria} aria-label="${escape(`${name}: ${valueText(win)}`)}"><i class="sp-meter-fill" style="--fill:${width}%"></i>${pace}</div>`;
+};
+
+export function renderMeterRow(win, { detail = true } = {}) {
+  const state = stateOf(win);
+  const name = windowLabel(win);
+  return `<div class="sp-meter-row sp-meter-row--${state}${win.source_issue ? ' sp-meter-row--issue' : ''}" title="${escape(meterTitle(win))}"><div class="sp-meter-top"><span class="sp-meter-label">${escape(name)}</span><span class="sp-meter-value">${escape(valueText(win))}</span></div>${meterBar(win, name)}${detail ? `<div class="sp-meter-bottom"><span>${escape(detailText(win))}</span><span>${escape(paceText(win))}</span></div>` : ''}</div>`;
+}
+
+function renderMiniRow(win) {
+  const state = stateOf(win);
+  const name = windowName(win);
+  const when = whenPart(win.resets_at, { short: true, bare: true }) || '';
+  const value = state === 'exhausted' ? 'Out' : awaiting(win) ? 'Reset' : Number.isFinite(win.remaining_pct) && win.basis !== 'unknown' ? percent(win.remaining_pct) : 'Unknown';
+  return `<div class="sp-mini sp-mini--${state}${win.source_issue ? ' sp-mini--issue' : ''}" title="${escape(meterTitle(win))}"><span>${escape(name)}</span>${meterBar(win, windowLabel(win))}<span class="sp-mini-value"><b>${escape(value)}</b>${escape(awaiting(win) ? '' : when)}</span></div>`;
+}
+
+/** Multi-pool providers: windows grouped under their Rust-supplied pool name as compact rows. */
+export function renderPoolGroup(windows) {
+  const groups = new Map();
+  for (const win of windows) {
+    const key = win.pool || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(win);
+  }
+  return `<div class="sp-windows">${[...groups].map(([pool, list]) => `<div class="sp-pool">${pool ? `<p class="sp-pool-name">${escape(pool)}</p>` : ''}${list.map(renderMiniRow).join('')}</div>`).join('')}</div>`;
+}
+
+const CHEVRON = '<svg class="sp-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+const providerName = p => p.display_name || titleCase(p.provider);
+const providerMark = p => `<span class="sp-provider-mark" aria-hidden="true">${escape(Array.from(providerName(p))[0]?.toUpperCase() || '?')}</span>`;
+const chip = state => `<span class="sp-chip sp-chip--${CHIP_CLASS[state]}">${CHIP_TEXT[state]}</span>`;
+const money = (value, basis) => Number.isFinite(value) && !(basis === 'unknown' && value === 0) ? `$${value.toFixed(2)}${basis === 'exact' ? '' : ' est.'}` : 'Unknown';
+
+function summaryLine(p, windows) {
+  if (p.source_issue) return `<span class="sp-provider-line sp-provider-line--issue" title="${escape(p.source_issue)}">${escape(p.source_issue)}</span>`;
+  const head = windows[Number.isInteger(p.headline_window) && windows[p.headline_window] ? p.headline_window : 0];
+  const state = stateOf(head);
+  const label = escape(windowLabel(head));
+  const when = whenPart(head.resets_at, { short: true });
+  const text = state === 'exhausted' ? `${label} <b>exhausted</b>${when ? ` · back ${escape(whenPart(head.resets_at))}` : ''}`
+    : awaiting(head) ? `${label} <b>reset</b> · awaiting reading`
+      : `${label} <b>${escape(valueText(head))}</b>${when ? ` · resets ${escape(when)}` : ''}`;
+  return `<span class="sp-provider-line">${text}</span>`;
+}
+
+function costLine(p) {
+  if (!p.cost) return '';
+  return `<span>Today ${escape(money(p.cost.today_usd, p.cost.basis))} · 30 days ${escape(money(p.cost.last_30_days_usd, p.cost.basis))}${p.cost.basis === 'unknown' ? ' · partial' : ''}</span>`;
+}
+
+function emptyCard(p) {
+  const text = p.source_issue || p.enable_hint || 'No reading yet.';
+  const command = p.enable_command ? `<button type="button" class="sp-copy" data-copy="${escape(p.enable_command)}"><code>${escape(p.enable_command)}</code><span>Copy</span></button>` : '';
+  return `<article class="sp-card sp-provider-card sp-provider-card--empty" data-provider="${escape(p.provider)}"><header class="sp-provider-head"><div class="sp-provider-id">${providerMark(p)}<div><span class="sp-provider-name">${escape(providerName(p))}</span>${p.plan ? `<span class="sp-provider-plan">${escape(p.plan)}</span>` : ''}</div></div>${chip('unknown')}</header><p class="sp-provider-empty">${escape(text)}</p>${command}</article>`;
+}
+
+/** One provider as a `<details>` card, collapsed by default; the summary is the one-line overview. */
+export function renderProviderCard(p, { compact = false, cost = true } = {}) {
+  const windows = Array.isArray(p?.windows) ? p.windows : [];
+  if (!windows.length) return emptyCard(p || {});
+  const state = stateOf(p);
+  const multiPool = windows.some(win => win.pool);
+  const strip = windows.map(win => `<i class="is-${stateOf(win)}"></i>`).join('');
+  const body = multiPool ? renderPoolGroup(windows) : `<div class="sp-windows">${windows.map(win => renderMeterRow(win, { detail: !compact })).join('')}</div>`;
+  const issue = multiPool && p.source_issue ? `<p class="sp-provider-issue">${escape(p.source_issue)}</p>` : '';
+  const spend = cost && !compact ? costLine(p) : '';
+  const source = p.source_label ? `${escape(p.source_label)}${Number.isFinite(Date.parse(p.updated_at)) ? ` · Seen ${escape(relativeActivity(p.updated_at))}` : ''}` : '';
+  const foot = !compact && (spend || source) ? `<footer class="sp-provider-foot"${p.source_label ? ` title="Limit source: ${escape(p.source_label)}"` : ''}>${spend}<span>${source}</span></footer>` : '';
+  const slug = escape(p.provider);
+  return `<details class="sp-card sp-provider-card${compact ? ' sp-provider-card--compact' : ''}" data-key="provider:${slug}" data-provider="${slug}"><summary>${providerMark(p)}<span class="sp-provider-sum"><span class="sp-provider-name">${escape(providerName(p))}${p.plan ? `<span class="sp-provider-plan">${escape(p.plan)}</span>` : ''}</span>${summaryLine(p, windows)}</span><span class="sp-sum-right"><span class="sp-strip" aria-hidden="true">${strip}</span>${chip(state)}</span>${CHEVRON}</summary><div class="sp-provider-body">${issue}${body}${foot}</div></details>`;
+}
+
+/** The Limits section: heading, freshness and a grid of provider cards. */
+export function renderProviderCards(list, options = {}) {
+  const items = Array.isArray(list) ? list : [];
+  const received = Date.parse(options.publishedAt);
+  const updated = items.map(p => Date.parse(p.updated_at)).filter(Number.isFinite);
+  const meta = Number.isFinite(received) ? `Last received ${relativeActivity(received)}` : updated.length ? `Updated ${relativeActivity(Math.max(...updated))}` : '';
+  const grid = items.length ? `<div class="sp-card-grid">${items.map(p => renderProviderCard(p, options)).join('')}</div>` : '<div class="sp-empty"><p>No measured quota pools are available. Remaining capacity is unknown.</p></div>';
+  return `<section class="sp-section sp-limits" aria-label="Provider limits"><header class="sp-section-head"><h2>Limits</h2><span class="sp-section-meta">${escape(meta)}</span></header>${grid}</section>`;
+}
+
+const PROVIDER_OPEN_KEY = 'gnomcode-provider-open';
+function readProviderOpen() {
+  try { const stored = JSON.parse(localStorage.getItem(PROVIDER_OPEN_KEY)); return stored && typeof stored === 'object' ? stored : {}; } catch (_) { return {}; }
+}
+function writeProviderOpen(slug, open) {
+  try { localStorage.setItem(PROVIDER_OPEN_KEY, JSON.stringify({ ...readProviderOpen(), [slug]: open })); } catch (_) { /* storage unavailable */ }
+}
+const toggleListeners = new WeakSet();
+
+/** Re-renders the cards without collapsing the ones the user opened; open state survives reloads. */
+export function updateProviderCards(element, list, options) {
+  const first = !element.querySelector('details[data-provider]');
+  updateMarkup(element, renderProviderCards(list, options));
+  if (first) {
+    element.querySelector('.sp-limits')?.setAttribute('data-enter', '');
+    const stored = readProviderOpen();
+    for (const card of element.querySelectorAll('details[data-provider]')) card.open = stored[card.dataset.provider] === true;
+  }
+  if (toggleListeners.has(element)) return;
+  toggleListeners.add(element);
+  // toggle does not bubble, so listen during the capture phase.
+  element.addEventListener('toggle', event => {
+    const card = event.target;
+    if (!card?.dataset?.provider || !card.matches?.('details')) return;
+    writeProviderOpen(card.dataset.provider, card.open);
+    for (const other of document.querySelectorAll('details[data-provider]')) if (other !== card && other.dataset.provider === card.dataset.provider && other.open !== card.open) other.open = card.open;
+  }, true);
+}
+
+// Raw pools (web console, Remote, tour) carry per-window Rust fields but no provider overview.
+// Group them by provider and pick the headline from the Rust-supplied states.
+const WORST_FIRST = ['exhausted', 'low', 'unknown', 'reset_awaiting', 'ok'];
+function quotaOverviews(pools) {
+  const groups = new Map();
+  for (const pool of Array.isArray(pools) ? pools : []) {
+    if (!groups.has(pool.provider)) groups.set(pool.provider, []);
+    groups.get(pool.provider).push(pool);
+  }
+  return [...groups].map(([provider, windows]) => {
+    const states = windows.map(stateOf);
+    const state = WORST_FIRST.find(candidate => states.includes(candidate));
+    const observed = windows.map(win => Date.parse(win.observed_at)).filter(Number.isFinite);
+    return { provider, display_name: titleCase(provider), plan: windows.find(win => win.plan)?.plan || null, state, windows, headline_window: states.indexOf(state), updated_at: observed.length ? new Date(Math.max(...observed)).toISOString() : null };
+  });
+}
+
+export function renderQuota(pools, publishedAt) { return renderProviderCards(quotaOverviews(pools), { cost: false, publishedAt }); }
 
 
 export function renderSessionList(sessions, selected = '', query = '') {
@@ -267,10 +433,5 @@ export function updateChat(element, events) {
 
 export function renderConversationLimits(limits = []) {
   if (!limits.length) return '<span>Limits unavailable</span>';
-  return limits.map(limit => {
-    const known = ['exact','estimated','api'].includes(limit.basis) && Number.isFinite(limit.remaining_pct);
-    const observed = limit.observed_at ? new Date(limit.observed_at).toLocaleString() : 'Unknown';
-
-    return `<span class="sp-conversation-limit" title="Last updated ${escape(observed)}; ${escape(trust(limit.basis))}"><span>${escape(limit.label)}</span> <strong>${known ? limit.remaining_pct.toFixed(0) + '% left' : 'Unknown'}</strong> ${limit.stale ? '<small>Last seen</small>' : limit.basis === 'estimated' ? '<small>Estimated</small>' : ''}</span>`;
-  }).join('');
+  return limits.map(limit => `<span class="sp-chip sp-chip--${CHIP_CLASS[stateOf(limit)]} sp-conversation-limit" title="${escape(meterTitle(limit))}">${escape(limit.label)} ${escape(valueText(limit))}</span>`).join('');
 }
