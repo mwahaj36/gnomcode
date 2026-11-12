@@ -30,7 +30,7 @@ Set-ItemProperty -Path $AppModelKey -Name "IconUri" -Value (Join-Path $InstallDi
 $UninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode"
 if (-not (Test-Path $UninstallKey)) { New-Item -Path $UninstallKey -Force | Out-Null }
 Set-ItemProperty -Path $UninstallKey -Name "DisplayName" -Value "gnomcode"
-Set-ItemProperty -Path $UninstallKey -Name "DisplayVersion" -Value "0.9.3"
+Set-ItemProperty -Path $UninstallKey -Name "DisplayVersion" -Value "0.9.4"
 Set-ItemProperty -Path $UninstallKey -Name "Publisher" -Value "gnomcode"
 Set-ItemProperty -Path $UninstallKey -Name "DisplayIcon" -Value ((Join-Path $InstallDir "gnomcode.ico") + ",0")
 Set-ItemProperty -Path $UninstallKey -Name "InstallLocation" -Value $InstallDir
@@ -71,4 +71,4 @@ if ($CurPath -notlike "*$InstallDir*") {
     [Environment]::SetEnvironmentVariable("Path", "$CurPath;$InstallDir", "User")
 }
 
-Write-Host "Gnomcode v0.9.3 installed successfully to $InstallDir!"
+Write-Host "Gnomcode v0.9.4 installed successfully to $InstallDir!"

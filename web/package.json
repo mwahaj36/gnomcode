@@ -1,6 +1,6 @@
 {
   "name": "gnomcode-web",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "private": true,
   "scripts": {
     "prebuild": "node ../scripts/build-chat-markdown.mjs --check",
