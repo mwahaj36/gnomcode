@@ -115,7 +115,7 @@ export function renderHeatmap(data, { weeks = 53, stats = true, legend = true, m
   const figures = stats && summary ? `<div class="sp-heatmap-stats"><div><strong>${escape(tokens(summary.total_tokens))}</strong><span>tokens, past year</span></div><div><strong>${escape(summary.active_days ?? 'Unknown')}</strong><span>active days</span></div><div${streakTitle}><strong>${escape(summary.current_streak ?? 'Unknown')}</strong><span>day streak</span></div><div${busiest ? ` title="${escape(tokens(busiest.total_tokens))} tokens"` : ''}><strong>${busiest ? escape(monthDay(busiest.date)) : 'None'}</strong><span>busiest day</span></div></div>` : '';
   const description = summary ? `${tokens(summary.total_tokens)} tokens over ${summary.active_days} active days. Details below.` : 'Token activity by day.';
   const key = legend ? '<div class="sp-heatmap-legend" aria-hidden="true"><span>Less</span><i class="sp-heat" data-level="0"></i><i class="sp-heat" data-level="1"></i><i class="sp-heat" data-level="2"></i><i class="sp-heat" data-level="3"></i><i class="sp-heat" data-level="4"></i><span>More</span></div>' : '';
-  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>Activity</h2><span class="sp-section-meta">UTC days</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" tabindex="0" role="group" aria-label="Activity grid, scrollable">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
+  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>${weeks < 53 ? `Last ${weeks} weeks` : 'Activity'}</h2><span class="sp-section-meta">UTC days</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" tabindex="0" role="group" aria-label="Activity grid, scrollable">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
 }
 
 export function renderHourStrip(report) {
@@ -156,6 +156,58 @@ export function renderOngoing(sessions) {
 }
 
 export function updateOngoing(element, sessions) { updateMarkup(element, renderOngoing(sessions)); }
+
+const HOME_GROUPS = [['needs_you', 'Needs you'], ['running', 'Running'], ['recent', 'Recent']];
+const HOME_RECENT_MAX = 6;
+const CHEVRON_RIGHT = '<svg class="sp-session-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+const shortAge = value => { const date = new Date(value); if (!Number.isFinite(date.getTime())) return ''; const age = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)); return age < 60 ? 'now' : age < 3600 ? Math.floor(age / 60) + 'm' : age < 86400 ? Math.floor(age / 3600) + 'h' : Math.floor(age / 86400) + 'd'; };
+
+function homeRow(session, group) {
+  const project = session.project_name && session.project_name.toLowerCase() !== 'unknown' ? session.project_name : 'Private project';
+  const title = session.title && session.title.toLowerCase() !== 'unknown' ? session.title : project === 'Private project' ? 'Private session' : project;
+  const fill = Number.isFinite(session.context_fill_pct) ? Math.round(session.context_fill_pct) : null;
+  const meta = [project, titleCase(session.agent), session.model && session.model !== 'Unspecified' ? session.model : ''].filter(Boolean).join(' · ');
+  const context = fill === null ? '<span class="sp-session-context" aria-hidden="true"></span>' : `<span class="sp-session-context" title="Context ${fill}% full"><i style="--fill:${fill}%"></i></span>`;
+  return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${escape(meta)}</span></span>${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
+}
+
+export function renderHomeSessions(sessions) {
+  const head = '<header class="sp-section-head"><h2>Sessions</h2><span class="sp-section-meta"><button type="button" class="sp-link" data-action="view:sessions">View all</button></span></header>';
+  if (!Array.isArray(sessions)) return `<section class="sp-section" aria-label="Sessions"><header class="sp-section-head"><h2>Sessions</h2></header><div class="sp-empty"><p>Sessions are unavailable.</p></div></section>`;
+  if (!sessions.length) return '<section class="sp-section" aria-label="Sessions"><header class="sp-section-head"><h2>Sessions</h2></header><div class="sp-empty"><p>No sessions yet.</p><button type="button" class="btn-primary" data-action="home-new-session">New session</button></div></section>';
+  const groups = HOME_GROUPS.map(([key, label]) => {
+    const all = sessions.filter(session => (HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent') === key);
+    const rows = key === 'recent' ? all.slice(0, HOME_RECENT_MAX) : all;
+    return rows.length ? `<h3 class="sp-group-label">${label}${key === 'recent' ? '' : ` <span>(${all.length})</span>`}</h3><div class="sp-session-list">${rows.map(session => homeRow(session, key)).join('')}</div>` : '';
+  }).join('');
+  return `<section class="sp-section" aria-label="Sessions">${head}${groups}</section>`;
+}
+
+export function updateHomeSessions(element, sessions) {
+  const markup = renderHomeSessions(sessions);
+  if (homeMarkup.get(element) === markup) return;
+  const focused = element.contains(document.activeElement) ? document.activeElement.dataset.arg : null;
+  element.innerHTML = markup;
+  if (focused) [...element.querySelectorAll('[data-arg]')].find(item => item.dataset.arg === focused)?.focus({ preventScroll: true });
+  homeMarkup.set(element, markup);
+}
+
+export function renderTodayTiles({ report = null, activeCount = null } = {}) {
+  const tile = (label, value, meta = '') => `<div class="sp-tile"><span class="sp-tile-label">${label}</span><strong class="sp-tile-value">${escape(value)}</strong>${meta ? `<span class="sp-tile-meta">${escape(meta)}</span>` : ''}</div>`;
+  return `<header class="sp-section-head"><h2>Today</h2></header><div class="sp-tiles">${
+    tile('Tokens today', Number.isFinite(report?.total_tokens) ? tokens(report.total_tokens) : 'Unknown') +
+    tile('Est. spend today', cost(report, report?.total_cost_usd), priced(report) ? (report.unpriced_turns > 0 ? 'Partial estimate' : 'API equivalent') : 'Price unavailable') +
+    tile('Active sessions', Number.isFinite(activeCount) ? String(activeCount) : 'Unknown')
+  }</div>`;
+}
+
+const homeMarkup = new WeakMap();
+export function updateTodayTiles(element, data) {
+  const markup = renderTodayTiles(data);
+  if (homeMarkup.get(element) === markup) return;
+  element.innerHTML = markup;
+  homeMarkup.set(element, markup);
+}
 
 const activityMarkup = new WeakMap();
 export function updateActivity(element, report) {

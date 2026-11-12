@@ -81,9 +81,8 @@ try {
   assert.equal(await page.locator('#ide-launcher').isVisible(),true);
   await page.reload();
   assert.equal(await guide.isVisible(),false,'dismissal survives reload');
-  await page.getByRole('tab',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('tab',{name:'Home',exact:true}).click();
   assert.equal(await page.locator('#chat-list-toggle').isVisible(),false,'conversation toggle is only visible in Workspace');
-  assert.equal(await page.getByRole('button',{name:'Sign in to connect your desktop'}).isVisible(),true,'dashboard exposes sign-in without expanding the rail');
   await page.getByRole('button',{name:'Sign in to Gnomcode'}).click();
   assert.equal(await page.getByRole('heading',{name:'Sign in on this desktop'}).isVisible(),true,'sign-in is reachable directly from the rail');
   await page.getByRole('tab',{name:'Profile',exact:true}).click();
