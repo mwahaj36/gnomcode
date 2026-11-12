@@ -28,3 +28,10 @@ Fix the verified audit defects in the core loop and prove Claude Code, Codex and
 - `gnomcode limits enable|disable|status|check <claude|antigravity>`; daemon polls opted-in providers every 5 min.
 - Claude: OAuth usage endpoint with Claude Code's own token; never refreshed. On this machine the CLI token was expired (desktop-only sign-in), so a one-time `claude auth login` is needed.
 - Antigravity: language server `GetUserStatus` via its loopback descriptor; the `agy` CLI endpoint returned 401 without a token in PTY and non-PTY tests, so CodexBar's CLI path was not adopted.
+
+## Addendum: real-install verification gap
+- Installs run from inside the Claude desktop app (an MSIX package) were redirected to `Packages/Claude_*/LocalCache/Local/Gnomcode`; the real `%LOCALAPPDATA%\Gnomcode` stayed on the old build. Every earlier "installed and verified" check observed the sandboxed copy. Real-machine steps now run from the user's own shell.
+- Taskbar showed the Electron logo because a dev-run `Electron.lnk` in the Start Menu claimed `app.gnomcode.desktop`. Dev runs now use `app.gnomcode.desktop.dev`.
+- Tray/summary showed 2 ongoing while the list showed 1: the count SQL still used the 24 h open-execution window. Counts now use the same 2 h limit as presence (regression test added).
+- Antigravity limits now come from `RetrieveUserQuotaSummary`: per-group 5-hour and weekly buckets, including the separate Gemini Argon weekly pool.
+
