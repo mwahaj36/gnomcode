@@ -3555,7 +3555,7 @@ mod tests {
     fn embedded_console_uses_the_compact_application_shell_and_plain_status() {
         let html = include_str!("console.html");
 
-        assert!(html.contains("id=\"console-title\">Dashboard</h1>"));
+        assert!(html.contains("id=\"console-title\">Home</h1>"));
         assert!(!html.contains("<header class=\"app-header\""));
         assert!(html.contains("class=\"console-context\""));
         assert!(html.contains("role=\"tablist\""));
