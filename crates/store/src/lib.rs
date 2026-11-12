@@ -13,7 +13,7 @@ use thiserror::Error;
 
 mod automation;
 mod conversation;
-pub use automation::{AutomationNotice, ScheduledMessage};
+pub use automation::{AutomationNotice, PendingPushNotice, ScheduledMessage};
 pub use conversation::ConversationLaunch;
 
 /// Storage layer error type.
@@ -996,6 +996,28 @@ impl Database {
         )?;
         if !push_column_exists {
             self.conn.execute_batch(obfstr::obfstr!("BEGIN; ALTER TABLE automation_notice ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0; INSERT INTO schema_migrations(version,applied_at) VALUES (14,datetime('now')); COMMIT;"))?;
+        }
+        let v15_exists: bool = self.conn.query_row(
+            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=15)"),
+            [],
+            |row| row.get(0),
+        )?;
+        if !v15_exists {
+            self.conn.execute_batch(obfstr::obfstr!(
+                r#"BEGIN;
+                CREATE TABLE IF NOT EXISTS notification_settings (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    approval_waiting INTEGER NOT NULL DEFAULT 1,
+                    turn_finished INTEGER NOT NULL DEFAULT 1,
+                    turn_finished_min_minutes INTEGER NOT NULL DEFAULT 2,
+                    limit_low INTEGER NOT NULL DEFAULT 1,
+                    limit_reset INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT NOT NULL
+                );
+                ALTER TABLE automation_notice ADD COLUMN push_payload TEXT;
+                INSERT INTO schema_migrations(version,applied_at) VALUES (15,datetime('now'));
+                COMMIT;"#
+            ))?;
         }
         self.conn.execute_batch(obfstr::obfstr!(r#"
             DELETE FROM usage_record

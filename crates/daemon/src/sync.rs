@@ -224,20 +224,31 @@ async fn push_notifications(
         return Ok(());
     };
     let shared = db.clone();
-    let pending =
-        tokio::task::spawn_blocking(move || shared.blocking_lock().pending_push_notices())
-            .await??;
-    for id in pending {
+    let pending = tokio::task::spawn_blocking(move || {
+        shared.blocking_lock().pending_push_notices_with_meta()
+    })
+    .await??;
+    for notice in pending {
+        let body = match notice.payload {
+            Some(payload) => json!({
+                "event_id": notice.id,
+                "kind": "agent_event",
+                "event": payload.event,
+                "agent": payload.agent,
+            }),
+            None => json!({"event_id": notice.id, "kind": "agent_event"}),
+        };
         let response = client
             .post(format!("{}/api/push/send", brand.base_url))
             .bearer_auth(&auth.access_token)
-            .json(&json!({"event_id":id,"kind":"agent_event"}))
+            .json(&body)
             .send()
             .await?
             .error_for_status()?;
         let accepted: Value = response.json().await?;
         if accepted["ok"] == true {
             let shared = db.clone();
+            let id = notice.id;
             tokio::task::spawn_blocking(move || shared.blocking_lock().mark_notice_pushed(&id))
                 .await??;
         }
