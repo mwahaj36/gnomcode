@@ -8,8 +8,8 @@
 
 | Order | Area | Item | Status | PR | Depends on |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | Section C | Quick actions (canned prompts, never raw argv) | in progress | - | - |
-| 2 | Section C | Changes view (read-only diff on console and phone) | not started | - | - |
+| 1 | Section C | Quick actions (canned prompts, never raw argv) | PR open | [#188](https://github.com/mwahaj36/spawnt/pull/188) | Optional Worker A backend persistence |
+| 2 | Section C | Changes view (read-only diff on console and phone) | in progress | - | Optional Worker A Remote `changes` handler |
 | 3 | Section C | File viewer on phone and console (read-only, workspace only) | not started | - | - |
 | 4 | Section C | Artifacts alongside changes | not started | - | - |
 | 5 | Section C | Phone attachments UI | not started | - | - |
@@ -26,4 +26,16 @@
 
 ## Entries
 
-_Entries are appended as each roadmap item completes._
+### 1. Section C — Quick actions (canned prompts, never raw argv)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/188 (`feat/quick-actions-ui`, commit `2de5af6`)
+- **What changed:**
+  - `web/lib/console-presentation.js`, `web/lib/console-presentation.d.ts`: exported `QUICK_ACTIONS_STORAGE_KEY`, `DEFAULT_QUICK_ACTIONS`, `normalizeQuickAction`, `mergeQuickActions`, `loadStoredQuickActions`, `saveStoredQuickActions`, `renderQuickActionsStrip`.
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: added `#chat-quick-actions` bar, `#quick-actions-dialog` manager, `sendPromptText` / `sendQuickAction` dispatching via `POST /api/v1/sessions/{id}/prompt` (preserving unsent composer drafts).
+  - `web/components/RemoteCompanion.tsx`: added `.sp-quick-actions` toolbar, `submitQuickAction` dispatching via `{ type: 'prompt', session_id, text }`, and `Quick prompts` bottom sheet.
+  - `web/app/gnomcode-console.css`: appended `--sp-*` token pill strip and dialog styles, 44px touch targets at `<=760px`, hidden at `max-height: 450px` for short keyboards.
+  - `web/test/quick-actions.test.mjs`, `docs/SPEC.md` (append §11), `docs/ROADMAP_1.0.md` (append status), `docs/sessions/2026-11-13-quick-actions-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap at `crates/daemon/src/console.html:96-97` and `web/components/RemoteCompanion.tsx:586-591` (composer only, no canned prompts); Remote `prompt` validation at `crates/daemon/src/remote.rs:796-822`. Tests: `web/test/quick-actions.test.mjs` (5/5 pass). Gate: `CARGO_INCREMENTAL=0 cargo fmt --all -- --check` pass, `cargo clippy --workspace --all-targets -- -D warnings` pass, `cargo test --workspace` pass, `node scripts/check-local-console.mjs` pass, `web/` `npm ci` + `npm test` (104/104) + `npm run typecheck` + `npm run build` pass.
+- **Verification:** Browser UI verified live against an ephemeral mock daemon in `chrome-headless-shell.exe` at `390x844` and `1440x900` (dark & light) and `390x350` (`scrollWidth === innerWidth`, min pill height 44px on mobile, 32px on desktop, hidden under `450px` height). Not verified live against a real phone/relay (`check-remote-companion.mjs`) or Worker A backend persistence.
+- **Deviations:** Stored locally (`gnomcode-quick-actions-v1` in `localStorage`) instead of calling unimplemented `quick_prompts` Remote RPCs (which would trigger `Unsupported remote command`).
+- **Open risks/questions:** Waiting on Worker A's `C quick actions` PR + ADR if cross-device quick-prompt storage is needed.
+- **Dependencies:** Independent UI PR; optional sync depends on Worker A `C quick actions` PR.
