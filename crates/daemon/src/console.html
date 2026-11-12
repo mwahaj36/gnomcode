@@ -241,7 +241,7 @@
     <details class="profile-disclosure sp-settings-section"><summary>Pricing</summary>    <div class="settings-grid">
       <!-- Left Column: Subscription Plans -->
       <div class="card">
-        <div class="section-title" style="margin-bottom: 16px;">Local profile and subscriptions</div>
+        <div class="section-title sp-title-gap">Local profile and subscriptions</div>
         <div class="form-group">
           <label for="settings-display-name">Display Name</label>
           <input type="text" id="settings-display-name" placeholder="Developer">
@@ -258,30 +258,30 @@
           <label for="settings-google-plan">Google Monthly Plan ($/mo)</label>
           <input type="number" id="settings-google-plan" placeholder="0.00" step="1">
         </div>
-        <div style="margin-top: 20px;">
+        <div class="sp-form-actions">
           <button class="btn-primary" data-action="save-settings">Save Preferences</button>
-          <span id="settings-saved-feedback" style="margin-left: 10px; font-size: var(--sp-fs-meta); color: var(--green); display: none;">Saved successfully!</span>
+          <span id="settings-saved-feedback" class="sp-saved-feedback">Saved successfully!</span>
         </div>
       </div>
 
       <!-- Right Column: Database Storage & Custom Pricing -->
       <div class="card">
-        <div class="section-title" style="margin-bottom: 16px;">Custom Model Pricing Overrides</div>
-        <div id="settings-pricing-list" style="margin-bottom: 14px; font-family: var(--font-mono); font-size: var(--sp-fs-meta);"></div>
+        <div class="section-title sp-title-gap">Custom Model Pricing Overrides</div>
+        <div id="settings-pricing-list" class="sp-pricing-list"></div>
 
-        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Add New Model Rate ($/1M tokens):</div>
+        <div class="sp-field-note">Add New Model Rate ($/1M tokens):</div>
         <div class="profile-pricing-fields">
           <input type="text" id="settings-model-pattern" aria-label="Model name or pattern" placeholder="Model (e.g. claude-3-5)">
           <input type="number" id="settings-model-in" aria-label="Input price per million tokens" placeholder="In $" step="0.1">
           <input type="number" id="settings-model-out" aria-label="Output price per million tokens" placeholder="Out $" step="0.1">
           <input type="number" id="settings-model-cache" aria-label="Cached input price per million tokens" placeholder="Cache $" step="0.1">
-          <button class="btn-control" style="white-space: nowrap; flex: 0 0 auto;" data-action="add-pricing">+ Add</button>
+          <button class="btn-control sp-add-rate" data-action="add-pricing">+ Add</button>
         </div>
 
-        <div style="border-top: 1px solid var(--border); padding-top: 16px; font-family: var(--font-mono); font-size: var(--sp-fs-meta); color: var(--text-muted);">
-          <div class="section-title" style="margin-bottom: 8px;">Local Flight Recorder Storage</div>
+        <div class="sp-storage-note">
+          <div class="section-title sp-title-gap-sm">Local Flight Recorder Storage</div>
           <div>Database: ~/.gnomcode/state.db</div>
-          <div id="settings-db-stats" style="margin-top: 4px;">Loading local storage stats...</div>
+          <div id="settings-db-stats" class="sp-storage-stats">Loading local storage stats...</div>
         </div>
       </div>
     </div>
@@ -290,24 +290,24 @@
       <!-- License Activation Card -->
       <div class="card">
         <div class="card-title">Legacy Offline License</div>
-        <div style="margin: 12px 0; display: flex; align-items: center; gap: 10px;">
-          <span style="color: var(--text-muted); font-size: 12px;">Active Tier:</span>
-          <span id="pro-tier-badge" class="badge" style="font-weight: 700;">FREE</span>
+        <div class="sp-license-tier">
+          <span class="sp-field-note">Active Tier:</span>
+          <span id="pro-tier-badge" class="badge sp-tier-badge">FREE</span>
         </div>
-        <div id="pro-license-details" style="font-size: var(--sp-fs-meta); color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
+        <div id="pro-license-details" class="sp-license-details">
           All local features are free. Existing offline licenses can still be managed here.
         </div>
         <div id="license-entry" class="sp-license-actions">
           <input
             type="text"
             id="license-key-input"
+            class="sp-license-input"
             placeholder="Paste your signed Remote license"
-            style="flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 0; padding: 8px 12px; font-family: var(--font-mono); font-size: var(--sp-fs-meta); color: var(--text);"
           >
           <button class="btn-control" data-action="activate-license">Activate license</button>
           </div><div class="sp-license-actions"><button id="replace-license" class="btn-control" hidden data-action="replace-license">Replace license</button><button id="remove-license" class="btn-control" hidden data-action="remove-license">Remove license</button>
         </div>
-        <div id="license-feedback" style="font-size: var(--sp-fs-meta); margin-top: 8px; font-family: var(--font-mono);"></div>
+        <div id="license-feedback" class="sp-license-feedback"></div>
       </div>
 
   </details>
