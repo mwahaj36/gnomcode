@@ -172,6 +172,9 @@ pub struct SessionListItem {
     /// Source-independent presence classification.
     #[serde(default)]
     pub presence: gnomcode_core::presence::SessionPresence,
+    /// Home board group derived from presence; absent in payloads from older daemons.
+    #[serde(default)]
+    pub home_group: Option<gnomcode_core::presence::HomeGroup>,
     /// Started at timestamp.
     pub started_at: String,
     /// Last event timestamp.
@@ -2565,6 +2568,7 @@ impl Database {
                     is_active,
                     is_ongoing,
                     presence,
+                    home_group: Some(presence.home_group()),
                     started_at,
                     last_event_at: last_event_at_str,
                     input_tokens: input_tokens.max(0) as u64,
@@ -4070,10 +4074,14 @@ mod tests {
             (1, 1)
         );
         assert_eq!(projects[0].cost_usd, 5.0);
-        let (_, count) = db
+        let (project_rows, count) = db
             .list_sessions_filtered(None, None, Some(&projects[0].id), 0, 1)
             .expect("project filter");
         assert_eq!(count, 1);
+        assert_eq!(
+            project_rows[0].home_group,
+            Some(project_rows[0].presence.home_group())
+        );
         let (rows, count) = db
             .list_sessions_filtered(None, None, Some("missing-project"), 0, 1)
             .expect("unmatched project");

@@ -24,6 +24,19 @@ pub enum SessionPresence {
     /// Explicit source-reported end.
     Ended,
 }
+
+/// Where a session appears on the Home board.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HomeGroup {
+    /// Waiting for the user, such as an approval request.
+    NeedsYou,
+    /// Executing or recently idle.
+    Running,
+    /// Not currently active.
+    Recent,
+}
+
 impl SessionPresence {
     /// Whether this session belongs in ongoing lists and badges.
     #[must_use]
@@ -37,6 +50,15 @@ impl SessionPresence {
     #[must_use]
     pub const fn is_active(self) -> bool {
         matches!(self, Self::Running | Self::AwaitingApproval)
+    }
+    /// Home board group for this presence.
+    #[must_use]
+    pub const fn home_group(self) -> HomeGroup {
+        match self {
+            Self::AwaitingApproval => HomeGroup::NeedsYou,
+            Self::Running | Self::RecentlyIdle => HomeGroup::Running,
+            Self::Inactive | Self::Ended => HomeGroup::Recent,
+        }
     }
 }
 /// Classifies source observations without assuming silence means completion.
@@ -61,6 +83,21 @@ pub fn classify_presence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn home_group_maps_every_presence() {
+        assert_eq!(
+            SessionPresence::AwaitingApproval.home_group(),
+            HomeGroup::NeedsYou
+        );
+        assert_eq!(SessionPresence::Running.home_group(), HomeGroup::Running);
+        assert_eq!(
+            SessionPresence::RecentlyIdle.home_group(),
+            HomeGroup::Running
+        );
+        assert_eq!(SessionPresence::Inactive.home_group(), HomeGroup::Recent);
+        assert_eq!(SessionPresence::Ended.home_group(), HomeGroup::Recent);
+    }
+
     #[test]
     fn rules_apply_without_provider_specific_exceptions() {
         assert_eq!(
