@@ -93,6 +93,7 @@
             <div class="sp-imported-info"><span id="imported-banner-text">Observed from agent application.</span></div>
             <div class="sp-imported-actions"><button type="button" class="btn-primary" data-action="focus-chat" id="imported-focus-btn">Open in Agent App</button></div>
           </div>
+          <div id="chat-quick-actions" hidden></div>
           <form id="chat-prompt-form" data-submit="send-prompt">
             <label class="visually-hidden" for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="1" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Message the agent..."></textarea>
             <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
@@ -354,6 +355,19 @@
       <section data-onboarding-step hidden><h2 tabindex="-1">Desktop tray and Remote access</h2><p>Stay informed away from the main window.</p><dl><dt>Right-click the tray icon</dt><dd>View tightest limits, waiting sessions, and quick restart actions.</dd><dt>Pair your phone in Settings</dt><dd>Open Devices and Remote to link encrypted mobile access.</dd><dt>Replay this guide anytime</dt><dd>Select Getting started under Settings whenever you need it.</dd></dl><p class="onboarding-note">Nothing leaves this machine until you connect an account.</p></section>
     </div>
     <div class="onboarding-footer"><button id="onboarding-back" type="button" class="btn-control" data-action="onboarding-back">Back</button><button id="onboarding-next" type="button" class="btn-primary" data-action="onboarding-next">Continue</button></div>
+  </dialog>
+  <dialog id="quick-actions-dialog" class="sp-dialog" aria-labelledby="quick-actions-heading">
+    <div class="onboarding-header"><h2 id="quick-actions-heading">Quick prompts</h2><button type="button" class="btn-control" data-action="close-quick-actions">Close</button></div>
+    <p class="sp-field-note">Canned prompts are sent as plain chat messages, never shell commands.</p>
+    <div id="quick-actions-list" class="sp-quick-actions-list"></div>
+    <form id="quick-actions-form" data-submit="add-quick-action" class="sp-quick-actions-form">
+      <label for="quick-action-label">Button label</label>
+      <input id="quick-action-label" type="text" maxlength="40" required placeholder="Review tests">
+      <label for="quick-action-prompt">Prompt message</label>
+      <textarea id="quick-action-prompt" rows="3" maxlength="4000" required placeholder="Run the test suite and summarize any failures."></textarea>
+      <p id="quick-actions-error" class="sp-field-note sp-tone-red" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn-control" data-action="reset-quick-actions">Reset defaults</button><button type="submit" class="btn-primary">Add prompt</button></div>
+    </form>
   </dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-heading" aria-describedby="confirm-message"><form method="dialog"><h2 id="confirm-heading">Confirm action</h2><p id="confirm-message"></p><div class="dialog-actions"><button class="btn-control" value="cancel" autofocus>Cancel</button><button class="btn-primary" id="confirm-accept" value="confirm">Continue</button></div></form></dialog>
   <script src="/vendor/xterm.js"></script>

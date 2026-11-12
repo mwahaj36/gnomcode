@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { reconcileChat, renderConversationLimitCard, renderConversationLimits, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
+import { DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -66,6 +66,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [notice, setNotice] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [quickActions, setQuickActions] = useState<QuickAction[]>(() => [...DEFAULT_QUICK_ACTIONS]);
+  const [quickActionsPanel, setQuickActionsPanel] = useState(false);
+  const [newQuickLabel, setNewQuickLabel] = useState('');
+  const [newQuickPrompt, setNewQuickPrompt] = useState('');
+  const [quickActionError, setQuickActionError] = useState('');
   const [hasEarlier, setHasEarlier] = useState(false);
   const [folderBrowser, setFolderBrowser] = useState<FolderListing | null>(null);
   const [foldersLoading, setFoldersLoading] = useState(false);
@@ -92,7 +97,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const historyAnchor = useRef<{top:number; height:number} | null>(null);
   const drafts = useRef(new Map<string,string>());
   const promptRef = useRef('');
-  const pendingPrompt = useRef<{session:string; text:string; id:string} | null>(null);
+  const pendingPrompt = useRef<{session:string; text:string; id:string; fromComposer:boolean} | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const channel = useRef<Channel | null>(null);
   const selectedRef = useRef('');
@@ -118,7 +123,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const desktopDialog=useRef<HTMLDialogElement|null>(null);
   const modelDialog=useRef<HTMLDialogElement|null>(null);
   const limitsDialog=useRef<HTMLDialogElement|null>(null);
+  const quickActionsDialog=useRef<HTMLDialogElement|null>(null);
   useEffect(()=>{if(limitsPanel)limitsDialog.current?.showModal();},[limitsPanel]);
+  useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
+  useEffect(()=>{setQuickActions(loadStoredQuickActions());},[]);
   const sidebarToggle=useRef<HTMLButtonElement|null>(null);
   const sidebarClose=useRef<HTMLButtonElement|null>(null);
 
@@ -230,16 +238,36 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
 
   function changePrompt(text: string) { promptRef.current = text; setPrompt(text); }
 
-  async function submitPrompt() {
-    if (!authenticated.current || !sessions.find(session => session.id === selectedRef.current)?.can_prompt || pendingPrompt.current || !promptRef.current.trim()) return;
+  async function submitPromptText(rawText: string, fromComposer: boolean) {
+    if (!authenticated.current || !sessions.find(session => session.id === selectedRef.current)?.can_prompt || pendingPrompt.current || !rawText.trim()) return;
     const id = crypto.randomUUID();
     const sourceSession = selectedRef.current;
-    pendingPrompt.current = {session:sourceSession,text:promptRef.current,id};
-    const pending:PendingChat = {id,text:promptRef.current,created_at:new Date().toISOString(),baseline:events.map(event=>event.event_id),delivered:false};
+    pendingPrompt.current = {session:sourceSession,text:rawText,id,fromComposer};
+    const pending:PendingChat = {id,text:rawText,created_at:new Date().toISOString(),baseline:events.map(event=>event.event_id),delivered:false};
     setOptimistic(current=>({...current,[selectedRef.current]:[...(current[selectedRef.current] || []),pending]}));
     setSending(true); setError(''); setNotice('');
-    try { await send({type:'prompt',session_id:selectedRef.current,text:promptRef.current}); }
+    try { await send({type:'prompt',session_id:selectedRef.current,text:rawText}); }
     catch { setOptimistic(current=>({...current,[sourceSession]:(current[sourceSession] || []).filter(item=>item.id !== id)})); pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
+  }
+
+  function submitPrompt() { return submitPromptText(promptRef.current, true); }
+
+  function submitQuickAction(action: QuickAction) {
+    const clean = normalizeQuickAction(action);
+    if (clean) void submitPromptText(clean.prompt, false);
+  }
+
+  function addRemoteQuickAction(event: React.FormEvent) {
+    event.preventDefault();
+    const clean = normalizeQuickAction({ id: `custom-${crypto.randomUUID().slice(0, 8)}`, label: newQuickLabel, prompt: newQuickPrompt, builtin: false });
+    if (!clean) {
+      setQuickActionError('Enter a label and plain prompt (up to 4000 characters, never starting with /).');
+      return;
+    }
+    setQuickActionError('');
+    setQuickActions(saveStoredQuickActions([...quickActions, clean]));
+    setNewQuickLabel('');
+    setNewQuickPrompt('');
   }
 
   async function scheduleDraft() {
@@ -366,8 +394,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     else if (reply.type === 'prompt_ack') {
       const pending = pendingPrompt.current;
       if (pending && (!reply.session_id || reply.session_id === pending.session)) {
-        if (drafts.current.get(pending.session) === pending.text) drafts.current.delete(pending.session);
-        if (pending.session === selectedRef.current && promptRef.current === pending.text) changePrompt('');
+        if (pending.fromComposer) {
+          if (drafts.current.get(pending.session) === pending.text) drafts.current.delete(pending.session);
+          if (pending.session === selectedRef.current && promptRef.current === pending.text) changePrompt('');
+        }
         pendingPrompt.current = null; setSending(false); setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).map(item=>item.id === pending.id ? {...item,delivered:true} : item)})); setNotice('');
       }
     }
@@ -528,6 +558,19 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Open any linked desktop through your signed-in account.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
     {limitsPanel && <dialog ref={limitsDialog} className="remote-sheet" aria-labelledby="remote-limits-heading" onClose={()=>setLimitsPanel(false)}><header><h2 id="remote-limits-heading">Limits</h2><button type="button" aria-label="Close limits" onClick={()=>limitsDialog.current?.close()}>Close</button></header><div dangerouslySetInnerHTML={{__html:renderConversationLimitCard(active?.limits || [], active?.agent || '')}} /></dialog>}
     {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><ModelChoices providers={modelProviders} loading={modelsLoading} error={modelsError} disabled={!connected} onRefresh={()=>void loadModels()} onSelect={selectModel}/></dialog>}
+    {quickActionsPanel && <dialog ref={quickActionsDialog} className="remote-sheet" aria-labelledby="remote-quick-actions-heading" onClose={()=>setQuickActionsPanel(false)}>
+      <header><h2 id="remote-quick-actions-heading">Quick prompts</h2><button type="button" aria-label="Close quick prompts" onClick={()=>quickActionsDialog.current?.close()}>Close</button></header>
+      <p className="sp-field-note">Canned prompts are sent as plain chat messages, never shell commands.</p>
+      <div className="sp-quick-actions-list">{quickActions.map(item=><div key={item.id} className="sp-quick-action-row"><div><strong>{item.label}</strong><p>{item.prompt}</p></div><button type="button" disabled={quickActions.length<=1} onClick={()=>setQuickActions(saveStoredQuickActions(quickActions.filter(row=>row.id!==item.id)))}>Remove</button></div>)}</div>
+      <form className="sp-quick-actions-form" onSubmit={addRemoteQuickAction}>
+        <label htmlFor="remote-quick-label">Button label</label>
+        <input id="remote-quick-label" value={newQuickLabel} onChange={event=>setNewQuickLabel(event.target.value)} maxLength={40} required placeholder="Review tests" />
+        <label htmlFor="remote-quick-prompt">Prompt message</label>
+        <textarea id="remote-quick-prompt" value={newQuickPrompt} onChange={event=>setNewQuickPrompt(event.target.value)} maxLength={4000} rows={3} required placeholder="Run the test suite and summarize any failures." />
+        {quickActionError && <p className="remote-feedback" role="alert">{quickActionError}</p>}
+        <div className="dialog-actions"><button type="button" onClick={()=>{setQuickActionError('');setQuickActions(saveStoredQuickActions(DEFAULT_QUICK_ACTIONS));}}>Reset defaults</button><button type="submit" className="sp-primary-action">Add prompt</button></div>
+      </form>
+    </dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
@@ -583,12 +626,17 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <p role="status">{resetArmed?'Reset reconnection armed. Waiting for fresh quota confirmation.':'Reset reconnection is not armed.'}</p>
           <button type="button" disabled={!connected || !active?.can_reset} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:true})}>Reconnect after reset</button><button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:false})}>Cancel reset reconnection</button>
           <div aria-label="Recent events">{automationNotices.filter(item=>(item.conversation_id===selected || !item.conversation_id)).slice(0,8).map(item=><p key={item.id}>{item.message}</p>)}</div>
-        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Read-only history.'}</p>{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div> : <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
+        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Read-only history.'}</p>{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div> : <>
+          <div className="sp-quick-actions" role="toolbar" aria-label="Quick prompts">
+            {quickActions.map(action => <button key={action.id} type="button" className="sp-quick-action" title={action.prompt} disabled={!connected || sending || !active?.can_prompt} onClick={() => submitQuickAction(action)}>{action.label}</button>)}
+            <button type="button" className="sp-quick-action sp-quick-action--manage" aria-label="Manage quick prompts" onClick={() => setQuickActionsPanel(true)}>Customize</button>
+          </div>
+          <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
           <label htmlFor="remote-prompt">Message the agent</label>
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
           <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="submit" disabled={!connected || sending || !prompt.trim() || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
           {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'The agent is busy or waiting for approval. Prompting becomes available when it is idle.'}</p>}
-        </form>}
+        </form></>}
       </> : <div className="remote-empty"><h2>Your conversations</h2><p>Choose a conversation or start an agent to begin.</p><button type="button" className="sp-primary-action" onClick={startNew}>New conversation</button><button type="button" onClick={() => setShowSessions(true)}>Browse history</button></div>}</div>
     </div>}
   </section>;

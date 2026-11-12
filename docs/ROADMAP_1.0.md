@@ -63,3 +63,5 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## Worker A native-usage delivery details
 
 - [x] G7: existing opt-in Antigravity limits now prefer the running server and fall back to bounded, no-inference usage metadata from verified agy 1.5.7; ADR 0029 amended. Other CLI versions stay gated; native macOS/Linux and independent network acceptance remain unverified. Depends on baseline #189 while unmerged.
+## Section C UI status (Worker B)
+- Quick actions UI (console + Remote canned prompts strip and management dialog; local storage + normal prompt path; pending Worker A backend persistence/ADR): implemented in Worker B PR.

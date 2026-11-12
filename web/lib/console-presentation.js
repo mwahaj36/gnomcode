@@ -747,3 +747,63 @@ export function renderConversationLimits(limits = []) {
   if (!limits.length) return '<span>Limits unavailable</span>';
   return limits.map(limit => `<span class="sp-chip sp-chip--${CHIP_CLASS[stateOf(limit)]} sp-conversation-limit" title="${escape(meterTitle(limit))}">${escape(limit.label)} ${escape(valueText(limit))}</span>`).join('');
 }
+
+export const QUICK_ACTIONS_STORAGE_KEY = 'gnomcode-quick-actions-v1';
+
+export const DEFAULT_QUICK_ACTIONS = Object.freeze([
+  Object.freeze({ id: 'continue', label: 'Continue', prompt: 'Continue where you left off and complete the current step.', builtin: true }),
+  Object.freeze({ id: 'summarize-changes', label: 'Summarize changes', prompt: 'Summarize the changes made so far and list any remaining steps.', builtin: true }),
+  Object.freeze({ id: 'run-tests', label: 'Run tests', prompt: 'Run the relevant test suite and summarize any failures.', builtin: true }),
+  Object.freeze({ id: 'explain-error', label: 'Explain error', prompt: 'Explain the most recent error or failing check and propose the smallest fix.', builtin: true }),
+]);
+
+const DISALLOWED_PROMPT_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+
+export function normalizeQuickAction(item) {
+  if (!item || typeof item !== 'object') return null;
+  const label = typeof item.label === 'string' ? item.label.trim().slice(0, 40) : '';
+  const prompt = typeof item.prompt === 'string' ? item.prompt : '';
+  if (!label || !prompt.trim()) return null;
+  if (prompt.length > 4000 || prompt.trimStart().startsWith('/') || DISALLOWED_PROMPT_CONTROL.test(prompt)) return null;
+  const rawId = typeof item.id === 'string' && item.id.trim()
+    ? item.id.trim()
+    : label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'custom';
+  return { id: rawId.slice(0, 48), label, prompt, builtin: Boolean(item.builtin) };
+}
+
+export function mergeQuickActions(items) {
+  if (!Array.isArray(items) || !items.length) return DEFAULT_QUICK_ACTIONS.map(item => ({ ...item }));
+  const seen = new Set();
+  const normalized = [];
+  for (const item of items) {
+    const clean = normalizeQuickAction(item);
+    if (!clean || seen.has(clean.id)) continue;
+    seen.add(clean.id);
+    normalized.push(clean);
+  }
+  return normalized.length ? normalized : DEFAULT_QUICK_ACTIONS.map(item => ({ ...item }));
+}
+
+export function loadStoredQuickActions(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+  try {
+    const raw = storage?.getItem(QUICK_ACTIONS_STORAGE_KEY);
+    return raw ? mergeQuickActions(JSON.parse(raw)) : DEFAULT_QUICK_ACTIONS.map(item => ({ ...item }));
+  } catch {
+    return DEFAULT_QUICK_ACTIONS.map(item => ({ ...item }));
+  }
+}
+
+export function saveStoredQuickActions(items, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+  const merged = mergeQuickActions(items);
+  try {
+    storage?.setItem(QUICK_ACTIONS_STORAGE_KEY, JSON.stringify(merged));
+  } catch {}
+  return merged;
+}
+
+export function renderQuickActionsStrip(actions = DEFAULT_QUICK_ACTIONS, { disabled = false } = {}) {
+  const list = mergeQuickActions(actions);
+  const disabledAttr = disabled ? ' disabled' : '';
+  const buttons = list.map(action => `<button type="button" class="sp-quick-action" data-action="quick-action" data-arg="${escape(action.id)}" title="${escape(action.prompt)}"${disabledAttr}>${escape(action.label)}</button>`).join('');
+  return `<div class="sp-quick-actions" role="toolbar" aria-label="Quick prompts">${buttons}<button type="button" class="sp-quick-action sp-quick-action--manage" data-action="manage-quick-actions" aria-label="Manage quick prompts">Customize</button></div>`;
+}
