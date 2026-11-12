@@ -2337,6 +2337,9 @@ pub(crate) struct ProviderOverview {
     state: gnomcode_core::quota::QuotaState,
     /// Sorted: session, weekly, monthly, then label.
     windows: Vec<QuotaPoolView>,
+    /// Index into `windows` of the tightest window: highest severity, ties by lowest
+    /// remaining percentage. `None` when there are no windows.
+    headline_window: Option<usize>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
     /// "Local logs", "Status line", "Provider API", "Language server" or "Off".
     source_label: String,
@@ -2488,6 +2491,7 @@ fn provider_overviews(
                 (provider_display_name(&slug), None, None)
             };
             Some(ProviderOverview {
+                headline_window: headline_window(&windows),
                 plan: windows.iter().find_map(|w| w.snapshot.plan.clone()),
                 state: windows
                     .iter()
@@ -2505,6 +2509,21 @@ fn provider_overviews(
             })
         })
         .collect()
+}
+
+/// Index of the window with the highest severity, ties broken by the lowest remaining
+/// percentage (windows without a remaining value rank last); the earliest window wins a full tie.
+fn headline_window(windows: &[QuotaPoolView]) -> Option<usize> {
+    windows
+        .iter()
+        .enumerate()
+        .min_by(|(_, a), (_, b)| {
+            b.state.severity().cmp(&a.state.severity()).then_with(|| {
+                let left = |w: &QuotaPoolView| w.remaining_pct.unwrap_or(f64::INFINITY);
+                left(a).total_cmp(&left(b))
+            })
+        })
+        .map(|(index, _)| index)
 }
 
 fn window_rank(window: gnomcode_core::QuotaWindow) -> u8 {
@@ -3896,6 +3915,109 @@ mod tests {
         );
         assert_eq!(list[1].state, QuotaState::Exhausted);
         assert_eq!(list[1].updated_at, Some(now));
+    }
+
+    #[test]
+    fn overview_headline_window_is_tightest_by_severity_then_remaining() {
+        use gnomcode_core::{QuotaWindow, TrustLevel};
+        let now = chrono::Utc::now();
+        let reset = Some(now + chrono::Duration::days(3));
+        let at = |list: &[super::ProviderOverview]| list[1].headline_window;
+        // No windows: none.
+        assert_eq!(
+            overviews(Vec::new(), now, false, false)[1].headline_window,
+            None
+        );
+        // Windows sort session, weekly, monthly. Weekly (index 1) is low; the others are ok.
+        let list = overviews(
+            vec![
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::FiveHour,
+                    10.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::Weekly,
+                    90.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::Monthly,
+                    20.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+            ],
+            now,
+            false,
+            false,
+        );
+        assert_eq!(at(&list), Some(1));
+        // Two low windows: the one with less left wins.
+        let list = overviews(
+            vec![
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::FiveHour,
+                    85.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::Weekly,
+                    95.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+            ],
+            now,
+            false,
+            false,
+        );
+        assert_eq!(at(&list), Some(1));
+        // Exhausted outranks low even when listed later.
+        let list = overviews(
+            vec![
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::FiveHour,
+                    95.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+                pool(
+                    "codex",
+                    "codex",
+                    QuotaWindow::Weekly,
+                    100.0,
+                    reset,
+                    TrustLevel::Exact,
+                    now,
+                ),
+            ],
+            now,
+            false,
+            false,
+        );
+        assert_eq!(at(&list), Some(1));
     }
 
     #[test]

@@ -25,3 +25,7 @@
 
 ## Follow-up fix
 - `sync::tests::remote_snapshot_contains_no_local_project_path_or_pairing_token` pins the key set of synced quota rows. The new derived fields (`state`, `pace`, `stale`, `label`, `pool`, `window_label`) are metadata only, so the expected keys were extended; the Remote and web console now receive state without recomputing it.
+
+## Rebase and headline window
+- Rebased onto main after the activity heatmap API merged; kept both routes and both session entries.
+- Added `headline_window` to the provider overview (plan section 15.1): index of the window with the highest severity, ties by lowest remaining percentage, `None` without windows. Test: `overview_headline_window_is_tightest_by_severity_then_remaining`.
