@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray, type MenuItemConstructorOptions } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { get, type IncomingMessage } from 'node:http';
 import * as path from 'node:path';
 import { activationArguments, workspaceLaunchHash, desktopNotification, daemonEnvironment, isAllowedExternalUrl, isAllowedResource, isDaemonNavigation, trayBadgeName, trayTooltip, windowChrome } from './security';
-import { dataHome, readDaemon } from './daemon-client';
+import { dataHome, readDaemon, daemonRequest } from './daemon-client';
+import { formatTrayMenu, formatTrayTooltip, type TrayAction, type TrayItem, type TrayProvider, type TraySession } from './tray-menu';
 import {retainNotification,repairNotificationShortcut} from './notifications';
 
 let window: BrowserWindow | null = null;
@@ -13,6 +14,10 @@ let quitting = false;
 let daemonPort = 0;
 let spawnedDaemon: ChildProcess | null = null;
 const retainedNotifications=new Set<Notification>();
+let trayMenuOpen = false;
+let trayMenuKey = '';
+let trayLimitsTooltip: string | null = null;
+let trayStatusTooltip = 'Gnomcode';
 
 function stopDaemon(): void {
   if (spawnedDaemon && !spawnedDaemon.killed) {
@@ -69,13 +74,81 @@ async function refreshTray(url: string): Promise<void> {
     request.on('timeout', () => request.destroy());
     request.on('error', () => resolve(null));
   });
-  tray?.setToolTip(trayTooltip(status));
+  trayStatusTooltip = trayTooltip(status);
+  tray?.setToolTip(trayLimitsTooltip ?? trayStatusTooltip);
   if (tray) {
     const badge = trayBadgeName(status);
     const resource = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../scripts');
     tray.setImage(path.join(resource, badge === 'gnomcode-tray.ico' ? badge : path.join('tray-badges', badge)));
   }
 }
+let currentDaemonUrl = '';
+let latestTrayTemplate: TrayItem[] | null = null;
+let trayMenuOpenedAt = 0;
+
+function openView(view: 'usage' | 'sessions'): void {
+  showWindow();
+  if (!window) return;
+  try {
+    const target = new URL(window.webContents.getURL());
+    target.hash = view;
+    void window.loadURL(target.href).catch(() => {});
+  } catch {
+    // The window may have no page yet; showing it is enough.
+  }
+}
+
+function runTrayAction(action: TrayAction): void {
+  switch (action.kind) {
+    case 'open': showWindow(); break;
+    case 'quit': quitting = true; stopDaemon(); app.quit(); break;
+    case 'open-view': openView(action.view); break;
+    case 'copy': clipboard.writeText(action.text); break;
+    case 'focus-session':
+      void daemonRequest(currentDaemonUrl, 'POST', `/api/v1/sessions/${encodeURIComponent(action.id)}/focus`, 5000).then(result => {
+        if (!(result && typeof result === 'object' && (result as { focused?: unknown }).focused === true)) openView('sessions');
+      });
+      break;
+  }
+}
+
+function toMenuItem(item: TrayItem): MenuItemConstructorOptions {
+  if (item.type === 'separator') return { type: 'separator' };
+  const options: MenuItemConstructorOptions = { label: item.label, enabled: item.enabled !== false };
+  if (item.submenu) options.submenu = item.submenu.map(toMenuItem);
+  const action = item.action;
+  if (action) options.click = () => runTrayAction(action);
+  return options;
+}
+
+// Rebuilding a native menu while it is open is unsafe on Windows, so a changed template waits for menu-will-close.
+function applyTrayMenu(): void {
+  const menuOpen = trayMenuOpen && Date.now() - trayMenuOpenedAt < 120000;
+  if (!tray || !latestTrayTemplate || menuOpen) return;
+  const key = JSON.stringify(latestTrayTemplate);
+  if (key === trayMenuKey) return;
+  const menu = Menu.buildFromTemplate(latestTrayTemplate.map(toMenuItem));
+  menu.on('menu-will-show', () => { trayMenuOpen = true; trayMenuOpenedAt = Date.now(); });
+  menu.on('menu-will-close', () => { trayMenuOpen = false; setImmediate(applyTrayMenu); });
+  tray.setContextMenu(menu);
+  trayMenuKey = key;
+}
+
+async function refreshTrayMenu(): Promise<void> {
+  const [overview, sessions] = currentDaemonUrl
+    ? await Promise.all([
+        daemonRequest(currentDaemonUrl, 'GET', '/api/v1/providers/overview'),
+        daemonRequest(currentDaemonUrl, 'GET', '/api/v1/sessions?status=ongoing&limit=100'),
+      ])
+    : [null, null];
+  const providers = Array.isArray(overview) ? overview as TrayProvider[] : null;
+  const list = sessions && typeof sessions === 'object' && Array.isArray((sessions as { sessions?: unknown }).sessions) ? (sessions as { sessions: TraySession[] }).sessions : null;
+  latestTrayTemplate = formatTrayMenu(providers, list, new Date());
+  trayLimitsTooltip = providers ? formatTrayTooltip(providers) : null;
+  tray?.setToolTip(trayLimitsTooltip ?? trayStatusTooltip);
+  applyTrayMenu();
+}
+
 function showWindow(): void {
   if (!window) return;
   if (window.isMinimized()) window.restore();
@@ -203,7 +276,9 @@ async function start(): Promise<void> {
   try {
     tray = new Tray(icon);
     tray.setToolTip('Gnomcode');
-    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Gnomcode', click: showWindow }, { type: 'separator' }, { label: 'Quit Gnomcode', click: () => { quitting = true; stopDaemon(); app.quit(); } }]));
+    currentDaemonUrl = baseUrl;
+    latestTrayTemplate = formatTrayMenu(null, null, new Date());
+    applyTrayMenu();
     if(process.platform==='win32')tray.on('click',showWindow);
     tray.on('double-click', showWindow);
   } catch {
@@ -233,8 +308,13 @@ async function start(): Promise<void> {
         await current.loadURL(targetUrl.href);
         connectedUrl = nextUrl;
       }
+      currentDaemonUrl = nextUrl;
       await refreshTray(nextUrl);
     } catch {
+      currentDaemonUrl = '';
+      trayLimitsTooltip = null;
+      latestTrayTemplate = formatTrayMenu(null, null, new Date());
+      applyTrayMenu();
       tray?.setToolTip('Gnomcode: daemon unavailable');
     } finally {
       checking = false;
@@ -242,6 +322,8 @@ async function start(): Promise<void> {
   };
   void checkDaemon();
   setInterval(() => { void checkDaemon(); }, 5000).unref();
+  void refreshTrayMenu();
+  setInterval(() => { void refreshTrayMenu(); }, 30000).unref();
 }
 
 app.setName('Gnomcode');
