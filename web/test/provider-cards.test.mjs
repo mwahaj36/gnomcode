@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { renderMeterRow, renderPoolGroup, renderProviderCard, renderProviderCards, renderQuota, renderConversationLimits, updateProviderCards } from '../lib/console-presentation.js';
 
 const future = hours => new Date(Date.now() + hours * 3600000).toISOString();
@@ -113,7 +114,7 @@ test('conversation limits are chips whose state comes from Rust', () => {
   const html = renderConversationLimits([win({ label: 'Weekly', state: 'low', remaining_pct: 12 }), { label: 'Old', remaining_pct: 50, basis: 'exact' }]);
   assert.match(html, /sp-chip sp-chip--low sp-conversation-limit" title="Provider API\./);
   assert.match(html, /Weekly 12% left/);
-  assert.match(html, /sp-chip--unknown[^>]*>Old 50% left/, 'no state from an older desktop renders plainly');
+  assert.match(html, /sp-chip--neutral[^>]*>Old 50% left/, 'no state from an older desktop renders plainly');
 });
 
 test('raw pools from the web console group into one card per provider', () => {
@@ -159,4 +160,44 @@ test('open state survives re-render and persists in localStorage, closed by defa
   assert.equal(reloaded.cards[0].open, true, 'a stored open card opens on the next page load');
   globalThis.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
   assert.doesNotThrow(() => updateProviderCards(fakeElement(), list));
+});
+
+const stateless = over => { const { state, ...rest } = win(over); return rest; };
+
+test('windows without a Rust state show no chip and a neutral meter, not No data', () => {
+  const html = renderProviderCard(card({ state: undefined, windows: [stateless()] }));
+  assert.doesNotMatch(html, /No data/);
+  assert.doesNotMatch(html, /sp-chip/);
+  assert.match(html, /sp-meter-row--plain/);
+  assert.match(html, /<i class="is-plain">/);
+  assert.match(html, /42% left/);
+});
+
+test('No data stays for a window with no reading and a card with no windows', () => {
+  assert.match(renderProviderCard(card({ state: undefined, windows: [stateless({ remaining_pct: null })] })), /No data/);
+  assert.match(renderProviderCard(card({ windows: [] })), /No data/);
+});
+
+test('the grid aligns cards to their own height', () => {
+  const css = readFileSync(new URL('../app/gnomcode-console.css', import.meta.url), 'utf8');
+  assert.match(css, /\.sp-card-grid \{[^}]*align-items: start;/);
+});
+
+test('multi-limit windows without a pool are grouped by limit_id', () => {
+  const windows = [win({ pool: null, limit_id: 'gemini_pro', window: 'weekly' }), win({ pool: null, limit_id: 'claude_models', window: 'weekly' })];
+  const html = renderProviderCard(card({ provider: 'antigravity', windows }));
+  assert.match(html, /sp-pool-name">Gemini Pro</);
+  assert.match(html, /sp-pool-name">Claude Models</);
+  assert.doesNotMatch(renderProviderCard(card({ windows: [win({ pool: null }), win({ pool: null, window: 'weekly' })] })), /sp-pool-name/);
+});
+
+test('known providers get a monochrome svg mark, unknown ones a letter', () => {
+  for (const provider of ['claude-code', 'codex', 'gemini-cli', 'antigravity']) {
+    const mark = renderProviderCard(card({ provider })).match(/<span class="sp-provider-mark[\s\S]*?<\/span>/)[0];
+    assert.match(mark, /aria-hidden="true"/);
+    assert.match(mark, /<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"/, provider);
+  }
+  const letter = renderProviderCard(card({ provider: 'mystery', display_name: 'Mystery' })).match(/<span class="sp-provider-mark[\s\S]*?<\/span>/)[0];
+  assert.doesNotMatch(letter, /<svg/);
+  assert.match(letter, />M</);
 });
