@@ -2544,7 +2544,7 @@ impl Database {
             - chrono::Duration::milliseconds(gnomcode_core::presence::RECENT_ACTIVITY_GRACE_MS))
         .to_rfc3339();
         let stale_cutoff = (now
-            - chrono::Duration::milliseconds(gnomcode_core::presence::STALE_EXECUTION_LIMIT_MS))
+            - chrono::Duration::milliseconds(gnomcode_core::presence::APPROVAL_WAIT_LIMIT_MS))
         .to_rfc3339();
         // Open tool/model executions use the shorter limit so counts match presence classification.
         let execution_cutoff = (now
