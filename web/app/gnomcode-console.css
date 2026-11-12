@@ -663,3 +663,6 @@ body.sp-native-console.navigation-expanded .sp-console-nav .rail-label{opacity:1
 .sp-limit-unknown b{color:var(--sp-text-3)}
 .sp-limit-missing{display:grid;grid-template-columns:minmax(64px,1fr) minmax(0,2fr);gap:16px;padding:16px 0;border-bottom:1px solid var(--sp-border);font:13px/1.5 var(--sp-font-mono)}
 .sp-limit-missing span{color:var(--sp-text-3);font-family:var(--sp-font-sans);text-align:right}
+.sp-limits-compact>.sp-limit-row{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,3fr);align-items:start;gap:16px;padding:16px 0;border-bottom:1px solid var(--sp-border);font:13px/1.5 var(--sp-font-mono)}
+.sp-limits-compact>.sp-limit-row>strong,.sp-limit-missing>strong{overflow-wrap:normal;word-break:keep-all}
+.sp-limits-compact>.sp-limit-row .sp-limit-windows{justify-content:flex-end}
