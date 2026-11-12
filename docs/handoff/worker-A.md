@@ -1,5 +1,16 @@
 # Worker A handoff
 
+## 2026-11-13: baseline fixed in PR #189
+
+- PR: https://github.com/mwahaj36/spawnt/pull/189, title `fix: restore green baseline`; branch `fix/restore-green-baseline`, commit `0d439e6d07c02e814f4f4d0cb050e17d88d7c9d1`, based on origin/main `fee3c8e`.
+- Root cause verified with git history: PR #132 (`1f96ab22`) moved the consent guard below cloud-auth loading. SPEC 3.15 and ADR 0025 already require consent first. Restored the guard in the existing device-action handler after local API authentication; test unchanged. The original test freshly failed 401 versus 428, then passed after the fix.
+- Upgraded root Cargo.toml/Cargo.lock from ruzstd 0.8.3 to 0.9.1 for RUSTSEC-2026-0344. `cargo info` verifies declared Rust 1.87 minimum, matching the workspace. Lockfile changes only this package; no API adjustment, ignore or deny.toml change. Ingest's archive decoder makes the advisory relevant; an ignore was not justified.
+- Full gate PASS with CARGO_INCREMENTAL=0 and isolated GNOMCODE_HOME/CLAUDE_CONFIG_DIR/CODEX_HOME: fmt, workspace clippy with -D warnings, workspace tests, cargo-deny and core purity. Archive decode regression also passes. Whitespace/LF/UTF-8 without BOM/zero-mojibake checks passed. Web/desktop gates not applicable; no UI/presenter changes.
+- Files: existing consent handler, root Cargo.toml/Cargo.lock, appended SPEC clarification, new session `2026-11-13-restore-green-baseline.md` and session-index line. No endpoint/JSON shape/setting/ADR changes. This is the specifically authorized one-PR baseline exception to file ownership, not a general allowance.
+- Verified: automated isolated Windows API regression and actual dependency resolution/build. Native provider, phone and macOS/Linux acceptance not verified. No deviations or disabled checks.
+- Worker B notified via https://github.com/mwahaj36/spawnt/pull/186#issuecomment-6839082900: may base new PRs on origin/fix/restore-green-baseline until #189 merges; after merge fetch and base on origin/main. No merge by Worker A.
+- G5 #187 rebase onto this baseline is in progress; keep its dependency on #189 explicit. Baseline worktree and generated target removed immediately after opening #189. No new blocker at this point.
+
 ## 2026-11-13: G5 draft published; baseline gates blocked
 
 - Roadmap item and PR: G5 backend, https://github.com/mwahaj36/spawnt/pull/187 (draft, not complete). Log PR: https://github.com/mwahaj36/spawnt/pull/185.
