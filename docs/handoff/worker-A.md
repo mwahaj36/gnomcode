@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: ownership resolved; G5 in progress
+
+The owner explicitly permits Worker A to append new Remote request match arms/dispatch entries to `crates/daemon/src/remote.rs` and new `mod`/`pub(crate) use` lines to `crates/daemon/src/lib.rs`. Handler logic stays in Worker A's new files; existing code must not be rewritten or reordered. Worker B never edits these files. This authorization applies to G5, protocol approvals and section C backend APIs.
+
+- G5 branch: `feat/remote-interrupt`, freshly based on `origin/main` at `fee3c8ee8529213c60d541e7e160594979d6ad44`.
+- Previous ownership blocker is resolved. Prior sections below are historical evidence, not the current blocking state.
+- G5 implementation and live provider checks are in progress; no feature PR or passing test claim yet.
+
 ## 2026-11-13: ownership blocker before G5
 
 - Branch: `docs/handoff-worker-A`.
