@@ -358,6 +358,35 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     }
 }
 
+/// Holds one sleep inhibition while a hosted agent is busy or scheduled work is pending
+/// (SPEC 3.14.3). `GNOMCODE_KEEP_AWAKE=0` disables it; any lookup failure counts as no demand.
+pub(crate) async fn sync_keep_awake(
+    db: &Arc<Mutex<Database>>,
+    awake: &mut gnomcode_platform::keepawake::SleepInhibitor,
+) {
+    use gnomcode_core::SessionState::{AwaitingApproval, Thinking, Tool};
+    let wanted = std::env::var_os("GNOMCODE_KEEP_AWAKE").is_none_or(|v| v != "0")
+        && store(db, |db| {
+            let limit =
+                chrono::Duration::milliseconds(gnomcode_core::presence::OPEN_EXECUTION_LIMIT_MS);
+            let busy = !gnomcode_pty::list_active_sessions().is_empty()
+                && db.list_active_sessions(1000)?.iter().any(|s| {
+                    matches!(s.state, Thinking | Tool | AwaitingApproval)
+                        && chrono::Utc::now() - s.last_event_at <= limit
+                });
+            Ok(busy
+                || !db.due_messages(i64::MAX)?.is_empty()
+                || !db.list_resume_queue()?.is_empty())
+        })
+        .await
+        .unwrap_or(false);
+    match (wanted, awake.holds()) {
+        (true, 0) => awake.acquire(),
+        (false, 1) => awake.release(),
+        _ => {}
+    }
+}
+
 async fn deliver_due(db: &Arc<Mutex<Database>>) {
     let Ok(messages) = store(db, move |db| {
         db.due_messages(chrono::Utc::now().timestamp())
