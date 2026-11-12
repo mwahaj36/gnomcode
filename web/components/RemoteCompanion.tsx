@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -17,7 +17,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -31,6 +31,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [changesLoading, setChangesLoading] = useState(false);
   const [changesState, setChangesState] = useState<{ session_id: string; repo?: string; diff?: string; status?: string; lossy?: boolean; error?: string } | null>(null);
   const changesRequested = useRef(false);
+  const [filesPanel, setFilesPanel] = useState(false);
+  const [filePathInput, setFilePathInput] = useState('');
+  const [fileListState, setFileListState] = useState<RepoFileListing | null>(null);
+  const [fileData, setFileData] = useState<RepoFileData | null>(null);
+  const filesRequested = useRef(false);
   const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'unavailable' | 'paired'>('ready');
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -133,6 +138,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
   useEffect(()=>{if(changesPanel)changesDialog.current?.showModal();},[changesPanel]);
   useEffect(()=>{setQuickActions(loadStoredQuickActions());},[]);
+  const filesDialog=useRef<HTMLDialogElement|null>(null);
+  useEffect(()=>{if(filesPanel)filesDialog.current?.showModal();},[filesPanel]);
   const sidebarToggle=useRef<HTMLButtonElement|null>(null);
   const sidebarClose=useRef<HTMLButtonElement|null>(null);
 
@@ -323,6 +330,24 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     setChangesState(null);
     try { await send({ type: 'changes', session_id: selectedRef.current }); }
     catch { changesRequested.current = false; setChangesLoading(false); setChangesState({ session_id: selectedRef.current, error: 'Could not reach your desktop for workspace changes.' }); }
+  async function browseRepoFiles(path = '') {
+    if (!authenticated.current || !selectedRef.current) return;
+    filesRequested.current = true;
+    setFilesPanel(true);
+    setFileListState({ loading: true });
+    try { await send({ type: 'repo_files', session_id: selectedRef.current, path }); }
+    catch { filesRequested.current = false; setFileListState({ error: 'Could not reach your desktop for workspace files.' }); }
+  }
+
+  async function readRepoFile(rawPath: string) {
+    if (!authenticated.current || !selectedRef.current) return;
+    const check = normalizeWorkspaceRelPath(rawPath);
+    if (!check.ok) { setFileData({ error: check.error }); return; }
+    setFilePathInput(check.path);
+    filesRequested.current = true;
+    setFileData({ loading: true });
+    try { await send({ type: 'repo_file', session_id: selectedRef.current, path: check.path }); }
+    catch { filesRequested.current = false; setFileData({ error: 'Could not read workspace file from your desktop.' }); }
   }
 
   function requestSessions(){return send({type:'sessions',...historyQuery.current});}
@@ -431,6 +456,16 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       setChangesLoading(false);
       if (!reply.session_id || reply.session_id === selectedRef.current) {
         setChangesState({ session_id: reply.session_id || selectedRef.current, repo: reply.repo, diff: reply.diff || '', status: reply.status || '', lossy: Boolean(reply.lossy) });
+    else if (reply.type === 'repo_files') {
+      filesRequested.current = false;
+      if (!reply.session_id || reply.session_id === selectedRef.current) {
+        setFileListState({ path: reply.path || '', parent: parentWorkspacePath(reply.path || ''), entries: reply.entries || [], truncated: Boolean(reply.truncated) });
+      }
+    }
+    else if (reply.type === 'repo_file') {
+      filesRequested.current = false;
+      if (!reply.session_id || reply.session_id === selectedRef.current) {
+        setFileData({ path: reply.path || '', content: reply.content || '', lossy: Boolean(reply.lossy), truncated: Boolean(reply.truncated) });
       }
     }
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
@@ -439,6 +474,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(reply.request_type==='changes' || (changesRequested.current && /unsupported remote command/i.test(reply.message || ''))){
         changesRequested.current=false;setChangesLoading(false);
         setChangesState({session_id:selectedRef.current,error:/unsupported/i.test(reply.message || '') ? 'Update Gnomcode on your desktop to inspect git changes from your phone.' : (reply.message || 'Could not load git changes.')});
+      if (reply.request_type === 'repo_files' || reply.request_type === 'repo_file' || (filesRequested.current && /unsupported remote command/i.test(reply.message || ''))) {
+        filesRequested.current = false;
+        const msg = /unsupported/i.test(reply.message || '')
+          ? 'Update Gnomcode on your desktop to inspect workspace files from your phone.'
+          : (reply.message || 'Could not inspect workspace file.');
+        if (reply.request_type === 'repo_file') setFileData({ error: msg });
+        else setFileListState({ error: msg });
         return;
       }
       if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
@@ -562,6 +604,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     changePrompt(drafts.current.get(id) || '');
     setHasEarlier(false); historyAnchor.current = null;
     changesRequested.current = false; setChangesPanel(false); setChangesLoading(false); setChangesState(null);
+    filesRequested.current = false; setFilesPanel(false); setFileListState(null); setFileData(null); setFilePathInput('');
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
@@ -612,6 +655,23 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       <header><h2 id="remote-changes-heading">Workspace changes</h2><div className="sp-changes-actions"><button type="button" disabled={!connected || changesLoading} onClick={()=>void loadChanges()}>Refresh</button><button type="button" aria-label="Close workspace changes" onClick={()=>changesDialog.current?.close()}>Close</button></div></header>
       <div className="sp-changes-sheet-body" dangerouslySetInnerHTML={{__html:renderChangesView(changesLoading ? { loading: true } : changesState)}} />
     </dialog>}
+    {filesPanel && <dialog ref={filesDialog} className="remote-sheet sp-files-sheet" aria-labelledby="remote-files-heading" onClose={()=>setFilesPanel(false)}>
+      <header><h2 id="remote-files-heading">Workspace files</h2><button type="button" aria-label="Close workspace files" onClick={()=>filesDialog.current?.close()}>Close</button></header>
+      <form className="sp-file-form" onSubmit={event=>{event.preventDefault();void readRepoFile(filePathInput);}}>
+        <label className="visually-hidden" htmlFor="remote-file-path">Relative workspace file path</label>
+        <input id="remote-file-path" type="text" value={filePathInput} onChange={event=>setFilePathInput(event.target.value)} placeholder="src/main.rs" autoComplete="off" />
+        <button type="submit" disabled={!connected}>Open</button>
+      </form>
+      <div className="sp-files-sheet-body">
+        {fileListState?.loading && <p className="sp-provider-empty" role="status">Loading workspace files...</p>}
+        {fileListState?.error && <p className="sp-field-note sp-tone-red" role="alert">{fileListState.error}</p>}
+        {fileListState && !fileListState.loading && !fileListState.error && <div className="sp-file-entries">
+          {typeof fileListState.parent === 'string' && <button type="button" className="sp-file-entry sp-file-entry--dir" onClick={()=>void browseRepoFiles(fileListState.parent || '')}>Up one folder</button>}
+          {(fileListState.entries || []).map(entry => <button key={entry.path} type="button" className={`sp-file-entry ${entry.kind === 'dir' ? 'sp-file-entry--dir' : 'sp-file-entry--file'}`} onClick={() => entry.kind === 'dir' ? void browseRepoFiles(entry.path) : void readRepoFile(entry.path)}><code>{entry.name}</code><span>{entry.kind === 'dir' ? 'Folder' : 'File'}</span></button>)}
+        </div>}
+        <div dangerouslySetInnerHTML={{__html:renderFileViewer(fileData)}} />
+      </div>
+    </dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
@@ -650,7 +710,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <div className="sp-approval-actions"><button type="button" disabled={!connected} aria-label={`Deny ${item.tool}`} onClick={()=>decideApproval(item.id,'deny')}>Deny</button><button type="button" disabled={!connected} aria-label={`Approve ${item.tool} once`} onClick={()=>decideApproval(item.id,'approve')}>Approve once</button></div>
         </article>)}</section>}
         {selected ? <>
-        <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button></div>
+        <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void browseRepoFiles('')}>Files</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button></div>
         {historyLoading && <p role="status">Loading messages...</p>}
         {hasEarlier && <button type="button" disabled={!connected || historyLoading} onClick={() => {
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};
