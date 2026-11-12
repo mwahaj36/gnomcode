@@ -338,7 +338,7 @@ pub async fn run_pty_host_resuming(
         bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
     };
 
-    let scrollback = Arc::new(Mutex::new(Scrollback::new(256 * 1024)));
+    let scrollback = Arc::new(Mutex::new(Scrollback::new(SCROLLBACK_BYTES)));
     let (output_tx, _) = broadcast::channel(128);
     let (input_tx, input_rx) = std::sync::mpsc::channel::<PtyInput>();
     let stopping = Arc::new(AtomicBool::new(false));
@@ -591,34 +591,144 @@ async fn host_health_handler(
     .into_response()
 }
 
-fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
+const SCROLLBACK_BYTES: usize = 256 * 1024;
+/// Recent characters of rendered text that readiness matching may look at.
+const SCREEN_TAIL_CHARS: usize = 8192;
+
+/// Lower-cased, whitespace-collapsed text of what the terminal shows now.
+///
+/// shortcut: not a terminal emulator; cursor-forward becomes a space and any other cursor
+/// move a newline, and text before the last screen clear is dropped (`cut`). Upgrade to a
+/// real screen model if a TUI redraws in place without clearing.
+fn screen_text(bytes: &[u8], cut: bool) -> String {
     let raw = String::from_utf8_lossy(bytes);
-    let mut characters = raw.chars();
+    let start = if cut {
+        ["\x1b[2J", "\x1b[3J", "\x1b[?1049h", "\x1bc"]
+            .iter()
+            .filter_map(|mark| raw.rfind(mark).map(|at| at + mark.len()))
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let mut characters = raw[start..].chars();
     let mut text = String::new();
     while let Some(character) = characters.next() {
-        if character == '\x1b' {
-            if characters.next() == Some('[') {
+        if character != '\x1b' {
+            text.push(character);
+            continue;
+        }
+        match characters.next() {
+            Some('[') => {
                 for control in characters.by_ref() {
                     if ('@'..='~').contains(&control) {
+                        match control {
+                            'C' => text.push(' '),
+                            'A' | 'B' | 'E' | 'F' | 'H' | 'd' | 'f' => text.push('\n'),
+                            _ => {}
+                        }
                         break;
                     }
                 }
             }
-        } else {
-            text.push(character);
+            Some(']') => {
+                while let Some(control) = characters.next() {
+                    if control == '\x07' || (control == '\x1b' && characters.next().is_some()) {
+                        break;
+                    }
+                }
+            }
+            _ => {}
         }
     }
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let question = if agent == "codex" {
-        text.rfind("hooks are new or changed")
-    } else {
-        text.rfind("Do you trust the contents of this project?")
+    let text = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    let tail = text
+        .char_indices()
+        .rev()
+        .nth(SCREEN_TAIL_CHARS)
+        .map_or(0, |(at, _)| at);
+    text[tail..].to_owned()
+}
+
+fn last_of(text: &str, marks: &[&str]) -> Option<usize> {
+    marks.iter().filter_map(|mark| text.rfind(mark)).max()
+}
+
+/// Position of the last Claude Code composer box: a long rule followed by the `>` prompt.
+fn last_composer(text: &str) -> Option<usize> {
+    let (mut rule, mut found) = (0, None);
+    for (at, character) in text.char_indices() {
+        match character {
+            '─' => rule += 1,
+            ' ' => {}
+            '>' | '❯' if rule >= 10 => {
+                found = Some(at);
+                rule = 0;
+            }
+            _ => rule = 0,
+        }
+    }
+    found
+}
+
+/// True while the agent shows a startup, trust, login or choice screen, or has not yet
+/// shown its normal input prompt. Chat input must wait; it is never answered for the user.
+///
+/// Matching is per agent on the recent rendered screen, and the latest marker wins. The
+/// strings for agy, Codex and Claude Code were seen live (Claude Code v2.1.322, see
+/// `fixtures/claude-code/`); the Gemini CLI strings come from its source and are unverified.
+fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
+    let (blockers, ready, require_ready): (&[&str], &[&str], bool) = match agent {
+        "codex" => (&["hooks are new or changed"], &["? for shortcuts"], false),
+        "claude" | "claude-code" => (
+            &[
+                "quick safety check",
+                "yes, i trust this folder",
+                "yes, i accept",
+                "select login method",
+                "paste code here if prompted",
+                "choose the text style",
+                "press enter to continue",
+                "detected a custom api key",
+                "enter to confirm",
+                "esc to cancel",
+            ],
+            &["? for shortcuts"],
+            true,
+        ),
+        "gemini" | "gemini-cli" => (
+            &[
+                "do you trust the files in this folder",
+                "how would you like to authenticate",
+                "(use enter to select)",
+                "select theme",
+                "waiting for auth",
+                "logging in with google",
+            ],
+            &["type your message or @path/to/file"],
+            true,
+        ),
+        _ => (
+            &["do you trust the contents of this project?"],
+            &["? for shortcuts"],
+            false,
+        ),
     };
-    let Some(question) = question else {
-        return false;
+    let claude = matches!(agent, "claude" | "claude-code");
+    let marks = |text: &str| {
+        let composer = if claude { last_composer(text) } else { None };
+        last_of(text, ready).max(composer)
     };
-    text.rfind("? for shortcuts")
-        .is_none_or(|ready| ready < question)
+    let recent = screen_text(bytes, true);
+    if let Some(blocked) = last_of(&recent, blockers) {
+        return marks(&recent).is_none_or(|ready| ready < blocked);
+    }
+    // Once the ring wraps, the startup frames are gone and only blockers can be judged.
+    require_ready && bytes.len() < SCROLLBACK_BYTES && marks(&screen_text(bytes, false)).is_none()
 }
 
 async fn host_input_handler(
@@ -639,8 +749,10 @@ async fn host_input_handler(
     if body.is_empty() {
         return StatusCode::BAD_REQUEST;
     }
-    if matches!(state.agent.as_str(), "antigravity" | "agy" | "codex")
-        && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
+    if matches!(
+        state.agent.as_str(),
+        "antigravity" | "agy" | "codex" | "claude" | "claude-code" | "gemini" | "gemini-cli"
+    ) && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
         && state.scrollback.lock().map_or(true, |output| {
             let bytes = output.bytes();
             startup_needs_setup(&state.agent, &bytes)
@@ -678,7 +790,8 @@ fn codex_prompt_ready(bytes: &[u8]) -> bool {
     if let Some(idle) = idle {
         return working.is_none_or(|working| idle > working);
     }
-    text.contains("? for shortcuts") && !text.trim_end().ends_with("loading")
+    let screen = screen_text(bytes, true);
+    screen.contains("? for shortcuts") && !screen.ends_with("loading")
 }
 
 async fn host_stop_handler(
@@ -1068,6 +1181,121 @@ mod tests {
         let mut ready = blocked.to_vec();
         ready.extend_from_slice(b"\x1b[2J\r\n? for shortcuts");
         assert!(!startup_needs_setup("codex", &ready));
+    }
+
+    const CLAUDE_TRUST: &[u8] =
+        include_bytes!("../../../fixtures/claude-code/v2.1.322/trust-dialog.pty");
+    const CLAUDE_READY: &[u8] =
+        include_bytes!("../../../fixtures/claude-code/v2.1.322/ready-composer.pty");
+    const GEMINI_TRUST: &[u8] = b"\x1b[2J\x1b[H\x1b[1mDo\x1b[1Cyou\x1b[1Ctrust\x1b[1Cthe\x1b[1Cfiles\x1b[1Cin\x1b[1Cthis\x1b[1Cfolder?\x1b[0m\r\n1.\x1b[1CTrust\x1b[1Cfolder\r\n2. Trust parent folder\r\n3. Don't trust";
+    const GEMINI_READY: &[u8] = b"\x1b[2J\x1b[H\x1b]0;Gemini CLI\x07\x1b[38;5;244m>\x1b[0m\x1b[1C\x1b[7m \x1b[0m\x1b[2mType\x1b[1Cyour\x1b[1Cmessage\x1b[1Cor\x1b[1C@path/to/file\x1b[0m";
+
+    #[test]
+    fn claude_trust_dialog_holds_chat_until_the_composer_returns() {
+        assert!(startup_needs_setup("claude-code", CLAUDE_TRUST));
+        assert!(startup_needs_setup("claude", b""), "no composer yet");
+        assert!(!startup_needs_setup("claude-code", CLAUDE_READY));
+        let mut accepted = CLAUDE_TRUST.to_vec();
+        accepted.extend_from_slice(b"\x1b[?1049h\x1b[2J");
+        accepted.extend_from_slice(CLAUDE_READY);
+        assert!(!startup_needs_setup("claude-code", &accepted));
+        let mut again = CLAUDE_READY.to_vec();
+        again.extend_from_slice(CLAUDE_TRUST);
+        assert!(startup_needs_setup("claude-code", &again));
+    }
+
+    #[test]
+    fn claude_stale_dialog_text_above_a_ready_prompt_does_not_block() {
+        let mut ring = CLAUDE_TRUST.to_vec();
+        for line in 0..200 {
+            ring.extend_from_slice(format!("\r\nwork line {line}").as_bytes());
+        }
+        ring.extend_from_slice(b"\r\n? for shortcuts");
+        assert!(!startup_needs_setup("claude", &ring));
+        ring.extend_from_slice(b"\r\nOK\x1b[1Cto\x1b[1Cproceed? Enter to confirm");
+        assert!(
+            startup_needs_setup("claude", &ring),
+            "newer choice footer wins"
+        );
+    }
+
+    #[test]
+    fn claude_login_and_bypass_screens_hold_chat() {
+        for screen in [
+            &b"Select login method:\r\n> 1. Claude account"[..],
+            b"Bypass Permissions mode\r\n1. No, exit\r\n2. Yes, I accept",
+            b"Choose the text style that looks best",
+        ] {
+            assert!(startup_needs_setup("claude", screen));
+        }
+    }
+
+    #[test]
+    fn a_wrapped_ring_without_markers_is_not_treated_as_startup() {
+        let ring = vec![b'x'; SCROLLBACK_BYTES];
+        assert!(!startup_needs_setup("claude", &ring));
+        assert!(!startup_needs_setup("gemini", &ring));
+    }
+
+    #[test]
+    fn gemini_trust_and_auth_screens_hold_chat_until_the_prompt_returns() {
+        assert!(startup_needs_setup("gemini-cli", GEMINI_TRUST));
+        assert!(startup_needs_setup(
+            "gemini",
+            b"Get started\r\nHow would you like to authenticate for this project?"
+        ));
+        assert!(startup_needs_setup("gemini", b""));
+        assert!(!startup_needs_setup("gemini", GEMINI_READY));
+        let mut accepted = GEMINI_TRUST.to_vec();
+        accepted.extend_from_slice(GEMINI_READY);
+        assert!(!startup_needs_setup("gemini", &accepted));
+        let mut again = GEMINI_READY.to_vec();
+        again.extend_from_slice(GEMINI_TRUST);
+        assert!(startup_needs_setup("gemini", &again));
+    }
+
+    #[test]
+    fn codex_stale_shortcuts_text_does_not_count_as_ready() {
+        let mut ring = b"? for shortcuts".to_vec();
+        ring.extend_from_slice(b"\x1b[2J\x1b[Hloading");
+        assert!(!codex_prompt_ready(&ring));
+        ring.extend_from_slice(b"\x1b[2J\x1b[H> \r\n? for shortcuts");
+        assert!(codex_prompt_ready(&ring));
+    }
+
+    #[tokio::test]
+    async fn chat_input_cannot_accept_claude_or_gemini_trust() {
+        for (agent, screen) in [("claude-code", CLAUDE_TRUST), ("gemini-cli", GEMINI_TRUST)] {
+            let (input_tx, input_rx) = std::sync::mpsc::channel();
+            let (output_tx, _) = broadcast::channel(8);
+            let mut scrollback = Scrollback::new(SCROLLBACK_BYTES);
+            scrollback.append(screen);
+            let state = Arc::new(HostState {
+                agent: agent.into(),
+                token: "setup-test".into(),
+                session_id: "setup-test".into(),
+                child_pid: 0,
+                scrollback: Arc::new(Mutex::new(scrollback)),
+                output_tx,
+                input_tx,
+                stopping: Arc::new(AtomicBool::new(false)),
+                resize: Arc::new(|_, _| {}),
+            });
+            let mut headers = HeaderMap::new();
+            headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+            headers.insert("authorization", "Bearer setup-test".parse().expect("token"));
+            assert_eq!(
+                host_input_handler(
+                    headers,
+                    State(state),
+                    axum::body::Bytes::from_static(b"\x1b[200~hello\x1b[201~")
+                )
+                .await,
+                StatusCode::CONFLICT,
+                "{agent}"
+            );
+            assert!(input_rx.try_recv().is_err(), "{agent} must receive nothing");
+        }
     }
 
     #[tokio::test]
