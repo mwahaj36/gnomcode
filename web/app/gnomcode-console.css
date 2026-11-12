@@ -1103,7 +1103,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 
 .sp-card { background: var(--sp-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); box-shadow: var(--sp-card-shadow); padding: var(--sp-5); transition: border-color var(--sp-dur) var(--sp-ease); }
 .sp-card:hover { border-color: var(--sp-card-hover-border); }
-.sp-card-grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); align-items: stretch; }
+.sp-card-grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); align-items: start; }
 .sp-empty { display: grid; justify-items: start; gap: var(--sp-3); padding: var(--sp-5); border: 1px dashed var(--sp-border); border-radius: var(--sp-radius-card); color: var(--sp-text-2); }
 .sp-empty p { margin: 0; font-size: var(--sp-fs-body); }
 
@@ -1136,9 +1136,11 @@ details.sp-provider-card { padding: 0; gap: 0; container-type: inline-size; }
 .sp-provider-line b { font-weight: 600; color: var(--sp-text-2); }
 .sp-provider-line--issue { color: var(--sp-text-2); }
 .sp-provider-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--sp-surface-2); color: var(--sp-text); font-weight: 600; flex: none; }
+.sp-provider-mark svg { width: 18px; height: 18px; display: block; }
 .sp-sum-right { display: flex; align-items: center; gap: var(--sp-3); }
 .sp-strip { display: flex; gap: 3px; width: 56px; }
 .sp-strip i { flex: 1; height: 4px; border-radius: 2px; background: var(--sp-ok); }
+.sp-strip i.is-plain { background: var(--sp-accent); }
 .sp-strip i.is-low { background: var(--sp-low); }
 .sp-strip i.is-exhausted { background: var(--sp-exhausted); }
 .sp-strip i.is-unknown, .sp-strip i.is-reset_awaiting { background: var(--sp-unknown); }
@@ -1174,6 +1176,7 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 /* The fill grows once, when the section first renders; poll re-renders must not replay it. */
 .sp-limits[data-enter] .sp-meter-fill { animation: sp-meter-in 600ms var(--sp-ease) both; }
 .sp-meter-pace { position: absolute; top: -3px; bottom: -3px; left: var(--pace); width: 2px; border-radius: 1px; background: var(--sp-text); opacity: .6; }
+.sp-meter-row--plain .sp-meter-fill, .sp-mini--plain .sp-meter-fill { background: var(--sp-accent); }
 .sp-meter-row--low .sp-meter-fill, .sp-mini--low .sp-meter-fill { background: var(--sp-low); }
 .sp-meter-row--exhausted .sp-meter-fill, .sp-mini--exhausted .sp-meter-fill { background: var(--sp-exhausted); }
 .sp-meter-row--exhausted .sp-meter-value, .sp-mini--exhausted .sp-mini-value b { color: var(--sp-exhausted); }

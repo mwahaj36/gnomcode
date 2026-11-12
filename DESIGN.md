@@ -230,7 +230,7 @@ The rail has exactly four places: Home, Workspace, Usage and Settings. Home show
 
 ### Components
 
-Card, section header, chip (`sp-chip` with `ok`, `low`, `exhausted`, `unknown`, `neutral` states; also used per window in the conversation header), meter row (role `meter`, pace marker), collapsible provider card (`details.sp-provider-card`, collapsed by default, equal height in a grid row), stat tile, session row, activity grid with legend, copy command button and empty state (one line plus one action).
+Card, section header, chip (`sp-chip` with `ok`, `low`, `exhausted`, `unknown`, `neutral` states; also used per window in the conversation header), meter row (role `meter`, pace marker), collapsible provider card (`details.sp-provider-card`, collapsed by default, each card its own height in the grid; provider marks are simple-icons CC0 paths in `web/lib/provider-logos.js` with a letter fallback; windows without a Rust state show no chip and a neutral accent meter), stat tile, session row, activity grid with legend, copy command button and empty state (one line plus one action).
 
 ### Anti-clutter rules
 
