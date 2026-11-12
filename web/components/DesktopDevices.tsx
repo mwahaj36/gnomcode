@@ -1,12 +1,11 @@
 "use client";
 
 import {useEffect,useRef,useState} from 'react';
-import Link from 'next/link';
 import {supabase} from '../lib/supabase';
-import {enrollmentDevice,forgetDevice,type DeviceOffer} from '../lib/remote-device';
+import {enrollmentDevice,forgetDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
 import {approvedRequest} from '../lib/device-approval.mjs';
+import DevicesView,{type Desktop} from './DevicesView';
 
-type Desktop={id:string;name:string;last_seen_at:string;remote_enabled:boolean};
 type Request={desktop_id:string;id:string;name:string;state:string;revoked:boolean;offer:DeviceOffer|null};
 
 export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:DeviceOffer)=>void;autoOpen?:boolean}={}) {
@@ -16,6 +15,8 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
   const [status,setStatus]=useState('Checking your devices...');
   const [busy,setBusy]=useState(false);
   const [waiting,setWaiting]=useState<{desktop:string;request:string}|null>(null);
+  const [mineIds,setMineIds]=useState<string[]>([]);
+  const [now,setNow]=useState(()=>Date.now());
   const autoStarted=useRef(false);
   const [disableTarget,setDisableTarget]=useState<Desktop|null>(null);
   const disableDialog=useRef<HTMLDialogElement|null>(null);
@@ -39,6 +40,13 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
     void refresh();const timer=setInterval(()=>void refresh(),5000);
     return()=>{active=false;controller.abort();clearInterval(timer);};
   },[owner]);
+  useEffect(()=>{
+    if(!owner)return;let active=true;
+    void Promise.all(desktops.map(host=>savedDevice(owner,host.id).catch(()=>undefined))).then(saved=>{if(active)setMineIds(saved.flatMap(row=>row?.offer.request_id?[row.offer.request_id]:[]));});
+    return()=>{active=false;};
+  },[owner,desktops,requests]);
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(timer);},[]);
+  useEffect(()=>{setNow(Date.now());},[desktops]);
   useEffect(()=>{if(disableTarget&&!disableDialog.current?.open)disableDialog.current?.showModal();},[disableTarget]);
   useEffect(()=>{
     if(autoOpen&&!autoStarted.current&&!busy&&owner&&desktops.some(host=>host.remote_enabled)){autoStarted.current=true;void connect(desktops.find(host=>host.remote_enabled)!);}
@@ -98,10 +106,8 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
       setBusy(false);
     }
   }
-  return <section className="web-profile-section" aria-label="Devices"><h2>Devices</h2><p role="status">{status}</p>
-    {owner===null && <Link className="sp-console-action" href="/auth">Sign in</Link>}
-    {desktops.map(desktop=><div className="sp-device-row" key={desktop.id}><div><strong>{desktop.name}</strong><p>{desktop.remote_enabled?'Available to signed-in devices':'Account access disabled'} · Last seen {new Date(desktop.last_seen_at).toLocaleString()}</p><button type="button" className="sp-console-action" disabled={busy||!desktop.remote_enabled} onClick={()=>void connect(desktop)}>Open desktop</button></div>{desktop.remote_enabled&&<button type="button" className="sp-console-action" disabled={busy} onClick={()=>setDisableTarget(desktop)}>Disable account access</button>}</div>)}
-    {requests.length > 0 && <div className="sp-saved-devices mt-4 pt-4 border-t border-[var(--sp-border)]"><h3 className="text-xs font-mono uppercase tracking-wider text-[var(--sp-muted)] mb-2">Connected Devices & Browsers</h3>{requests.map(req => <div className="sp-device-row" key={req.id}><div><strong>{req.name}</strong><p>{req.revoked ? 'Revoked' : req.state === 'approved' ? 'Approved' : 'Pending'} · ID {req.id.slice(0, 8)}</p></div><button type="button" className="sp-console-action text-red-500 hover:text-red-400" disabled={busy} onClick={() => void removeRequest(req)}>Remove</button></div>)}</div>}
+  return <>
+    <DevicesView owner={owner} status={status} busy={busy} desktops={desktops} requests={requests} mineIds={mineIds} now={now} onOpen={host=>void connect(host)} onDisable={setDisableTarget} onRemove={req=>void removeRequest(req)}/>
     {disableTarget&&<dialog ref={disableDialog} className="remote-sheet sp-account-access-dialog" aria-labelledby="disable-account-heading" onClose={()=>setDisableTarget(null)}><h2 id="disable-account-heading">Disable account access?</h2><p>Every device signed in to your account will lose access to {disableTarget.name} when that desktop next reaches the account service. Local sessions keep running. You can enable access again in the native app.</p><div className="web-profile-actions"><button type="button" disabled={busy} onClick={()=>disableDialog.current?.close()}>Cancel</button><button type="button" disabled={busy} onClick={()=>void disableAccess(disableTarget)}>Disable account access</button></div></dialog>}
-  </section>;
+  </>;
 }
