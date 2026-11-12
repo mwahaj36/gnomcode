@@ -135,22 +135,30 @@ async fn fetch_antigravity() -> Result<Vec<QuotaSnapshot>, String> {
         ) else {
             continue;
         };
-        let request = client
-            .post(format!(
-                "http://127.0.0.1:{port}{}",
-                obfstr::obfstr!("/exa.language_server_pb.LanguageServerService/GetUserStatus")
-            ))
-            .header("Connect-Protocol-Version", "1")
-            .header(obfstr::obfstr!("X-Codeium-Csrf-Token"), csrf)
-            .json(&serde_json::json!({
-                "metadata": {"ideName": "antigravity", "extensionName": "antigravity", "locale": "en"}
-            }));
-        let Ok(reply) = request.send().await else {
-            continue;
-        };
-        if let Ok(body) = reply.json::<serde_json::Value>().await {
-            let quota =
-                gnomcode_adapters::antigravity::parse_user_status(&body, chrono::Utc::now());
+        // Prefer the pooled summary (5-hour and weekly per group); older servers only report per model.
+        for method in ["RetrieveUserQuotaSummary", "GetUserStatus"] {
+            let request = client
+                .post(format!(
+                    "http://127.0.0.1:{port}{}{method}",
+                    obfstr::obfstr!("/exa.language_server_pb.LanguageServerService/")
+                ))
+                .header("Connect-Protocol-Version", "1")
+                .header(obfstr::obfstr!("X-Codeium-Csrf-Token"), csrf)
+                .json(&serde_json::json!({
+                    "metadata": {"ideName": "antigravity", "extensionName": "antigravity", "locale": "en"}
+                }));
+            let Ok(reply) = request.send().await else {
+                continue;
+            };
+            let Ok(body) = reply.json::<serde_json::Value>().await else {
+                continue;
+            };
+            let now = chrono::Utc::now();
+            let quota = if method == "GetUserStatus" {
+                gnomcode_adapters::antigravity::parse_user_status(&body, now)
+            } else {
+                gnomcode_adapters::antigravity::parse_quota_summary(&body, now)
+            };
             if !quota.is_empty() {
                 return Ok(quota);
             }

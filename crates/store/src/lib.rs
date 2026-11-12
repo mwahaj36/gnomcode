@@ -2418,6 +2418,10 @@ impl Database {
         let stale_cutoff = (now
             - chrono::Duration::milliseconds(gnomcode_core::presence::STALE_EXECUTION_LIMIT_MS))
         .to_rfc3339();
+        // Open tool/model executions use the shorter limit so counts match presence classification.
+        let execution_cutoff = (now
+            - chrono::Duration::milliseconds(gnomcode_core::presence::OPEN_EXECUTION_LIMIT_MS))
+        .to_rfc3339();
         let agent = agent_filter
             .filter(|value| !value.is_empty())
             .unwrap_or("all");
@@ -2430,24 +2434,24 @@ impl Database {
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?5)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?5)))))
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))))
                    OR (?2 = 'idle' AND s.state = 'idle'))"#,
-            params![agent, status, cutoff, project_filter, stale_cutoff],
+            params![agent, status, cutoff, project_filter, stale_cutoff, execution_cutoff],
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
             r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?7)))))
+                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))))
                     OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
@@ -2490,7 +2494,8 @@ impl Database {
                 project_filter,
                 limit as i64,
                 offset as i64,
-                stale_cutoff
+                stale_cutoff,
+                execution_cutoff
             ],
             |row| {
                 let id: String = row.get(0)?;
@@ -3222,6 +3227,64 @@ mod tests {
         ActivityEvent, ActivityKind, AgentId, Project, QuotaSnapshot, QuotaWindow, Session,
         SessionState, Surface, TrustLevel, UsageRecord,
     };
+
+    #[test]
+    fn open_execution_counts_as_ongoing_only_within_the_presence_limit() {
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "/w", None);
+        let now = Utc::now();
+        let session = |name: &str, age: chrono::Duration| Session {
+            id: format!("antigravity:{name}"),
+            agent: AgentId::Antigravity,
+            surface: Surface::Ide,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Tool,
+            pid: None,
+            started_at: now - age,
+            last_event_at: now - age,
+        };
+        db.commit_batch(
+            std::slice::from_ref(&project),
+            &[
+                session("recent", chrono::Duration::minutes(30)),
+                session("abandoned", chrono::Duration::hours(13)),
+            ],
+            &[],
+            &[],
+            &[],
+            &SourceCheckpoint {
+                file_path: "fixture".into(),
+                last_read_offset: 0,
+                file_size: 0,
+                fingerprint: "fixture".into(),
+                last_ingested_at: now,
+            },
+        )
+        .expect("sessions");
+        for (name, age) in [("recent", 30), ("abandoned", 13 * 60)] {
+            db.conn
+                .execute(
+                    "INSERT INTO activity_event(session_id,timestamp,kind) VALUES (?1,?2,'tool_start')",
+                    rusqlite::params![
+                        format!("antigravity:{name}"),
+                        (now - chrono::Duration::minutes(age)).to_rfc3339()
+                    ],
+                )
+                .expect("activity");
+        }
+        let (rows, count) = db
+            .list_sessions_paginated(None, Some("ongoing"), 0, 10)
+            .expect("ongoing");
+        assert_eq!(
+            count, 1,
+            "count must match the presence rules the list uses"
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "antigravity:recent");
+    }
 
     #[test]
     fn all_time_activity_groups_by_span_without_losing_totals() {

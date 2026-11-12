@@ -174,7 +174,8 @@ fn claude_cli() -> Option<std::path::PathBuf> {
         return Some(native);
     }
     // Windows desktop app layout: Claude-Data/<install>/claude-code/<version>/<build>/claude.exe.
-    let root = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("Claude-Data");
+    // The packaged (MSIX) app keeps it under Packages/Claude_*/LocalCache/Local when seen from outside.
+    let local = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?);
     let children = |dir: &Path| {
         std::fs::read_dir(dir)
             .into_iter()
@@ -183,8 +184,17 @@ fn claude_cli() -> Option<std::path::PathBuf> {
             .map(|entry| entry.path())
             .collect::<Vec<_>>()
     };
-    children(&root)
-        .iter()
+    let packaged = children(&local.join("Packages"))
+        .into_iter()
+        .filter(|package| {
+            package
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("Claude_"))
+        })
+        .map(|package| package.join("LocalCache").join("Local").join("Claude-Data"));
+    std::iter::once(local.join("Claude-Data"))
+        .chain(packaged)
+        .flat_map(|root| children(&root))
         .flat_map(|install| children(&install.join("claude-code")))
         .flat_map(|version| children(&version))
         .map(|build| build.join(file))
@@ -320,6 +330,49 @@ mod tests {
             .args([
                 "--exact",
                 "executables::tests::claude_bundled_with_desktop_app_is_found_without_path_entry",
+            ])
+            .env(CHILD, root.path())
+            .env("LOCALAPPDATA", root.path())
+            .env("USERPROFILE", root.path())
+            .env("HOME", root.path())
+            .env("PATH", root.path())
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
+    }
+
+    #[test]
+    fn claude_bundled_with_packaged_desktop_app_is_found() {
+        const CHILD: &str = "GNOMCODE_TEST_CLAUDE_PACKAGE";
+        let build = |root: &Path| {
+            root.join("Packages")
+                .join("Claude_pzs8sxrjxfjjc")
+                .join("LocalCache")
+                .join("Local")
+                .join("Claude-Data")
+                .join("claude_x")
+                .join("claude-code")
+                .join("2.1.321")
+                .join("build")
+        };
+        if let Some(root) = std::env::var_os(CHILD) {
+            let expected = build(Path::new(&root)).join("claude.exe");
+            assert_eq!(
+                agent_command("claude"),
+                (expected.to_string_lossy().into_owned(), vec![])
+            );
+            return;
+        }
+        if !cfg!(windows) {
+            return;
+        }
+        let root = tempfile::tempdir().expect("root");
+        std::fs::create_dir_all(build(root.path())).expect("build dir");
+        std::fs::write(build(root.path()).join("claude.exe"), "fixture").expect("binary");
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "executables::tests::claude_bundled_with_packaged_desktop_app_is_found",
             ])
             .env(CHILD, root.path())
             .env("LOCALAPPDATA", root.path())
