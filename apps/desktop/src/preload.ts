@@ -7,6 +7,7 @@ export interface DesktopApi {
   chooseWorkspace(): Promise<string | null>;
   launchSession(agent: string, repoPath: string, model?: string): Promise<unknown>;
   stopSession(sessionId: string): Promise<unknown>;
+  restartToUpdate(): Promise<boolean>;
 }
 
 const desktop: DesktopApi = Object.freeze({
@@ -18,6 +19,7 @@ const desktop: DesktopApi = Object.freeze({
     ipcRenderer.invoke('desktop:launch-session', agent, repoPath, model),
   stopSession: (sessionId: string): Promise<unknown> =>
     ipcRenderer.invoke('desktop:stop-session', sessionId),
+  restartToUpdate: (): Promise<boolean> => ipcRenderer.invoke('desktop:restart-to-update'),
 });
 contextBridge.exposeInMainWorld('gnomcodeDesktop', desktop);
 

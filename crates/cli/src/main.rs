@@ -1063,6 +1063,7 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
     });
     let _cloud_sync_handle =
         gnomcode_daemon::sync::spawn_cloud_sync(orchestrator.db(), remote.clone());
+    let _update_handle = gnomcode_daemon::update::spawn(orchestrator.db());
 
     let state = gnomcode_daemon::api::AppState {
         db: orchestrator.db(),

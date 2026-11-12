@@ -1019,6 +1019,9 @@ impl Database {
                 COMMIT;"#
             ))?;
         }
+        self.conn.execute_batch(obfstr::obfstr!(
+            "CREATE TABLE IF NOT EXISTS desktop_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+        ))?;
         self.conn.execute_batch(obfstr::obfstr!(r#"
             DELETE FROM usage_record
             WHERE session_id IN (
@@ -1652,6 +1655,39 @@ impl Database {
         cfg.policy = policy.as_str().to_owned();
         cfg.updated_at = Utc::now().to_rfc3339();
         self.save_context_relay_config(&cfg)
+    }
+
+    /// Returns whether automatic background desktop update checks are enabled (default `true`).
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn get_auto_update_enabled(&self) -> Result<bool, Error> {
+        let val: Option<String> = self
+            .conn
+            .query_row(
+                obfstr::obfstr!(
+                    "SELECT value FROM desktop_preferences WHERE key = 'auto_update_enabled'"
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(val.as_deref() != Some("0"))
+    }
+
+    /// Persists the opt-out automatic desktop update check preference.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite write failure.
+    pub fn set_auto_update_enabled(&self, enabled: bool) -> Result<(), Error> {
+        self.conn.execute(
+            obfstr::obfstr!(
+                "INSERT INTO desktop_preferences(key, value) VALUES ('auto_update_enabled', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+            ),
+            [if enabled { "1" } else { "0" }],
+        )?;
+        Ok(())
     }
 
     /// Lists recent recorded Context Relay events.
@@ -3892,6 +3928,11 @@ mod tests {
             db.get_routing_policy().expect("get policy 2"),
             RoutingPolicy::DenyCrossProvider
         );
+
+        assert!(db.get_auto_update_enabled().expect("default auto update"));
+        db.set_auto_update_enabled(false)
+            .expect("disable auto update");
+        assert!(!db.get_auto_update_enabled().expect("disabled auto update"));
 
         let entry = ContextRelayEntry {
             id: "relay-1".to_owned(),

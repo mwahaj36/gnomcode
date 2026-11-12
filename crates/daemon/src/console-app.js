@@ -1604,11 +1604,87 @@ function cycleTheme() {
         await loadCustomPricingSettings();
         await loadNotificationSettings();
         await loadRemoteStatus();
+        await loadUpdateStatus();
         return true;
       } catch (e) {
         console.error(e);
         document.getElementById('settings-db-stats').textContent = 'Local settings are unavailable. Retry Reload view when the daemon is reachable.';
         return false;
+      }
+    }
+
+    function renderUpdateStatus(status) {
+      const text = document.getElementById('update-status-text');
+      const toggle = document.getElementById('update-auto-check');
+      const restartBtn = document.getElementById('update-restart-btn');
+      if (!text || !toggle || !restartBtn || !status) return;
+      toggle.checked = status.auto_update_enabled !== false;
+      const version = status.available_version ? `v${status.available_version}` : 'new version';
+      if (status.state === 'ready') {
+        text.textContent = `Update available: ${version} ready to install on quit or restart.`;
+      } else if (status.state === 'downloading' || status.state === 'available') {
+        text.textContent = status.state === 'downloading'
+          ? `Update available: ${version} downloading in background.`
+          : `Update available: ${version} queued for download.`;
+      } else if (status.state === 'disabled') {
+        text.textContent = 'Automatic update checks off.';
+      } else if (status.state === 'error') {
+        text.textContent = `Update check failed (${status.last_error || 'offline'}).`;
+      } else {
+        text.textContent = `Up to date (v${status.current_version || 'unknown'}).`;
+      }
+      restartBtn.hidden = !(status.state === 'ready' && window.gnomcodeDesktop?.restartToUpdate);
+    }
+
+    async function loadUpdateStatus() {
+      try {
+        const status = await apiJson('/api/v1/update/status', { headers });
+        renderUpdateStatus(status);
+      } catch {
+        const text = document.getElementById('update-status-text');
+        const restartBtn = document.getElementById('update-restart-btn');
+        if (text) text.textContent = 'Update status unavailable.';
+        if (restartBtn) restartBtn.hidden = true;
+      }
+    }
+
+    async function checkUpdateNow() {
+      const btn = document.getElementById('update-check-btn');
+      const text = document.getElementById('update-status-text');
+      if (btn) btn.disabled = true;
+      if (text) text.textContent = 'Checking for updates...';
+      try {
+        const status = await apiJson('/api/v1/update/check', { method: 'POST', headers });
+        renderUpdateStatus(status);
+      } catch {
+        if (text) text.textContent = 'Update check unavailable right now.';
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function toggleAutoUpdate(enabled) {
+      try {
+        const status = await apiJson('/api/v1/settings/update', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        renderUpdateStatus(status);
+      } catch {
+        await loadUpdateStatus();
+      }
+    }
+
+    async function restartToUpdate() {
+      const btn = document.getElementById('update-restart-btn');
+      const text = document.getElementById('update-status-text');
+      if (!window.gnomcodeDesktop?.restartToUpdate) return;
+      if (btn) btn.disabled = true;
+      const started = await window.gnomcodeDesktop.restartToUpdate().catch(() => false);
+      if (!started) {
+        if (btn) btn.disabled = false;
+        if (text) text.textContent = 'Could not launch verified update installer. Re-check updates and try again.';
       }
     }
 
@@ -1843,6 +1919,7 @@ function cycleTheme() {
       'choose-workspace': chooseWorkspace,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'save-notifications': saveNotificationSettings, 'add-pricing': addCustomPricingSettings,
+        'check-update': checkUpdateNow, 'restart-to-update': restartToUpdate,
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
@@ -1853,6 +1930,7 @@ function cycleTheme() {
     });
     document.addEventListener('change', event => {
       if (event.target.id === 'chat-model-select') { void switchChatModel(); return; }
+      if (event.target.id === 'update-auto-check') { void toggleAutoUpdate(event.target.checked); return; }
       if (event.target.id === 'launch-agent-select') {
         updateAgentInstallHint();
         return;

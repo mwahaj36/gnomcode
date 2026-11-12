@@ -267,7 +267,7 @@ CLI, desktop and npm use lockstep SemVer. Remain 0.x before v1.0. Current develo
 
 ### 6.4 Updates
 
-Opt-out update-manifest check and approved signed/hash-verified release flow. Do not change public update channels when refreshing draft artifacts.
+Opt-out update-manifest check (`{branding.base_url}/downloads/latest.json`, checked on daemon startup and every 6 hours unless disabled via Settings or `GNOMCODE_AUTO_UPDATE=0`) and approved signed/hash-verified release flow ([ADR 0033](./adr/0033-desktop-auto-update.md)). `gnomcode-core::update` and the daemon validate release URLs, compare SemVer, download matching packages in the background to `GNOMCODE_HOME/updates/`, and verify SHA-256 checksums (plus Ed25519 signatures when configured). Both Settings and the desktop tray show `"Update available"`; the Electron shell re-verifies the staged SHA-256 checksum and installs only on explicit quit or when the user clicks `"Restart to update"`. Failures fail open without interrupting agents. Do not change public update channels when refreshing draft artifacts.
 
 ### 6.5 Website and docs
 
@@ -328,6 +328,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0030](./adr/0030-claude-signin-refresh.md) | Refresh the Claude sign-in by running the official CLI (`claude auth status`), amending 0029 | Accepted |
 | [0031](./adr/0031-console-four-places.md) | Console has four places (Home, Workspace, Usage, Settings); toggle-only grid rail, top bar under 720px | Accepted |
 | [0032](./adr/0032-phone-approvals.md) | Approve or deny Claude Code permission prompts from the phone (Remote, E2EE) and console through a fail-open `PermissionRequest` hook; Codex, Antigravity and Gemini detection only | Accepted |
+| [0033](./adr/0033-desktop-auto-update.md) | Rust-verified background desktop auto-update staged for user restart or quit | Accepted |
 
 ## 10. Open decisions
 
