@@ -131,6 +131,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/callback", get(auth_callback_handler))
         .route("/api/v1/auth/signin", post(auth_signin_handler))
         .route("/health", get(health_handler))
+        .route("/api/v1/doctor", get(doctor_handler))
         .route("/api/v1/sessions", get(list_sessions_handler))
         .route("/api/v1/conversations", get(list_conversations_handler))
         .route("/api/v1/sessions/hosted", get(list_hosted_sessions_handler))
@@ -1860,6 +1861,26 @@ pub(crate) fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result
     } else {
         Err(StatusCode::UNAUTHORIZED)
     }
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct DoctorQueryParams {
+    repo: Option<String>,
+}
+
+async fn doctor_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<DoctorQueryParams>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let repo = params
+        .repo
+        .map(std::path::PathBuf::from)
+        .filter(|path| path.is_dir());
+    let db_path = gnomcode_platform::default_db_path();
+    let report = crate::doctor::run_for_daemon(&state.db, &db_path, repo).await;
+    Ok(Json(report))
 }
 
 async fn health_handler(
@@ -5119,5 +5140,48 @@ mod tests {
             .expect("request");
         let res_rev = app.oneshot(req_rev).await.expect("res");
         assert_eq!(res_rev.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn doctor_endpoint_requires_auth_and_returns_checks() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "doctor-token".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+
+        let unauth = Request::builder()
+            .uri("/api/v1/doctor")
+            .header("Host", "127.0.0.1")
+            .body(Body::empty())
+            .expect("request");
+        let unauth_res = app.clone().oneshot(unauth).await.expect("res");
+        assert_eq!(unauth_res.status(), StatusCode::UNAUTHORIZED);
+
+        let authed = Request::builder()
+            .uri("/api/v1/doctor")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer doctor-token")
+            .body(Body::empty())
+            .expect("request");
+        let res = app.oneshot(authed).await.expect("res");
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 65536)
+            .await
+            .expect("body");
+        let report: crate::doctor::DoctorReport = serde_json::from_slice(&body).expect("json");
+        let ids: Vec<&str> = report.checks.iter().map(|c| c.id.as_str()).collect();
+        for expected in [
+            "agent_clis",
+            "claude_signin",
+            "limit_sources",
+            "claude_integration",
+            "daemon",
+            "disk_space",
+            "keep_awake",
+        ] {
+            assert!(ids.contains(&expected), "missing check {expected}");
+        }
     }
 }

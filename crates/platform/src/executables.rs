@@ -2,6 +2,27 @@
 
 use std::path::Path;
 
+/// Resolves an installed official CLI executable path and leading arguments, if available.
+#[must_use]
+pub fn resolve_agent_executable(name: &str) -> Option<(String, Vec<String>)> {
+    if !executable_available(name) {
+        return None;
+    }
+    let (program, args) = agent_command(name);
+    let candidate = Path::new(&program);
+    if candidate.is_file() {
+        return Some((program, args));
+    }
+    if let Some(paths) = std::env::var_os("PATH") {
+        for directory in std::env::split_paths(&paths) {
+            if let Some(found) = find_executable_in(&directory, name) {
+                return Some((found.to_string_lossy().into_owned(), args));
+            }
+        }
+    }
+    Some((program, args))
+}
+
 /// Builds a hidden, shell-free command for a known official coding-agent CLI.
 #[must_use]
 pub fn background_agent_command(name: &str) -> std::process::Command {
@@ -202,27 +223,31 @@ fn claude_cli() -> Option<std::path::PathBuf> {
         .max_by_key(|binary| binary.metadata().and_then(|m| m.modified()).ok())
 }
 
-fn executable_in(directory: &Path, name: &str) -> bool {
+fn find_executable_in(directory: &Path, name: &str) -> Option<std::path::PathBuf> {
     #[cfg(windows)]
     {
-        ["exe", "cmd", "bat", ""].iter().any(|extension| {
-            directory
-                .join(if extension.is_empty() {
-                    name.to_owned()
-                } else {
-                    format!("{name}.{extension}")
-                })
-                .is_file()
+        ["exe", "cmd", "bat", ""].iter().find_map(|extension| {
+            let candidate = directory.join(if extension.is_empty() {
+                name.to_owned()
+            } else {
+                format!("{name}.{extension}")
+            });
+            candidate.is_file().then_some(candidate)
         })
     }
     #[cfg(not(windows))]
     {
         use std::os::unix::fs::PermissionsExt;
-        directory
-            .join(name)
+        let candidate = directory.join(name);
+        candidate
             .metadata()
             .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+            .then_some(candidate)
     }
+}
+
+fn executable_in(directory: &Path, name: &str) -> bool {
+    find_executable_in(directory, name).is_some()
 }
 
 /// Returns the interactive local shell and its startup arguments.
@@ -416,5 +441,35 @@ mod tests {
         assert_eq!(entry, package.join("bin").join("agent.js"));
         std::fs::write(package.join("package.json"), "broken JSON").expect("manifest");
         assert!(npm_entry_point(prefix.path(), "@example/agent", "agent").is_none());
+    }
+
+    #[test]
+    fn resolve_agent_executable_returns_none_when_missing_and_path_when_present() {
+        assert!(resolve_agent_executable("missing-gnomcode-test-executable").is_none());
+        let current = std::env::current_exe().expect("test executable");
+        let dir = current.parent().expect("parent");
+        let stem = current.file_stem().expect("stem").to_string_lossy();
+        const CHILD: &str = "GNOMCODE_TEST_RESOLVE_EXE";
+        if let Some(target) = std::env::var_os(CHILD) {
+            let target = target.to_string_lossy();
+            let resolved = resolve_agent_executable(&target).expect("resolved");
+            assert!(
+                resolved.0.contains(target.as_ref()),
+                "expected {} to contain {}",
+                resolved.0,
+                target
+            );
+            return;
+        }
+        let status = std::process::Command::new(&current)
+            .args([
+                "--exact",
+                "executables::tests::resolve_agent_executable_returns_none_when_missing_and_path_when_present",
+            ])
+            .env(CHILD, stem.as_ref())
+            .env("PATH", dir)
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
     }
 }

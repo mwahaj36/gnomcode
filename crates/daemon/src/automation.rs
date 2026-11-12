@@ -366,6 +366,13 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     }
 }
 
+static KEEP_AWAKE_HOLDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Returns the daemon's current sleep-inhibitor hold count.
+pub(crate) fn keep_awake_holds() -> usize {
+    KEEP_AWAKE_HOLDS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Holds one sleep inhibition while a hosted agent is busy or scheduled work is pending
 /// (SPEC 3.14.3). `GNOMCODE_KEEP_AWAKE=0` disables it; any lookup failure counts as no demand.
 pub(crate) async fn sync_keep_awake(
@@ -393,6 +400,7 @@ pub(crate) async fn sync_keep_awake(
         (false, 1) => awake.release(),
         _ => {}
     }
+    KEEP_AWAKE_HOLDS.store(awake.holds(), std::sync::atomic::Ordering::Relaxed);
 }
 
 async fn deliver_due(db: &Arc<Mutex<Database>>) {

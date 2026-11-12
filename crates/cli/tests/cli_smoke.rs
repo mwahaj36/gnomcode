@@ -65,6 +65,51 @@ fn doctor_network_discloses_opt_in_remote_and_pricing_without_connecting() {
 }
 
 #[test]
+fn doctor_json_reports_all_checks_and_exits_nonzero_on_fail_without_leaking_tokens() {
+    let root = tempfile::tempdir().expect("root");
+    let expired_ms = (chrono::Utc::now() - chrono::Duration::hours(1)).timestamp_millis();
+    std::fs::write(
+        root.path().join(".credentials.json"),
+        serde_json::json!({
+            "claudeAiOauth": {
+                "accessToken": "super-secret-oauth-token",
+                "refreshToken": "super-secret-refresh-token",
+                "expiresAt": expired_ms
+            }
+        })
+        .to_string(),
+    )
+    .expect("creds");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_gnomcode"))
+        .args(["doctor", "--json"])
+        .env("GNOMCODE_HOME", root.path())
+        .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .env("APPDATA", root.path())
+        .env("CLAUDE_CONFIG_DIR", root.path())
+        .env("CODEX_HOME", root.path())
+        .env("GEMINI_HOME", root.path())
+        .output()
+        .expect("doctor --json");
+    assert!(!output.status.success(), "expired sign-in must fail doctor");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("super-secret-oauth-token"));
+    assert!(!stdout.contains("super-secret-refresh-token"));
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("doctor json");
+    assert_eq!(parsed["status"], "fail");
+    assert_eq!(parsed["ok"], false);
+    let checks = parsed["checks"].as_array().expect("checks array");
+    assert_eq!(checks.len(), 7);
+    let signin = checks
+        .iter()
+        .find(|c| c["id"] == "claude_signin")
+        .expect("claude_signin check");
+    assert_eq!(signin["status"], "fail");
+    assert!(signin["fix"].as_str().is_some_and(|s| !s.is_empty()));
+}
+
+#[test]
 fn statusline_records_only_limits_and_never_fails() {
     use std::io::Write as _;
     let home = tempfile::tempdir().expect("home");

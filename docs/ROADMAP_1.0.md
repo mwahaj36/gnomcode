@@ -12,7 +12,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## A2. Added 2026-11-13 (assigned to Gemini via agy, reviewed by Claude)
 - [ ] Push notifications for Needs you: approval waiting, turn finished, limit low, limit reset
 - [ ] In-app auto-update from the allowed update manifest
-- [ ] `gnomcode doctor`: agents, sign-in expiry, limit sources, hooks, disk
+- [x] `gnomcode doctor`: agents, sign-in expiry, limit sources, hooks, disk
 - [ ] First-run tour refresh for the four places and list-first Workspace
 
 ## B. Research gaps (docs/research/2026-11-13-dialpad-cao-comparison.md)
