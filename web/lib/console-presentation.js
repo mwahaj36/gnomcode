@@ -38,9 +38,106 @@ export function renderSummary({ activeCount = null, report = null, quotaCount = 
   }</section><details class="sp-data-details"><summary>About these numbers</summary><p>Session counts are inferred from recent records, not a live process count. Spend and savings are API-equivalent estimates, not invoices. Unpriced usage is excluded. Token and quota counts come from recorded observations.</p></details>`;
 }
 
-export function renderProjects(projects) {
-  if (!Array.isArray(projects)) return '<section class="sp-activity"><h2>Project activity</h2><p>Project rollups remain local. This cloud source does not publish repository identity or project totals.</p></section>';
-  return `<section class="sp-activity"><h2>Project activity</h2><p>Usage by project in this period.</p><div class="sp-quota-grid">${projects.length ? projects.map(project => `<a class="sp-project-link" href="#sessions" data-project-id="${escape(project.id)}"><article><header><strong>${escape(project.name)}</strong></header><div class="sp-quota-number">${escape(tokens(project.total_tokens))}<span class="sp-data-unit">recorded tokens</span></div><p>${escape(project.sessions)} recorded sessions</p><p>${cost(project, project.cost_usd)} · ${priced(project) ? coverage(project) : 'Price unavailable'}</p></article></a>`).join('') : '<p>No project usage was recorded in this period.</p>'}</div></section>`;
+// ---- Project activity ----
+// Rust supplies each project (name, folder, session count, last activity, agents). This only lays them out:
+// newest first, ten rows, a filter once there are more than ten.
+const PROJECT_TOP = 10;
+const PROJECT_HELPER = 'Most recent first.';
+const FOLDER_ICON = '<svg class="sp-project-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.5h8.5A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>';
+const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', 'gemini-cli': 'Gemini CLI' };
+const agentLabel = id => AGENT_NAMES[id] || titleCase(id);
+const projectTime = project => { const time = Date.parse(project.last_active); return Number.isFinite(time) ? time : -Infinity; };
+
+/** The folder a project lives in, shortened for one line: home becomes ~, then at most the last three folders. */
+export function shortPath(path) {
+  const parts = String(path ?? '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').split('/').filter(Boolean);
+  if (parts.length < 2) return '';
+  parts.pop();
+  const home = /^[A-Za-z]:$/.test(parts[0]) ? 1 : 0;
+  if (/^(users|home)$/i.test(parts[home] ?? '') && parts.length > home + 1) parts.splice(0, home + 2, '~');
+  return parts.length > 3 ? '.../' + parts.slice(-3).join('/') : parts.join('/');
+}
+
+/** Projects from a synced session list (the cloud snapshot carries no folder paths). Sessions without a project are skipped. */
+export function projectsFromSessions(sessions) {
+  const groups = new Map();
+  for (const session of Array.isArray(sessions) ? sessions : []) {
+    const name = String(session?.project_name ?? '').trim();
+    if (!name || name.toLowerCase() === 'unknown') continue;
+    const group = groups.get(name) || { id: name, name, sessions: 0, last_active: null, agents: [] };
+    group.sessions += 1;
+    if (projectTime({ last_active: session.last_event_at }) > projectTime(group)) group.last_active = session.last_event_at;
+    if (session.agent && !group.agents.includes(session.agent)) group.agents.push(session.agent);
+    groups.set(name, group);
+  }
+  return [...groups.values()];
+}
+
+const listedProjects = projects => (Array.isArray(projects) ? projects : [])
+  .filter(project => project?.name && String(project.name).toLowerCase() !== 'unknown')
+  .sort((a, b) => projectTime(b) - projectTime(a) || String(a.name).localeCompare(String(b.name)));
+
+function projectRow(project) {
+  const path = shortPath(project.repo_root);
+  const agents = (Array.isArray(project.agents) ? project.agents : []).map(agentLabel).join(', ');
+  const sessions = Number.isFinite(project.sessions) ? project.sessions : 0;
+  const at = new Date(project.last_active);
+  const known = Number.isFinite(at.getTime());
+  const second = path || agents;
+  // Local rollups also carry recorded usage; it stays in the tooltip, with its price coverage, to keep the row to one line.
+  const usage = Number.isFinite(project.total_tokens) ? `\n${tokens(project.total_tokens)} recorded tokens\n${cost(project, project.cost_usd)} · ${priced(project) ? coverage(project) : 'Price unavailable'}` : '';
+  return `<button type="button" class="sp-project-row" data-project-id="${escape(project.id)}" title="${escape((project.repo_root || project.name) + usage)}">${FOLDER_ICON}<span class="sp-project-main"><strong>${escape(project.name)}</strong>${second ? `<span>${escape(second)}</span>` : ''}</span><span class="sp-project-agents">${path ? escape(agents) : ''}</span><span class="sp-project-count"><b>${sessions}</b><span> ${sessions === 1 ? 'session' : 'sessions'}</span></span><time class="sp-project-time" datetime="${known ? escape(project.last_active) : ''}" title="${known ? escape(at.toLocaleString()) : 'Unknown'}">${known ? escape(shortAge(project.last_active)) : '-'}</time>${CHEVRON_RIGHT}</button>`;
+}
+
+/** The rows and the Show all control; `query` filters by name or folder and always shows every match. */
+export function renderProjectRows(projects, { query = '', expanded = false } = {}) {
+  const all = listedProjects(projects);
+  if (!all.length) return '<div class="sp-empty"><p>No project activity recorded yet.</p></div>';
+  const needle = String(query).trim().toLowerCase();
+  const matches = needle ? all.filter(project => `${project.name} ${project.repo_root || ''}`.toLowerCase().includes(needle)) : all;
+  if (!matches.length) return `<div class="sp-empty"><p>No project matches "${escape(String(query).trim())}".</p></div>`;
+  const shown = needle || expanded ? matches : matches.slice(0, PROJECT_TOP);
+  const more = !needle && all.length > PROJECT_TOP ? `<button type="button" class="sp-link sp-project-more" aria-expanded="${expanded}">${expanded ? 'Show fewer' : `Show all ${all.length}`}</button>` : '';
+  return `<div class="sp-project-list">${shown.map(projectRow).join('')}</div>${more}`;
+}
+
+export function renderProjects(projects, { query = '', expanded = false, helper = PROJECT_HELPER, heading = true } = {}) {
+  if (!Array.isArray(projects)) return '<section class="sp-section sp-projects"><header class="sp-section-head"><h2>Project activity</h2></header><p class="sp-project-helper">Project rollups remain local. This cloud source does not publish repository identity or project totals.</p></section>';
+  const search = listedProjects(projects).length > PROJECT_TOP ? `<input type="search" class="sp-project-search" aria-label="Filter projects" placeholder="Filter projects" autocomplete="off" value="${escape(query)}">` : '';
+  return `<section class="sp-section sp-projects" aria-label="Project activity">${heading ? '<header class="sp-section-head"><h2>Project activity</h2></header>' : ''}<div class="sp-project-tools"><p class="sp-project-helper">${escape(helper)}</p>${search}</div><div class="sp-project-rows">${renderProjectRows(projects, { query, expanded })}</div></section>`;
+}
+
+const projectViews = new WeakMap();
+
+/** Renders the list into `element` and keeps the filter text and Show all choice across refreshes. Rows carry `data-project-id`; opening one is the caller's job. */
+export function mountProjectList(element, projects, options = {}) {
+  let view = projectViews.get(element);
+  if (!view) {
+    view = { query: '', expanded: false };
+    projectViews.set(element, view);
+    element.addEventListener('input', event => {
+      if (!event.target.matches?.('.sp-project-search')) return;
+      view.query = event.target.value;
+      element.querySelector('.sp-project-rows').innerHTML = renderProjectRows(view.projects, view);
+    });
+    element.addEventListener('click', event => {
+      if (!event.target.closest?.('.sp-project-more')) return;
+      view.expanded = !view.expanded;
+      element.querySelector('.sp-project-rows').innerHTML = renderProjectRows(view.projects, view);
+      element.querySelector('.sp-project-more')?.focus({ preventScroll: true });
+    });
+  }
+  view.projects = projects;
+  const markup = renderProjects(projects, { ...options, query: view.query, expanded: view.expanded });
+  if (view.markup === markup && element.querySelector('.sp-projects')) return;
+  const typing = element.querySelector('.sp-project-search') === document.activeElement;
+  if (typing && Array.isArray(projects)) {
+    element.querySelector('.sp-project-rows').innerHTML = renderProjectRows(projects, view);
+    view.markup = null;
+    return;
+  }
+  element.innerHTML = markup;
+  view.markup = markup;
 }
 
 export function renderSessions(sessions, { focus = false, rotate = false, illustrative = false } = {}) {
