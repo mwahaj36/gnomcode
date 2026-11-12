@@ -50,3 +50,5 @@ export type HeatmapOptions = { weeks?: number; stats?: boolean; legend?: boolean
 export function renderHeatmap(data: ActivityHeatmap | null | undefined, options?: HeatmapOptions): string;
 export function renderHourStrip(report: unknown): string;
 export function updateHeatmap(element: HTMLElement, data: ActivityHeatmap | null | undefined, options?: HeatmapOptions): void;
+export function renderValue(byProvider?: unknown[], combined?: unknown): string;
+export function updateValue(element: HTMLElement, byProvider?: unknown[], combined?: unknown): void;

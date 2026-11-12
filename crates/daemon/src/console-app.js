@@ -655,17 +655,8 @@ function cycleTheme() {
         }
         document.getElementById('timeline-label').textContent = dateStr;
 
-// Render subscription comparisons with one section-level estimate label.
-        const activeRoi = (res.roi_by_provider || []).filter(r => r.spend_usd > 0);
-        const roiContainer = document.getElementById('roi-cards-container');
-        roiContainer.innerHTML = activeRoi.map(r => `
-          <div class="sp-roi-item">
-            <h3>${escapeHtml(r.provider)}</h3>
-            <strong>${r.multiplier.toFixed(1)}x estimated return</strong>
-            <p>${r.net_savings_usd >= 0 ? '+' : ''}$${r.net_savings_usd.toFixed(2)} compared with API pricing</p>
-            <details><summary>Details</summary><p>Recorded plan: $${r.plan_usd.toFixed(2)} / ${escapeHtml(r.period_label || 'period')}<br>Estimated API equivalent: $${r.spend_usd.toFixed(2)}</p></details>
-          </div>
-        `).join('') || '<p>No subscription usage in this period.</p>';
+        // Subscription value tiles: Rust supplies every figure, the presentation module only formats.
+        presentation.updateValue(document.getElementById('usage-value'), res.roi_by_provider, res.combined_roi);
 
         // Render the shared provider breakdown.
         presentation.updateProviders(document.getElementById('providers-container'), tl);
