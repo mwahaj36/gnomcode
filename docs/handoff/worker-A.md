@@ -1,5 +1,14 @@
 # Worker A handoff
 
+## 2026-11-13: G11 Claude parent-session env scrub
+
+- PR https://github.com/mwahaj36/spawnt/pull/200; branch `fix/agent-environment-context`, head `1c21f64`, depends on baseline #189, independent of #187/#193/#197.
+- Changed files: `crates/platform/src/executables.rs` (`CLAUDE_PARENT_ENV_VARS` + `env_remove` in `background_agent_command` for `"claude" | "claude-code"`), `crates/pty/src/lib.rs` (`env_remove` in `run_pty_host` for both Windows `conpty_oxide::blocking::Command` and Unix `portable_pty::CommandBuilder`), `crates/pty/src/environment_tests.rs`, `fixtures/platform/agent-environment.rs`, `docs/SPEC.md` §3.3, `docs/sessions/2026-11-13-claude-env-scrub.md`, `docs/sessions/README.md`.
+- Evidence: shipped Claude Code 2.1.322 PE explicitly clears `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, and `CLAUDE_CODE_CHILD_SESSION` (verified in prior handoff). Tests: `executables::tests::background_metadata_commands_remove_only_proven_parent_context` (red `left: []` -> green) and `environment_tests::independent_agent_drops_parent_markers_but_preserves_provider_and_restrictions` (red `clean=false` -> green `clean=true;provider=true;restriction=true`, parent env untouched).
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+- Verified live: synthetic child-process PTY test on Windows; not verified: live Claude Code nested launch or Unix runtime locally.
+- Deviations: `docs/ROADMAP_1.0.md` batch checkbox left unticked until G12 and G13 complete.
+
 ## Status at stop — explicitly ended by owner
 
 The owner instructed: "stop and report back this is the end for u". Implementation work and the active G11 test run were stopped. No PR was merged.
