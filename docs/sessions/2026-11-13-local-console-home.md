@@ -1,4 +1,4 @@
-# 2026-11-13 — E1 Local Console React Home View (Phase 1)
+# 2026-11-13 - E1 Local Console React Home View (Phase 1)
 
 ## Goals
 
