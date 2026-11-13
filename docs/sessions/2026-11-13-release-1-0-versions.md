@@ -32,3 +32,5 @@ Shared docs receive append-only completion records. Existing launch gates remain
 Reviewed 496d740..47a24a0 and extended release-note coverage for consistent console dialogs. Added the user-facing off-by-default scheduled-message/account-sync policy from the original range. No version implementation changed. Final integration at 1.0.0 additionally passed 127 current-main web tests, desktop 40 tests, 68 browser tests against the release binary, production web build and rendered-version consistency. No npm artifacts were published.
 
 Final notes cutoff: reviewed 47a24a0..3943dbb (account-view refinement), already covered by the consistent account/approval dialog release note. The coverage line now records 3943dbb. No product/version code changed in this documentation follow-up.
+
+The final fetch also included 175f821 (React console shell retirement). Reviewed as implementation consolidation under the existing four-place console note; source-note coverage cutoff is 175f821. Shipping builds still require final integration after all release PRs merge.
