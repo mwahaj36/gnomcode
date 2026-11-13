@@ -112,3 +112,5 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] A / F3 long-session original request and title preserved before recent context under budget; all 9 eval cases pass without threshold changes. No pins or decision heuristics.
 
 - [x] Release follow-up: Held approval alerts; see `docs/sessions/2026-11-13-approval-alerts.md`.
+
+- [x] Release follow-up: Remote action activity timer; see `docs/sessions/2026-11-13-remote-activity.md`.
