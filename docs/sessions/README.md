@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Worktree per session backend (F1)](2026-11-13-worktree-session-backend.md)
 - [2026-11-13 - Handoff quality evals backend (F3)](2026-11-13-handoff-evals-backend.md)
 - [2026-11-13 - Continue here backend for imported sessions (F2)](2026-11-13-continue-here-backend.md)
 - [2026-11-13 - Freeze unproven features behind off-by-default toggles (E3)](2026-11-13-e3-freeze-toggles.md)
