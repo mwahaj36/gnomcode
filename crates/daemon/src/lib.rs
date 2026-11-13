@@ -14,6 +14,7 @@ pub mod model_catalog;
 pub mod pro;
 pub mod remote;
 mod remote_trust;
+mod session_artifacts;
 mod session_changes;
 pub mod sync;
 pub mod update;
