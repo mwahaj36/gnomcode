@@ -127,6 +127,14 @@ enum Commands {
         #[arg(long)]
         no_refresh: bool,
     },
+    /// Opt Codex or Antigravity launches in or out of protocol mode, where approvals go to the
+    /// console and phone instead of the terminal (off by default).
+    ProtocolApprovals {
+        /// `enable`, `disable` or `status`.
+        action: String,
+        /// Agent (`codex` or `antigravity`).
+        agent: String,
+    },
     /// Internal Claude Code status line: records account limits and prints them.
     #[command(hide = true)]
     Statusline,
@@ -243,6 +251,7 @@ async fn main() -> Result<()> {
             provider,
             no_refresh,
         } => cmd_limits(&action, &provider, no_refresh).await,
+        Commands::ProtocolApprovals { action, agent } => cmd_protocol_approvals(&action, &agent),
         Commands::Statusline => {
             cmd_statusline();
             Ok(())
@@ -548,6 +557,32 @@ fn hook_notification(payload: &serde_json::Value) {
         Some(&serde_json::json!({"session_id": session})),
         REPLY_BUDGET,
     );
+}
+
+fn cmd_protocol_approvals(action: &str, agent: &str) -> Result<()> {
+    match action {
+        "enable" | "disable" => {
+            gnomcode_pty::protocol_host::set_protocol_approvals(agent, action == "enable")?;
+            println!(
+                "{agent} protocol approvals {action}d. New {agent} sessions {} run through the agent's JSON-RPC protocol in a plain-text terminal; approvals are answered from the console or phone and anything unanswered is cancelled. Resumed sessions keep the normal terminal.",
+                if action == "enable" {
+                    "will"
+                } else {
+                    "will not"
+                }
+            );
+        }
+        "status" => println!(
+            "{agent} protocol approvals {}",
+            if gnomcode_pty::protocol_host::protocol_approvals_enabled(agent) {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        ),
+        _ => anyhow::bail!("action must be enable, disable or status"),
+    }
+    Ok(())
 }
 
 async fn cmd_limits(action: &str, provider: &str, no_refresh: bool) -> Result<()> {
@@ -1500,6 +1535,18 @@ async fn cmd_pty_host(
     model: Option<&str>,
     resume_session: Option<&str>,
 ) -> Result<()> {
+    // Opt-in protocol mode (ADR 0057) applies to new launches only; the terminal stays the default.
+    if resume_session.is_none() && gnomcode_pty::protocol_host::protocol_approvals_enabled(agent) {
+        let daemon: gnomcode_pty::protocol_host::DaemonEndpoint = std::sync::Arc::new(|| {
+            gnomcode_daemon::approvals::client::Endpoint::from_daemon_info()
+                .map(|endpoint| (endpoint.port, endpoint.token))
+        });
+        return gnomcode_pty::protocol_host::run_protocol_host(
+            session_id, agent, repo, model, daemon,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Protocol session host failed: {e}"));
+    }
     gnomcode_pty::run_pty_host_resuming(session_id, agent, repo, model, None, resume_session)
         .await
         .map_err(|e| anyhow::anyhow!("Session host failed: {e}"))

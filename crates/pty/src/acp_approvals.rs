@@ -249,7 +249,7 @@ pub async fn request_daemon_approval(
     let Ok(waited) = wait_resp.json::<Value>().await else {
         return AcpApprovalOutcome::NoDecision;
     };
-    match waited.get("decision").and_then(Value::as_str) {
+    match waited.get("outcome").and_then(Value::as_str) {
         Some("allow") => AcpApprovalOutcome::Allow,
         Some("deny") => AcpApprovalOutcome::Deny,
         _ => AcpApprovalOutcome::NoDecision,

@@ -215,5 +215,6 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-12 — Live audit and editor adapter removal](2026-11-12-remove-editor-adapters.md)
 - [2026-11-12 — Core loop fixes and ingest accuracy](2026-11-12-core-loop-and-ingest-accuracy.md)
 - [2026-11-13 — Live Claude desktop sessions and subagents](2026-11-13-live-claude-sessions.md)
+- [2026-11-13 - Protocol approvals wiring](2026-11-13-protocol-approvals-wiring.md)
 - [2026-11-13 - Antigravity exhausted scope](2026-11-13-antigravity-exhausted-scope.md)
 - [2026-11-13 - Unix CI verification](2026-11-13-unix-ci-verify.md)
