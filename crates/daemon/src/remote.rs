@@ -729,7 +729,21 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                     .map(|d| d.as_nanos())
                     .unwrap_or(0)
             );
-            match gnomcode_pty::launch_session(&session_id, agent, repo, model).await {
+            let isolated = match crate::worktree_api::prepare_launch(
+                repo,
+                &session_id,
+                request.get("worktree").and_then(Value::as_bool) == Some(true),
+                request.get("worktree_branch").and_then(Value::as_str),
+            )
+            .await
+            {
+                Ok(record) => record,
+                Err(error) => return json!({"type":"error","message":error.to_string()}),
+            };
+            let cwd = isolated
+                .as_ref()
+                .map_or_else(|| repo.to_path_buf(), |record| record.cwd.clone().into());
+            match gnomcode_pty::launch_session(&session_id, agent, &cwd, model).await {
                 Ok(record) => {
                     if db
                         .lock()
@@ -744,9 +758,20 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                     {
                         return json!({"type":"error","message":"Agent started but its conversation could not be saved. Check your laptop before retrying."});
                     }
-                    json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent})
+                    let mut ack = json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent});
+                    if let (Some(isolated), Some(fields)) = (&isolated, ack.as_object_mut()) {
+                        if let Value::Object(extra) = crate::worktree_api::fields(isolated) {
+                            fields.extend(extra);
+                        }
+                    }
+                    ack
                 }
-                Err(err) => json!({"type":"error","message":format!("Launch failed: {err}")}),
+                Err(err) => {
+                    if let Some(isolated) = &isolated {
+                        crate::worktree_api::abort_launch(isolated).await;
+                    }
+                    json!({"type":"error","message":format!("Launch failed: {err}")})
+                }
             }
         }
         Some("chat") => {
@@ -831,6 +856,9 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             }
         }
         Some("continue_here") => crate::continue_here::remote_command(db, &request).await,
+        Some("worktree_merge" | "worktree_discard" | "worktree_open_pr" | "session_changes") => {
+            crate::worktree_api::remote_command(db, &request).await
+        }
         Some("resume_session") => {
             let Some(id) = request
                 .get("session_id")
@@ -1194,6 +1222,7 @@ pub(crate) fn conversation_sessions(
 ) -> Result<Vec<Value>, gnomcode_store::Error> {
     sync_conversation_bindings(db, sessions, hosted)?;
     let quota = db.get_latest_quota_snapshots()?;
+    let worktrees = crate::worktree_api::index();
     let mut visible = Vec::new();
     let mut candidates = remote_sessions(sessions, hosted);
     for root in db.conversation_ids()? {
@@ -1268,6 +1297,13 @@ pub(crate) fn conversation_sessions(
             row["state"] = json!(displayed_state(session, host.is_some()));
         }
         row["id"] = json!(root);
+        if let Some(record) = worktrees.get(&root).or_else(|| worktrees.get(id)) {
+            if let (Value::Object(fields), Value::Object(extra)) =
+                (&mut row, crate::worktree_api::fields(record))
+            {
+                fields.extend(extra);
+            }
+        }
         row["hosted"] = json!(host.is_some());
         row["can_prompt"] = json!(can_prompt);
         row["can_resume"] = json!(can_resume);

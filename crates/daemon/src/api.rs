@@ -141,6 +141,18 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/conversations", get(list_conversations_handler))
         .route("/api/v1/sessions/hosted", get(list_hosted_sessions_handler))
         .route("/api/v1/sessions/launch", post(launch_session_handler))
+        .route(
+            "/api/v1/sessions/{id}/worktree/merge",
+            post(crate::worktree_api::merge_handler),
+        )
+        .route(
+            "/api/v1/sessions/{id}/worktree/discard",
+            post(crate::worktree_api::discard_handler),
+        )
+        .route(
+            "/api/v1/sessions/{id}/worktree/open-pr",
+            post(crate::worktree_api::open_pr_handler),
+        )
         .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
         .route(
             "/api/v1/sessions/{id}/interrupt",
@@ -826,13 +838,19 @@ pub struct LaunchSessionRequest {
     pub repo_path: String,
     /// Optional model identifier.
     pub model: Option<String>,
+    /// Run the agent in its own git worktree on a new branch (ADR 0051).
+    #[serde(default)]
+    pub worktree: bool,
+    /// Optional branch name for the worktree; defaults to `gnomcode/<session id>`.
+    #[serde(default)]
+    pub worktree_branch: Option<String>,
 }
 
 async fn launch_session_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
     Json(payload): Json<LaunchSessionRequest>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<axum::response::Response, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let session_id = format!(
         "{}-{}",
@@ -846,7 +864,27 @@ async fn launch_session_handler(
     if !repo.is_dir() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    match gnomcode_pty::launch_session(&session_id, &payload.agent, repo, payload.model.as_deref())
+    let isolated = match crate::worktree_api::prepare_launch(
+        repo,
+        &session_id,
+        payload.worktree,
+        payload.worktree_branch.as_deref(),
+    )
+    .await
+    {
+        Ok(record) => record,
+        Err(error) => {
+            return Ok((
+                error.status(),
+                Json(json!({"ok":false,"message":error.to_string()})),
+            )
+                .into_response());
+        }
+    };
+    let cwd = isolated
+        .as_ref()
+        .map_or_else(|| repo.to_path_buf(), |record| record.cwd.clone().into());
+    match gnomcode_pty::launch_session(&session_id, &payload.agent, &cwd, payload.model.as_deref())
         .await
     {
         Ok(record) => {
@@ -861,9 +899,21 @@ async fn launch_session_handler(
                     record.model.as_deref(),
                 )
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            Ok(Json(record))
+            let mut body =
+                serde_json::to_value(&record).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            if let (Some(isolated), Some(fields)) = (&isolated, body.as_object_mut()) {
+                if let Value::Object(extra) = crate::worktree_api::fields(isolated) {
+                    fields.extend(extra);
+                }
+            }
+            Ok(Json(body).into_response())
         }
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Err(_) => {
+            if let Some(isolated) = &isolated {
+                crate::worktree_api::abort_launch(isolated).await;
+            }
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
