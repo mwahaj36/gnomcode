@@ -1,6 +1,8 @@
 //! File watching, reconciliation, incremental tailing, and checkpointing
 //! of agent logs into the SQLite store (`SPEC §3.5`, `§4.4`).
 
+pub mod watcher;
+
 use chrono::Utc;
 use gnomcode_adapters::{
     FileCtx, SourceAdapter,
