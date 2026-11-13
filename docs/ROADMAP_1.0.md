@@ -33,6 +33,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] D3 file watcher and idle back-off for ingest (CPU budget: idle under 1%)
 - [x] Antigravity exhausted cross-check against RESOURCE_EXHAUSTED
 - [x] Failover demo end to end: Claude exhausted, continue in Codex with handoff
+- [x] Host sweep fails open: end exited hosted sessions only after a complete host listing agrees with a fresh process check
 
 ## E. Consolidation (audit Phase 3)
 - [ ] Local console built from web/ React; delete console-app.js

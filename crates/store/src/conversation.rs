@@ -118,12 +118,41 @@ impl Database {
         Ok(self.conn.query_row(obfstr::obfstr!("SELECT host_id,native_id,needs_context FROM conversation_member WHERE conversation_id=?1 ORDER BY position DESC LIMIT 1"),[root],|row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional()?)
     }
 
+    /// Hosts bound to a thinking, tool or approval session that are absent from `live_hosts`:
+    /// the candidates [`Self::end_exited_hosted_sessions`] would end.
+    ///
+    /// # Errors
+    /// Returns an error if the lookup fails.
+    pub fn unlisted_bound_hosts(&self, live_hosts: &[String]) -> Result<Vec<String>, Error> {
+        let mut statement = self.conn.prepare(obfstr::obfstr!(
+            "SELECT DISTINCT m.host_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')"
+        ))?;
+        let hosts = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(hosts
+            .into_iter()
+            .filter(|host| !live_hosts.contains(host))
+            .collect())
+    }
+
     /// Marks bound sessions ended when their Gnomcode host is not in `live_hosts`, so a killed
     /// host never leaves a thinking/tool/approval state behind. Returns the rows changed.
     ///
+    /// `known_alive` holds hosts a fresh process check found running. Fail open: when any of
+    /// them is missing from `live_hosts` the listing is incomplete (an unreadable record, a
+    /// race with a starting host, or a wrongly empty list), so nothing is ended.
+    ///
     /// # Errors
     /// Returns an error if the update fails.
-    pub fn end_exited_hosted_sessions(&self, live_hosts: &[String]) -> Result<usize, Error> {
+    pub fn end_exited_hosted_sessions(
+        &self,
+        live_hosts: &[String],
+        known_alive: &[String],
+    ) -> Result<usize, Error> {
+        if known_alive.iter().any(|host| !live_hosts.contains(host)) {
+            return Ok(0);
+        }
         let mut statement = self.conn.prepare(obfstr::obfstr!(
             "SELECT m.host_id, m.native_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')"
         ))?;
@@ -475,6 +504,72 @@ mod tests {
         );
     }
 
+    fn two_bound_sessions() -> Database {
+        let db = Database::open_in_memory().expect("db");
+        for (host, native) in [("h-dead", "antigravity:a"), ("h-live", "antigravity:b")] {
+            db.conn
+                .execute(
+                    "INSERT OR IGNORE INTO project(id,canonical_key,repo_root,name) VALUES ('p','/w','/w','w')",
+                    [],
+                )
+                .expect("project");
+            db.conn
+                .execute(
+                    "INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at) VALUES (?1,'antigravity','cli','p','tool','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+                    [native],
+                )
+                .expect("session");
+            db.bind_conversation_host(host, native).expect("bind");
+        }
+        db
+    }
+
+    fn state_of(db: &Database, id: &str) -> String {
+        db.conn
+            .query_row("SELECT state FROM session WHERE id=?1", [id], |r| r.get(0))
+            .expect("state")
+    }
+
+    #[test]
+    fn sweep_ends_nothing_when_a_host_known_alive_is_missing_from_the_listing() {
+        let db = two_bound_sessions();
+        // Wrongly empty listing while a process check found h-dead running.
+        assert_eq!(
+            db.end_exited_hosted_sessions(&[], &["h-dead".into()])
+                .expect("sweep"),
+            0
+        );
+        // Partial listing that dropped a known-alive host.
+        assert_eq!(
+            db.end_exited_hosted_sessions(&["h-live".into()], &["h-dead".into()])
+                .expect("sweep"),
+            0
+        );
+        assert_eq!(state_of(&db, "antigravity:a"), "tool");
+        assert_eq!(state_of(&db, "antigravity:b"), "tool");
+        // A complete listing that agrees with the process check still ends the dead host.
+        assert_eq!(
+            db.end_exited_hosted_sessions(&["h-live".into()], &["h-live".into()])
+                .expect("sweep"),
+            1
+        );
+        assert_eq!(state_of(&db, "antigravity:a"), "ended");
+        assert_eq!(state_of(&db, "antigravity:b"), "tool");
+    }
+
+    #[test]
+    fn unlisted_bound_hosts_are_the_sweep_candidates() {
+        let db = two_bound_sessions();
+        let mut candidates = db.unlisted_bound_hosts(&[]).expect("candidates");
+        candidates.sort();
+        assert_eq!(candidates, ["h-dead", "h-live"]);
+        assert_eq!(
+            db.unlisted_bound_hosts(&["h-live".into()])
+                .expect("candidates"),
+            ["h-dead"]
+        );
+    }
+
     #[test]
     fn exited_host_ends_its_bound_session_but_not_a_live_one() {
         let db = Database::open_in_memory().expect("db");
@@ -494,7 +589,7 @@ mod tests {
             db.bind_conversation_host(host, native).expect("bind");
         }
         assert_eq!(
-            db.end_exited_hosted_sessions(&["h-live".into()])
+            db.end_exited_hosted_sessions(&["h-live".into()], &[])
                 .expect("sweep"),
             1
         );

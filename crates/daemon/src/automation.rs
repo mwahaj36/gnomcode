@@ -328,17 +328,42 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     }
 }
 
-/// Ends sessions whose Gnomcode host process exited (SPEC 3.7). Fails open: an unreadable host
-/// directory or store error changes nothing.
+/// Ends sessions whose Gnomcode host process exited (SPEC 3.7). Fails open: a listing error, an
+/// unreadable host record, a host the fresh process check still finds running, or a store error
+/// ends nothing.
 async fn end_exited_hosts(db: &Arc<Mutex<Database>>) {
     if !gnomcode_pty::sessions_dir().is_dir() {
         return;
     }
-    let live: Vec<String> = gnomcode_pty::list_active_sessions()
+    let Ok(records) = gnomcode_pty::try_list_active_sessions() else {
+        return;
+    };
+    let live = records
         .into_iter()
         .map(|record| record.session_id)
         .collect();
-    let _ = store(db, move |db| db.end_exited_hosted_sessions(&live)).await;
+    sweep_exited_hosts(db, live, |host| gnomcode_pty::host_is_running(host).ok()).await;
+}
+
+/// Ends bound sessions whose host is not in `live`, but only after `host_alive` (a fresh process
+/// check, `None` when unknown) confirms every unlisted host is gone.
+async fn sweep_exited_hosts(
+    db: &Arc<Mutex<Database>>,
+    live: Vec<String>,
+    host_alive: impl Fn(&str) -> Option<bool> + Send + 'static,
+) {
+    let _ = store(db, move |db| {
+        let mut known_alive = Vec::new();
+        for host in db.unlisted_bound_hosts(&live)? {
+            match host_alive(&host) {
+                Some(true) => known_alive.push(host),
+                Some(false) => {}
+                None => return Ok(0),
+            }
+        }
+        db.end_exited_hosted_sessions(&live, &known_alive)
+    })
+    .await;
 }
 
 static KEEP_AWAKE_HOLDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -1116,5 +1141,74 @@ mod tests {
                 .unwrap_or_default()
                 .contains("frozen")
         );
+    }
+
+    async fn busy_hosted_database() -> Arc<Mutex<Database>> {
+        use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
+        let now = chrono::Utc::now();
+        let project = Project::from_origin(None, "/sweep", None);
+        let session = Session {
+            id: "codex:swept".into(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Tool,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let checkpoint = gnomcode_store::SourceCheckpoint {
+            file_path: "sweep".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "sweep".into(),
+            last_ingested_at: now,
+        };
+        let mut database = Database::open_in_memory().expect("db");
+        database
+            .commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+            .expect("session");
+        database
+            .bind_conversation_host("sweep-host", "codex:swept")
+            .expect("bind");
+        Arc::new(Mutex::new(database))
+    }
+
+    async fn swept_state(db: &Arc<Mutex<Database>>) -> String {
+        let guard = db.lock().await;
+        let (rows, _) = guard
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("sessions");
+        rows.iter()
+            .find(|row| row.id == "codex:swept")
+            .expect("row")
+            .state
+            .clone()
+    }
+
+    #[tokio::test]
+    async fn host_sweep_ends_nothing_unless_the_listing_is_complete() {
+        // An unreadable record leaves liveness unknown: nothing ends.
+        let db = busy_hosted_database().await;
+        sweep_exited_hosts(&db, Vec::new(), |_| None).await;
+        assert_eq!(swept_state(&db).await, "tool");
+
+        // The listing came back empty but the process check finds the host running: nothing ends.
+        sweep_exited_hosts(&db, Vec::new(), |_| Some(true)).await;
+        assert_eq!(swept_state(&db).await, "tool");
+
+        // Listing and process check agree the host is gone: the stale session ends.
+        sweep_exited_hosts(&db, Vec::new(), |_| Some(false)).await;
+        assert_eq!(swept_state(&db).await, "ended");
+    }
+
+    #[tokio::test]
+    async fn host_sweep_keeps_a_listed_host() {
+        let db = busy_hosted_database().await;
+        sweep_exited_hosts(&db, vec!["sweep-host".into()], |_| Some(false)).await;
+        assert_eq!(swept_state(&db).await, "tool");
     }
 }
