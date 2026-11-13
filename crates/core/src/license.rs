@@ -3,7 +3,7 @@
 //! Licenses are offline cryptographic files (`~/.gnomcode/license.key`).
 //! The payload contains:
 //! - `licensee`: Name or email of the purchaser.
-//! - `tier`: `"pro"` or `"team"`.
+//! - `tier`: `"pro"` (or the legacy `"team"`, treated as Pro).
 //! - `issued_at`: ISO-8601 timestamp.
 //! - `expires_at`: Optional expiration timestamp (`None` for lifetime).
 //! - `signature`: Base64-encoded Ed25519 signature over canonical payload bytes.
@@ -12,7 +12,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Hardcoded public key for verifying Gnomcode Pro and Team license files.
+/// Hardcoded public key for verifying Gnomcode Pro license files (including legacy Team files).
 /// In release binaries, the key is compiled directly into the binary.
 pub const GNOMCODE_LICENSE_PUBKEY_HEX: &str =
     "c8a5542a1226a7988ee0fcfe7dfa2c91838883ff0c96c567e997a66b9d628dd5";
@@ -39,7 +39,8 @@ pub enum Tier {
     Free,
     /// Pro tier ($19 one-time: guardrails, Resume Queue, custom alert rules, export).
     Pro,
-    /// Teams tier ($12/seat/mo: Supabase shared rollups, org budgets, Slack alerts).
+    /// Legacy tier from licenses issued before the 1.0 scope cut. Verifies like a signature
+    /// over `"team"` payloads and is treated as Pro. No Teams features exist in 1.0.
     Team,
 }
 

@@ -1,6 +1,6 @@
 # 0022 - Continuous conversations and native resume
 
-- **Status:** Accepted
+- **Status:** Accepted. Superseded in part by [0058](./0058-1.0-scope-three-agents.md) (Gemini CLI resume is removed from 1.0).
 - **Date:** 2026-10-30
 
 ## Context

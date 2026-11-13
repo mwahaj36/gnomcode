@@ -284,7 +284,7 @@ pub fn hostname() -> String {
 }
 
 /// Returns the candidate log root directories for supported agents, respecting
-/// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GEMINI_HOME`).
+/// environment variable overrides (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `GEMINI_HOME`, which locates Antigravity data).
 #[must_use]
 pub fn discover_agent_roots() -> Vec<AgentRoot> {
     let home = user_home_dir();
@@ -314,7 +314,6 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
     let antigravity_cli_root = gemini_base
         .join(obfstr::obfstr!("antigravity-cli"))
         .join("brain");
-    let gemini_cli_root = gemini_base.join("tmp");
 
     vec![
         AgentRoot {
@@ -346,11 +345,6 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             agent: AgentId::Antigravity,
             exists: antigravity_cli_root.exists(),
             path: antigravity_cli_root,
-        },
-        AgentRoot {
-            agent: AgentId::GeminiCli,
-            exists: gemini_cli_root.exists(),
-            path: gemini_cli_root,
         },
     ]
 }
@@ -731,7 +725,6 @@ pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
     let clean_agent = match agent {
         "claude" | "claude-code" => "claude",
         "codex" => "codex",
-        "gemini" | "gemini-cli" => "gemini",
         _ => return false,
     };
     let Ok(exe) = std::env::current_exe() else {

@@ -88,7 +88,6 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
                 let agent = match target.agent.as_str() {
                     "codex" => gnomcode_core::AgentId::Codex,
                     "claude-code" => gnomcode_core::AgentId::ClaudeCode,
-                    "gemini-cli" => gnomcode_core::AgentId::GeminiCli,
                     _ => return Err(gnomcode_store::Error::Migration("Unsupported agent".into())),
                 };
                 // Never guess a folder: without the session's own, there is nothing safe to resume in.
@@ -242,7 +241,6 @@ fn provider(agent: &str) -> &str {
     match agent {
         "anthropic" | "claude" | "claude-code" => "claude-code",
         "openai" | "codex" => "codex",
-        "google" | "gemini" | "gemini-cli" => "gemini-cli",
         value => value,
     }
 }
@@ -677,7 +675,7 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
             .iter()
             .filter(|p| matches!(p.status.as_str(), "authenticated" | "configured"))
             .flat_map(|p| p.models.iter())
-            .filter(|m| matches!(provider(&m.agent), "codex" | "claude-code" | "gemini-cli"))
+            .filter(|m| matches!(provider(&m.agent), "codex" | "claude-code"))
             .collect();
         let candidates: Vec<_> = choices
             .iter()

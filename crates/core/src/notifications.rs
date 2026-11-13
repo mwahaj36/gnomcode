@@ -159,7 +159,6 @@ pub fn agent_display_name(raw: &str) -> String {
         "claude-code" | "claude" | "anthropic" => "Claude Code".to_owned(),
         "codex" | "openai" => "Codex".to_owned(),
         "antigravity" => "Antigravity".to_owned(),
-        "gemini-cli" | "gemini" | "google" => "Gemini CLI".to_owned(),
         "" => "Agent".to_owned(),
         other => sanitize_plain_text(other, 32),
     }
@@ -170,7 +169,6 @@ const fn agent_id_display(agent: AgentId) -> &'static str {
         AgentId::ClaudeCode => "Claude Code",
         AgentId::Codex => "Codex",
         AgentId::Antigravity => "Antigravity",
-        AgentId::GeminiCli => "Gemini CLI",
     }
 }
 

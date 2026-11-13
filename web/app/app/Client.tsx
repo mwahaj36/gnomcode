@@ -104,7 +104,7 @@ export default function AppLauncherClient() {
               </div>
               <h2 className="text-lg font-semibold text-[var(--sp-text)]">Remote Companion</h2>
               <p className="text-sm text-[var(--sp-muted)] leading-relaxed">
-                Connect your phone or browser to active coding sessions. View conversation steps, respond to tool approval requests, and prompt Claude Code, Codex, or Gemini CLI from anywhere.
+                Connect your phone or browser to active coding sessions. View conversation steps, respond to tool approval requests, and prompt Claude Code, Codex, or Antigravity from anywhere.
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[var(--sp-border)] flex items-center justify-between">

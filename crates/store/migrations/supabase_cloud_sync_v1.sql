@@ -77,6 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_quota_pool_sync_user ON public.quota_pool_sync(us
 ALTER TABLE public.quota_pool_sync ENABLE ROW LEVEL SECURITY;
 
 -- 6. Team Budget & Webhook Alert Rules
+-- Unused since the 1.0 scope cut (ROADMAP E4): no Teams features ship. Kept for history; never dropped.
 CREATE TABLE IF NOT EXISTS public.team_budget_rules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,

@@ -835,7 +835,7 @@ async fn focus_session_handler(
 /// Request payload to launch an agent in a workspace.
 #[derive(Debug, Deserialize)]
 pub struct LaunchSessionRequest {
-    /// Agent identifier (e.g. `claude`, `codex`, `gemini`).
+    /// Agent identifier (e.g. `claude`, `codex`, `antigravity`).
     pub agent: String,
     /// Absolute path to the repository directory.
     pub repo_path: String,
@@ -1240,13 +1240,6 @@ async fn installed_agents_handler(
             "installed": gnomcode_platform::executables::executable_available("codex"),
             "install_command": "npm install -g @openai/codex",
             "login_command": "codex login"
-        }),
-        json!({
-            "id": "gemini",
-            "name": "Gemini CLI",
-            "installed": gnomcode_platform::executables::executable_available("gemini"),
-            "install_command": "npm install -g @google/gemini-cli",
-            "login_command": "gemini"
         }),
         json!({
             "id": "antigravity",
@@ -4452,7 +4445,7 @@ mod tests {
         month.providers = vec![
             provider("Claude Code", vec![model("claude-code", 12.0, 0)]),
             provider("OpenAI Codex", vec![model("codex", 4.0, 2)]),
-            provider("Google Gemini CLI", vec![model("gemini-cli", 0.0, 0)]),
+            provider("Google Antigravity", vec![model("antigravity", 0.0, 0)]),
         ];
         assert_ne!(month.providers[0].provider, "claude-code");
         let costs = super::provider_costs(&today, &month);
@@ -4463,7 +4456,7 @@ mod tests {
         let codex = costs.get("codex").expect("codex cost");
         assert_eq!(codex.today_usd, 0.0);
         assert_eq!(codex.basis, gnomcode_core::TrustLevel::Unknown);
-        assert!(!costs.contains_key("gemini-cli"), "no spend means no cost");
+        assert!(!costs.contains_key("antigravity"), "no spend means no cost");
         let list = super::provider_overviews(Vec::new(), costs, false, false);
         assert!(list[0].cost.is_some() && list[1].cost.is_some() && list[2].cost.is_none());
     }

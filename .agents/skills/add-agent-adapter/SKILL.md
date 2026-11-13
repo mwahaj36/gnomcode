@@ -2,7 +2,7 @@
 name: add-agent-adapter
 description: >-
   Step-by-step runbook for adding or updating an AI agent log adapter in
-  crates/adapters (e.g., Claude Code, Codex, Antigravity, Gemini CLI), including log anonymization, golden fixture testing,
+  crates/adapters (e.g., Claude Code, Codex, Antigravity), including log anonymization, golden fixture testing,
   deduplication keys, and per-model quota pool mapping.
 ---
 
