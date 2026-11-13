@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - G7 verified Antigravity usage fallback](2026-11-13-agy-usage-fallback.md)
 - [2026-11-13 - G6 Antigravity native resume backend](2026-11-13-agy-native-resume-backend.md)
 - [2026-11-13 - G5 Remote interrupt backend](2026-11-13-remote-interrupt-backend.md)
 - [2026-11-13 - Restore green baseline](2026-11-13-restore-green-baseline.md)

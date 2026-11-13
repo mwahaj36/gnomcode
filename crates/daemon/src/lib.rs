@@ -4,6 +4,7 @@
 mod account_devices;
 #[cfg(test)]
 mod agy_resume_tests;
+mod agy_usage;
 pub mod api;
 pub mod approvals;
 mod automation;
