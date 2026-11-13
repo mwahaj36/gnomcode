@@ -1,26 +1,20 @@
 import { pageMetadata } from "../../lib/seo";
 import Link from "next/link";
 
-export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local AI Agent Tools", "All local Gnomcode features are free. Remote and Teams pricing is not finalized. Your agent provider bills inference separately.");
+export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local AI Agent Tools", "All local Gnomcode features are free. Remote pricing is not finalized. Your agent provider bills inference separately.");
 
 const tiers = [
   {
-    name: "Local", note: "FREE · NO ACCOUNT", price: "$0", cadence: "free forever",
+    name: "Local", note: "FREE · NO ACCOUNT", price: "$0", cadence: "free, no account",
     description: "Monitor and manage agents on your own machine.",
-    features: ["CLI, daemon, and local dashboard", "Live sessions, usage, and quota", "Guardrails and alert rules", "Resume Queue and Context Relay", "Analytics and exports"],
+    features: ["CLI, daemon, tray and local console", "Live sessions, usage, and quota", "Guardrails and alert rules", "Resume Queue and Context Relay", "Analytics and exports"],
     action: "Download free", href: "/downloads",
   },
   {
     name: "Remote", note: "PROTOTYPE", price: "Remote", cadence: "pricing not finalized",
     description: "Access your own sessions from your phone.",
-    features: ["End-to-end encrypted access", "Pair and revoke devices", "View sessions and respond to requests"],
+    features: ["End-to-end encrypted access", "Link and revoke devices", "View sessions, respond to requests and approve Claude Code prompts"],
     action: "Explore Remote", href: "/docs/remote-access",
-  },
-  {
-    name: "Teams", note: "PLANNED", price: "Teams", cadence: "pricing not finalized",
-    description: "Shared visibility is a future product direction, not a complete service.",
-    features: ["Shared visibility is the Teams direction", "Pricing and scope to be determined"],
-    action: "Read the FAQ", href: "/docs/faq",
   },
 ];
 
@@ -34,8 +28,8 @@ const questions = [
     answer: "Yes. All local features run without an account. Existing cloud sync is optional and is not end-to-end encrypted.",
   },
   {
-    question: "How much do Remote and Teams cost?",
-    answer: "Remote and Teams pricing and terms are not finalized. Your agent provider bills inference separately.",
+    question: "How much does Remote cost?",
+    answer: "Remote pricing and terms are not finalized. Your agent provider bills inference separately.",
   },
 ];
 
@@ -44,7 +38,7 @@ export default function PricingPage() {
     <div className="sp-console-shell sp-pricing-page mx-auto max-w-7xl px-6 py-16 font-sans">
       <header className="sp-pricing-intro">
         <h1>All local features are free.</h1>
-        <p>Use the CLI and local dashboard without an account. Remote is a prototype and Teams is a future direction; pricing and terms are not finalized. Provider inference is billed separately.</p>
+        <p>Use the CLI and local dashboard without an account. Remote is a prototype; its pricing and terms are not finalized. Provider inference is billed separately.</p>
       </header>
 
       <section className="sp-pricing-grid" aria-label="Plans">

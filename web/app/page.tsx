@@ -5,7 +5,7 @@ import { landingFaq } from "../lib/landing-faq";
 export const metadata = pageMetadata(
   "",
   "Gnomcode — Switch AI Coding Agents and Keep Working",
-  "Launch Claude Code and Codex, switch agents with a concise handoff, and manage coding sessions locally. Free local features; Windows development build available."
+  "Launch Claude Code, Codex and Antigravity, switch with a concise handoff and manage sessions locally. Free local features; Windows build available."
 );
 
 const softwareApp = buildSoftwareAppJsonLd();

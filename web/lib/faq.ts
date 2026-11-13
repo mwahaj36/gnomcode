@@ -25,7 +25,11 @@ export const faqGroups = [
     "questions": [
       {
         "question": "Which agents does Gnomcode observe?",
-        "answer": "Adapters cover Claude Code, Codex, Gemini CLI and Antigravity records. Available token, model and quota fields vary by source."
+        "answer": "Gnomcode 1.0 supports exactly Claude Code, Codex and Antigravity. Available token, model and quota fields vary by source."
+      },
+      {
+        "question": "Does Gnomcode support Gemini CLI, Cursor, Aider, Cline or Teams?",
+        "answer": "No. Gemini CLI, Cursor, Aider and Cline are not supported, and there is no Teams product. Antigravity uses Google's Gemini models and is supported. History from removed agents stays on disk and is not shown as a supported agent."
       },
       {
         "question": "Will more agents be added?",
@@ -67,7 +71,11 @@ export const faqGroups = [
       },
       {
         "question": "What can I do from my phone?",
-        "answer": "Read available chat history, receive replies, launch supported CLIs, choose a workspace and send eligible initial/follow-up prompts. Imported history remains read-only."
+        "answer": "Read available chat history, receive replies, launch supported CLIs, choose a workspace, send eligible initial/follow-up prompts, interrupt a turn, browse the session's changes, files and artifacts read-only, and attach files to a prompt. Imported history stays read-only until you choose Continue here, which reopens it through the agent's own resume command."
+      },
+      {
+        "question": "Can I approve permission prompts from my phone?",
+        "answer": "Yes for Claude Code: Gnomcode's optional hook forwards a one-line summary of the prompt, and nothing is ever allowed by default. Codex and Antigravity can be approved from the phone only in their opt-in protocol mode, which applies to new launches. Timeouts and errors leave the decision to the agent's own dialog."
       },
       {
         "question": "What can I not do remotely?",
@@ -84,7 +92,7 @@ export const faqGroups = [
     "questions": [
       {
         "question": "What is free and what is paid?",
-        "answer": "All local features are free without a local license. Remote and Teams are paid categories; commercial prices and terms are not finalized."
+        "answer": "All local features are free without a local license. Remote is a paid category; commercial prices and terms are not finalized. There is no Teams product."
       },
       {
         "question": "Does Gnomcode charge per token?",

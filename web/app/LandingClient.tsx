@@ -14,7 +14,6 @@ const agents = [
   { name: "Claude Code", icons: ["claudecode"] },
   { name: "Codex", icons: ["codex"] },
   { name: "Antigravity", icons: ["antigravity"] },
-  { name: "Gemini CLI", icons: ["gemini"] },
 ];
 const tours = [
   { name: "Overview", title: "Everything happening now.", detail: "See active sessions, spend and the limits that need attention.", kind: "overview" },
@@ -24,13 +23,12 @@ const tours = [
 ];
 const features = [
   ["Hit a limit. Keep the task moving.", "Switch supported agents with a compact briefing of objectives and changed files. Keep the original history and continue with another model."],
-  ["Away from your desk. Still in control.", "Pair your phone, read the conversation and send the next instruction over an end-to-end encrypted channel."],
+  ["Away from your desk. Still in control.", "Read the conversation, send the next instruction and approve Claude Code permission prompts from your phone over an end-to-end encrypted channel."],
   ["One fleet. One view of usage.", "Compare recorded tokens, estimated API-equivalent spend and quota across agents. Every measurement carries its trust level."],
 ];
 const plans = [
-  { name: "Local", price: "$0", term: "forever", promise: "Run locally without an account.", points: ["Session and quota view", "Guardrails and resume", "Analytics and export"], href: "/downloads", action: "Download" },
-  { name: "Remote", price: "Remote", term: "prototype", promise: "Connect to supported sessions from your phone.", points: ["End-to-end encrypted access", "Device pairing", "Session controls"], href: "/pricing", action: "Explore Remote" },
-  { name: "Teams", price: "Teams", term: "planned", promise: "Shared visibility for a team is a future direction.", points: ["Shared visibility", "Product direction in docs", "Terms before purchase"], href: "/pricing", action: "Explore Teams" },
+  { name: "Local", price: "$0", term: "no account", promise: "Run locally without an account.", points: ["Session and quota view", "Guardrails and resume", "Analytics and export"], href: "/downloads", action: "Download" },
+  { name: "Remote", price: "Remote", term: "prototype", promise: "Connect to supported sessions from your phone.", points: ["End-to-end encrypted access", "Linked devices you can revoke", "Session controls"], href: "/pricing", action: "Explore Remote" },
 ];
 
 function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="true" />; }
@@ -168,7 +166,7 @@ export default function LandingPage() {
 
       <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Local by default. Encrypted when remote.</h2><span>PRIVACY / BY DESIGN</span></div><div className="sp-privacy-grid">{[["Local history", "Keep redacted conversations on your desktop."], ["Encrypted Remote", "Conversations reach your paired device through E2EE."], ["No telemetry", "No product analytics or tracking."], ["Your choice", "Account metadata sync is optional and separately disclosed."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
 
-      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote is a prototype; Teams is planned. Pricing is not finalized. Provider inference is billed separately.</p></div><Link href="/pricing">Compare plans <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></article>)}</div></section>
+      <section className="sp-pricing sp-width" data-reveal aria-labelledby="pricing-title"><div className="sp-section-head"><div><h2 id="pricing-title">All local features are free.</h2><p>Remote is a prototype and its pricing is not finalized. Provider inference is billed separately.</p></div><Link href="/pricing">Compare plans <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><div className="sp-plan-grid">{plans.map((plan) => <article key={plan.name}><span className="sp-label">{plan.name}</span><div className="sp-plan-price"><strong>{plan.price}</strong><span>{plan.term}</span></div><p>{plan.promise}</p><ul>{plan.points.map((point) => <li key={point}>{point}</li>)}</ul><Link href={plan.href}>{plan.action} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></article>)}</div></section>
 
       <section className="sp-width sp-landing-downloads" data-reveal><div className="sp-section-head"><h2>Choose your platform.</h2></div><PlatformDownloads /></section>
 
