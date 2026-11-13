@@ -1,5 +1,17 @@
 # Worker A handoff
 
+## 2026-11-13: Gemini ACP protocol approvals (blocked — CLI not installed)
+
+- `gemini` CLI is not installed on this Windows host (`where.exe gemini` / `$APPDATA\npm\gemini.cmd` absent), so Gemini's exact ACP launch flag cannot be verified live without guessing.
+- Note: `crates/pty/src/acp_approvals.rs` (PR #216) already accepts `agent: "gemini-cli"` for the shared ACP `session/request_permission` JSON-RPC bridge once Gemini's launch flag is verified live.
+
+## 2026-11-13: Antigravity agy acp protocol approvals (ADR 0047)
+
+- PR https://github.com/mwahaj36/spawnt/pull/216; branch `feat/agy-acp-approvals`, head `51151a6`, depends on baseline #189.
+- Changed files: `crates/pty/src/acp_approvals.rs` (new), `crates/pty/src/lib.rs`, `docs/adr/0047-agy-acp-approvals.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-agy-acp-approvals.md`, `docs/sessions/README.md`.
+- Evidence & tests: verified live `agy acp` (`Antigravity ACP Server 1.5.7`) `initialize` in temp workspace; `acp_approvals::tests::no_decision_always_cancels_and_never_auto_allows_acp`, `acp_approvals::tests::pump_permission_requests_bridges_allow_and_deny`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: Codex app-server protocol approvals (ADR 0045)
 
 - PR https://github.com/mwahaj36/spawnt/pull/215; branch `feat/codex-app-server-approvals`, head `4d94a63`, depends on baseline #189.
