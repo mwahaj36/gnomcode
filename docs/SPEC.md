@@ -276,6 +276,8 @@ Source: `mwahaj36/gnomcode`; releases: `mwahaj36/gnomcode-releases`. Preserve pr
 
 CLI, Electron packages and notices/EULA/hashes per approved platform. Target npm shim plus seven platform packages: Windows/macOS x64+arm64, Linux x64+arm64 and Linux x64 musl. Targets are not claims of publication. Download links follow actual approved assets. Windows Electron installers and checksums are published to the public binary-only `mwahaj36/gnomcode-releases` repository; private source remains separate. Website download routes redirect only an explicit asset allow-list to the current release.
 
+On `workflow_dispatch` with `package=true`, `.github/workflows/ci.yml` (`package-desktop`) builds the release daemon and packages the Electron app without publishing for `ubuntu-22.04` (`x64` `.deb` and `.zip`), `macos-15-intel` (`x64` `.zip`), and `macos-15` (`arm64` `.zip`).
+
 ### 6.3 Versioning
 
 CLI, desktop and npm use lockstep SemVer. Remain 0.x before v1.0. Current development version is 0.9.0. No legacy executable/home migration or compatibility alias; preserve old directories without deleting them.

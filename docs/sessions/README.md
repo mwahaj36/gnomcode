@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - CI packaging matrix for macOS and Linux desktop builds](2026-11-13-ci-macos-linux-packaging.md)
 - [2026-11-13 - Worktree per session backend (F1)](2026-11-13-worktree-session-backend.md)
 - [2026-11-13 - Handoff quality evals backend (F3)](2026-11-13-handoff-evals-backend.md)
 - [2026-11-13 - Continue here backend for imported sessions (F2)](2026-11-13-continue-here-backend.md)
