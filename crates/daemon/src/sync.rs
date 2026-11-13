@@ -106,7 +106,9 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, gnomcode_store::Error> 
         "month":crate::api::report_roi(&calendar_month,&profile,"month"),
         "all":crate::api::report_roi(&all,&profile,"all"),
     });
-    let (sessions, count) = db.list_sessions_paginated(None, None, 0, 200)?;
+    let live_hosted = crate::remote::live_hosted_native_ids(db);
+    let (sessions, count) =
+        db.list_sessions_paginated_with_hosts(None, None, &live_hosted, 0, 200)?;
     let sessions: Vec<_> = sessions
         .into_iter()
         .map(|s| {
@@ -125,8 +127,10 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, gnomcode_store::Error> 
             })
         })
         .collect();
-    let (_, ongoing_count) = db.list_sessions_paginated(None, Some("ongoing"), 0, 1)?;
-    let (_, active_count) = db.list_sessions_paginated(None, Some("active"), 0, 1)?;
+    let (_, ongoing_count) =
+        db.list_sessions_paginated_with_hosts(None, Some("ongoing"), &live_hosted, 0, 1)?;
+    let (_, active_count) =
+        db.list_sessions_paginated_with_hosts(None, Some("active"), &live_hosted, 0, 1)?;
     Ok(json!({
         "generated_at": Utc::now().to_rfc3339(),
         "timeline": today,

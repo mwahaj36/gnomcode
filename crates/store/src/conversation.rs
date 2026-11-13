@@ -136,6 +136,31 @@ impl Database {
             .collect())
     }
 
+    /// Returns distinct native session IDs bound in `conversation_member` to any of `live_hosts`.
+    ///
+    /// # Errors
+    /// Returns an error if the lookup fails.
+    pub fn native_ids_for_hosts(&self, live_hosts: &[String]) -> Result<Vec<String>, Error> {
+        if live_hosts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let marks = vec!["?"; live_hosts.len()].join(",");
+        let sql = format!(
+            "{} ({marks})",
+            obfstr::obfstr!(
+                "SELECT DISTINCT native_id FROM conversation_member WHERE native_id IS NOT NULL AND host_id IN"
+            )
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let ids = statement
+            .query_map(
+                rusqlite::params_from_iter(live_hosts.iter().map(String::as_str)),
+                |row| row.get::<_, String>(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
     /// Marks bound sessions ended when their Gnomcode host is not in `live_hosts`, so a killed
     /// host never leaves a thinking/tool/approval state behind. Returns the rows changed.
     ///
