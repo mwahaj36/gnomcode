@@ -595,7 +595,7 @@ async fn run_connection(
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
                 if request_type.as_str()==Some("interrupt") {room.activity().await;}
-                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file"|"changes"|"artifacts"|"upload_attachment"|"quick_actions")) {room.activity().await;}
+                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file"|"changes"|"artifacts"|"upload_attachment"|"quick_actions"|"continue_here"|"worktree_merge"|"worktree_discard"|"worktree_open_pr"|"approvals")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
@@ -2083,6 +2083,55 @@ mod tests {
                 serde_json::from_str(packet["data"].as_str().expect("data")).expect("packet");
             assert_eq!(packet["type"], "resumed");
             assert!(manager.status().await.paired);
+            for kind in [
+                "continue_here",
+                "worktree_merge",
+                "worktree_discard",
+                "worktree_open_pr",
+                "interrupt",
+                "approvals",
+                "approval",
+            ] {
+                let active_room = manager.current.lock().await.clone().expect("room");
+                let old = chrono::Utc::now().timestamp() - 61;
+                active_room
+                    .trusted
+                    .lock()
+                    .await
+                    .as_mut()
+                    .expect("trust")
+                    .last_activity = old;
+                let request = json!({"type":kind,"session_id":"missing-activity-session","id":"missing-request","decision":"deny","request_id":"activity-check-request"});
+                let frame = fresh
+                    .seal(&serde_json::to_vec(&request).expect("request"))
+                    .expect("encrypted request");
+                next.send(Message::Binary(
+                    serde_json::to_vec(&frame).expect("frame").into(),
+                ))
+                .await
+                .expect("send activity request");
+                let refreshed = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                    loop {
+                        if active_room
+                            .trusted
+                            .lock()
+                            .await
+                            .as_ref()
+                            .expect("trust")
+                            .last_activity
+                            > old
+                        {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                    }
+                })
+                .await;
+                assert!(
+                    refreshed.is_ok(),
+                    "{kind} did not refresh authenticated room activity"
+                );
+            }
             phone_socket = next;
         }
         let old_room = manager.current.lock().await.clone().expect("room");
