@@ -3,7 +3,7 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", "Download Gnomcode for Windows", "Download the Windows development build of Gnomcode. macOS and Linux builds are not available yet. Local features are free and need no account.");
+export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version} for Windows`, "Windows x64 release candidate for Claude Code, Codex and Antigravity. Check release notes and SHA-256 checksums before installing. macOS and Linux downloads are not available yet.");
 
 export default function DownloadsPage() {
   return (
@@ -11,7 +11,7 @@ export default function DownloadsPage() {
       <header className="sp-downloads-header">
         <div>
           <h1>Download gnomcode</h1>
-          <p>Launch and switch supported AI coding agents in one local workspace. The unsigned Windows development build is available now; macOS and Linux builds are not yet available.</p>
+          <p>Launch and switch supported AI coding agents in one local workspace. This release candidate targets Windows x64; macOS and Linux downloads are not yet available.</p>
         </div>
         <span className="sp-download-release">GNOMCODE · v{packageInfo.version}</span>
       </header>
@@ -22,7 +22,7 @@ export default function DownloadsPage() {
       <section className="sp-download-help" aria-label="Release verification">
         <div>
           <h2>Verify the release</h2>
-          <p>Release archives include a SHA-256 manifest. The Windows updater verifies downloads before replacing an existing install.</p>
+          <p>Check the versioned SHA-256 manifest and release notes before installing. Windows installers are unsigned; update signatures are a separate authenticity check.</p>
         </div>
         <Link href="/docs/getting-started">Read installation guide <span aria-hidden="true">→</span></Link>
       </section>
