@@ -102,3 +102,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## codex-release downloads preparation - 2026-11-13
 
 - [x] G source preparation: version-derived Windows downloads, checksum/update routes and local real-artifact manifest generation. Vercel deployment and release publication remain unchecked in section G.
+
+## codex-release smoke preparation - 2026-11-13
+
+- [x] G packaged-app smoke procedure prepared for Claude in docs/sessions/2026-11-13-release-1-0-smoke.md. Execution/acceptance remains unchecked in section G.
