@@ -12,37 +12,8 @@
 <link rel="stylesheet" href="/vendor/xterm.css">
 </head>
 <body class="sp-native-console">
-      <div class="sp-console-workspace"><nav class="nav-tabs sp-console-nav" aria-label="Console views">
-        <a class="app-brand" href="#" data-action="view:overview" aria-label="Gnomcode home"><span class="sp-brand-mark" aria-hidden="true"></span><span class="rail-label">gnomcode</span></a>
-        <div role="tablist" aria-label="Console views" aria-orientation="vertical" class="sp-rail-tabs"><button class="tab-btn active" id="tab-btn-overview" data-view="overview" role="tab" aria-selected="true" aria-controls="view-console" tabindex="0" data-action="view:overview" title="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v10H3z M9 21v-6h6v6"/></svg><span class="rail-label">Home</span></button>
-        <button class="tab-btn" id="tab-btn-sessions" data-view="sessions" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:sessions" title="Workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span class="rail-label">Workspace</span></button>
-        <button class="tab-btn" id="tab-btn-usage" data-view="usage" role="tab" aria-selected="false" aria-controls="view-console" tabindex="-1" data-action="view:usage" title="Usage"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m8 10V4m8 16v-7"/></svg><span class="rail-label">Usage</span></button>
-        <button class="tab-btn" id="tab-btn-settings" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" tabindex="-1" data-action="view:settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg><span class="rail-label">Settings</span></button></div>
-        <button type="button" class="tab-btn" id="account-entry" data-action="view:auth" aria-label="Sign in to Gnomcode" title="Sign in to Gnomcode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg><span class="rail-label" id="account-entry-label">Sign in</span></button>
-        <button type="button" id="navigation-toggle" data-action="toggle-navigation" aria-label="Expand navigation" title="Expand navigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16"/></svg><span class="rail-label">Expand navigation</span></button>
-      </nav><div class="sp-console-content">
-  <div class="console-context"><h1 id="console-title">Home</h1><div class="console-status visually-hidden" aria-live="polite"><span id="sync-state">Connecting</span></div><button type="button" class="btn-control" data-action="toggle-chat-list" aria-controls="ide-session-sidebar" aria-expanded="true" id="chat-list-toggle" aria-label="Toggle conversations" title="Toggle conversations" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button></div>
-  <div id="approvals-root"></div>
-  <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
-    <div id="local-usage-root" data-local-view="usage"></div>
-    <div id="local-home-root" data-local-view="overview" class="sp-home"></div>
-    <div id="local-workspace-root" data-local-view="sessions"></div>
-  </main>
-
-  <!-- ==================== VIEW 2: SETTINGS ==================== -->
-  <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <div id="local-settings-root" data-base-url="__GNOMCODE_BASE_URL__"></div>
-  </main>
-
-  <!-- ==================== VIEW 3: ACCOUNT ==================== -->
-  <main id="view-auth" class="view-content" tabindex="0">
-    <div id="account-root" data-base-url="__GNOMCODE_BASE_URL__"></div>
-  </main>
-
-  </div></div>
-  <div id="shell-dialogs-root"></div>
+  <div id="gnomcode-console-root" data-base-url="__GNOMCODE_BASE_URL__"></div>
   <script src="/vendor/xterm.js"></script>
   <script src="/vendor/xterm-addon-fit.js"></script>
-  <script src="/console-app.js"></script>
 </body>
 </html>

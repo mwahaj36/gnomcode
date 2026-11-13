@@ -131,7 +131,6 @@ pub fn build_router(state: AppState) -> Router {
                 )
             }),
         )
-        .route("/console-app.js", get(console_app_handler))
         .route("/console-react.js", get(console_react::handler))
         .route("/markdown-it.mjs", get(markdown_handler))
         .route("/gnomcode-tokens.css", get(tokens_handler))
@@ -349,13 +348,6 @@ async fn theme_init_handler() -> impl IntoResponse {
     )
 }
 
-async fn console_app_handler() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
-        include_str!("console-app.js"),
-    )
-}
-
 async fn tokens_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
@@ -533,9 +525,9 @@ mod tests {
             remote: Arc::new(crate::remote::RemoteManager::new()),
         });
         for (path, content_type, marker) in [
-            ("/", "text/html", "/console-app.js"),
+            ("/", "text/html", "/console-react.js"),
             ("/theme-init.js", "text/javascript", "gnomcode-theme"),
-            ("/console-app.js", "text/javascript", "function setView"),
+            ("/console-react.js", "text/javascript", "Reporting period"),
             ("/markdown-it.mjs", "text/javascript", "markdown-it"),
             (
                 "/console-presentation.js",
@@ -578,11 +570,9 @@ mod tests {
     fn embedded_console_uses_the_compact_application_shell_and_plain_status() {
         let html = include_str!("console.html");
 
-        assert!(html.contains("id=\"console-title\">Home</h1>"));
+        assert!(html.contains("id=\"gnomcode-console-root\""));
         assert!(!html.contains("<header class=\"app-header\""));
-        assert!(html.contains("class=\"console-context\""));
-        assert!(html.contains("role=\"tablist\""));
-        assert!(html.contains("data-view=\"overview\" role=\"tab\""));
+        assert!(!html.contains("console-app.js"));
         for wrapper in ["[RUN]", "[WAIT]", "[IDLE]", "[READY]", "[LOCAL]"] {
             assert!(
                 !html.contains(wrapper),

@@ -190,3 +190,11 @@ test.describe('Settings', () => {
     expect(new URL(page.url()).hash).toBe('#auth');
   });
 });
+
+test('the Home activity grid is separated from the Today tiles', async ({ page, openConsole }) => {
+  await openConsole();
+  await expect(page.locator('#home-activity')).toContainText('Last 12 weeks');
+  const today = await page.locator('#home-today').boundingBox();
+  const activity = await page.locator('#home-activity').boundingBox();
+  expect((activity?.y ?? 0) - ((today?.y ?? 0) + (today?.height ?? 0))).toBeGreaterThanOrEqual(16);
+});

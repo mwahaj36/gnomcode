@@ -149,3 +149,24 @@ test('a missing token is reported with an action instead of an endless spinner',
   await expect(page.locator('#sync-state')).toHaveText('Local data unavailable');
   await expect(page.locator('#sync-state')).toHaveClass(/local-status-error/);
 });
+
+test('the Sign in entry stays reachable by keyboard and a hash change navigates', async ({ page, openConsole }) => {
+  await openConsole();
+  const entry = page.getByRole('button', { name: 'Sign in to Gnomcode' });
+  await expect(entry).not.toHaveAttribute('tabindex', '-1');
+  await entry.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#console-title')).toHaveText('Account');
+  await page.evaluate(() => (window.location.hash = 'settings'));
+  await expect(page.locator('#console-title')).toHaveText('Settings');
+  await expect(page.locator('#view-settings')).toHaveClass(/active/);
+  await expect(page.locator('#view-auth')).not.toHaveClass(/active/);
+});
+
+test('the console is one React root and the retired script is gone', async ({ page, daemon, openConsole }) => {
+  await openConsole();
+  await expect(page.locator('#gnomcode-console-root .sp-console-workspace')).toBeVisible();
+  const scripts = await page.locator('script[src]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('src')));
+  expect(scripts).not.toContain('/console-app.js');
+  expect((await fetch(`${daemon.base}/console-app.js`, { headers: { Authorization: `Bearer ${daemon.token}` } })).status).toBe(404);
+});

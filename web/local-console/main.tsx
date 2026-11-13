@@ -1,37 +1,19 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AccountView } from './AccountView';
-import { ApprovalsCard } from './ApprovalsCard';
-import { HomeView } from './HomeView';
-import { SettingsView } from './SettingsView';
-import { ShellDialogs } from './ShellDialogs';
-import { UsageView } from './UsageView';
-import { WorkspaceView } from './WorkspaceView';
+import { ConsoleShell } from './ConsoleShell';
 
-const VIEWS = [
-  ['approvals-root', ApprovalsCard],
-  ['shell-dialogs-root', ShellDialogs],
-  ['account-root', AccountView],
-  ['local-home-root', HomeView],
-  ['local-workspace-root', WorkspaceView],
-  ['local-usage-root', UsageView],
-  ['local-settings-root', SettingsView],
-] as const;
-
-function mountLocalConsoleViews(): void {
-  for (const [id, View] of VIEWS) {
-    const container = document.getElementById(id);
-    if (!container) continue;
-    createRoot(container).render(
-      <StrictMode>
-        <View />
-      </StrictMode>,
-    );
-  }
+function mountConsole(): void {
+  const container = document.getElementById('gnomcode-console-root');
+  if (!container) return;
+  createRoot(container).render(
+    <StrictMode>
+      <ConsoleShell />
+    </StrictMode>,
+  );
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', mountLocalConsoleViews, { once: true });
+  document.addEventListener('DOMContentLoaded', mountConsole, { once: true });
 } else {
-  mountLocalConsoleViews();
+  mountConsole();
 }
