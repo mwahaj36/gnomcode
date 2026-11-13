@@ -367,6 +367,8 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0053](./adr/0053-continue-here-imported-sessions.md) | Continue here: resume an imported session through its native resume id in its own recorded folder | Accepted |
 | [0034](./adr/0034-pwa-app-lock.md) | Client-side PWA passkey / PBKDF2 PIN app lock without altering E2EE keys | Accepted |
 
+| [0059](./adr/0059-embedded-update-signing-key.md) | Build-pinned update verification key and offline owner-key artifact signing | Accepted |
+
 ## 10. Open decisions
 
 - Final Remote prices, payment/refund process and governing jurisdiction.
@@ -421,3 +423,7 @@ Sections 5, 6.2 and 6.3: the prepared release candidate uses lockstep 1.0.0 acro
 ## Approved release legal inputs - 2026-11-13
 
 Wahaj selected docs/legal/EULA.txt unchanged for installer and npm distribution. EULA_DRAFT.md is not shipped. Version remains 1.0.0; Claude owns renaming the historical FleetHUD release/tag at publication. Installed acceptance is pending release smoke by Claude on Wahaj’s machine.
+
+## Update authenticity addendum - 2026-11-13
+
+Sections 5 and 6.4, ADR 0059: release builds may embed GNOMCODE_UPDATE_PUBLIC_KEY at Rust compile time. An embedded value is authoritative even if empty or malformed; runtime configuration cannot remove or replace it. The daemon requires SHA-256 and a valid Ed25519 artifact signature before cached or downloaded installers become ready. Verification errors block installation and leave app/agent use running. Builds without an embedded value retain the existing runtime-key development fallback. Release tooling signs actual installer bytes into the existing per-platform manifest signature field using an owner-supplied key; no real key is generated, committed or uploaded. Envelope metadata is not signed. Key custody, bridge rotation and release-time verification are specified in docs/release-signing.md. A reviewed owner public key and signing acceptance remain release gates.

@@ -1,3 +1,4 @@
+- [2026-11-13 Build-pinned update signing](2026-11-13-release-update-signing.md)
 # Engineering sessions
 
 - [2026-11-13 Release 1.0.0 versions](2026-11-13-release-1-0-versions.md)
