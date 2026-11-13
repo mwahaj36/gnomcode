@@ -13,6 +13,10 @@ import {
   type ProviderOverview,
 } from '../lib/console-presentation.js';
 import {
+  renderHandoffEvalMarkup,
+  type HandoffEvalReport,
+} from '../lib/eval-presentation.mjs';
+import {
   fetchLocalJson,
   localAuthHeaders,
   type LocalReportResponse,
@@ -58,6 +62,7 @@ export function UsageView() {
   const providersRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef<HTMLElement | null>(null);
   const projectsRef = useRef<HTMLDivElement | null>(null);
+  const evalsRef = useRef<HTMLDivElement | null>(null);
 
   const rangeRef = useRef(range);
   rangeRef.current = range;
@@ -185,6 +190,19 @@ export function UsageView() {
     }
   }, []);
 
+  const loadEvals = useCallback(async () => {
+    try {
+      const report = await fetchLocalJson<HandoffEvalReport>('/api/v1/evals/handoff');
+      if (evalsRef.current) {
+        evalsRef.current.innerHTML = renderHandoffEvalMarkup(report);
+      }
+    } catch {
+      if (evalsRef.current) {
+        evalsRef.current.innerHTML = renderHandoffEvalMarkup(null);
+      }
+    }
+  }, []);
+
   const refreshAll = useCallback(
     async (forceHeatmap = false) => {
       const currentRange = rangeRef.current;
@@ -193,9 +211,10 @@ export function UsageView() {
         loadReport(currentRange),
         loadHeatmap(forceHeatmap),
         loadProjects(currentRange),
+        loadEvals(),
       ]);
     },
-    [loadHeatmap, loadProjects, loadQuota, loadReport],
+    [loadEvals, loadHeatmap, loadProjects, loadQuota, loadReport],
   );
 
   useEffect(() => {
@@ -341,6 +360,12 @@ export function UsageView() {
           <h2>Projects</h2>
         </header>
         <div ref={projectsRef}>Loading project usage...</div>
+      </section>
+      <section className="sp-section sp-eval-report" aria-label="Handoff quality evals">
+        <header className="sp-section-head">
+          <h2>Handoff quality evals</h2>
+        </header>
+        <div ref={evalsRef}>Loading handoff quality evals...</div>
       </section>
     </div>
   );
