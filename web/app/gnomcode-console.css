@@ -1793,3 +1793,6 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 #auth-unpaired-card>form{display:grid;gap:8px;max-width:360px;margin-bottom:16px}
 #auth-unpaired-card>form input{width:100%}
 #auth-unpaired-card>form button[type="submit"]{justify-self:start;margin-top:8px}
+
+/* Home: the activity grid gets the same section gap as the other Home sections. */
+#home-activity{margin-top:var(--sp-5)}

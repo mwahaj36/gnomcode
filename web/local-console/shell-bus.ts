@@ -28,3 +28,46 @@ export function showNotice(message: string): void {
 export function startOnboarding(): void {
   controller?.startTour();
 }
+
+/** The five places the shell can show; `auth` is the Account view reached from the rail or Settings. */
+export type ConsoleView = 'overview' | 'sessions' | 'usage' | 'settings' | 'auth';
+
+let navigator: ((view: string) => void) | null = null;
+
+export function registerNavigator(next: (view: string) => void): () => void {
+  navigator = next;
+  return () => {
+    if (navigator === next) navigator = null;
+  };
+}
+
+/** Moves the shell to a place (old names like `limits` are resolved by the shell). */
+export function navigateTo(view: ConsoleView | string): void {
+  navigator?.(view);
+}
+
+export interface WorkspaceActionDetail {
+  type: 'new-session' | 'open-session' | 'toggle-chat-list';
+  sessionId?: string;
+  folder?: string;
+  focus?: boolean;
+}
+
+let workspaceIsReady = false;
+const queuedWorkspaceActions: WorkspaceActionDetail[] = [];
+
+function dispatchWorkspaceAction(detail: WorkspaceActionDetail): void {
+  window.dispatchEvent(new CustomEvent('gnomcode:workspace-action', { detail }));
+}
+
+/** Asks the Workspace view to act; actions that arrive before it has mounted wait for it. */
+export function workspaceAction(detail: WorkspaceActionDetail): void {
+  if (workspaceIsReady) dispatchWorkspaceAction(detail);
+  else queuedWorkspaceActions.push(detail);
+}
+
+/** Called by the Workspace view once it listens for actions. */
+export function markWorkspaceReady(): void {
+  workspaceIsReady = true;
+  queuedWorkspaceActions.splice(0).forEach(dispatchWorkspaceAction);
+}

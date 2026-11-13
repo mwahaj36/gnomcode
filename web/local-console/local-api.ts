@@ -63,16 +63,16 @@ export interface LocalFitAddonNamespace {
 
 declare global {
   interface Window {
-    __gnomcodeLocalActions?: {
-      setView?: (view: string) => void;
-      openSession?: (sessionId: string) => void;
-      workspaceAction?: (detail: { type: string; sessionId?: string; folder?: string; focus?: boolean }) => void;
-      workspaceReady?: () => void;
-    };
     Terminal?: LocalTerminalConstructor;
     FitAddon?: LocalFitAddonNamespace;
     gnomcodeDesktop?: LocalDesktopBridge;
   }
+}
+
+/** The marketing site address the daemon injects into the page, empty when unset. */
+export function getConsoleBaseUrl(): string {
+  const raw = document.getElementById('gnomcode-console-root')?.dataset.baseUrl || '';
+  return raw && raw !== '__GNOMCODE_BASE_URL__' ? raw : '';
 }
 
 export function getLocalBearerToken(): string {
