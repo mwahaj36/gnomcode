@@ -1,11 +1,11 @@
 # Gnomcode Windows updater: use the same native installer as the download page.
 $ErrorActionPreference = "Stop"
-$Version = "0.9.4"
+$Version = "1.0.0"
 $BaseUrl = "https://gnomcode.vercel.app/downloads"
 if (-not [Environment]::Is64BitOperatingSystem) {
     throw "gnomcode requires 64-bit Windows. The existing installation was not changed."
 }
-$Asset = "Gnomcode-v0.9.4-windows-x64.zip"
+$Asset = "Gnomcode-v1.0.0-windows-x64.zip"
 $Stage = Join-Path ([IO.Path]::GetTempPath()) ("gnomcode-update-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $Stage | Out-Null
 try {

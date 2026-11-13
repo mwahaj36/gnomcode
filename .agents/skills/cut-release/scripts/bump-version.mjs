@@ -178,6 +178,20 @@ if (lockText) {
   write("web/package-lock.json", JSON.stringify(lock, null, 2) + "\n");
 }
 
+// Keep local workspace packages synchronized without changing dependency resolution.
+let cargoLock = read("Cargo.lock");
+if (cargoLock) {
+  cargoLock = cargoLock.replace(/(name = "gnomcode(?:-[^"]+)?"\nversion = ")[^"]+(")/g, `$1${newVersion}$2`);
+  write("Cargo.lock", cargoLock);
+}
+let desktopLockText = read("apps/desktop/package-lock.json");
+if (desktopLockText) {
+  const lock = JSON.parse(desktopLockText);
+  lock.version = newVersion;
+  if (lock.packages?.[""]) lock.packages[""].version = newVersion;
+  write("apps/desktop/package-lock.json", JSON.stringify(lock, null, 2) + "\n");
+}
+
 // 7. web/app/downloads/page.tsx
 const downloadsPagePath = "web/app/downloads/page.tsx";
 let downloadsPage = read(downloadsPagePath);
