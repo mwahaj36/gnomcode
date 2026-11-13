@@ -1,6 +1,6 @@
 // Console shell. Home, Workspace, Usage and Settings are React views in /console-react.js;
 // this file owns view routing, connection status, the first-run tour, account sign-in and
-// pairing, tool approvals and the delegated clicks for presenter markup.
+// pairing and the delegated clicks for presenter markup.
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -11,7 +11,6 @@
     const workspaceAction = detail => { if (workspaceReady) fire('gnomcode:workspace-action', detail); else queuedWorkspaceActions.push(detail); };
     function storedFlag(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
     function storeFlag(key, value) { try { localStorage.setItem(key, value); } catch (_) { /* storage unavailable */ } }
-    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
 
     async function apiJson(url, options = { headers }) {
       const response = await fetch(url, options);
@@ -377,34 +376,6 @@
     }
 // End account
 
-// Tool approvals held by a Claude Code hook (ADR 0032). The daemon owns the rules;
-// this only lists pending requests and sends the person's choice for one exact id.
-    let approvalsMarkup = null;
-    async function loadApprovals() {
-      const region = document.getElementById('approvals');
-      if (!region) return;
-      let items = [];
-      try { items = (await apiJson('/api/v1/approvals', { headers })).items || []; } catch (_) { return; }
-      const markup = items.map(item => {
-        const agent = item.agent === 'claude-code' ? 'Claude Code' : item.agent;
-        return `<article class="sp-approval" data-approval-id="${escapeHtml(item.id)}"><div class="sp-approval-body"><p class="sp-approval-title"><span class="sp-session-dot sp-session-dot--needs_you" aria-hidden="true"></span>${escapeHtml(agent)} wants to run <strong>${escapeHtml(item.tool)}</strong></p>${item.summary ? `<code class="sp-approval-summary">${escapeHtml(item.summary)}</code>` : ''}<p class="sp-approval-meta">If you do not answer, Claude asks in its own window.</p></div><div class="sp-approval-actions"><button type="button" class="btn-control" data-action="approval-decide" data-arg="${escapeHtml(item.id)}:deny" aria-label="Deny ${escapeHtml(item.tool)}">Deny</button><button type="button" class="btn-control" data-action="approval-decide" data-arg="${escapeHtml(item.id)}:allow" aria-label="Approve ${escapeHtml(item.tool)} once">Approve once</button></div></article>`;
-      }).join('');
-      if (markup === approvalsMarkup) return;
-      approvalsMarkup = markup;
-      region.innerHTML = markup;
-      region.hidden = items.length === 0;
-    }
-    async function decideApproval(arg) {
-      const [id, decision] = String(arg || '').split(':');
-      if (!id || !['allow', 'deny'].includes(decision)) return;
-      document.querySelectorAll(`[data-approval-id="${CSS.escape(id)}"] button`).forEach(button => { button.disabled = true; });
-      try {
-        await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/decision`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }) });
-      } catch (_) { /* the list shows the real state */ }
-      approvalsMarkup = null;
-      await loadApprovals();
-    }
-// End approvals
 
 // Delegated clicks: presenter markup in the views carries data-action instead of handlers.
     document.addEventListener('click', async event => {
@@ -424,7 +395,6 @@
     });
 
     const actions = {
-      'approval-decide': decideApproval,
       'onboarding-start': startOnboarding,
       'onboarding-skip': () => finishOnboarding(false),
       'onboarding-back': () => moveOnboarding(-1),
@@ -474,7 +444,6 @@
       },
       startOnboarding: () => { startOnboarding(); },
       workspaceReady: () => { workspaceReady = true; queuedWorkspaceActions.splice(0).forEach(detail => fire('gnomcode:workspace-action', detail)); },
-      refreshShell: () => { void pollLocalData(); void loadApprovals(); },
     };
 
     normalizeHash();
@@ -489,8 +458,4 @@
     void checkOnboardingOffer();
     void checkAuthSession();
     pollLocalData();
-    void loadApprovals();
-    setInterval(() => {
-      pollLocalData();
-      void loadApprovals();
-    }, 2000);
+    setInterval(pollLocalData, 2000);
