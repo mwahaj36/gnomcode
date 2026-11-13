@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Automated packaged-build smoke script](2026-11-13-packaged-smoke-script.md)
 - [2026-11-13 - macOS and Linux platform correctness](2026-11-13-macos-linux-correctness.md)
 - [2026-11-13 - CI packaging matrix for macOS and Linux desktop builds](2026-11-13-ci-macos-linux-packaging.md)
 - [2026-11-13 - Worktree per session backend (F1)](2026-11-13-worktree-session-backend.md)
