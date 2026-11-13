@@ -1467,6 +1467,73 @@ function cycleTheme() {
       panel.hidden = !panel.hidden;
       if (!panel.hidden) void loadSessionFileListing('');
     }
+    let artifactsOpen = false;
+    let artifactItems = [];
+    let selectedArtifactId = '';
+
+    function resetArtifactsPanel() {
+      artifactsOpen = false;
+      artifactItems = [];
+      selectedArtifactId = '';
+      const panel = document.getElementById('chat-artifacts-panel');
+      const btn = document.getElementById('chat-artifacts-btn');
+      if (panel) panel.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    async function renderArtifactsState() {
+      const presentation = await import('/console-presentation.js');
+      const list = document.getElementById('chat-artifacts-list');
+      const preview = document.getElementById('chat-artifact-preview');
+      if (!list || !preview) return;
+      list.innerHTML = presentation.renderArtifactsList(artifactItems, selectedArtifactId);
+      const selected = artifactItems.find((item, idx) => String(item.id || item.path || idx) === String(selectedArtifactId)) || null;
+      preview.innerHTML = presentation.renderArtifactPreview(selected);
+    }
+
+    async function loadArtifacts() {
+      const sessionId = activeChatSession;
+      if (!sessionId) return;
+      const list = document.getElementById('chat-artifacts-list');
+      const preview = document.getElementById('chat-artifact-preview');
+      const changesBadge = document.getElementById('chat-artifacts-changes');
+      if (list) list.innerHTML = '<p class="sp-empty">Loading artifacts...</p>';
+      if (preview) preview.innerHTML = '';
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      let items = [];
+      let changesCount = null;
+      let failed = false;
+      try {
+        const res = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts`, { headers, signal: AbortSignal.timeout(10000) });
+        if (res.ok) {
+          const data = await res.json();
+          items = Array.isArray(data.artifacts) ? data.artifacts : [];
+          if (typeof data.changes_count === 'number') changesCount = data.changes_count;
+        } else failed = true;
+      } catch (_) { failed = true; }
+      if (sessionId !== activeChatSession) return;
+      if (changesBadge) changesBadge.textContent = failed ? 'Artifacts unavailable for this conversation' : changesCount === null ? 'Artifacts' : `${changesCount} workspace change${changesCount === 1 ? '' : 's'}`;
+      artifactItems = items;
+      selectedArtifactId = items[0] ? String(items[0].id || items[0].path || 0) : '';
+      await renderArtifactsState();
+    }
+
+    function toggleArtifacts(forceOpen) {
+      const panel = document.getElementById('chat-artifacts-panel');
+      const btn = document.getElementById('chat-artifacts-btn');
+      if (!panel || !btn) return;
+      artifactsOpen = typeof forceOpen === 'boolean' ? forceOpen : !artifactsOpen;
+      panel.hidden = !artifactsOpen;
+      btn.setAttribute('aria-expanded', String(artifactsOpen));
+      if (artifactsOpen) void loadArtifacts();
+    }
+
+    document.getElementById('chat-artifacts-list')?.addEventListener('click', event => {
+      const item = event.target.closest('[data-artifact-id]');
+      if (!item) return;
+      selectedArtifactId = item.dataset.artifactId || '';
+      void renderArtifactsState();
+    });
 
     async function loadChat(sessionId, earlier = false, silent = false) {
       if (!sessionId) return;
@@ -1477,6 +1544,7 @@ function cycleTheme() {
           closeChangesPanel();
           closeFilesPanel();
         }
+        if (activeChatSession !== sessionId) { selectChatSession(sessionId); resetArtifactsPanel(); }
         chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
@@ -2168,6 +2236,7 @@ function cycleTheme() {
 
     const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-tour-tip': dismissTourTip, 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
+      'toggle-artifacts': () => toggleArtifacts(), 'refresh-artifacts': () => { void loadArtifacts(); }, 'close-artifacts': () => toggleArtifacts(false),
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
