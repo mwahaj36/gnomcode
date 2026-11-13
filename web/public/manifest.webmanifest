@@ -1,7 +1,7 @@
 {
   "name": "Gnomcode — The Runtime for AI Coding Agents",
   "short_name": "Gnomcode",
-  "description": "Launch, switch, and remotely control AI coding agents. Work across Claude Code, Codex, and Gemini CLI from desktop or phone.",
+  "description": "Launch, switch, and remotely control AI coding agents. Work across Claude Code, Codex and Antigravity from desktop or phone.",
   "start_url": "/remote?source=pwa",
   "scope": "/",
   "display": "standalone",

@@ -12,7 +12,7 @@ You may obtain Gnomcode through its authorized distribution channels. Do not red
 
 Optional services
 
-Remote access, Teams, and other optional services may be subject to separate terms presented before use or purchase. Existing optional cloud sync has a separate privacy boundary. Any paid service terms, prices, renewal terms, cancellation process, and refund policy must be presented before purchase.
+Remote access and other optional services may be subject to separate terms presented before use or purchase. Existing optional cloud sync has a separate privacy boundary. Any paid service terms, prices, renewal terms, cancellation process, and refund policy must be presented before purchase.
 
 Privacy
 

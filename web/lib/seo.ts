@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import branding from "../branding.json";
+import packageInfo from "../package.json";
 
 export function pageMetadata(path: string, title: string, description: string, index = true): Metadata {
   const url = `${branding.baseUrl}${path}`;
@@ -41,27 +42,21 @@ export function buildSoftwareAppJsonLd() {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Gnomcode",
-    "operatingSystem": "Windows, macOS, Linux, iOS (PWA), Android (PWA)",
+    "operatingSystem": "Windows",
     "applicationCategory": "DeveloperApplication",
-    "description": "Local-first runtime, model handoff orchestrator, and encrypted remote control for AI coding agents including Claude Code, OpenAI Codex, and Gemini CLI.",
+    "description": "Local-first runtime, model handoff orchestrator, and encrypted remote control for AI coding agents including Claude Code, OpenAI Codex and Antigravity.",
     "url": branding.baseUrl,
-    "softwareVersion": "0.9.0",
+    "softwareVersion": packageInfo.version,
     "offers": [
       {
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "USD",
-        "description": "Local runtime, CLI observer, and usage tracking are free forever."
-      },
-      {
-        "@type": "Offer",
-        "price": "20",
-        "priceCurrency": "USD",
-        "description": "Pro plan with encrypted mobile remote companion."
+        "description": "Local features are free without an account."
       }
     ],
     "featureList": [
-      "Switch models mid-conversation across Claude Code, Codex and Gemini CLI",
+      "Switch models mid-conversation across Claude Code, Codex and Antigravity",
       "Control agents from your phone over an end-to-end encrypted channel",
       "Local-first architecture with zero telemetry and fail-open guarantees",
       "Unified token, cost and quota usage tracking with declared trust levels"
