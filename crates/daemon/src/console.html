@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>gnomcode — Local Console</title>
   <script src="/theme-init.js"></script>
+  <script src="/console-react.js" defer></script>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="stylesheet" href="/gnomcode-tokens.css">
 <link rel="stylesheet" href="/gnomcode-console.css">
@@ -30,7 +31,7 @@
     <div id="quota-table" data-local-view="usage"><p>Loading provider limits...</p></div>
     <div id="usage-heatmap" data-local-view="usage"></div>
     <div id="daily-activity" data-local-view="usage"><p>Loading daily activity...</p></div>
-    <div data-local-view="overview" class="sp-home">
+    <div data-local-view="overview" class="sp-home" id="local-home-root">
       <section class="sp-section" id="home-limits"></section>
       <section class="sp-section" id="home-sessions"></section>
       <section class="sp-section" id="home-today"></section>
