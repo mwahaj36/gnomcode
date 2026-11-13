@@ -1283,6 +1283,11 @@ pub(crate) fn conversation_sessions(
         });
         let limits = crate::api::conversation_quota(&quota, agent, chrono::Utc::now());
         row["agent"] = json!(agent);
+        if let Some(label) = observed
+            .and_then(|session| gnomcode_core::surface_label(agent, session.surface.as_str()))
+        {
+            row["surface_label"] = json!(label);
+        }
         if let Some(session) = observed {
             row["model"] = json!(session.model);
             row["state"] = json!(displayed_state(session, host.is_some()));

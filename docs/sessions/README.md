@@ -240,3 +240,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 - Notice, tour and confirmation dialogs in React](2026-11-13-console-dialogs-react.md)
 - [2026-11-13 - Account view in React](2026-11-13-console-account-react.md)
 - [2026-11-13 - Shell in React, console-app.js deleted](2026-11-13-console-shell-react.md)
+- [2026-11-13 - Surface label on session rows and the Workspace list](2026-11-13-session-surface-label.md)
