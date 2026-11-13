@@ -2,6 +2,8 @@
 //! background log watcher & periodic reconciler (`SPEC §3.1`, `§4.4`).
 
 mod account_devices;
+#[cfg(test)]
+mod agy_resume_tests;
 pub mod api;
 pub mod approvals;
 mod automation;
@@ -337,7 +339,7 @@ pub(crate) async fn ensure_conversation_running(
                 .ok_or(HandoffError::MissingSession)?;
             if !matches!(
                 target.agent.as_str(),
-                "codex" | "claude-code" | "gemini-cli"
+                "codex" | "claude-code" | "gemini-cli" | "antigravity"
             ) {
                 return Err(HandoffError::UnsupportedTarget);
             }

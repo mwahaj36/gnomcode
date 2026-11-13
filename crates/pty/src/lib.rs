@@ -118,9 +118,16 @@ pub fn resume_command(agent: &str, repo: &Path, native_id: &str) -> Result<Launc
     let verb = match agent {
         "codex" => "resume",
         "claude" | "claude-code" | "gemini" | "gemini-cli" => "--resume",
+        "antigravity" | "agy" => "--conversation",
         _ => return Err(Error::UnsupportedAgent(agent.to_owned())),
     };
     command.arguments = vec![verb.to_owned(), native_id.to_owned()];
+    // Native agy resume defaults to Auto rather than restoring the previous permission mode.
+    if matches!(agent, "antigravity" | "agy") {
+        command
+            .arguments
+            .extend(["--mode".to_owned(), "plan".to_owned()]);
+    }
     Ok(command)
 }
 
@@ -1334,7 +1341,7 @@ mod tests {
     }
 
     #[test]
-    fn resume_uses_the_exact_native_session_without_permission_flags() {
+    fn resume_uses_the_exact_native_session_without_permission_bypass() {
         let repo = tempfile::tempdir().expect("workspace");
         assert_eq!(
             resume_command("codex", repo.path(), "saved-123")
@@ -1354,6 +1361,30 @@ mod tests {
                 .arguments,
             ["--resume", "saved-123"]
         );
+        for agent in ["antigravity", "agy"] {
+            assert_eq!(
+                resume_command(agent, repo.path(), "saved-123").expect("agy native resume"),
+                LaunchCommand {
+                    executable: "agy".into(),
+                    arguments: vec![
+                        "--conversation".into(),
+                        "saved-123".into(),
+                        "--mode".into(),
+                        "plan".into()
+                    ]
+                }
+            );
+            for id in [
+                "",
+                "--last",
+                "--yolo",
+                "saved\r/exit",
+                "saved another",
+                "../saved",
+            ] {
+                assert!(resume_command(agent, repo.path(), id).is_err());
+            }
+        }
         for id in ["", "--last", "--yolo", "saved\r/exit", "saved another"] {
             assert!(resume_command("codex", repo.path(), id).is_err());
         }

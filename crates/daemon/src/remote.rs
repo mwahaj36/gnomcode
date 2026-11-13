@@ -1187,7 +1187,7 @@ pub(crate) fn conversation_sessions(
             && host.is_none()
             && (matches!(
                 agent,
-                "codex" | "claude-code" | "claude" | "gemini-cli" | "gemini"
+                "codex" | "claude-code" | "claude" | "gemini-cli" | "gemini" | "antigravity"
             ) || observed.is_none()
                 && launch.as_ref().is_some_and(|launch| {
                     matches!(
