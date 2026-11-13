@@ -801,6 +801,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
         Some("artifacts") => crate::session_artifacts::remote_command(db, &request).await,
         Some("upload_attachment") => crate::attachments::remote_command(db, &request).await,
         Some("quick_actions") => crate::quick_actions::remote_command(&request).await,
+        Some("features.get" | "features.set") => crate::features::handle_remote(db, &request).await,
         Some("prompt") => {
             let Some(session_id) = request.get("session_id").and_then(Value::as_str) else {
                 return json!({"type":"error","message":"Missing session"});

@@ -1690,6 +1690,45 @@ impl Database {
         Ok(())
     }
 
+    /// Returns the E3 off-by-default feature toggles (all `false` when unset).
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn get_feature_toggles(&self) -> Result<gnomcode_core::FeatureToggles, Error> {
+        let val: Option<String> = self
+            .conn
+            .query_row(
+                obfstr::obfstr!(
+                    "SELECT value FROM desktop_preferences WHERE key = 'feature_toggles'"
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(val
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default())
+    }
+
+    /// Persists the E3 feature toggles in `desktop_preferences`.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite write or JSON serialization failure.
+    pub fn set_feature_toggles(
+        &self,
+        toggles: &gnomcode_core::FeatureToggles,
+    ) -> Result<(), Error> {
+        let json = serde_json::to_string(toggles)?;
+        self.conn.execute(
+            obfstr::obfstr!(
+                "INSERT INTO desktop_preferences(key, value) VALUES ('feature_toggles', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+            ),
+            [json],
+        )?;
+        Ok(())
+    }
+
     /// Lists recent recorded Context Relay events.
     ///
     /// # Errors

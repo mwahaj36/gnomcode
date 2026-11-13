@@ -48,9 +48,18 @@ pub struct DiscoveredFile {
 /// Recursively scans agent log directories for parseable log files (`.jsonl`, `.json`).
 #[must_use]
 pub fn scan_log_files(roots: &[AgentRoot]) -> Vec<DiscoveredFile> {
+    scan_log_files_with_extra(roots, true)
+}
+
+/// Scans agent log directories, optionally including extra adapters (`GeminiCli`) when enabled.
+#[must_use]
+pub fn scan_log_files_with_extra(
+    roots: &[AgentRoot],
+    include_extra_adapters: bool,
+) -> Vec<DiscoveredFile> {
     let mut files = Vec::new();
     for root in roots {
-        if !root.exists {
+        if !root.exists || (!include_extra_adapters && root.agent == AgentId::GeminiCli) {
             continue;
         }
         if root.path.is_file() {
@@ -260,8 +269,9 @@ pub fn reproject_all(db: &mut Database) -> Result<usize, Error> {
 /// Returns [`Error`] if database commit or reading fails.
 pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     reproject_all(db)?;
+    let include_extra = db.get_feature_toggles()?.extra_adapters_enabled;
     let roots = discover_agent_roots();
-    let discovered = scan_log_files(&roots);
+    let discovered = scan_log_files_with_extra(&roots, include_extra);
     let repair_chat_format = db.chat_format_needs_repair()?;
     let total = ingest_files(db, &roots, &discovered, repair_chat_format)?;
     ingest_claude_status_limits(
@@ -789,6 +799,11 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|f| f.agent == AgentId::ClaudeCode));
         assert!(files.iter().any(|f| f.agent == AgentId::GeminiCli));
+
+        let core_only = super::scan_log_files_with_extra(&roots, false);
+        assert_eq!(core_only.len(), 1);
+        assert!(core_only.iter().any(|f| f.agent == AgentId::ClaudeCode));
+        assert!(!core_only.iter().any(|f| f.agent == AgentId::GeminiCli));
     }
 
     #[test]

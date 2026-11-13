@@ -349,6 +349,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0043](./adr/0043-remote-quick-actions.md) | Bounded local quick-actions storage for HTTP and Remote Companion | Accepted |
 | [0045](./adr/0045-codex-app-server-approvals.md) | Codex `app-server` JSON-RPC approval bridge reusing ADR 0032 | Accepted |
 | [0047](./adr/0047-agy-acp-approvals.md) | Antigravity `agy acp` JSON-RPC permission bridge reusing ADR 0032 | Accepted |
+| [0049](./adr/0049-freeze-unproven-features-behind-toggles.md) | Freeze Teams, extra adapters, scheduled messages, and account sync behind off-by-default `FeatureToggles` (E3) | Accepted |
 
 ## 10. Open decisions
 

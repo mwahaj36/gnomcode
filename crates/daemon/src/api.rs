@@ -186,6 +186,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/update/status", get(update_status_handler))
         .route("/api/v1/update/check", post(update_check_handler))
         .route("/api/v1/settings/update", post(update_settings_handler))
+        .route(
+            "/api/v1/settings/features",
+            get(crate::features::get_handler).post(crate::features::post_handler),
+        )
         .route("/api/v1/supabase-config", get(supabase_config_handler))
         .route("/api/v1/live", get(live_snapshot_handler))
         .route("/api/v1/reconcile", post(reconcile_handler))

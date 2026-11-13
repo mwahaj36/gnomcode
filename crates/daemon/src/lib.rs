@@ -10,6 +10,7 @@ pub mod approvals;
 mod attachments;
 mod automation;
 pub mod doctor;
+pub mod features;
 mod interrupt;
 pub mod model_catalog;
 pub mod pro;
