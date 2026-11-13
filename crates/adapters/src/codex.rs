@@ -108,15 +108,14 @@ impl SourceAdapter for CodexAdapter {
                 continue;
             };
 
-            if self.raw_session_id.is_none() {
-                if let Some(sid) = payload
+            if self.raw_session_id.is_none()
+                && let Some(sid) = payload
                     .get("session_id")
                     .or_else(|| payload.get("thread_id"))
                     .and_then(Value::as_str)
                     .filter(|s| is_valid_codex_session_id(s))
-                {
-                    self.raw_session_id = Some(sid.to_owned());
-                }
+            {
+                self.raw_session_id = Some(sid.to_owned());
             }
 
             if line_type == "session_meta" {
@@ -382,37 +381,37 @@ impl SourceAdapter for CodexAdapter {
                         .and_then(|ts_obj| ts_obj.get("model"))
                         .and_then(Value::as_str)
                 });
-                if let Some(m) = turn_model {
-                    if !m.trim().is_empty() {
-                        if (line_type == "turn_context"
-                            || payload.get("type").and_then(Value::as_str)
-                                == Some("thread_settings_applied"))
-                            && self.last_turn_model.as_deref() != Some(m)
-                        {
-                            let (content, status) = self.last_turn_model.as_ref().map_or_else(
-                                || (format!("Model active: {m}"), "model_active"),
-                                |previous| {
-                                    (
-                                        format!("Model changed from {previous} to {m}"),
-                                        "model_changed",
-                                    )
-                                },
-                            );
-                            batch.chat_events.push(gnomcode_core::ChatEvent {
-                                event_id: format!("{session_id}:{current_offset}:model"),
-                                session_id: session_id.clone(),
-                                turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
-                                role: gnomcode_core::ChatRole::System,
-                                content: gnomcode_core::redact::redact_chat_content(&content),
-                                tool_name: None,
-                                status: Some(status.to_owned()),
-                                created_at: ts,
-                            });
-                            self.last_turn_model = Some(m.to_owned());
-                        }
-                        self.active_model = Some(m.to_owned());
-                        sess.model = Some(m.to_owned());
+                if let Some(m) = turn_model
+                    && !m.trim().is_empty()
+                {
+                    if (line_type == "turn_context"
+                        || payload.get("type").and_then(Value::as_str)
+                            == Some("thread_settings_applied"))
+                        && self.last_turn_model.as_deref() != Some(m)
+                    {
+                        let (content, status) = self.last_turn_model.as_ref().map_or_else(
+                            || (format!("Model active: {m}"), "model_active"),
+                            |previous| {
+                                (
+                                    format!("Model changed from {previous} to {m}"),
+                                    "model_changed",
+                                )
+                            },
+                        );
+                        batch.chat_events.push(gnomcode_core::ChatEvent {
+                            event_id: format!("{session_id}:{current_offset}:model"),
+                            session_id: session_id.clone(),
+                            turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
+                            role: gnomcode_core::ChatRole::System,
+                            content: gnomcode_core::redact::redact_chat_content(&content),
+                            tool_name: None,
+                            status: Some(status.to_owned()),
+                            created_at: ts,
+                        });
+                        self.last_turn_model = Some(m.to_owned());
                     }
+                    self.active_model = Some(m.to_owned());
+                    sess.model = Some(m.to_owned());
                 }
 
                 let turn_cwd = payload.get("cwd").and_then(Value::as_str).or_else(|| {
@@ -442,29 +441,25 @@ impl SourceAdapter for CodexAdapter {
                             |total| format!("{raw_sid}:total:{total}"),
                         );
 
-                    if self.seen_dedup_keys.insert(dedup_key.clone()) {
-                        if let Some(info) = payload.get("info").and_then(Value::as_object) {
-                            if let Some(last) =
-                                info.get("last_token_usage").and_then(Value::as_object)
-                            {
-                                let model = self
-                                    .active_model
-                                    .as_deref()
-                                    .or(ctx.fallback_model.as_deref())
-                                    .unwrap_or("unknown");
-                                let context_win =
-                                    info.get("model_context_window").and_then(Value::as_u64);
-                                let record = build_codex_usage(
-                                    dedup_key,
-                                    session_id.clone(),
-                                    ts,
-                                    model,
-                                    last,
-                                    context_win,
-                                );
-                                batch.usage_records.push(record);
-                            }
-                        }
+                    if self.seen_dedup_keys.insert(dedup_key.clone())
+                        && let Some(info) = payload.get("info").and_then(Value::as_object)
+                        && let Some(last) = info.get("last_token_usage").and_then(Value::as_object)
+                    {
+                        let model = self
+                            .active_model
+                            .as_deref()
+                            .or(ctx.fallback_model.as_deref())
+                            .unwrap_or("unknown");
+                        let context_win = info.get("model_context_window").and_then(Value::as_u64);
+                        let record = build_codex_usage(
+                            dedup_key,
+                            session_id.clone(),
+                            ts,
+                            model,
+                            last,
+                            context_win,
+                        );
+                        batch.usage_records.push(record);
                     }
 
                     if let Some(rl) = payload.get("rate_limits").and_then(Value::as_object) {

@@ -28,7 +28,7 @@ function stopDaemon(): void {
       } else {
         spawnedDaemon.kill('SIGTERM');
       }
-    } catch (_) {}
+    } catch { /* daemon already exited; nothing to stop */ }
   }
 }
 
@@ -335,7 +335,7 @@ async function start(): Promise<void> {
         try {
           const currentUrl = new URL(current.webContents.getURL());
           if (currentUrl.hash) targetUrl.hash = currentUrl.hash;
-        } catch (_) {}
+        } catch { /* unparsable current URL; keep target without hash */ }
         await current.loadURL(targetUrl.href);
         connectedUrl = nextUrl;
       }

@@ -64,27 +64,27 @@ pub fn evaluate_guardrails(
     rules: &[GuardrailRule],
 ) -> Option<RuleAction> {
     for rule in rules {
-        if let Some(ref pid) = rule.project_id {
-            if pid != &session.project_id {
-                continue;
-            }
+        if let Some(ref pid) = rule.project_id
+            && pid != &session.project_id
+        {
+            continue;
         }
-        if let Some(agent) = rule.agent {
-            if agent != session.agent {
-                continue;
-            }
-        }
-
-        if let Some(max_cost) = rule.max_spend_usd {
-            if accumulated_cost_usd >= max_cost {
-                return Some(rule.action);
-            }
+        if let Some(agent) = rule.agent
+            && agent != session.agent
+        {
+            continue;
         }
 
-        if let Some(max_turns) = rule.max_turns {
-            if turn_count >= max_turns {
-                return Some(rule.action);
-            }
+        if let Some(max_cost) = rule.max_spend_usd
+            && accumulated_cost_usd >= max_cost
+        {
+            return Some(rule.action);
+        }
+
+        if let Some(max_turns) = rule.max_turns
+            && turn_count >= max_turns
+        {
+            return Some(rule.action);
         }
     }
     None

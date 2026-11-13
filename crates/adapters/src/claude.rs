@@ -243,60 +243,59 @@ impl SourceAdapter for ClaudeAdapter {
                 }
             }
 
-            if obj.get("type").and_then(Value::as_str) == Some("assistant") {
-                if let Some(msg) = obj.get("message").and_then(Value::as_object) {
-                    if let Some(model) = msg.get("model").and_then(Value::as_str) {
-                        if model != "<synthetic>" {
-                            sess.model = Some(model.to_owned());
-                        }
-                    }
+            if obj.get("type").and_then(Value::as_str) == Some("assistant")
+                && let Some(msg) = obj.get("message").and_then(Value::as_object)
+            {
+                if let Some(model) = msg.get("model").and_then(Value::as_str)
+                    && model != "<synthetic>"
+                {
+                    sess.model = Some(model.to_owned());
+                }
 
-                    // Extract tool_use summaries from content blocks
-                    if let Some(blocks) = msg.get("content").and_then(Value::as_array) {
-                        for block in blocks {
-                            if block.get("type").and_then(Value::as_str) == Some("tool_use") {
-                                let name =
-                                    block.get("name").and_then(Value::as_str).unwrap_or("tool");
-                                let detail = extract_tool_detail(block.get("input"));
-                                let summary = redact_summary(name, &detail);
-                                let kind = classify_tool_kind(name);
-                                sess.state = if name == "AskUserQuestion" {
-                                    SessionState::AwaitingApproval
-                                } else {
-                                    SessionState::Tool
-                                };
-                                batch.activity_events.push(ActivityEvent {
-                                    session_id: session_id.clone(),
-                                    timestamp: ts,
-                                    kind,
-                                    tool_name: Some(name.to_owned()),
-                                    summary_redacted: Some(summary),
-                                    duration_ms: None,
-                                });
-                            }
+                // Extract tool_use summaries from content blocks
+                if let Some(blocks) = msg.get("content").and_then(Value::as_array) {
+                    for block in blocks {
+                        if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+                            let name = block.get("name").and_then(Value::as_str).unwrap_or("tool");
+                            let detail = extract_tool_detail(block.get("input"));
+                            let summary = redact_summary(name, &detail);
+                            let kind = classify_tool_kind(name);
+                            sess.state = if name == "AskUserQuestion" {
+                                SessionState::AwaitingApproval
+                            } else {
+                                SessionState::Tool
+                            };
+                            batch.activity_events.push(ActivityEvent {
+                                session_id: session_id.clone(),
+                                timestamp: ts,
+                                kind,
+                                tool_name: Some(name.to_owned()),
+                                summary_redacted: Some(summary),
+                                duration_ms: None,
+                            });
                         }
                     }
-                    if msg.get("stop_reason").and_then(Value::as_str) == Some("end_turn") {
-                        sess.state = SessionState::Idle;
-                    }
+                }
+                if msg.get("stop_reason").and_then(Value::as_str) == Some("end_turn") {
+                    sess.state = SessionState::Idle;
+                }
 
-                    // Deduplicate token usage across multi-block assistant lines
-                    let msg_id = msg.get("id").and_then(Value::as_str).unwrap_or("");
-                    let req_id = obj.get("requestId").and_then(Value::as_str).unwrap_or("");
-                    if !msg_id.is_empty() && !req_id.is_empty() {
-                        let dedup_key = format!("{msg_id}:{req_id}");
-                        if self.seen_dedup_keys.insert(dedup_key.clone()) {
-                            if let Some(usage_obj) = msg.get("usage").and_then(Value::as_object) {
-                                let record = build_usage_record(
-                                    dedup_key,
-                                    session_id.clone(),
-                                    ts,
-                                    sess.model.as_deref().unwrap_or("unknown"),
-                                    usage_obj,
-                                );
-                                batch.usage_records.push(record);
-                            }
-                        }
+                // Deduplicate token usage across multi-block assistant lines
+                let msg_id = msg.get("id").and_then(Value::as_str).unwrap_or("");
+                let req_id = obj.get("requestId").and_then(Value::as_str).unwrap_or("");
+                if !msg_id.is_empty() && !req_id.is_empty() {
+                    let dedup_key = format!("{msg_id}:{req_id}");
+                    if self.seen_dedup_keys.insert(dedup_key.clone())
+                        && let Some(usage_obj) = msg.get("usage").and_then(Value::as_object)
+                    {
+                        let record = build_usage_record(
+                            dedup_key,
+                            session_id.clone(),
+                            ts,
+                            sess.model.as_deref().unwrap_or("unknown"),
+                            usage_obj,
+                        );
+                        batch.usage_records.push(record);
                     }
                 }
             }
@@ -422,10 +421,11 @@ pub(crate) fn extract_tool_detail(input: Option<&Value>) -> String {
         "toolSummary",
         "pattern",
     ] {
-        if let Some(val) = obj.get(key).and_then(Value::as_str) {
-            if val != "[REDACTED]" && !val.trim().is_empty() {
-                return val.to_owned();
-            }
+        if let Some(val) = obj.get(key).and_then(Value::as_str)
+            && val != "[REDACTED]"
+            && !val.trim().is_empty()
+        {
+            return val.to_owned();
         }
     }
     String::new()
@@ -574,10 +574,10 @@ fn handle_claude_error_or_rate_limit(
         || api_err.is_some_and(|s| s.contains("limit"));
 
     if is_limit {
-        if let Some(info) = limit_info {
-            if record_claude_rate_limit(info, sess, session_id, ts, batch) {
-                return;
-            }
+        if let Some(info) = limit_info
+            && record_claude_rate_limit(info, sess, session_id, ts, batch)
+        {
+            return;
         }
         emit_claude_error(sess, session_id, ts, batch, true, status, err_kind);
     } else {
