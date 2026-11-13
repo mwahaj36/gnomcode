@@ -1,3 +1,4 @@
+- [2026-11-13 Windows 1.0.0 packaging evidence](2026-11-13-release-windows-package.md)
 # Engineering sessions
 
 - [2026-11-13 Build-pinned update signing](2026-11-13-release-update-signing.md)

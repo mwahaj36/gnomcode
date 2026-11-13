@@ -94,3 +94,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## codex-release signing preparation - 2026-11-13
 
 - [x] G release preparation: build-pinned update public key and offline artifact-signing script (ADR 0059). Actual owner key provisioning, signing and installed-update acceptance remain open.
+
+## codex-release Windows build preparation - 2026-11-13
+
+- [x] G local Windows 1.0.0 test installer built, payload verified and exact hashes recorded. Owner-key/OS signing, safe installed acceptance, final merged-source rebuild and publication remain open; section G's built-and-published gate stays unchecked.
