@@ -95,7 +95,13 @@ async fn run_git_readonly(repo: &Path, args: &[&str]) -> Result<(String, bool), 
     use tokio::io::AsyncReadExt as _;
     let mut command = tokio::process::Command::new("git");
     command
-        .args(["--no-pager", "-c", "core.quotepath=off"])
+        .args([
+            "--no-pager",
+            "-c",
+            "core.quotepath=off",
+            "-c",
+            "core.fsmonitor=false",
+        ])
         .args(args)
         .current_dir(repo)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -140,8 +146,11 @@ async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesErro
     if !canonical.is_dir() {
         return Err(ChangesError::NotGitRepo);
     }
-    let (diff, diff_lossy) =
-        run_git_readonly(&canonical, &["diff", "--no-ext-diff", "HEAD"]).await?;
+    let (diff, diff_lossy) = run_git_readonly(
+        &canonical,
+        &["diff", "--no-ext-diff", "--no-textconv", "HEAD"],
+    )
+    .await?;
     let (status_raw, status_lossy) =
         run_git_readonly(&canonical, &["status", "--porcelain=v1", "-z"]).await?;
     let status = status_raw.replace('\0', "\n");
