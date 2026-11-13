@@ -378,7 +378,7 @@ fn https_client() -> Result<reqwest::Client, String> {
 pub async fn check(provider: &str) -> Result<Vec<QuotaSnapshot>, String> {
     match provider {
         "claude" => fetch_claude(&https_client()?).await,
-        "antigravity" => fetch_antigravity().await,
+        "antigravity" => crate::agy_usage::fallback(fetch_antigravity().await).await,
         _ => Err(format!("unsupported provider {provider}")),
     }
 }

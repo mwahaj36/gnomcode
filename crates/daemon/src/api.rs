@@ -2490,7 +2490,7 @@ pub(crate) struct ProviderOverview {
     /// remaining percentage. `None` when there are no windows.
     headline_window: Option<usize>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
-    /// "Local logs", "Status line", "Provider API", "Language server" or "Off".
+    /// "Local logs", "Status line", "Provider API", "Native limits" or "Off".
     source_label: String,
     /// Shown when `windows` is empty.
     enable_hint: Option<String>,
@@ -2631,7 +2631,7 @@ fn provider_overviews(
                 "claude-code" if claude_api => "Provider API",
                 "claude-code" if has_exact => "Status line",
                 "claude-code" => "Off",
-                "antigravity" if antigravity_api => "Language server",
+                "antigravity" if antigravity_api => "Native limits",
                 "antigravity" => "Off",
                 _ => "Local logs",
             };
@@ -4259,7 +4259,7 @@ mod tests {
             Some("Start an Antigravity agent to read limits.")
         );
         assert_eq!(list[2].enable_command, None);
-        assert_eq!(list[2].source_label, "Language server");
+        assert_eq!(list[2].source_label, "Native limits");
     }
 
     #[test]
