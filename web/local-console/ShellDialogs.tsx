@@ -132,11 +132,9 @@ export function ShellDialogs() {
 
   const controller = useMemo(() => ({ confirm, notice: setNotice, startTour }), [confirm, startTour]);
   useEffect(() => {
-    window.__gnomcodeShell = { confirmAction: (message, label = 'Continue') => confirm(message, label), showNotice: setNotice };
     const unregister = registerShellDialogs(controller);
     return () => {
       unregister();
-      delete window.__gnomcodeShell;
     };
   }, [confirm, controller]);
 

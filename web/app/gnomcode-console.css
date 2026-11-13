@@ -1788,3 +1788,8 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-eval-providers { list-style: none; margin: var(--sp-3) 0; padding: 0; display: grid; gap: var(--sp-1); }
 .sp-eval-provider { display: flex; justify-content: space-between; gap: var(--sp-3); font: 400 var(--sp-fs-meta)/1.4 var(--sp-font-sans); color: var(--sp-text-2); }
 .sp-eval-provider strong { color: var(--sp-text); font-weight: 500; }
+
+/* Local account view: the sign-in fields fill their column and the button sits under them. */
+#auth-unpaired-card>form{display:grid;gap:8px;max-width:360px;margin-bottom:16px}
+#auth-unpaired-card>form input{width:100%}
+#auth-unpaired-card>form button[type="submit"]{justify-self:start;margin-top:8px}

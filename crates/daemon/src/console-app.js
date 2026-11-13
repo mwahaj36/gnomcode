@@ -1,6 +1,5 @@
 // Console shell. Home, Workspace, Usage and Settings are React views in /console-react.js;
-// this file owns view routing, connection status, account sign-in and pairing and the
-// delegated clicks for presenter markup.
+// this file owns view routing, connection status and the delegated clicks for presenter markup.
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -17,9 +16,6 @@
       if (!response.ok) {const error=await response.json().catch(()=>null);throw new Error(response.status === 401 ? 'Local authorization is missing or expired. Close this window and reopen gnomcode from its tray icon or shortcut.' : typeof error?.message === 'string' ? error.message : `gnomcode request failed (${response.status}). Retry Reload view or restart gnomcode if this persists.`);}
       return response.json();
     }
-
-    const showNotice = message => window.__gnomcodeShell.showNotice(message);
-    const confirmAction = (message, label) => window.__gnomcodeShell.confirmAction(message, label);
 
 // Views and navigation
     let activeView = 'overview';
@@ -165,7 +161,7 @@
       try {
         while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
         fire('gnomcode:reload-view', { view: activeView });
-        if (activeView === 'auth' ? !await checkAuthSession() : !await probeDaemon()) throw new Error('Local data could not be loaded');
+        if (!await probeDaemon()) throw new Error('Local data could not be loaded');
         lastSuccessfulUpdate = new Date();
         syncState('View refreshed');
       } catch {
@@ -176,123 +172,10 @@
     }
 // End connection status
 
-// Account
-    const accountAccessDisclosure='Linking this native app makes its available conversations and supported session controls accessible from any device signed in to your account, anywhere. This includes devices already signed in and devices you sign in to later. No phone pairing or per-desktop approval will be required. This desktop must stay awake with Gnomcode running. Protect your account: anyone with access to it can use these controls. You can disable account access in Devices or disconnect this desktop.';
-    function confirmAccountAccess(){return confirmAction(accountAccessDisclosure,'Link and allow account access');}
-    let accountWriteBusy = false;
-    async function signInAccount(){
-      if(accountWriteBusy)return;
-      accountWriteBusy=true;
-      const button=document.getElementById('auth-signin-button'),password=document.getElementById('auth-password'),status=document.getElementById('auth-pair-status');
-      button.disabled=true;button.textContent='Signing in...';status.hidden=false;
-      try{
-        if(!await confirmAccountAccess()){status.hidden=true;return;}
-        await apiJson('/api/v1/auth/signin',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('auth-email').value.trim(),password:password.value,remote_access_confirmed:true}),signal:AbortSignal.timeout(15000)});
-        password.value='';status.textContent='Signed in. Your desktop will appear in Devices.';await checkAuthSession();
-      }catch{status.textContent='Sign-in failed. Check your email, password and connection. Browser accounts can use the connection option below.';}
-      finally{accountWriteBusy=false;button.disabled=false;button.textContent='Sign in';}
-    }
-    async function pairTokenDirectly() {
-      if (accountWriteBusy) return;
-      const input = document.getElementById('auth-token-input');
-      const status = document.getElementById('auth-pair-status');
-      if (!input || !status) return;
-      const val = input.value.trim();
-      if (!val) return;
-
-      accountWriteBusy = true; input.disabled = true;
-      const button = document.getElementById('auth-pair-button'); button.disabled = true; button.textContent = 'Connecting...';
-      status.hidden = false;
-      status.style.color = 'var(--text-muted)';
-      status.textContent = 'Connecting this desktop...';
-
-      try {
-        let sessionData = null;
-        try {
-          sessionData = JSON.parse(val);
-        } catch {
-          try {
-            sessionData = JSON.parse(atob(val));
-          } catch {
-            sessionData = { access_token: val, token_type: 'bearer' };
-          }
-        }
-
-        if(!await confirmAccountAccess()){status.hidden=true;return;}
-        sessionData.remote_access_confirmed=true;
-        const res = await fetch('/api/v1/auth/session', {
-          method: 'POST', signal: AbortSignal.timeout(30000),
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(sessionData)
-        });
-
-        if (res.ok) {
-          status.style.color = 'var(--green)';
-          status.textContent = 'Desktop connected. Waiting for its next metadata update.';
-          input.value = '';
-          input.type = 'password';
-          const visibility = document.querySelector('[data-action="toggle-pair-token"]');
-          visibility.setAttribute('aria-pressed', 'false');
-          visibility.textContent = 'Show token';
-          if (await checkAuthSession()) document.getElementById('auth-cloud-status').focus({ preventScroll: true });
-        } else {
-          status.style.color = 'var(--red)';
-          status.textContent = 'Failed to save session. Check token and try again.';
-        }
-      } catch (err) {
-        status.style.color = 'var(--red)';
-        status.textContent = 'Connection could not be confirmed. Reload account status before retrying.';
-      } finally { accountWriteBusy = false; input.disabled = false; button.disabled = false; button.textContent = 'Connect desktop'; }
-    }
-
-    async function checkAuthSession() {
-      try {
-        const [account, publication] = await Promise.allSettled([
-          apiJson('/api/v1/auth/session', { headers, signal: AbortSignal.timeout(15000) }),
-          apiJson('/api/v1/sync/status', { headers, signal: AbortSignal.timeout(15000) })
-        ]);
-        if (account.status !== 'fulfilled') throw new Error('Account unavailable');
-        const res = account.value;
-        const sync = publication.status === 'fulfilled' ? publication.value : null;
-        const publicationText = sync ? `${sync.message} Last published: ${sync.last_success_at ? new Date(sync.last_success_at).toLocaleString() : 'not yet'}.` : 'Publication status unavailable. Retry Reload view.';
-        document.getElementById('auth-publication-status').textContent = publicationText;
-        document.getElementById('auth-cloud-status').textContent = res.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.';
-        document.getElementById('account-entry').hidden = Boolean(res.paired);
-        document.getElementById('auth-paired-card').hidden = !res.paired;
-        document.getElementById('auth-unpaired-card').hidden = Boolean(res.paired);
-        document.getElementById('auth-paired-email').textContent = res.email || 'Connected account';
-        return true;
-      } catch (_) {
-        document.getElementById('auth-cloud-status').textContent = 'Account connection unavailable. Retry Reload view.';
-        document.getElementById('auth-publication-status').textContent = 'Local monitoring does not require an account connection.';
-        document.getElementById('account-entry').hidden = false;
-        document.getElementById('auth-paired-card').hidden = true;
-        document.getElementById('auth-unpaired-card').hidden = false;
-        return false;
-      }
-    }
-
-    async function unpairSession() {
-      if (accountWriteBusy) return;
-      if (!await confirmAction('Disconnect this desktop from your account? Recorded local sessions will stay on this device.', 'Disconnect desktop')) return;
-      accountWriteBusy = true;
-      const button = document.getElementById('auth-disconnect-button'); button.disabled = true; button.textContent = 'Disconnecting...';
-      try {
-        const res = await fetch('/api/v1/auth/session', {
-          method: 'DELETE', signal: AbortSignal.timeout(30000),
-          headers
-        });
-        if (res.ok) {
-          await checkAuthSession();
-        } else {
-          showNotice('Could not disconnect. Reload the account status and retry.');
-        }
-      } catch (err) {
-        showNotice('Connection could not be confirmed. Reload the account status before retrying.');
-      } finally { accountWriteBusy = false; button.disabled = false; button.textContent = 'Disconnect desktop'; }
-    }
-// End account
-
+// The account view reports whether this desktop is connected; the rail offers Sign in only while it is not.
+    window.addEventListener('gnomcode:account-state', event => {
+      document.getElementById('account-entry').hidden = Boolean(event.detail.paired);
+    });
 
 // Delegated clicks: presenter markup in the views carries data-action instead of handlers.
     document.addEventListener('click', async event => {
@@ -316,7 +199,6 @@
       'toggle-chat-list': toggleChatList,
       'home-new-session': () => { navigateView('sessions'); workspaceAction({ type: 'new-session' }); },
       'open-home-session': id => { navigateView('sessions'); workspaceAction({ type: 'open-session', sessionId: id }); },
-      unpair: unpairSession,
     };
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-action]');
@@ -328,24 +210,8 @@
         if (event.detail && isPhone()) document.querySelector('.view-content.active')?.focus({preventScroll:true});
         return;
       }
-      if (action === 'toggle-pair-token') {
-        const input = document.getElementById('auth-token-input');
-        const visible = input.type === 'password';
-        input.type = visible ? 'text' : 'password';
-        target.setAttribute('aria-pressed', String(visible));
-        target.textContent = visible ? 'Hide token' : 'Show token';
-        return;
-      }
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
-    document.addEventListener('submit', event => {
-      const form = event.target.closest('[data-submit]');
-      if (!form) return;
-      const submit = form.dataset.submit;
-      if (submit === 'signin') { event.preventDefault(); signInAccount(); }
-      else if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
-    });
-
     // Bridge the React views call to move around the shell.
     window.__gnomcodeLocalActions = {
       setView: view => { navigateView(view); },
@@ -366,6 +232,5 @@
     if (VIEWS.includes(initialView)) setView(initialView, Boolean(hashView));
     else setView('overview', false);
     openExplorerWorkspace();
-    void checkAuthSession();
     pollLocalData();
     setInterval(pollLocalData, 2000);
