@@ -278,6 +278,8 @@ CLI, Electron packages and notices/EULA/hashes per approved platform. Target npm
 
 On `workflow_dispatch` with `package=true`, `.github/workflows/ci.yml` (`package-desktop`) builds the release daemon and packages the Electron app without publishing for `ubuntu-22.04` (`x64` `.deb` and `.zip`), `macos-15-intel` (`x64` `.zip`), and `macos-15` (`arm64` `.zip`).
 
+`scripts/smoke/run-packaged-smoke.mjs` verifies a packaged or staged `gnomcode` binary across Windows, macOS, and Linux by starting the daemon with a temporary `GNOMCODE_HOME` on a free loopback port, checking `/api/v1/doctor`, `/api/v1/providers/overview`, `/api/v1/sessions`, console HTML at `/`, and `formatTrayMenu` when `apps/desktop/dist/tray-menu.js` is built.
+
 ### 6.3 Versioning
 
 CLI, desktop and npm use lockstep SemVer. Remain 0.x before v1.0. Current development version is 0.9.0. No legacy executable/home migration or compatibility alias; preserve old directories without deleting them.
