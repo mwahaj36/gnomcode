@@ -26,3 +26,7 @@ Gnomcode 1.0 supports exactly these three agents.
 ## Progressive Web App & Remote
 - Web Application: https://gnomcode.vercel.app/remote
 - Mobile PWA: Installable directly from browser on iOS and Android with background notifications for agent completion and approval requests.
+
+## Downloads
+
+- [Windows downloads](https://gnomcode.vercel.app/downloads): The downloads page shows the package version and Windows x64 release-candidate installer/ZIP names. Review the published release notes and versioned SHA-256 checksums before installing. Windows installers are unsigned; updater signatures are separate from OS signing. macOS and Linux downloads are not available yet.

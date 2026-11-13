@@ -58,3 +58,6 @@ supabase/.temp/
 # Playwright
 web/test-results/
 web/playwright-report/
+
+# Prepared locally; owner-key signing and approval precede publication.
+web/public/downloads/latest.json

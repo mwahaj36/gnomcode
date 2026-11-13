@@ -1,3 +1,4 @@
+- [2026-11-13 Windows downloads and update manifest](2026-11-13-release-download-manifest.md)
 # Engineering sessions
 
 - [2026-11-13 Windows 1.0.0 packaging evidence](2026-11-13-release-windows-package.md)
