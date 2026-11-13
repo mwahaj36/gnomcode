@@ -40,9 +40,9 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] Freeze unproven features behind off-by-default toggles (Teams, extra adapters, account sync)
 
 ## F. Differentiators (audit Phase 4)
-- [ ] Worktree per session with diff review and merge
 - [x] "Continue here" for imported sessions (backend, ADR 0053; pairs with UI PR #209)
 - [x] Handoff quality evals (backend, ADR 0055; pairs with UI PR #211)
+- [x] Worktree per session with diff review and merge (backend, ADR 0051; pairs with UI PR #206)
 
 ## G. Release 1.0.0
 - [ ] Version 1.0.0 everywhere (cut-release skill), CHANGELOG, release notes

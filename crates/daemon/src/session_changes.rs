@@ -146,9 +146,13 @@ async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesErro
     if !canonical.is_dir() {
         return Err(ChangesError::NotGitRepo);
     }
+    // A managed worktree is reviewed against the commit it was cut from, so committed work shows.
+    let base =
+        crate::worktree_session::diff_base(&crate::worktree_session::managed_root(), &canonical)
+            .unwrap_or_else(|| "HEAD".to_owned());
     let (diff, diff_lossy) = run_git_readonly(
         &canonical,
-        &["diff", "--no-ext-diff", "--no-textconv", "HEAD"],
+        &["diff", "--no-ext-diff", "--no-textconv", &base],
     )
     .await?;
     let (status_raw, status_lossy) =
