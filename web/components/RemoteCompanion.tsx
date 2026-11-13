@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -17,7 +17,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -42,6 +42,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [artifactsLoading, setArtifactsLoading] = useState(false);
   const [artifactsError, setArtifactsError] = useState('');
   const [artifactsChangesCount, setArtifactsChangesCount] = useState<number | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [attachError, setAttachError] = useState('');
   const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'unavailable' | 'paired'>('ready');
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -142,6 +144,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const changesDialog=useRef<HTMLDialogElement|null>(null);
   const artifactsDialog=useRef<HTMLDialogElement|null>(null);
   const artifactsRequest=useRef(false);
+  const attachInput=useRef<HTMLInputElement|null>(null);
+  const pendingUploadIds=useRef(new Set<string>());
+  const attachmentsRef=useRef<AttachmentItem[]>([]);
+  attachmentsRef.current = attachments;
   useEffect(()=>{if(limitsPanel)limitsDialog.current?.showModal();},[limitsPanel]);
   useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
   useEffect(()=>{if(changesPanel)changesDialog.current?.showModal();},[changesPanel]);
@@ -271,15 +277,46 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   function changePrompt(text: string) { promptRef.current = text; setPrompt(text); }
 
   async function submitPromptText(rawText: string, fromComposer: boolean) {
-    if (!authenticated.current || !sessions.find(session => session.id === selectedRef.current)?.can_prompt || pendingPrompt.current || !rawText.trim()) return;
+    const ready = fromComposer ? attachmentsRef.current.filter(item => item.status === 'saved' && item.workspace_path) : [];
+    const composed = formatPromptWithAttachments(rawText, ready);
+    if (!authenticated.current || !sessions.find(session => session.id === selectedRef.current)?.can_prompt || pendingPrompt.current || !composed) return;
     const id = crypto.randomUUID();
     const sourceSession = selectedRef.current;
     pendingPrompt.current = {session:sourceSession,text:rawText,id,fromComposer};
-    const pending:PendingChat = {id,text:rawText,created_at:new Date().toISOString(),baseline:events.map(event=>event.event_id),delivered:false};
+    const pending:PendingChat = {id,text:composed,created_at:new Date().toISOString(),baseline:events.map(event=>event.event_id),delivered:false};
     setOptimistic(current=>({...current,[selectedRef.current]:[...(current[selectedRef.current] || []),pending]}));
     setSending(true); setError(''); setNotice('');
-    try { await send({type:'prompt',session_id:selectedRef.current,text:rawText}); }
+    try { await send({type:'prompt',session_id:selectedRef.current,text:composed}); }
     catch { setOptimistic(current=>({...current,[sourceSession]:(current[sourceSession] || []).filter(item=>item.id !== id)})); pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
+  }
+  async function pickPhoneAttachment(file: File | null | undefined) {
+    if (!file || !authenticated.current || !selectedRef.current) return;
+    const checked = validateAttachmentCandidate(file);
+    if (!checked.ok) { setAttachError(checked.reason); return; }
+    setAttachError('');
+    const requestId = crypto.randomUUID();
+    const sessionId = selectedRef.current;
+    const item: AttachmentItem = { id: requestId, filename: checked.filename, size: checked.size, mime_type: checked.mime_type, status: 'uploading' };
+    setAttachments(current => [...current, item]);
+    pendingUploadIds.current.add(requestId);
+    try {
+      const data_base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const res = String(reader.result || '');
+          const comma = res.indexOf(',');
+          resolve(comma >= 0 ? res.slice(comma + 1) : res);
+        };
+        reader.onerror = () => reject(new Error('Could not read file.'));
+        reader.readAsDataURL(file);
+      });
+      if (sessionId !== selectedRef.current) { pendingUploadIds.current.delete(requestId); return; }
+      await send({ type: 'upload_attachment', session_id: sessionId, request_id: requestId, filename: checked.filename, mime_type: checked.mime_type, size: checked.size, data_base64 });
+    } catch {
+      pendingUploadIds.current.delete(requestId);
+      setAttachments(current => current.map(entry => entry.id === requestId ? { ...entry, status: 'error' } : entry));
+      setAttachError('Could not upload attachment. Check your laptop connection.');
+    }
   }
 
   function persistQuickActions(items: QuickAction[]) {
@@ -466,6 +503,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         if (pending.fromComposer) {
           if (drafts.current.get(pending.session) === pending.text) drafts.current.delete(pending.session);
           if (pending.session === selectedRef.current && promptRef.current === pending.text) changePrompt('');
+          setAttachments(current => current.filter(item => item.status !== 'saved')); setAttachError('');
         }
         pendingPrompt.current = null; setSending(false); setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).map(item=>item.id === pending.id ? {...item,delivered:true} : item)})); setNotice('');
       }
@@ -502,6 +540,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       setArtifactsChangesCount(typeof reply.changes_count === 'number' ? reply.changes_count : null);
     }
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
+    else if (reply.type === 'attachment_ack') {
+      const reqId = reply.request_id || reply.id || '';
+      pendingUploadIds.current.delete(reqId);
+      setAttachments(current => current.map(entry => entry.id === reqId ? { ...entry, status: 'saved', workspace_path: reply.workspace_path } : entry));
+    }
     else if (reply.type === 'error') {
       if(reply.request_type==='changes' || (changesRequested.current && /unsupported remote command/i.test(reply.message || ''))){
         changesRequested.current=false;setChangesLoading(false);
@@ -520,6 +563,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(reply.request_type==='artifacts' || (artifactsRequest.current && /Unsupported remote command/i.test(reply.message || ''))){
         artifactsRequest.current=false;setArtifactsLoading(false);
         setArtifactsError(/Unsupported remote command/i.test(reply.message || '') ? 'Artifacts view requires a newer Gnomcode desktop update.' : (reply.message || 'Could not load artifacts.'));
+        return;
+      }
+      if(reply.request_type==='upload_attachment' || (pendingUploadIds.current.size > 0 && /Unsupported remote command/i.test(reply.message || ''))){
+        const reqId = reply.request_id || [...pendingUploadIds.current][0];
+        if (reqId) pendingUploadIds.current.delete(reqId);
+        setAttachments(current => current.map(entry => (!reqId || entry.id === reqId) && entry.status === 'uploading' ? { ...entry, status: 'error' } : entry));
+        setAttachError(/Unsupported remote command/i.test(reply.message || '') ? 'Phone attachments require a newer Gnomcode desktop update.' : (reply.message || 'Attachment upload failed.'));
         return;
       }
       if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
@@ -646,6 +696,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     filesRequested.current = false; setFilesPanel(false); setFileListState(null); setFileData(null); setFilePathInput('');
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setArtifactsPanel(false); setArtifacts([]); setSelectedArtifactId(''); setArtifactsError(''); setArtifactsChangesCount(null); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
+    selectedRef.current = id; setSchedules([]); setResetArmed(false); pendingUploadIds.current.clear(); setAttachments([]); setAttachError(''); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
   }
@@ -654,6 +705,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     try {sessionStorage.removeItem('gnomcode-pairing-offer');}catch{}
     modelRequest.current=false;setModelProviders([]);setModelsError('');setModelsLoading(false);
     artifactsRequest.current=false;setArtifactsPanel(false);setArtifacts([]);setSelectedArtifactId('');setArtifactsError('');setArtifactsChangesCount(null);
+    pendingUploadIds.current.clear();setAttachments([]);setAttachError('');
     authenticated.current=false;connectionEpoch.current++;
     manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice(accountOwner.current,connectedDesktop.current).catch(()=>{});
     setOptimistic({});
@@ -664,6 +716,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
 
   const active = sessions.find(session => session.id === selected);
   const currentArtifact = artifacts.find((item, idx) => String(item.id || item.path || idx) === selectedArtifactId) || null;
+  const hasSavedAttachments = attachments.some(item => item.status === 'saved' && item.workspace_path);
   const readOnly=active?.hosted === false;
   const connected=phase==='paired';
   const workspace=connected || ((phase==='reconnecting'||phase==='unavailable') && sessions.length>0);
@@ -777,9 +830,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
             <button type="button" className="sp-quick-action sp-quick-action--manage" aria-label="Manage quick prompts" onClick={() => setQuickActionsPanel(true)}>Customize</button>
           </div>
           <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
+          {(attachments.length > 0 || attachError) && <div className="sp-attachments-bar" role="region" aria-label="Staged attachments">{attachments.map(item => <span key={item.id} className={`sp-attachment-pill sp-attachment-pill--${item.status}`}><span className="sp-attachment-name">{item.filename}</span><span className="sp-attachment-meta">{item.status === 'saved' ? 'Saved' : item.status === 'error' ? 'Failed' : 'Uploading'}</span><button type="button" className="sp-attachment-remove" aria-label={`Remove ${item.filename}`} onClick={() => setAttachments(current => current.filter(entry => entry.id !== item.id))}>Remove</button></span>)}{attachError && <span className="sp-attach-status" role="status">{attachError}</span>}</div>}
           <label htmlFor="remote-prompt">Message the agent</label>
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
-          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="submit" disabled={!connected || sending || !prompt.trim() || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
+          <input ref={attachInput} type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void pickPhoneAttachment(file); }} />
+          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="sp-attach-trigger" disabled={!connected} onClick={()=>attachInput.current?.click()} aria-label="Attach file">Attach</button><button type="submit" disabled={!connected || sending || (!prompt.trim() && !hasSavedAttachments) || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
           {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'The agent is busy or waiting for approval. Prompting becomes available when it is idle.'}</p>}
         </form></>}
       </> : <div className="remote-empty"><h2>Your conversations</h2><p>Choose a conversation or start an agent to begin.</p><button type="button" className="sp-primary-action" onClick={startNew}>New conversation</button><button type="button" onClick={() => setShowSessions(true)}>Browse history</button></div>}</div>

@@ -979,3 +979,56 @@ export function renderArtifactPreview(artifact) {
   }
   return `<pre class="sp-artifact-code"><code>${escape(String(artifact.content || 'Preview unavailable.'))}</code></pre>`;
 }
+export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.md', '.log', '.json', '.csv', '.pdf']);
+
+function sanitizeAttachmentName(name) {
+  const base = String(name || '').split(/[/\\]/).pop() || '';
+  const cleaned = base.replace(/[\u0000-\u001f\u007f]+/g, '').replace(/\.\.+/g, '.').trim();
+  return cleaned.slice(0, 120) || 'attachment';
+}
+
+export function validateAttachmentCandidate(file) {
+  if (!file || typeof file.size !== 'number' || file.size <= 0) {
+    return { ok: false, reason: 'Choose a non-empty file to attach.' };
+  }
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return { ok: false, reason: 'Attachments must be 15 MiB or smaller.' };
+  }
+  const filename = sanitizeAttachmentName(file.name);
+  const dot = filename.lastIndexOf('.');
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : '';
+  if (!ALLOWED_ATTACHMENT_EXTS.has(ext)) {
+    return { ok: false, reason: 'Unsupported file type. Use PNG, JPG, WEBP, GIF, PDF, TXT, MD, LOG, JSON, or CSV.' };
+  }
+  const mime_type = String(file.type || '').trim() || 'application/octet-stream';
+  return { ok: true, filename, size: file.size, mime_type };
+}
+
+function formatAttachmentBytes(size) {
+  if (!Number.isFinite(size) || size < 1024) return `${Math.max(0, Number(size) || 0)} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function renderAttachmentPills(items = []) {
+  if (!Array.isArray(items) || !items.length) return '';
+  return items.map(item => {
+    const id = escape(String(item?.id || ''));
+    const name = escape(String(item?.filename || 'attachment'));
+    const size = escape(formatAttachmentBytes(item?.size));
+    const statusLabel = item?.status === 'saved' ? 'Saved' : item?.status === 'error' ? 'Failed' : 'Uploading';
+    return `<span class="sp-attachment-pill sp-attachment-pill--${escape(String(item?.status || 'uploading'))}" data-attachment-id="${id}"><span class="sp-attachment-name">${name}</span><span class="sp-attachment-meta">${size} · ${statusLabel}</span><button type="button" class="sp-attachment-remove" data-attachment-remove="${id}" aria-label="Remove ${name}">Remove</button></span>`;
+  }).join('');
+}
+
+export function formatPromptWithAttachments(promptText, attachments = []) {
+  const base = String(promptText || '').trim();
+  const refs = (Array.isArray(attachments) ? attachments : [])
+    .filter(item => item?.status === 'saved' && item?.workspace_path)
+    .map(item => `[Attachment: ${String(item.workspace_path).trim()}]`);
+  if (!refs.length) return base.slice(0, 4000);
+  const refText = refs.join('\n');
+  // Never cut an attachment reference: shorten the typed message instead.
+  return base ? `${base.slice(0, Math.max(0, 4000 - refText.length - 1))}\n${refText}`.slice(0, 4000) : refText.slice(0, 4000);
+}
