@@ -31,6 +31,7 @@
 - [2026-11-13 - Phone and console workspace attachments UI](2026-11-13-phone-attachments-ui.md)
 - [2026-11-13 - PWA app lock with passkey and device PIN (ADR 0034)](2026-11-13-pwa-app-lock.md)
 - [2026-11-13 - G5 interrupt button UI on console and phone](2026-11-13-interrupt-ui.md)
+- [2026-11-13 - E1 Local console React Usage view](2026-11-13-local-console-usage.md)
 - [2026-11-13 - E1 Local console React Workspace view](2026-11-13-local-console-workspace.md)
 - [2026-11-13 - E1 Local console React Home view](2026-11-13-local-console-home.md)
 - [2026-11-13 - First-run tour refresh for four places and Workspace](2026-11-13-tour-refresh.md)

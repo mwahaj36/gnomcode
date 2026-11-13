@@ -20,8 +20,17 @@ export interface LocalSessionsResponse {
   total_count?: number;
 }
 
+export interface LocalTimelineReport {
+  range_label?: string;
+  earliest_at?: string | null;
+  latest_at?: string | null;
+  [key: string]: unknown;
+}
+
 export interface LocalReportResponse {
-  timeline?: unknown;
+  timeline?: LocalTimelineReport | null;
+  roi_by_provider?: unknown[];
+  combined_roi?: unknown;
 }
 
 export interface LocalDesktopBridge {
@@ -54,6 +63,7 @@ declare global {
     __gnomcodeReactViews?: {
       overview?: boolean;
       sessions?: boolean;
+      usage?: boolean;
     };
     __gnomcodeLocalActions?: {
       setView?: (view: string) => void;
