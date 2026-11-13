@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 Windows 1.0.0 packaging evidence](2026-11-13-release-windows-package.md)
 - [2026-11-13 Build-pinned update signing](2026-11-13-release-update-signing.md)
 - [2026-11-13 Release 1.0.0 versions](2026-11-13-release-1-0-versions.md)
 - [2026-11-13 - Platform support matrix for 1.0](2026-11-13-platforms-support-doc.md)
