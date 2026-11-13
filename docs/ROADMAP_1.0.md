@@ -69,3 +69,4 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - Changes view UI (read-only console panel via `GET /api/v1/repos/diff` + Remote `changes` E2EE stub sheet): implemented in Worker B PR (pending Worker A Remote `changes` backend/ADR).
 ## Section C UI status (Worker B)
 - File viewer UI (read-only workspace-confined file browser/reader on console + Remote): implemented in Worker B PR (pending Worker A `C file listing and reading` backend/ADR).
+- [~] Section C artifacts alongside changes UI (`feat/artifacts-view-ui`; HTML rendered in `sandbox=""` iframe, Markdown, safe images; Remote awaits Worker A backend handler)

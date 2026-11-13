@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -17,7 +17,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -36,6 +36,12 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [fileListState, setFileListState] = useState<RepoFileListing | null>(null);
   const [fileData, setFileData] = useState<RepoFileData | null>(null);
   const filesRequested = useRef(false);
+  const [artifactsPanel, setArtifactsPanel] = useState(false);
+  const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
+  const [selectedArtifactId, setSelectedArtifactId] = useState('');
+  const [artifactsLoading, setArtifactsLoading] = useState(false);
+  const [artifactsError, setArtifactsError] = useState('');
+  const [artifactsChangesCount, setArtifactsChangesCount] = useState<number | null>(null);
   const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'unavailable' | 'paired'>('ready');
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -134,6 +140,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const limitsDialog=useRef<HTMLDialogElement|null>(null);
   const quickActionsDialog=useRef<HTMLDialogElement|null>(null);
   const changesDialog=useRef<HTMLDialogElement|null>(null);
+  const artifactsDialog=useRef<HTMLDialogElement|null>(null);
+  const artifactsRequest=useRef(false);
   useEffect(()=>{if(limitsPanel)limitsDialog.current?.showModal();},[limitsPanel]);
   useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
   useEffect(()=>{if(changesPanel)changesDialog.current?.showModal();},[changesPanel]);
@@ -199,6 +207,17 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
 
   useEffect(()=>{if(desktopPanel)desktopDialog.current?.showModal();},[desktopPanel]);
   useEffect(()=>{if(modelPanel)modelDialog.current?.showModal();},[modelPanel]);
+  useEffect(()=>{
+    if(!artifactsPanel){artifactsRequest.current=false;setArtifactsLoading(false);return;}
+    artifactsDialog.current?.showModal();
+    if(phase==='paired' && selectedRef.current)void loadArtifacts();
+  },[artifactsPanel,phase]);
+
+  async function loadArtifacts(){
+    if(!authenticated.current || !selectedRef.current || artifactsRequest.current)return;
+    artifactsRequest.current=true;setArtifactsLoading(true);setArtifactsError('');
+    try{await send({type:'artifacts',session_id:selectedRef.current});}catch{artifactsRequest.current=false;setArtifactsLoading(false);setArtifactsError('Could not load artifacts. Check your desktop connection and retry.');}
+  }
   useEffect(()=>{
     if(!modelPanel || phase!=='paired'){modelRequest.current=false;setModelsLoading(false);return;}
     void loadModels();
@@ -473,6 +492,15 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       }
     }
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
+    else if (reply.type === 'artifacts' || reply.type === 'artifacts_result') {
+      artifactsRequest.current = false;
+      setArtifactsLoading(false);
+      setArtifactsError('');
+      const list = Array.isArray(reply.artifacts) ? reply.artifacts : [];
+      setArtifacts(list);
+      setSelectedArtifactId(list[0] ? String(list[0].id || list[0].path || 0) : '');
+      setArtifactsChangesCount(typeof reply.changes_count === 'number' ? reply.changes_count : null);
+    }
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
     else if (reply.type === 'error') {
       if(reply.request_type==='changes' || (changesRequested.current && /unsupported remote command/i.test(reply.message || ''))){
@@ -487,6 +515,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           : (reply.message || 'Could not inspect workspace file.');
         if (reply.request_type === 'repo_file') setFileData({ error: msg });
         else setFileListState({ error: msg });
+        return;
+      }
+      if(reply.request_type==='artifacts' || (artifactsRequest.current && /Unsupported remote command/i.test(reply.message || ''))){
+        artifactsRequest.current=false;setArtifactsLoading(false);
+        setArtifactsError(/Unsupported remote command/i.test(reply.message || '') ? 'Artifacts view requires a newer Gnomcode desktop update.' : (reply.message || 'Could not load artifacts.'));
         return;
       }
       if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
@@ -612,6 +645,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     changesRequested.current = false; setChangesPanel(false); setChangesLoading(false); setChangesState(null);
     filesRequested.current = false; setFilesPanel(false); setFileListState(null); setFileData(null); setFilePathInput('');
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
+    selectedRef.current = id; setSchedules([]); setResetArmed(false); setArtifactsPanel(false); setArtifacts([]); setSelectedArtifactId(''); setArtifactsError(''); setArtifactsChangesCount(null); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
   }
@@ -619,6 +653,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   function disconnect() {
     try {sessionStorage.removeItem('gnomcode-pairing-offer');}catch{}
     modelRequest.current=false;setModelProviders([]);setModelsError('');setModelsLoading(false);
+    artifactsRequest.current=false;setArtifactsPanel(false);setArtifacts([]);setSelectedArtifactId('');setArtifactsError('');setArtifactsChangesCount(null);
     authenticated.current=false;connectionEpoch.current++;
     manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice(accountOwner.current,connectedDesktop.current).catch(()=>{});
     setOptimistic({});
@@ -628,6 +663,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   }
 
   const active = sessions.find(session => session.id === selected);
+  const currentArtifact = artifacts.find((item, idx) => String(item.id || item.path || idx) === selectedArtifactId) || null;
   const readOnly=active?.hosted === false;
   const connected=phase==='paired';
   const workspace=connected || ((phase==='reconnecting'||phase==='unavailable') && sessions.length>0);
@@ -678,6 +714,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         <div dangerouslySetInnerHTML={{__html:renderFileViewer(fileData)}} />
       </div>
     </dialog>}
+    {artifactsPanel && <dialog ref={artifactsDialog} className="remote-sheet sp-artifacts-sheet" aria-labelledby="remote-artifacts-heading" onClose={()=>setArtifactsPanel(false)}><header><h2 id="remote-artifacts-heading">Artifacts{artifactsChangesCount !== null ? ` (${artifactsChangesCount} changes)` : ''}</h2><button type="button" disabled={!connected || artifactsLoading} onClick={()=>void loadArtifacts()}>Refresh</button><button type="button" aria-label="Close artifacts" onClick={()=>artifactsDialog.current?.close()}>Close</button></header><div className="sp-artifacts-sheet-body">{artifactsLoading ? <p role="status">Loading artifacts...</p> : artifactsError ? <p className="sp-empty" role="status">{artifactsError}</p> : !artifacts.length ? <p className="sp-empty">No artifacts recorded for this session yet.</p> : <><div className="sp-artifacts-list">{artifacts.map((item, idx) => { const id = String(item.id || item.path || idx); const kind = classifyArtifactKind(item); const isSelected = id === selectedArtifactId; return <button key={id} type="button" className={`sp-artifact-item${isSelected ? ' is-selected' : ''}`} aria-pressed={isSelected} onClick={()=>setSelectedArtifactId(id)}><span className="sp-artifact-badge">{kind === 'html' ? '[HTML]' : kind === 'markdown' ? '[MD]' : kind === 'image' ? '[IMG]' : '[FILE]'}</span><span className="sp-artifact-name">{item.title || item.path}</span>{item.status && <span className="sp-artifact-status">{item.status}</span>}</button>; })}</div><div className="sp-artifact-preview">{currentArtifact && classifyArtifactKind(currentArtifact) === 'html' ? <div className="sp-artifact-html-wrap"><p className="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe className="sp-artifact-frame" title={currentArtifact.title || currentArtifact.path} sandbox="" referrerPolicy="no-referrer" srcDoc={currentArtifact.content || ''} /></div> : <div dangerouslySetInnerHTML={{ __html: renderArtifactPreview(currentArtifact) }} />}</div></>}</div></dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
@@ -716,7 +753,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <div className="sp-approval-actions"><button type="button" disabled={!connected} aria-label={`Deny ${item.tool}`} onClick={()=>decideApproval(item.id,'deny')}>Deny</button><button type="button" disabled={!connected} aria-label={`Approve ${item.tool} once`} onClick={()=>decideApproval(item.id,'approve')}>Approve once</button></div>
         </article>)}</section>}
         {selected ? <>
-        <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void browseRepoFiles('')}>Files</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button></div>
+        <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void browseRepoFiles('')}>Files</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={()=>setArtifactsPanel(true)}>Artifacts</button></div>
         {historyLoading && <p role="status">Loading messages...</p>}
         {hasEarlier && <button type="button" disabled={!connected || historyLoading} onClick={() => {
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};
