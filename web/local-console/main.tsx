@@ -3,11 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { ApprovalsCard } from './ApprovalsCard';
 import { HomeView } from './HomeView';
 import { SettingsView } from './SettingsView';
+import { ShellDialogs } from './ShellDialogs';
 import { UsageView } from './UsageView';
 import { WorkspaceView } from './WorkspaceView';
 
 const VIEWS = [
   ['approvals-root', ApprovalsCard],
+  ['shell-dialogs-root', ShellDialogs],
   ['local-home-root', HomeView],
   ['local-workspace-root', WorkspaceView],
   ['local-usage-root', UsageView],
