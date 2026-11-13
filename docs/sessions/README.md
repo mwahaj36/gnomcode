@@ -232,3 +232,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 - Host sweep fails open](2026-11-13-host-sweep-fail-open.md)
 - [2026-11-13 - Scope 1.0 to three agents](2026-11-13-scope-1-0-three-agents.md)
 - [2026-11-13 - Watcher test isolation](2026-11-13-watcher-test-isolation.md)
+- [2026-11-13 - Split daemon api.rs by domain](2026-11-13-split-daemon-api.md)

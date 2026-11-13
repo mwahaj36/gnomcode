@@ -37,7 +37,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 
 ## E. Consolidation (audit Phase 3)
 - [ ] Local console built from web/ React; delete console-app.js
-- [ ] Split api.rs and store/lib.rs by domain
+- [ ] Split api.rs and store/lib.rs by domain (api.rs done in docs/sessions/2026-11-13-split-daemon-api.md; store/lib.rs pending)
 - [x] Freeze unproven features behind off-by-default toggles (Teams, extra adapters, account sync)
 
 ## F. Differentiators (audit Phase 4)
