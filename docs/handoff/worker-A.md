@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: G12 Unix process-group stop escalation
+
+- PR https://github.com/mwahaj36/spawnt/pull/202; branch `fix/unix-process-group-stop`, head `12b04fc`, depends on baseline #189, independent of #187/#193/#197/#200.
+- Changed files: `crates/platform/src/lib.rs` (`#[cfg(unix)] mod unix_stop` with `SIGINT` -> `SIGTERM` -> `SIGKILL` escalation against process group when `getpgid(pid) != getpgrp()`, Windows `taskkill /F /T` unchanged), `docs/SPEC.md` §3.3, `docs/sessions/2026-11-13-unix-process-group-stop.md`, `docs/sessions/README.md`.
+- Tests: `tests::unix_stop_plan_escalates_and_guards_own_process_group` (pure cross-platform) and `tests::unix_stop_escalates_past_ignored_sigint` (`#[cfg(unix)]`).
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS (Windows host).
+- Verified live: Windows suite passes; not verified: `#[cfg(unix)]` runtime behavior locally (requires macOS/Linux CI).
+
 ## 2026-11-13: G11 Claude parent-session env scrub
 
 - PR https://github.com/mwahaj36/spawnt/pull/200; branch `fix/agent-environment-context`, head `1c21f64`, depends on baseline #189, independent of #187/#193/#197.
