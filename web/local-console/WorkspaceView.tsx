@@ -206,6 +206,7 @@ export function WorkspaceView() {
   const [modelHandoffBusy, setModelHandoffBusy] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
+  const [continueHereBusy, setContinueHereBusy] = useState(false);
 
   // Automation state
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
@@ -809,6 +810,41 @@ export function WorkspaceView() {
     } else {
       setTerminalStreamOpen(true);
       window.requestAnimationFrame(() => connectAgentTerminal(activeSessionId));
+    }
+  };
+
+  const handleContinueHere = async () => {
+    if (!activeSessionId || continueHereBusy) return;
+    setContinueHereBusy(true);
+    setActionStatus('Continuing imported session in Gnomcode...');
+    try {
+      const result = await fetchLocalMutation<{ session_id?: string; new_session_id?: string }>(
+        `/api/v1/sessions/${encodeURIComponent(activeSessionId)}/continue-here`,
+        { method: 'POST', body: {} },
+      );
+      const nextId = result?.new_session_id || result?.session_id;
+      await loadConversations();
+      if (nextId) {
+        await loadChat(nextId);
+        setActionStatus('Conversation continued in Gnomcode.');
+      } else {
+        setActionStatus('Continuation requested.');
+      }
+    } catch (error) {
+      const reason = error instanceof Error && error.message ? error.message : 'Could not continue this session here.';
+      const agentId =
+        activeSession?.agent === 'claude-code'
+          ? 'claude'
+          : activeSession?.agent === 'gemini-cli'
+            ? 'gemini'
+            : activeSession?.agent || 'claude';
+      openLauncher(true, activeSession?.repo_path || '');
+      setLaunchAgent(agentId);
+      // ADR 0053: refusal messages are user-readable; keep the launcher prefill as the fallback.
+      setLaunchStatus(`${reason} Prefilled this workspace so you can start a new Gnomcode session instead.`);
+      setActionStatus('');
+    } finally {
+      setContinueHereBusy(false);
     }
   };
 
@@ -1906,6 +1942,14 @@ export function WorkspaceView() {
                   <button
                     type="button"
                     className="btn-primary"
+                    disabled={continueHereBusy}
+                    onClick={() => void handleContinueHere()}
+                  >
+                    {continueHereBusy ? 'Continuing...' : 'Continue here'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-control"
                     onClick={() => void handleFocusChat()}
                   >
                     {activeSession?.agent === 'antigravity'
