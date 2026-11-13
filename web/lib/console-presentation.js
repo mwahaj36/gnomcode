@@ -865,3 +865,55 @@ export function renderChangesView(data) {
     : '<p class="sp-provider-empty">No modified tracked diff hunks (untracked files listed above).</p>';
   return `<div class="sp-changes-meta">${badges}</div>${fileMarkup}${diffMarkup}`;
 }
+
+export function normalizeWorkspaceRelPath(input) {
+  if (typeof input !== 'string') return { ok: false, error: 'Enter a relative file path inside the workspace.' };
+  const raw = input.trim().replaceAll('\\', '/');
+  if (!raw || raw.includes('\u0000')) return { ok: false, error: 'Enter a relative file path inside the workspace.' };
+  if (raw.startsWith('/') || /^[a-zA-Z]:/.test(raw)) return { ok: false, error: 'Only relative workspace paths are allowed.' };
+  const parts = raw.split('/').filter(segment => segment && segment !== '.');
+  if (!parts.length || parts.some(segment => segment === '..')) return { ok: false, error: 'Path traversal (..) outside the workspace is blocked.' };
+  return { ok: true, path: parts.join('/') };
+}
+
+/** Parent folder of a workspace-relative directory path: '' for the root's children, null at the root. */
+export function parentWorkspacePath(path) {
+  if (typeof path !== 'string' || !path) return null;
+  const parts = path.split('/').filter(Boolean);
+  return parts.length <= 1 ? '' : parts.slice(0, -1).join('/');
+}
+
+export function renderFileEntries(listing) {
+  if (!listing) return '';
+  if (listing.loading) return '<p class="sp-provider-empty" role="status">Loading workspace files...</p>';
+  if (listing.error) return `<p class="sp-field-note sp-tone-red" role="alert">${escape(listing.error)}</p>`;
+  const entries = Array.isArray(listing.entries) ? listing.entries : [];
+  const cwd = listing.path ? `/${escape(listing.path)}` : '/';
+  const parent = typeof listing.parent === 'string' ? listing.parent : parentWorkspacePath(listing.path);
+  const up = typeof parent === 'string'
+    ? `<button type="button" class="btn-control sp-file-entry sp-file-entry--dir" data-action="open-repo-dir" data-arg="${escape(parent)}">Up one folder</button>`
+    : '';
+  const items = entries.map(entry => {
+    const isDir = entry.kind === 'dir';
+    const action = isDir ? 'open-repo-dir' : 'open-repo-file';
+    const meta = isDir ? 'Folder' : (Number.isFinite(entry.size) ? `${Math.max(1, Math.round(entry.size / 1024))} KB` : 'File');
+    return `<button type="button" class="btn-control sp-file-entry ${isDir ? 'sp-file-entry--dir' : 'sp-file-entry--file'}" data-action="${action}" data-arg="${escape(entry.path)}"><code>${escape(entry.name)}</code><span>${escape(meta)}</span></button>`;
+  }).join('');
+  return `<div class="sp-file-crumb">Folder: <code>${cwd}</code></div>${listing.note ? `<p class="sp-field-note">${escape(listing.note)}</p>` : ''}<div class="sp-file-entries">${up}${items || '<p class="sp-provider-empty">No files listed here. Enter a relative path above to open a file.</p>'}</div>`;
+}
+
+export function renderFileViewer(fileData) {
+  if (!fileData) return '<p class="sp-provider-empty">Select a file or enter a workspace-relative path to inspect it read-only.</p>';
+  if (fileData.loading) return '<p class="sp-provider-empty" role="status">Reading file...</p>';
+  if (fileData.error) return `<p class="sp-field-note sp-tone-red" role="alert">${escape(fileData.error)}</p>`;
+  const content = typeof fileData.content === 'string' ? fileData.content : '';
+  const badges = [
+    '<span class="sp-chip sp-chip--neutral">Read-only</span>',
+    fileData.lossy ? '<span class="sp-chip sp-chip--low">Lossy UTF-8 decoding</span>' : '',
+    fileData.truncated ? '<span class="sp-chip sp-chip--low">Truncated at 512 KiB</span>' : '',
+    fileData.path ? `<code class="sp-file-path">${escape(fileData.path)}</code>` : '',
+  ].filter(Boolean).join('');
+  const lines = content.split(/\r?\n/);
+  const body = lines.map((line, index) => `<span class="sp-file-line"><span class="sp-file-ln">${index + 1}</span><span>${escape(line) || ' '}</span></span>`).join('');
+  return `<div class="sp-changes-meta">${badges}</div><pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
+}

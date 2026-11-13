@@ -1390,6 +1390,84 @@ function cycleTheme() {
       if (!panel.hidden) void loadSessionChanges();
     }
 
+    function activeRepoForFiles() {
+      const hosted = hostedSessions.find(row => row.session_id === activeChatSession);
+      const session = ideSessions.find(row => row.id === activeChatSession);
+      return hosted?.repo_path || session?.repo_path || session?.repo_root || document.getElementById('session-action-copy')?.dataset.path || '';
+    }
+
+    function closeFilesPanel() {
+      const panel = document.getElementById('chat-files-panel');
+      if (panel) panel.hidden = true;
+    }
+
+    async function loadSessionFileListing(subpath = '') {
+      const listEl = document.getElementById('chat-files-list');
+      if (!listEl || !activeChatSession) return;
+      const presentation = await import('/console-presentation.js');
+      const repo = activeRepoForFiles();
+      if (!repo) {
+        listEl.innerHTML = presentation.renderFileEntries({ error: 'Workspace repository path is unavailable for this session.' });
+        return;
+      }
+      listEl.innerHTML = presentation.renderFileEntries({ loading: true });
+      try {
+        const res = await fetch(`/api/v1/repos/files?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(subpath)}`, { headers });
+        if (res.ok) {
+          const listing = await res.json();
+          listEl.innerHTML = presentation.renderFileEntries(listing);
+          return;
+        }
+        listEl.innerHTML = presentation.renderFileEntries({ error: res.status === 404 ? 'Folder not found inside the workspace.' : 'Could not list this workspace folder.' });
+      } catch {
+        listEl.innerHTML = presentation.renderFileEntries({ error: 'Could not list workspace files.' });
+      }
+    }
+
+    async function readSessionFile(rawPath) {
+      const bodyEl = document.getElementById('chat-file-body');
+      const inputEl = document.getElementById('chat-file-path-input');
+      if (!bodyEl || !activeChatSession) return;
+      const presentation = await import('/console-presentation.js');
+      const check = presentation.normalizeWorkspaceRelPath(rawPath);
+      if (!check.ok) {
+        bodyEl.innerHTML = presentation.renderFileViewer({ error: check.error });
+        return;
+      }
+      const repo = activeRepoForFiles();
+      if (!repo) {
+        bodyEl.innerHTML = presentation.renderFileViewer({ error: 'Workspace repository path is unavailable for this session.' });
+        return;
+      }
+      if (inputEl) inputEl.value = check.path;
+      bodyEl.innerHTML = presentation.renderFileViewer({ loading: true });
+      try {
+        const res = await fetch(`/api/v1/repos/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(check.path)}`, { headers });
+        if (!res.ok) {
+          const msg = res.status === 413
+            ? 'File exceeded the 512 KiB read cap on desktop.'
+            : res.status === 404
+              ? 'File not found inside the workspace.'
+              : res.status === 422
+                ? 'Binary or non-UTF-8 files are not shown.'
+                : 'File path is outside the workspace or unreadable.';
+          bodyEl.innerHTML = presentation.renderFileViewer({ error: msg });
+          return;
+        }
+        const data = await res.json();
+        bodyEl.innerHTML = presentation.renderFileViewer(data);
+      } catch {
+        bodyEl.innerHTML = presentation.renderFileViewer({ error: 'Could not read file from local daemon.' });
+      }
+    }
+
+    function toggleFilesPanel() {
+      const panel = document.getElementById('chat-files-panel');
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) void loadSessionFileListing('');
+    }
+
     async function loadChat(sessionId, earlier = false, silent = false) {
       if (!sessionId) return;
       if (silent && activeChatSession !== sessionId) return;
@@ -1397,6 +1475,7 @@ function cycleTheme() {
         if (activeChatSession !== sessionId) {
           selectChatSession(sessionId);
           closeChangesPanel();
+          closeFilesPanel();
         }
         chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
@@ -2105,6 +2184,8 @@ function cycleTheme() {
         'remove-quick-action': removeQuickAction, 'reset-quick-actions': resetQuickActions,
         'close-quick-actions': () => document.getElementById('quick-actions-dialog')?.close(),
         'toggle-changes': toggleChangesPanel, 'refresh-changes': loadSessionChanges, 'close-changes': closeChangesPanel,
+        'toggle-files': toggleFilesPanel, 'close-files': closeFilesPanel,
+        'open-repo-dir': p => { void loadSessionFileListing(p); }, 'open-repo-file': p => { void readSessionFile(p); },
  };
       if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
@@ -2136,6 +2217,7 @@ function cycleTheme() {
       else if (submit === 'launch-agent') { event.preventDefault(); launchNewAgent(event); }
       else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
       else if (submit === 'add-quick-action') { void addQuickActionFromDialog(event); }
+      else if (submit === 'open-repo-file') { event.preventDefault(); void readSessionFile(document.getElementById('chat-file-path-input')?.value); }
     });
 
     normalizeHash();
