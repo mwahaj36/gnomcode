@@ -934,6 +934,7 @@ dependencies = [
  "gnomcode-store",
  "notify",
  "obfstr",
+ "rusqlite",
  "ruzstd",
  "serde_json",
  "tempfile",

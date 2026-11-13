@@ -115,6 +115,19 @@ impl Surface {
     }
 }
 
+/// Product name for an agent whose surfaces are separate products, from the stored agent and
+/// surface identifiers. Antigravity ships as a CLI (`agy`), an IDE (1.x, editor and Agent Manager)
+/// and the standalone 2.0 app; other agents have one name per agent.
+#[must_use]
+pub fn surface_label(agent: &str, surface: &str) -> Option<&'static str> {
+    match (agent, surface) {
+        ("antigravity", "cli") => Some("Antigravity CLI"),
+        ("antigravity", "ide") => Some("Antigravity IDE"),
+        ("antigravity", "desktop_app") => Some("Antigravity 2.0"),
+        _ => None,
+    }
+}
+
 /// Live state of an agent session (SPEC §3.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
