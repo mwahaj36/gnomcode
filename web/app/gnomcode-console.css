@@ -1785,3 +1785,6 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-eval-outcome--unknown { color: var(--sp-text-2); background: var(--sp-surface-2); }
 .sp-eval-case-meta { display: flex; flex-wrap: wrap; gap: var(--sp-2); color: var(--sp-text-2); font: 12px/1.4 var(--sp-font-mono); overflow-wrap: anywhere; }
 .sp-eval-case-summary { margin: 0; color: var(--sp-text-2); font: 12px/1.5 var(--sp-font-sans); overflow-wrap: anywhere; }
+.sp-eval-providers { list-style: none; margin: var(--sp-3) 0; padding: 0; display: grid; gap: var(--sp-1); }
+.sp-eval-provider { display: flex; justify-content: space-between; gap: var(--sp-3); font: 400 var(--sp-fs-meta)/1.4 var(--sp-font-sans); color: var(--sp-text-2); }
+.sp-eval-provider strong { color: var(--sp-text); font-weight: 500; }
