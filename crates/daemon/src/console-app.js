@@ -1118,9 +1118,92 @@ function cycleTheme() {
     async function saveRouting() {try{await automationRequest({type:'routing',policy:document.getElementById('routing-policy').value});delete document.getElementById('routing-policy').dataset.dirty;showNotice('Routing policy saved on this laptop.');}catch(error){showNotice(error.message);}}
     async function reconnectReset(enabled) {try{await automationRequest({type:'resume_on_reset',session_id:activeChatSession,enabled});showNotice(enabled?'Reconnection armed. It waits for fresh quota confirmation after reset.':'Reset reconnection cancelled.');}catch(error){showNotice(error.message);}}
 
+    const sessionAttachments = new Map();
+
+    async function renderSessionAttachments() {
+      const bar = document.getElementById('chat-attachments-bar');
+      if (!bar) return;
+      const items = sessionAttachments.get(activeChatSession) || [];
+      if (!items.length) {
+        bar.hidden = true;
+        bar.innerHTML = '';
+        return;
+      }
+      const presentation = await import('/console-presentation.js');
+      bar.innerHTML = presentation.renderAttachmentPills(items);
+      bar.hidden = false;
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const comma = result.indexOf(',');
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(new Error('Could not read file.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleLocalAttachmentPick(file) {
+      if (!file || !activeChatSession) return;
+      const sessionId = activeChatSession;
+      const statusEl = document.getElementById('chat-attach-status');
+      const presentation = await import('/console-presentation.js');
+      const checked = presentation.validateAttachmentCandidate(file);
+      if (!checked.ok) {
+        if (statusEl) statusEl.textContent = checked.reason;
+        return;
+      }
+      if (statusEl) statusEl.textContent = '';
+      const id = crypto.randomUUID();
+      const item = { id, filename: checked.filename, size: checked.size, mime_type: checked.mime_type, status: 'uploading' };
+      sessionAttachments.set(sessionId, [...(sessionAttachments.get(sessionId) || []), item]);
+      if (sessionId === activeChatSession) void renderSessionAttachments();
+      try {
+        const data_base64 = await readFileAsBase64(file);
+        const res = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/attachments`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: checked.filename, mime_type: checked.mime_type, size: checked.size, data_base64 })
+        });
+        if (!res.ok) {
+          const msg = res.status === 404 ? 'This conversation has no workspace to attach files to.'
+            : res.status === 413 ? 'Attachment is too large (15 MiB per file, 200 MiB per conversation).'
+            : res.status === 415 ? 'Unsupported attachment type.'
+            : 'Could not upload attachment.';
+          throw new Error(msg);
+        }
+        const payload = await res.json();
+        const workspace_path = payload?.workspace_path;
+        if (!workspace_path) throw new Error('Could not upload attachment.');
+        const updated = (sessionAttachments.get(sessionId) || []).map(entry => entry.id === id ? { ...entry, status: 'saved', workspace_path } : entry);
+        sessionAttachments.set(sessionId, updated);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed.';
+        const updated = (sessionAttachments.get(sessionId) || []).map(entry => entry.id === id ? { ...entry, status: 'error', error: msg } : entry);
+        sessionAttachments.set(sessionId, updated);
+        if (statusEl && sessionId === activeChatSession) statusEl.textContent = msg;
+      }
+      if (sessionId === activeChatSession) void renderSessionAttachments();
+    }
+
+    document.getElementById('chat-attachments-bar')?.addEventListener('click', event => {
+      const btn = event.target.closest('[data-attachment-remove]');
+      if (!btn || !activeChatSession) return;
+      const id = btn.dataset.attachmentRemove;
+      sessionAttachments.set(activeChatSession, (sessionAttachments.get(activeChatSession) || []).filter(entry => entry.id !== id));
+      void renderSessionAttachments();
+    });
+
     async function sendPromptText(rawText, { fromComposer = false } = {}) {
       const input = document.getElementById('chat-prompt-text');
-      const text = typeof rawText === 'string' ? rawText.trim() : '';
+      const draft = typeof rawText === 'string' ? rawText.trim() : '';
+      const readyAttachments = fromComposer ? (sessionAttachments.get(activeChatSession) || []).filter(item => item.status === 'saved' && item.workspace_path) : [];
+      const presentation = await import('/console-presentation.js');
+      const text = presentation.formatPromptWithAttachments(draft, readyAttachments);
       if (!text || !activeChatSession || document.getElementById('chat-send-btn').disabled) return;
       const status = document.getElementById('chat-delivery-status');
       const sessionId = activeChatSession;
@@ -1144,11 +1227,17 @@ function cycleTheme() {
         }
         if ((chatDeletionGenerations.get(sessionId) || 0) !== deletionGeneration) return;
         optimistic.delivered = true;
+        sessionAttachments.set(sessionId, (sessionAttachments.get(sessionId) || []).filter(entry => entry.status !== 'saved'));
+        if (sessionId === activeChatSession) void renderSessionAttachments();
         if (sessionId === activeChatSession) void renderCurrentChat();
         if (fromComposer) {
-          if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
+          sessionAttachments.set(sessionId, (sessionAttachments.get(sessionId) || []).filter(entry => entry.status !== 'saved'));
+          if (sessionId === activeChatSession) void renderSessionAttachments();
+          if (chatDrafts.get(sessionId)?.trim() === draft) chatDrafts.delete(sessionId);
           if (sessionId === activeChatSession) {
-            if (input.value.trim() === text) { input.value = ''; resizePrompt(); }
+            if (input.value.trim() === draft) { input.value = ''; resizePrompt(); }
+            const attachStatus = document.getElementById('chat-attach-status');
+            if (attachStatus) attachStatus.textContent = '';
             if (status) status.textContent = '';
             input.focus();
           }
@@ -1545,6 +1634,9 @@ function cycleTheme() {
           closeFilesPanel();
         }
         if (activeChatSession !== sessionId) { selectChatSession(sessionId); resetArtifactsPanel(); }
+        void renderSessionAttachments();
+        const attachStatus = document.getElementById('chat-attach-status');
+        if (attachStatus) attachStatus.textContent = '';
         chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
@@ -2237,6 +2329,7 @@ function cycleTheme() {
     const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-tour-tip': dismissTourTip, 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
       'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
       'toggle-artifacts': () => toggleArtifacts(), 'refresh-artifacts': () => { void loadArtifacts(); }, 'close-artifacts': () => toggleArtifacts(false),
+      'pick-attachment': () => { document.getElementById('chat-attach-input')?.click(); },
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
@@ -2261,6 +2354,12 @@ function cycleTheme() {
       if (Object.hasOwn(actions, action)) actions[action](target.dataset.arg);
     });
     document.addEventListener('change', event => {
+      if (event.target.id === 'chat-attach-input') {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (file) void handleLocalAttachmentPick(file);
+        return;
+      }
       if (event.target.id === 'chat-model-select') { void switchChatModel(); return; }
       if (event.target.id === 'update-auto-check') { void toggleAutoUpdate(event.target.checked); return; }
       if (event.target.id === 'launch-agent-select') {

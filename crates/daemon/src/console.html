@@ -106,8 +106,11 @@
           </div>
           <div id="chat-quick-actions" hidden></div>
           <form id="chat-prompt-form" data-submit="send-prompt">
+            <div id="chat-attachments-bar" class="sp-attachments-bar" aria-label="Staged attachments" hidden></div>
+            <p id="chat-attach-status" class="sp-attach-status" role="status"></p>
             <label class="visually-hidden" for="chat-prompt-text">Message the agent</label><textarea id="chat-prompt-text" rows="1" maxlength="4000" aria-describedby="chat-prompt-help" placeholder="Message the agent..."></textarea>
-            <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
+            <input id="chat-attach-input" type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf" />
+            <div class="composer-toolbar"><div class="composer-model"><label class="visually-hidden" for="chat-model-select">Model</label><select id="chat-model-select" aria-describedby="chat-model-status"><option value="">Agent default</option></select><button type="button" class="btn-control" id="chat-switch-btn" hidden data-action="switch-model">Switch</button><button type="button" class="btn-control sp-attach-trigger" id="chat-attach-btn" data-action="pick-attachment">Attach</button><span id="chat-model-status" role="status"></span></div><button type="submit" class="btn-primary" id="chat-send-btn">Send</button></div>
             <small id="chat-prompt-help">Enter to send · Shift+Enter for a new line</small>
           </form>
           <details class="profile-disclosure" id="chat-automation"><summary>Schedule and automation</summary>

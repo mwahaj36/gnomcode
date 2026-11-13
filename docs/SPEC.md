@@ -382,3 +382,8 @@ Changes and verification are recorded per session under [docs/sessions](sessions
 - Local console calls `GET /api/v1/sessions/{id}/artifacts` (ADR 0039) and shows its `changes_count`; Remote sends `{ type: 'artifacts', session_id }`.
 - Remote sends on-demand `{ type: 'artifacts', session_id }` over E2EE and handles `Unsupported remote command` calmly inside the sheet.
 - HTML artifacts always render inside `<iframe sandbox="" referrerPolicy="no-referrer" srcdoc="...">` with zero script or origin permissions and an in-document `default-src 'none'; img-src data:; style-src 'unsafe-inline'` Content-Security-Policy; Markdown renders through MarkdownIt with `html: false`; images accept only validated `data:image/*;base64,...` or same-origin `/api/v1/...` sources.
+## 11. Phone & Console Attachments UI (Section C)
+
+- Local console (`#chat-attach-btn`, `#chat-attachments-bar`) and Remote (`sp-attach-trigger`) allow staging workspace attachments up to 15 MiB (`PNG`, `JPG`, `WEBP`, `GIF`, `PDF`, `TXT`, `MD`, `LOG`, `JSON`, `CSV`) before sending a prompt; Rust remains the authoritative size/path validator on receipt (`POST /api/v1/sessions/{id}/attachments` and Remote `upload_attachment` -> `attachment_ack`, ADR 0041; the prompt references the returned `workspace_path`).
+- Local uploads send base64 payloads to `POST /api/v1/sessions/{id}/attachments`; Remote sends `{ type: 'upload_attachment', session_id, request_id, filename, mime_type, size, data_base64 }` over E2EE and falls back cleanly in-composer when `Unsupported remote command` is returned.
+- Staged saved workspace paths are appended as `[Attachment: <workspace_path>]` within the 4000-char prompt budget when sent.
