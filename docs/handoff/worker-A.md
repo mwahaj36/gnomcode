@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: Section C per-session changes/diff (ADR 0037)
+
+- PR https://github.com/mwahaj36/spawnt/pull/207; branch `feat/remote-session-changes`, head `28dae6e`, depends on baseline #189, unblocks #190 Remote parity.
+- Changed files: `crates/daemon/src/session_changes.rs` (new), `crates/daemon/src/lib.rs`, `crates/daemon/src/api.rs` (`GET /api/v1/sessions/{id}/changes`), `crates/daemon/src/remote.rs` (`changes`), `docs/adr/0037-remote-session-changes.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-remote-session-changes.md`, `docs/sessions/README.md`.
+- JSON shape: `{type:"changes",session_id,repo,diff,status,lossy}` (1 MiB / 10 s cap, `GIT_OPTIONAL_LOCKS=0`, `GIT_LITERAL_PATHSPECS=1`, `LC_ALL=C`, `--porcelain=v1 -z`).
+- Tests: `session_changes::tests::remote_changes_returns_git_status_and_diff_and_handles_non_utf8_lossily`, `remote_changes_rejects_non_git_workspace`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: Section C read-only workspace file list/read (ADR 0035)
 
 - PR https://github.com/mwahaj36/spawnt/pull/205; branch `feat/remote-workspace-files`, head `313cd52`, depends on baseline #189, unblocks #191 Remote parity.
