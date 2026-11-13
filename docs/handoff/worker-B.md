@@ -16,7 +16,7 @@
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | PR open | [#195](https://github.com/mwahaj36/spawnt/pull/195) | None |
 | 7 | B / G5 | G5 interrupt button on phone and console chat | PR open | [#196](https://github.com/mwahaj36/spawnt/pull/196) | Worker A PR #187 |
 | 8 | Section E1 | Local console built from web/ React (Home) | PR open | [#198](https://github.com/mwahaj36/spawnt/pull/198) | None |
-| 9 | Section E1 | Local console built from web/ React (Workspace) | not started | - | - |
+| 9 | Section E1 | Local console built from web/ React (Workspace) | PR open | [#199](https://github.com/mwahaj36/spawnt/pull/199) | PR #198 |
 | 10 | Section E1 | Local console built from web/ React (Usage) | not started | - | - |
 | 11 | Section E1 | Local console built from web/ React (Settings + retire console-app.js) | not started | - | - |
 | 12 | Section F | F1 worktree per session UI | not started | - | Worker A / backend |
@@ -137,3 +137,17 @@
 - **Deviations:** `console-app.js` stays until E1 Settings PR completes all four views.
 - **Open risks/questions:** Deleting `console-app.js` in the final E1 PR will require removing existing `include_str!("console-app.js")` and `/console-app.js` route/test lines in shared `crates/daemon/src/api.rs` (currently append-only under ownership rules).
 - **Dependencies:** Independent. Remaining E1 PRs (Workspace, Usage, Settings) base on `feat/local-console-home`.
+
+### 9. Section E1 — Local console built from web/ React (Workspace view)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/199 (`feat/local-console-workspace`, commit `a7f255d`)
+- **What changed:**
+  - `web/local-console/local-api.ts`: added `fetchLocalMutation`, desktop bridge types (`chooseWorkspace`, `restartToUpdate`), and `xterm.js`/`FitAddon` types.
+  - `web/local-console/WorkspaceView.tsx`, `web/local-console/main.tsx`: React Workspace view covering conversation sidebar filters/search/pagination, launcher + folder browser dialog, chat transcript with optimistic reconciliation & permission buttons, imported session banner, model switcher, inline agent/workspace PTY WebSockets, and scheduling/reset automation, mounted on `#local-workspace-root` (`window.__gnomcodeReactViews.sessions = true`).
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`, `web/app/gnomcode-console.css`: keeps `#legacy-ide-layout` hidden at runtime while preserving static IDs for `check-local-console.mjs`; appends `.sp-workspace-*` CSS classes and mobile `390px` heading full-width wrap rule (`flex: 1 1 100%`).
+  - `crates/daemon/src/console-react.js`: deterministic rebuild (`381,404` bytes, zero `sourceMappingURL`).
+  - `web/test/local-console-workspace.test.mjs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-local-console-workspace.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `crates/daemon/src/console.html:49-121`, `console-app.js:786-1435`. Tests: `web/test/local-console-workspace.test.mjs` (`1/1`, failed RED first), `web/` `npm test` (`102/102`). Gate: `build-local-console.mjs --check`, `check-console.mjs`, `check-local-console.mjs`, `web/` (`test`/`typecheck`/`lint`/`build`), `CARGO_INCREMENTAL=0` (`fmt`/`clippy`/`test`) all pass.
+- **Verification:** Visually verified live in `chrome-headless-shell.exe` at `390x844` and `1440x900` (dark & light): `reactWorkspace=true`, `legacyHidden=true`, `overflowX=false`, clean mobile title wrapping, rendered sidebar + chat transcript + model selector. Not verified against live daemon CLI spawn PTY stream. `check-app-controls.mjs` could not run inside isolated worktree (`playwright` not installed there).
+- **Deviations:** Legacy Workspace markup remains hidden in `#legacy-ide-layout` until the final E1 PR retires `console-app.js`.
+- **Open risks/questions:** Same `api.rs` note as #198 when retiring `console-app.js`.
+- **Dependencies:** Depends on PR #198 (`feat/local-console-home`).
