@@ -27,3 +27,13 @@ Lockstep 1.0.0, bumper lockfile fix, CHANGELOG and release notes. Gate before fi
 ## Item 2 in progress
 
 Branch feat/release-embedded-update-key. Public-key-only RFC 8032 regression compiled with a build key and run without a runtime key failed first (unsigned bytes accepted). After option_env! precedence fix it passes with runtime key absent, blank and replaced. Node signer rejects absent/conflicting inputs without modifying manifest or printing sentinel. No private key generated or committed. Full final-head gate pending.
+
+## Item 2 delivered - PR #245
+
+https://github.com/mwahaj36/spawnt/pull/245
+
+Build-pinned Rust public key, no runtime bypass, offline owner-key signer, ADR 0059 and key custody/rotation docs. fmt/clippy and 499 workspace tests pass; embedded-key test separately passed under absent/blank/replaced runtime values. Node signer rejection test passes. No private key generated/read/committed. Valid owner-key signing and installed updates unverified. Signature covers installer bytes, not envelope metadata; old unpinned clients retain development behavior. Signing worktree and target removed immediately after PR.
+
+## Item 3 in progress
+
+Windows worktree based on 17267e5. Native release build uses a temporary version overlay from #243 (no duplicate version changes will be committed here). No signing key supplied: test candidate is unsigned/unpinned, not release-approved. User reports disk cleanup is running. Maintain >=20 GB free before dependencies/Electron packaging. Installer cannot be safely installed into a separate directory in this account because shared registration/shortcuts are affected; disposable account/VM required.
