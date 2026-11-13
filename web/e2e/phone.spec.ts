@@ -43,3 +43,36 @@ test('session rows on Home are 44px tall touch targets', async ({ page, openCons
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   }
 });
+
+test('filters and rule fields are touch sized, stacked under their labels and 16px on a phone', async ({ page, openConsole }) => {
+  await openConsole('#sessions');
+  await page.locator('#chat-list-toggle').click();
+  await page.locator('.conversation-filters summary').click();
+  const subagents = page.locator('.subagent-filter');
+  expect((await subagents.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  const checkbox = await subagents.locator('input').boundingBox();
+  expect(checkbox?.width ?? 99).toBeLessThanOrEqual(20);
+  expect(checkbox?.height ?? 99).toBeLessThanOrEqual(20);
+
+  await page.getByRole('tab', { name: 'Settings' }).tap();
+  const form = page.locator('#local-settings-root .sp-rule-form');
+  await form.scrollIntoViewIfNeeded();
+  for (const field of await form.locator('select, input').all()) {
+    const box = await field.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(await field.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    const label = await field.locator('xpath=..').boundingBox();
+    expect(box && label && box.y > label.y).toBe(true);
+  }
+});
+
+for (const scheme of ['dark', 'light'] as const) {
+  test(`${scheme} theme keeps every view free of horizontal overflow at 390px`, async ({ page, openConsole }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const hash of ['', '#sessions', '#usage', '#settings']) {
+      await openConsole(hash);
+      await page.waitForTimeout(500);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    }
+  });
+}

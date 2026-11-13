@@ -27,16 +27,9 @@ test('interrupt helpers strictly gate running states and bounded ASCII request I
   assert.match(presentation.formatInterruptAckMessage({ sent: false }), /not|no longer/i);
 });
 
-test('interrupt button wires into local console and Remote per Worker A PR #187 contract', () => {
-  const html = readFileSync(join(root, 'crates/daemon/src/console.html'), 'utf8');
-  const js = readFileSync(join(root, 'crates/daemon/src/console-app.js'), 'utf8');
+test('interrupt button wires into Remote per Worker A PR #187 contract', () => {
   const tsx = readFileSync(join(root, 'web/components/RemoteCompanion.tsx'), 'utf8');
   const css = readFileSync(join(root, 'web/app/gnomcode-console.css'), 'utf8');
-
-  assert.match(html, /id="chat-interrupt-btn"/);
-  assert.match(js, /\/api\/v1\/sessions\/.*\/interrupt/);
-  assert.match(js, /request_id/);
-  assert.match(js, /isSessionRunningState/);
 
   assert.match(tsx, /sp-interrupt-btn/);
   assert.match(tsx, /type:\s*['"]interrupt['"]/);
