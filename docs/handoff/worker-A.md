@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: D3 ingest file watcher and idle back-off
+
+- PR https://github.com/mwahaj36/spawnt/pull/217; branch `feat/ingest-watcher-backoff`, head `f6ea879`, depends on baseline #189.
+- Changed files: `crates/ingest/src/watcher.rs` (new), `crates/ingest/src/lib.rs`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-ingest-watcher-backoff.md`, `docs/sessions/README.md`.
+- Tests: `watcher::tests::idle_backoff_doubles_to_cap_and_resets_on_activity`, `watcher::tests::ingest_watcher_wakes_on_file_write_and_skips_idle_rescan`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+- Deviation: `DaemonOrchestrator::spawn_reconciler` (`crates/daemon/src/lib.rs`) was not edited due to append-only ownership; `IngestWatcher` is ready in `crates/ingest` to wire in.
+
 ## 2026-11-13: Gemini ACP protocol approvals (blocked — CLI not installed)
 
 - `gemini` CLI is not installed on this Windows host (`where.exe gemini` / `$APPDATA\npm\gemini.cmd` absent), so Gemini's exact ACP launch flag cannot be verified live without guessing.
