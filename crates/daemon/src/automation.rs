@@ -317,6 +317,7 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     {
         record_batch_notice(db, batch).await;
     }
+    end_exited_hosts(db).await;
     deliver_due(db).await;
     route_limited(db).await;
     resume_due(db).await;
@@ -327,6 +328,19 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
             });
         }
     }
+}
+
+/// Ends sessions whose Gnomcode host process exited (SPEC 3.7). Fails open: an unreadable host
+/// directory or store error changes nothing.
+async fn end_exited_hosts(db: &Arc<Mutex<Database>>) {
+    if !gnomcode_pty::sessions_dir().is_dir() {
+        return;
+    }
+    let live: Vec<String> = gnomcode_pty::list_active_sessions()
+        .into_iter()
+        .map(|record| record.session_id)
+        .collect();
+    let _ = store(db, move |db| db.end_exited_hosted_sessions(&live)).await;
 }
 
 static KEEP_AWAKE_HOLDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -346,7 +360,7 @@ pub(crate) async fn sync_keep_awake(
     let wanted = std::env::var_os("GNOMCODE_KEEP_AWAKE").is_none_or(|v| v != "0")
         && store(db, |db| {
             let limit =
-                chrono::Duration::milliseconds(gnomcode_core::presence::OPEN_EXECUTION_LIMIT_MS);
+                chrono::Duration::milliseconds(gnomcode_core::presence::APPROVAL_WAIT_LIMIT_MS);
             let busy = !gnomcode_pty::list_active_sessions().is_empty()
                 && db.list_active_sessions(1000)?.iter().any(|s| {
                     matches!(s.state, Thinking | Tool | AwaitingApproval)

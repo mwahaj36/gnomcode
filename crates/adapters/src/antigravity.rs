@@ -306,6 +306,36 @@ impl SourceAdapter for AntigravityAdapter {
                 }
             }
 
+            // A cancelled or denied tool step resolves the open call (ACP cancel, app-server
+            // interrupt); without this the session stays in `tool` until the next response.
+            let step_status = obj.get("status").and_then(Value::as_str).unwrap_or("");
+            if step_type != "USER_INPUT"
+                && matches!(
+                    sess.state,
+                    SessionState::Tool | SessionState::AwaitingApproval
+                )
+                && [
+                    "CANCELED",
+                    "CANCELLED",
+                    "DENIED",
+                    "REJECTED",
+                    "INTERRUPTED",
+                    "ABORTED",
+                ]
+                .iter()
+                .any(|resolved| step_status.eq_ignore_ascii_case(resolved))
+            {
+                sess.state = SessionState::Idle;
+                batch.activity_events.push(ActivityEvent {
+                    session_id: session_id.clone(),
+                    timestamp: ts,
+                    kind: ActivityKind::ToolEnd,
+                    tool_name: None,
+                    summary_redacted: None,
+                    duration_ms: None,
+                });
+            }
+
             let is_error_step = obj
                 .get("status")
                 .and_then(Value::as_str)

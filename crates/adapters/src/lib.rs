@@ -1106,6 +1106,30 @@ mod tests {
     }
 
     #[test]
+    fn antigravity_cancelled_or_denied_tool_step_resolves_the_open_call() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let pending = AntigravityAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/antigravity/synthetic/tool-pending.jsonl"),
+        );
+        assert_eq!(pending.sessions[0].state, gnomcode_core::SessionState::Tool);
+        let cancelled = AntigravityAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/antigravity/synthetic/tool-cancelled.jsonl"),
+        );
+        assert_eq!(
+            cancelled.sessions[0].state,
+            gnomcode_core::SessionState::Idle
+        );
+        assert!(
+            cancelled
+                .activity_events
+                .iter()
+                .any(|e| e.kind == gnomcode_core::ActivityKind::ToolEnd)
+        );
+    }
+
+    #[test]
     fn antigravity_resource_exhausted_without_a_known_model_records_none() {
         use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
         let bytes = include_bytes!(
