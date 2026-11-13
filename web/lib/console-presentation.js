@@ -1032,3 +1032,20 @@ export function formatPromptWithAttachments(promptText, attachments = []) {
   // Never cut an attachment reference: shorten the typed message instead.
   return base ? `${base.slice(0, Math.max(0, 4000 - refText.length - 1))}\n${refText}`.slice(0, 4000) : refText.slice(0, 4000);
 }
+export function isSessionRunningState(state) {
+  return state === 'thinking' || state === 'tool' || state === 'running';
+}
+
+export function createInterruptRequestId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `int_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`.slice(0, 64);
+}
+
+export function formatInterruptAckMessage(ack) {
+  if (ack?.sent) {
+    return 'Interrupt signal (Esc) sent to agent terminal.';
+  }
+  return 'Agent is no longer running a turn.';
+}

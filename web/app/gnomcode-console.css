@@ -1654,3 +1654,44 @@ html{touch-action:manipulation}
   .sp-lock-form input, .sp-applock-controls select, .sp-applock-pin-form input { min-height: 44px; font-size: 16px; }
   .sp-lock-reset button, .sp-applock-actions button, .sp-applock-pin-form button { min-height: 44px; }
 }
+
+/* Section G5 interrupt button */
+:is(.sp-native-console, .sp-remote, .sp-console-app) .sp-interrupt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--sp-primary);
+  border-radius: var(--sp-control-radius);
+  background: var(--sp-surface-2);
+  color: var(--sp-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+:is(.sp-native-console, .sp-remote, .sp-console-app) .sp-interrupt-btn:hover:not(:disabled) {
+  background: var(--sp-primary);
+  color: var(--sp-on-primary);
+}
+
+:is(.sp-native-console, .sp-remote, .sp-console-app) .sp-interrupt-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+:is(.sp-native-console, .sp-remote, .sp-console-app) .sp-interrupt-btn[hidden] {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  :is(.sp-native-console, .sp-remote, .sp-console-app) .sp-interrupt-btn {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+}
+

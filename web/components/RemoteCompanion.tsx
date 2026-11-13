@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -17,7 +17,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -88,6 +88,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [newQuickLabel, setNewQuickLabel] = useState('');
   const [newQuickPrompt, setNewQuickPrompt] = useState('');
   const [quickActionError, setQuickActionError] = useState('');
+  const [interrupting, setInterrupting] = useState(false);
   const [hasEarlier, setHasEarlier] = useState(false);
   const [folderBrowser, setFolderBrowser] = useState<FolderListing | null>(null);
   const [foldersLoading, setFoldersLoading] = useState(false);
@@ -148,6 +149,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const pendingUploadIds=useRef(new Set<string>());
   const attachmentsRef=useRef<AttachmentItem[]>([]);
   attachmentsRef.current = attachments;
+  const interruptAttempt=useRef<{sessionId:string; requestId:string}|null>(null);
+  const interruptInFlight=useRef(false);
   useEffect(()=>{if(limitsPanel)limitsDialog.current?.showModal();},[limitsPanel]);
   useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
   useEffect(()=>{if(changesPanel)changesDialog.current?.showModal();},[changesPanel]);
@@ -343,6 +346,27 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     persistQuickActions([...quickActions, clean]);
     setNewQuickLabel('');
     setNewQuickPrompt('');
+  }
+
+  async function requestInterrupt() {
+    const activeSession = sessions.find(session => session.id === selectedRef.current);
+    if (!authenticated.current || !activeSession || !isSessionRunningState(activeSession.state) || interruptInFlight.current) return;
+    if (!interruptAttempt.current || interruptAttempt.current.sessionId !== activeSession.id) {
+      interruptAttempt.current = { sessionId: activeSession.id, requestId: createInterruptRequestId() };
+    }
+    const requestId = interruptAttempt.current.requestId;
+    interruptInFlight.current = true;
+    setInterrupting(true);
+    setError('');
+    setNotice('Sending interrupt signal (Esc)...');
+    try {
+      await send({ type: 'interrupt', session_id: activeSession.id, request_id: requestId });
+    } catch {
+      interruptInFlight.current = false;
+      setInterrupting(false);
+      setNotice('');
+      setError('Interrupt could not be sent. Tap Interrupt to retry.');
+    }
   }
 
   async function scheduleDraft() {
@@ -581,6 +605,28 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
       setError(reply.message || 'Remote request failed. Reconnect and try again.');
     }
+    else if (reply.type === 'interrupt_ack') {
+      if (!reply.request_id || interruptAttempt.current?.requestId === reply.request_id) {
+        interruptAttempt.current = null;
+      }
+      interruptInFlight.current = false;
+      setInterrupting(false);
+      setNotice(formatInterruptAckMessage({ sent: reply.sent }));
+    }
+    else if (reply.type === 'error') {
+      if(reply.request_type==='interrupt' || (interruptInFlight.current && /Unsupported remote command/i.test(reply.message || ''))){
+        interruptInFlight.current=false;setInterrupting(false);
+        if(/Unsupported remote command/i.test(reply.message || '')){interruptAttempt.current=null;setNotice('Interrupt requires a newer Gnomcode desktop build.');return;}
+      }
+      if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
+      if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
+      if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
+      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
+      if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
+      if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
+      if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
+      setError(reply.message || 'Remote request failed. Reconnect and try again.');
+    }
   }
 
   async function connect(force=false) {
@@ -697,6 +743,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setArtifactsPanel(false); setArtifacts([]); setSelectedArtifactId(''); setArtifactsError(''); setArtifactsChangesCount(null); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     selectedRef.current = id; setSchedules([]); setResetArmed(false); pendingUploadIds.current.clear(); setAttachments([]); setAttachError(''); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
+    selectedRef.current = id; setSchedules([]); setResetArmed(false); interruptAttempt.current = null; interruptInFlight.current = false; setInterrupting(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
   }
@@ -710,7 +757,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     manualDisconnect.current=true;if(reconnectTimer.current)clearTimeout(reconnectTimer.current);if(connectionWatch.current)clearInterval(connectionWatch.current);proofKey.current=null;void forgetDevice(accountOwner.current,connectedDesktop.current).catch(()=>{});
     setOptimistic({});
     const previous = socket.current; socket.current = null; previous?.close(); if (poll.current) clearInterval(poll.current);
-    selectedRef.current = ''; setSelected(''); pendingPrompt.current = null; setSending(false); setError(''); setNotice('');
+    selectedRef.current = ''; setSelected(''); pendingPrompt.current = null; setSending(false); interruptAttempt.current = null; interruptInFlight.current = false; setInterrupting(false); setError(''); setNotice('');
     setPhase('ready');setSessions([]);setEvents([]);setHistoryLoading(false);retryStart.current=0;
   }
 
@@ -835,6 +882,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
           <input ref={attachInput} type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void pickPhoneAttachment(file); }} />
           <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="sp-attach-trigger" disabled={!connected} onClick={()=>attachInput.current?.click()} aria-label="Attach file">Attach</button><button type="submit" disabled={!connected || sending || (!prompt.trim() && !hasSavedAttachments) || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
+          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button>{active && isSessionRunningState(active.state) && <button type="button" className="sp-interrupt-btn" disabled={!connected || interrupting} aria-label="Interrupt running turn" title="Sends Esc to interrupt the active turn without closing the session" onClick={()=>void requestInterrupt()}>{interrupting ? 'Interrupting...' : 'Interrupt'}</button>}<button type="submit" disabled={!connected || sending || !prompt.trim() || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
           {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'The agent is busy or waiting for approval. Prompting becomes available when it is idle.'}</p>}
         </form></>}
       </> : <div className="remote-empty"><h2>Your conversations</h2><p>Choose a conversation or start an agent to begin.</p><button type="button" className="sp-primary-action" onClick={startNew}>New conversation</button><button type="button" onClick={() => setShowSessions(true)}>Browse history</button></div>}</div>
