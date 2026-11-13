@@ -104,7 +104,8 @@ pub fn handoff_files(repo: &Path) -> Result<Vec<String>, Error> {
     Ok(files)
 }
 
-/// Returns whether the operating system reports a process as alive.
+/// Returns whether the operating system reports a process as alive. An exited process that has not
+/// been reaped yet (a zombie) is not alive.
 #[must_use]
 pub fn process_is_alive(pid: u32) -> bool {
     if pid == 0 {
@@ -115,7 +116,10 @@ pub fn process_is_alive(pid: u32) -> bool {
         sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
         true,
     );
-    system.process(sysinfo::Pid::from_u32(pid)).is_some()
+    // A zombie has exited and only awaits its parent's wait(); it can no longer run or be stopped.
+    system
+        .process(sysinfo::Pid::from_u32(pid))
+        .is_some_and(|process| process.status() != sysinfo::ProcessStatus::Zombie)
 }
 
 /// Stops a process that was explicitly launched and owned by Gnomcode.
