@@ -226,3 +226,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 - Antigravity exhausted scope](2026-11-13-antigravity-exhausted-scope.md)
 - [2026-11-13 - Unix CI verification](2026-11-13-unix-ci-verify.md)
 - [2026-11-13 CI green on main](2026-11-13-ci-green-main.md)
+- [2026-11-13 - Stale Running presence](2026-11-13-stale-running-presence.md)

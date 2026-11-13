@@ -3,12 +3,13 @@ use serde::{Deserialize, Serialize};
 
 /// Grace duration for recent observations and brief idle gaps (15 minutes).
 pub const RECENT_ACTIVITY_GRACE_MS: i64 = 900_000;
-/// Maximum age of an open tool/model execution without new log lines (2 hours).
-pub const OPEN_EXECUTION_LIMIT_MS: i64 = 7_200_000;
-/// Maximum age of a transcript-derived approval request without fresh observations.
-/// Matches the open-execution limit (2 hours): without a live host or hook confirming
-/// the dialog, an older request degrades to inactive rather than staying "Needs you".
-pub const APPROVAL_WAIT_LIMIT_MS: i64 = OPEN_EXECUTION_LIMIT_MS;
+/// Maximum age of a thinking/tool state without new log lines (10 minutes). Beyond it the
+/// session is no longer Running: silence is not process evidence (audit D6).
+pub const OPEN_EXECUTION_LIMIT_MS: i64 = 600_000;
+/// Maximum age of a transcript-derived approval request without fresh observations (2 hours).
+/// Without a live host or hook confirming the dialog, an older request degrades to
+/// inactive rather than staying "Needs you".
+pub const APPROVAL_WAIT_LIMIT_MS: i64 = 7_200_000;
 
 /// What the last source observation establishes about a session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -64,12 +65,13 @@ impl SessionPresence {
     }
 }
 /// Classifies source observations without assuming silence means completion.
-/// Open execution means an unmatched start event consistent with the stored state.
+/// A thinking/tool state counts as Running only within [`OPEN_EXECUTION_LIMIT_MS`] of the last
+/// observation; `_open_execution` no longer extends it.
 #[must_use]
 pub fn classify_presence(
     state: &str,
     age_millis: Option<i64>,
-    open_execution: bool,
+    _open_execution: bool,
 ) -> SessionPresence {
     let recent = age_millis.is_some_and(|age| (0..=RECENT_ACTIVITY_GRACE_MS).contains(&age));
     let unresolved = age_millis.is_some_and(|age| (0..=APPROVAL_WAIT_LIMIT_MS).contains(&age));
@@ -77,7 +79,7 @@ pub fn classify_presence(
     match state {
         "ended" => SessionPresence::Ended,
         "awaiting_approval" if unresolved => SessionPresence::AwaitingApproval,
-        "thinking" | "tool" if recent || (open_execution && executing) => SessionPresence::Running,
+        "thinking" | "tool" if executing => SessionPresence::Running,
         "idle" if recent => SessionPresence::RecentlyIdle,
         _ => SessionPresence::Inactive,
     }
@@ -115,8 +117,17 @@ mod tests {
             SessionPresence::Inactive
         );
         assert_eq!(
-            classify_presence("tool", Some(3_600_000), true),
+            classify_presence("tool", Some(OPEN_EXECUTION_LIMIT_MS), true),
             SessionPresence::Running
+        );
+        // An unresolved tool step an hour old (denied or cancelled probe) is stalled, not Running.
+        assert_eq!(
+            classify_presence("tool", Some(3_600_000), true),
+            SessionPresence::Inactive
+        );
+        assert_eq!(
+            classify_presence("tool", Some(OPEN_EXECUTION_LIMIT_MS + 1), true),
+            SessionPresence::Inactive
         );
         assert_eq!(
             classify_presence("awaiting_approval", Some(APPROVAL_WAIT_LIMIT_MS), false),

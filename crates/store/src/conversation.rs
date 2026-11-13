@@ -118,6 +118,32 @@ impl Database {
         Ok(self.conn.query_row(obfstr::obfstr!("SELECT host_id,native_id,needs_context FROM conversation_member WHERE conversation_id=?1 ORDER BY position DESC LIMIT 1"),[root],|row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional()?)
     }
 
+    /// Marks bound sessions ended when their Gnomcode host is not in `live_hosts`, so a killed
+    /// host never leaves a thinking/tool/approval state behind. Returns the rows changed.
+    ///
+    /// # Errors
+    /// Returns an error if the update fails.
+    pub fn end_exited_hosted_sessions(&self, live_hosts: &[String]) -> Result<usize, Error> {
+        let mut statement = self.conn.prepare(obfstr::obfstr!(
+            "SELECT m.host_id, m.native_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')"
+        ))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut ended = 0;
+        for (host, native) in rows {
+            if !live_hosts.contains(&host) {
+                ended += self.conn.execute(
+                    obfstr::obfstr!("UPDATE session SET state='ended' WHERE id=?1"),
+                    [native],
+                )?;
+            }
+        }
+        Ok(ended)
+    }
+
     /// Marks the initial context as delivered after the host acknowledges the prompt.
     ///
     /// # Errors
@@ -447,5 +473,37 @@ mod tests {
                 .content,
             "preserved"
         );
+    }
+
+    #[test]
+    fn exited_host_ends_its_bound_session_but_not_a_live_one() {
+        let db = Database::open_in_memory().expect("db");
+        for (host, native) in [("h-dead", "antigravity:a"), ("h-live", "antigravity:b")] {
+            db.conn
+                .execute(
+                    "INSERT OR IGNORE INTO project(id,canonical_key,repo_root,name) VALUES ('p','/w','/w','w')",
+                    [],
+                )
+                .expect("project");
+            db.conn
+                .execute(
+                    "INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at) VALUES (?1,'antigravity','cli','p','tool','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+                    [native],
+                )
+                .expect("session");
+            db.bind_conversation_host(host, native).expect("bind");
+        }
+        assert_eq!(
+            db.end_exited_hosted_sessions(&["h-live".into()])
+                .expect("sweep"),
+            1
+        );
+        let state = |id: &str| -> String {
+            db.conn
+                .query_row("SELECT state FROM session WHERE id=?1", [id], |r| r.get(0))
+                .expect("state")
+        };
+        assert_eq!(state("antigravity:a"), "ended");
+        assert_eq!(state("antigravity:b"), "tool");
     }
 }
