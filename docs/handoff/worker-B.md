@@ -12,9 +12,9 @@
 | 2 | Section C | Changes view (read-only diff on console and phone) | PR open | [#190](https://github.com/mwahaj36/spawnt/pull/190) | Optional Worker A Remote `changes` handler |
 | 3 | Section C | File viewer on phone and console (read-only, workspace only) | PR open | [#191](https://github.com/mwahaj36/spawnt/pull/191) | Optional Worker A `C file listing and reading` |
 | 4 | Section C | Artifacts alongside changes | PR open | [#192](https://github.com/mwahaj36/spawnt/pull/192) | Optional Worker A `C last-turn artifacts` |
-| 5 | Section C | Phone attachments UI | in progress | - | Optional Worker A `C attachments` |
-| 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | not started | - | - |
-| 7 | B / G5 | G5 interrupt button on phone and console chat | not started | - | Worker A G5 PR |
+| 5 | Section C | Phone attachments UI | PR open | [#194](https://github.com/mwahaj36/spawnt/pull/194) | Optional Worker A `C attachments` |
+| 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | PR open | [#195](https://github.com/mwahaj36/spawnt/pull/195) | None |
+| 7 | B / G5 | G5 interrupt button on phone and console chat | in progress | - | Worker A PR #187 |
 | 8 | Section E1 | Local console built from web/ React (Home) | not started | - | - |
 | 9 | Section E1 | Local console built from web/ React (Workspace) | not started | - | - |
 | 10 | Section E1 | Local console built from web/ React (Usage) | not started | - | - |
@@ -95,3 +95,17 @@
 - **Deviations:** Requests `upload_attachment` on user file pick only and handles `Unsupported remote command` in-composer; no Rust edits.
 - **Open risks/questions:** Waiting on Worker A `C attachments` PR + ADR for authoritative backend validation and E2EE dispatch.
 - **Dependencies:** Backend persistence and Remote E2EE dispatch depend on Worker A `C attachments` PR.
+
+### 6. Section C — PWA app lock (passkey / device PIN, ADR 0034)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/195 (`feat/pwa-app-lock`, commit `d445c6b`)
+- **What changed:**
+  - `docs/adr/0034-pwa-app-lock.md`, `docs/SPEC.md` (§9 table row): client-side gate boundaries, PBKDF2 PIN storage, WebAuthn origin checks, 10-attempt cooldown, and safe device-forget recovery.
+  - `web/lib/app-lock.js`, `web/lib/app-lock.d.ts`: WebCrypto PBKDF2-SHA-256 (`210,000` iterations, random salt) PIN hashing, constant-time verify, WebAuthn platform passkey enroll/assert (`isSecureContext`), 10-attempt / 10-minute cooldown, fail-closed unlocked enrollment checks.
+  - `web/components/AppLockGate.tsx`: `<AppLockGate>` overlay wrapping `<Console />` and `<AppLockSettings />` inside `web/components/SettingsPanel.tsx`, with PIN/passkey unlock UI, cooldown status, idle timeout (`0`/`1`/`5`/`15` min), and `"Reset & forget device"` (`forgetDevice`).
+  - `web/app/gnomcode-console.css`: appended `var(--sp-*)` token styling for `.sp-lock-screen`, `.sp-lock-card`, `.sp-settings-applock` (zero raw hex, 44px mobile touch targets, 16px mobile inputs).
+  - `web/test/pwa-app-lock.test.mjs`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-pwa-app-lock.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `web/app/console/Client.tsx:418-541` and `web/components/SettingsPanel.tsx`. Tests: `web/test/pwa-app-lock.test.mjs` (3/3 pass), `web/` `npm test` (102/102 pass). Gate: `CARGO_INCREMENTAL=0` `fmt`/`clippy`/`test` pass, `check-console-presentation.mjs` pass, `web/` `npm ci` + `npm test` + `npm run typecheck` + `npm run build` pass, encoding/LF/mojibake pass.
+- **Verification:** Visually verified `.sp-lock-screen` / `.sp-lock-card` in `chrome-headless-shell.exe` with Gnomcode tokens at `390x844` and `1440x900` (dark & light): `overflowX=false`, `submitMinHeight=44` (mobile) / `40` (desktop). Hardware WebAuthn FaceID/Windows Hello prompt not exercised live.
+- **Deviations:** None.
+- **Open risks/questions:** None.
+- **Dependencies:** Independent (pure frontend / ADR 0034).
