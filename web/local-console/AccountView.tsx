@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { fetchLocalJson, fetchLocalMutation, LocalApiError } from './local-api';
+import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl, LocalApiError } from './local-api';
 import { confirmAction, showNotice } from './shell-bus';
 
 interface AccountState {
@@ -18,11 +18,6 @@ const ACCOUNT_ACCESS_DISCLOSURE =
   'Linking this native app makes its available conversations and supported session controls accessible from any device signed in to your account, anywhere. This includes devices already signed in and devices you sign in to later. No phone pairing or per-desktop approval will be required. This desktop must stay awake with Gnomcode running. Protect your account: anyone with access to it can use these controls. You can disable account access in Devices or disconnect this desktop.';
 
 const confirmAccountAccess = () => confirmAction(ACCOUNT_ACCESS_DISCLOSURE, 'Link and allow account access');
-
-function baseUrl(): string {
-  const raw = document.getElementById('account-root')?.dataset.baseUrl || '';
-  return raw && raw !== '__GNOMCODE_BASE_URL__' ? raw : '';
-}
 
 /** Turns what the person pasted (JSON, base64 JSON or a bare token) into the session body. */
 function parseConnection(value: string): Record<string, unknown> {
@@ -185,7 +180,7 @@ export function AccountView() {
           <h2 id="account-heading">Your account, on this device.</h2>
           <p>Keep monitoring locally, or connect your account to view this desktop from the web console.</p>
         </div>
-        <a href={`${baseUrl()}/console`} target="_blank" rel="noopener noreferrer" className="btn-control">
+        <a href={`${getConsoleBaseUrl()}/console`} target="_blank" rel="noopener noreferrer" className="btn-control">
           Open web console
         </a>
       </div>

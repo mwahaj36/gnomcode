@@ -25,6 +25,8 @@ import {
   renderWorktreeDiffMarkup,
   type WorktreeDiffData,
 } from '../lib/worktree-presentation.mjs';
+import { collapseChatList, toggleChatList } from './chat-list';
+import { markWorkspaceReady } from './shell-bus';
 import {
   fetchLocalJson,
   fetchLocalMutation,
@@ -252,19 +254,7 @@ export function WorkspaceView() {
     [hostedSessions, activeSessionId],
   );
 
-  const toggleChatSidebar = useCallback(() => {
-    if (typeof document === 'undefined') return;
-    const collapsed = !document.body.classList.contains('chat-list-collapsed');
-    document.body.classList.toggle('chat-list-collapsed', collapsed);
-    document.getElementById('chat-list-toggle')?.setAttribute('aria-expanded', String(!collapsed));
-    if (!window.matchMedia('(max-width: 760px)').matches) {
-      try {
-        localStorage.setItem('gnomcode-chat-list-collapsed', collapsed ? '1' : '0');
-      } catch {
-        // Storage unavailable
-      }
-    }
-  }, []);
+  const toggleChatSidebar = toggleChatList;
 
   const resizePrompt = useCallback(() => {
     const input = promptInputRef.current;
@@ -670,7 +660,7 @@ export function WorkspaceView() {
     window.addEventListener('gnomcode:view-change', onViewChange);
     window.addEventListener('gnomcode:reload-view', onReload);
     window.addEventListener('gnomcode:workspace-action', onWorkspaceAction);
-    window.__gnomcodeLocalActions?.workspaceReady?.();
+    markWorkspaceReady();
     return () => {
       window.removeEventListener('gnomcode:view-change', onViewChange);
       window.removeEventListener('gnomcode:reload-view', onReload);
@@ -1293,8 +1283,7 @@ export function WorkspaceView() {
     if (!sessionId) return;
     void loadChat(sessionId);
     if (window.matchMedia('(max-width: 760px)').matches) {
-      document.body.classList.add('chat-list-collapsed');
-      document.getElementById('chat-list-toggle')?.setAttribute('aria-expanded', 'false');
+      collapseChatList();
     }
   };
 

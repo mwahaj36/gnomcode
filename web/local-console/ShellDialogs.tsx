@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLocalJson } from './local-api';
-import { registerShellDialogs } from './shell-bus';
+import { navigateTo, registerShellDialogs, workspaceAction } from './shell-bus';
 
 const TOUR_FLAG = 'gnomcode-onboarding-v1';
 
@@ -97,8 +97,8 @@ export function ShellDialogs() {
     setTipOpen(false);
     tourRef.current?.close();
     if (launch) {
-      window.__gnomcodeLocalActions?.setView?.('sessions');
-      window.__gnomcodeLocalActions?.workspaceAction?.({ type: 'new-session', focus: true });
+      navigateTo('sessions');
+      workspaceAction({ type: 'new-session', focus: true });
     } else if (returnFocus.current instanceof HTMLElement) {
       returnFocus.current.focus();
     }
