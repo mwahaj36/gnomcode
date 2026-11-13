@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Failover end-to-end demo (Claude exhausted to Codex)](2026-11-13-failover-e2e-demo.md)
 - [2026-11-13 - Antigravity RESOURCE_EXHAUSTED cross-check](2026-11-13-antigravity-resource-exhausted.md)
 - [2026-11-13 - D3 ingest file watcher and idle back-off](2026-11-13-ingest-watcher-backoff.md)
 - [2026-11-13 - Antigravity ACP protocol approvals](2026-11-13-agy-acp-approvals.md)
