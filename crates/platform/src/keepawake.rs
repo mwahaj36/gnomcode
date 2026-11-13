@@ -227,4 +227,24 @@ mod tests {
         drop(guard);
         assert_eq!(*log.lock().expect("log"), ["start", "stop"]);
     }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn unix_helper_command_uses_expected_backend() {
+        let cmd = os::helper();
+        let program = cmd.get_program().to_string_lossy();
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        if cfg!(target_os = "macos") {
+            assert_eq!(program, "caffeinate");
+            assert_eq!(args.first().map(String::as_str), Some("-i"));
+            assert_eq!(args.get(1).map(String::as_str), Some("-w"));
+        } else {
+            assert_eq!(program, "systemd-inhibit");
+            assert!(args.iter().any(|arg| arg == "--what=idle:sleep"));
+            assert!(args.iter().any(|arg| arg == "--mode=block"));
+        }
+    }
 }
