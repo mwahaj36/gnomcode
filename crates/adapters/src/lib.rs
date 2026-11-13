@@ -967,4 +967,66 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn claude_usage_limit_fixture_marks_error_rate_limited_and_quota() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let bytes = include_bytes!("../../../fixtures/claude-code/2026-11-13/usage-limit.jsonl");
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.sessions.len(), 1);
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Error);
+        assert!(
+            batch
+                .activity_events
+                .iter()
+                .any(|e| e.kind == gnomcode_core::ActivityKind::RateLimited)
+        );
+        let snap = batch
+            .quota_snapshots
+            .iter()
+            .find(|q| q.provider == "claude-code")
+            .expect("rejected quota snapshot");
+        assert_eq!(snap.used_pct, 100.0);
+        assert_eq!(snap.basis, TrustLevel::Exact);
+        assert_eq!(
+            snap.resets_at,
+            chrono::DateTime::from_timestamp(1_794_507_600, 0)
+        );
+    }
+
+    #[test]
+    fn claude_api_error_and_stream_json_rate_limit_emit_error_or_rate_limited() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let auth_err = br#"{"type":"assistant","sessionId":"s-auth","timestamp":"2026-11-13T00:00:00Z","isApiErrorMessage":true,"apiErrorStatus":401,"error":"authentication_failed","message":{"role":"assistant","content":[{"type":"text","text":"401 Unauthorized"}]}}"#;
+        let b1 = ClaudeAdapter::new().parse(&FileCtx::default(), auth_err);
+        assert_eq!(b1.sessions[0].state, gnomcode_core::SessionState::Error);
+        assert!(b1.activity_events.iter().any(|e| {
+            e.kind == gnomcode_core::ActivityKind::Error
+                && e.summary_redacted
+                    .as_deref()
+                    .is_some_and(|s| s.contains("claude auth login"))
+        }));
+
+        let rl_ev = br#"{"type":"rate_limit_event","sessionId":"s-rl","timestamp":"2026-11-13T00:00:01Z","rate_limit_info":{"status":"rejected","resetsAt":1794507600,"rateLimitType":"seven_day"}}"#;
+        let b2 = ClaudeAdapter::new().parse(&FileCtx::default(), rl_ev);
+        assert_eq!(b2.sessions[0].state, gnomcode_core::SessionState::Error);
+        assert!(
+            b2.activity_events
+                .iter()
+                .any(|e| e.kind == gnomcode_core::ActivityKind::RateLimited)
+        );
+        assert_eq!(
+            b2.quota_snapshots[0].window,
+            gnomcode_core::QuotaWindow::Weekly
+        );
+
+        let res_err = br#"{"type":"result","sessionId":"s-res","timestamp":"2026-11-13T00:00:02Z","is_error":true,"result":"API error 529 overloaded"}"#;
+        let b3 = ClaudeAdapter::new().parse(&FileCtx::default(), res_err);
+        assert_eq!(b3.sessions[0].state, gnomcode_core::SessionState::Error);
+        assert!(
+            b3.activity_events
+                .iter()
+                .any(|e| e.kind == gnomcode_core::ActivityKind::Error)
+        );
+    }
 }

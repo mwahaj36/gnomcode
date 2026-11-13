@@ -206,7 +206,9 @@ impl SourceAdapter for ClaudeAdapter {
             if obj.get("type").and_then(Value::as_str) == Some("assistant") {
                 if let Some(msg) = obj.get("message").and_then(Value::as_object) {
                     if let Some(model) = msg.get("model").and_then(Value::as_str) {
-                        sess.model = Some(model.to_owned());
+                        if model != "<synthetic>" {
+                            sess.model = Some(model.to_owned());
+                        }
                     }
 
                     // Extract tool_use summaries from content blocks
@@ -247,7 +249,7 @@ impl SourceAdapter for ClaudeAdapter {
                             if let Some(usage_obj) = msg.get("usage").and_then(Value::as_object) {
                                 let record = build_usage_record(
                                     dedup_key,
-                                    session_id,
+                                    session_id.clone(),
                                     ts,
                                     sess.model.as_deref().unwrap_or("unknown"),
                                     usage_obj,
@@ -258,6 +260,7 @@ impl SourceAdapter for ClaudeAdapter {
                     }
                 }
             }
+            handle_claude_error_or_rate_limit(obj, sess, &session_id, ts, &mut batch);
         }
 
         if let Some(sess) = current_session {
@@ -460,4 +463,154 @@ pub fn parse_oauth_usage(value: &Value, observed_at: DateTime<Utc>) -> Vec<Quota
         })
     })
     .collect()
+}
+
+fn handle_claude_error_or_rate_limit(
+    obj: &serde_json::Map<String, Value>,
+    sess: &mut Session,
+    session_id: &str,
+    ts: DateTime<Utc>,
+    batch: &mut ParsedBatch,
+) {
+    let record_type = obj.get("type").and_then(Value::as_str);
+    if record_type == Some("rate_limit_event") {
+        if let Some(info) = obj.get("rate_limit_info").and_then(Value::as_object) {
+            record_claude_rate_limit(info, sess, session_id, ts, batch);
+        }
+        return;
+    }
+
+    if record_type == Some("result") && obj.get("is_error").and_then(Value::as_bool) == Some(true) {
+        let result_text = obj.get("result").and_then(Value::as_str).unwrap_or("");
+        let lower = result_text.to_ascii_lowercase();
+        let is_limit = lower.contains("rate limit")
+            || lower.contains("usage limit")
+            || lower.contains("hit your limit")
+            || lower.contains("429");
+        emit_claude_error(
+            sess,
+            session_id,
+            ts,
+            batch,
+            is_limit,
+            None,
+            Some(result_text),
+        );
+        return;
+    }
+
+    if obj.get("isApiErrorMessage").and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+
+    let status = obj.get("apiErrorStatus").and_then(Value::as_u64);
+    let err_kind = obj.get("error").and_then(Value::as_str);
+    let api_err = obj.get("apiError").and_then(Value::as_str);
+    let limit_info = obj
+        .get("quotaLimits")
+        .and_then(Value::as_object)
+        .or_else(|| {
+            obj.get("apiErrorParams")
+                .and_then(|p| p.get("rate_limit_info"))
+                .and_then(Value::as_object)
+        });
+    let rejected_limit = limit_info
+        .is_some_and(|info| info.get("status").and_then(Value::as_str) == Some("rejected"));
+    let is_limit = status == Some(429)
+        || rejected_limit
+        || err_kind == Some("rate_limit")
+        || api_err.is_some_and(|s| s.contains("limit"));
+
+    if is_limit {
+        if let Some(info) = limit_info {
+            if record_claude_rate_limit(info, sess, session_id, ts, batch) {
+                return;
+            }
+        }
+        emit_claude_error(sess, session_id, ts, batch, true, status, err_kind);
+    } else {
+        emit_claude_error(
+            sess,
+            session_id,
+            ts,
+            batch,
+            false,
+            status,
+            err_kind.or(api_err),
+        );
+    }
+}
+
+fn record_claude_rate_limit(
+    info: &serde_json::Map<String, Value>,
+    sess: &mut Session,
+    session_id: &str,
+    ts: DateTime<Utc>,
+    batch: &mut ParsedBatch,
+) -> bool {
+    if info.get("status").and_then(Value::as_str) != Some("rejected") {
+        return false;
+    }
+    let window = match info.get("rateLimitType").and_then(Value::as_str) {
+        Some(kind) if kind.contains("seven_day") || kind.contains("weekly") => QuotaWindow::Weekly,
+        _ => QuotaWindow::FiveHour,
+    };
+    let resets_at = info
+        .get("resetsAt")
+        .and_then(Value::as_i64)
+        .and_then(|sec| DateTime::from_timestamp(sec, 0));
+    batch.quota_snapshots.push(QuotaSnapshot {
+        provider: AgentId::ClaudeCode.as_str().to_owned(),
+        limit_id: "claude".to_owned(),
+        window,
+        used_pct: 100.0,
+        resets_at,
+        plan: None,
+        basis: TrustLevel::Exact,
+        observed_at: ts,
+    });
+    emit_claude_error(sess, session_id, ts, batch, true, Some(429), None);
+    true
+}
+
+fn emit_claude_error(
+    sess: &mut Session,
+    session_id: &str,
+    ts: DateTime<Utc>,
+    batch: &mut ParsedBatch,
+    is_limit: bool,
+    status: Option<u64>,
+    hint: Option<&str>,
+) {
+    sess.state = SessionState::Error;
+    let kind = if is_limit {
+        ActivityKind::RateLimited
+    } else {
+        ActivityKind::Error
+    };
+    let friendly = if is_limit {
+        "Claude usage limit reached"
+    } else {
+        match (status, hint) {
+            (Some(401), _) | (_, Some("authentication_failed")) => {
+                "Authentication failed; run claude auth login"
+            }
+            (Some(403), _) | (_, Some("billing_error")) => {
+                "Billing or permission error; check Claude account"
+            }
+            (Some(404), _) | (_, Some("model_not_found")) => "Requested model unavailable",
+            (Some(529), _) => "Anthropic API overloaded; retry shortly",
+            (Some(500..=599), _) | (_, Some("server_error")) => "Anthropic API server error",
+            _ => "Claude API error",
+        }
+    };
+    let label = if is_limit { "rate_limit" } else { "api_error" };
+    batch.activity_events.push(ActivityEvent {
+        session_id: session_id.to_owned(),
+        timestamp: ts,
+        kind,
+        tool_name: None,
+        summary_redacted: Some(redact_summary(label, friendly)),
+        duration_ms: None,
+    });
 }
