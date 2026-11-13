@@ -15,6 +15,7 @@ pub mod pro;
 pub mod remote;
 mod remote_trust;
 mod session_changes;
+mod session_artifacts;
 pub mod sync;
 pub mod update;
 pub mod vendor_limits;
