@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Codex and Gemini native-install discovery (G13)](2026-11-13-codex-gemini-discovery.md)
 - [2026-11-13 - Unix process-group stop escalation (G12)](2026-11-13-unix-process-group-stop.md)
 - [2026-11-13 - Claude child environment scrub (G11)](2026-11-13-claude-env-scrub.md)
 - [2026-11-13 - G7 verified Antigravity usage fallback](2026-11-13-agy-usage-fallback.md)
