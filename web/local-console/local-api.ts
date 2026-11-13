@@ -64,6 +64,7 @@ declare global {
       overview?: boolean;
       sessions?: boolean;
       usage?: boolean;
+      settings?: boolean;
     };
     __gnomcodeLocalActions?: {
       setView?: (view: string) => void;

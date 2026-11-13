@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HomeView } from './HomeView';
+import { SettingsView } from './SettingsView';
 import { UsageView } from './UsageView';
 import { WorkspaceView } from './WorkspaceView';
 
@@ -49,6 +50,23 @@ function mountLocalConsoleViews(): void {
     createRoot(usageContainer).render(
       <StrictMode>
         <UsageView />
+      </StrictMode>,
+    );
+  }
+
+  const settingsContainer = document.getElementById('local-settings-root');
+  if (settingsContainer) {
+    window.__gnomcodeReactViews = {
+      ...(window.__gnomcodeReactViews || {}),
+      settings: true,
+    };
+    const legacySettings = document.getElementById('legacy-settings-content');
+    if (legacySettings) {
+      legacySettings.hidden = true;
+    }
+    createRoot(settingsContainer).render(
+      <StrictMode>
+        <SettingsView />
       </StrictMode>,
     );
   }

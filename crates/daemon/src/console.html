@@ -140,7 +140,9 @@
 
   <!-- ==================== VIEW 2: SETTINGS ==================== -->
   <main id="view-settings" class="view-content" role="tabpanel" tabindex="0" aria-labelledby="tab-btn-settings">
-    <section class="sp-settings-section" id="settings-providers"><h2>Providers</h2><div id="settings-provider-list" class="sp-provider-sources">Loading providers...</div></section>
+    <div id="local-settings-root" data-base-url="__GNOMCODE_BASE_URL__"></div>
+    <div id="legacy-settings-content">
+      <section class="sp-settings-section" id="settings-providers"><h2>Providers</h2><div id="settings-provider-list" class="sp-provider-sources">Loading providers...</div></section>
     <section class="profile-appearance sp-settings-section"><h2>Appearance</h2><button class="theme-control" id="theme-control" type="button" data-action="theme" aria-label="Theme: system. Switch mode">Theme / system</button></section>
     <section class="profile-devices sp-settings-section" aria-labelledby="remote-heading">
       <h2 id="remote-heading">Devices and Remote</h2>
@@ -340,6 +342,7 @@
     <section class="sp-settings-section" id="settings-account"><div class="sp-account-row"><div><h2>Account</h2><p id="cloud-sync-status" role="status">Checking desktop publication status...</p></div><button class="btn-control" type="button" data-action="view:auth">Manage account</button></div></section>
     <section class="sp-settings-section" id="settings-updates"><h2>Desktop updates</h2><p id="update-status-text" role="status">Checking update status...</p><label><input type="checkbox" id="update-auto-check" checked> Check for desktop updates automatically</label><div class="sp-settings-resources"><button type="button" class="btn-control" data-action="check-update" id="update-check-btn">Check now</button><button type="button" class="btn-control" data-action="restart-to-update" id="update-restart-btn" hidden>Restart to update</button></div></section>
     <section class="sp-settings-section" id="settings-guide"><h2>Guide</h2><p id="app-build" role="status">Checking installed version...</p><div class="sp-settings-resources"><button type="button" class="btn-control" data-action="onboarding-start">Getting started</button><a href="__GNOMCODE_BASE_URL__/downloads" target="_blank" rel="noopener noreferrer">Download desktop app</a><a href="__GNOMCODE_BASE_URL__/docs" target="_blank" rel="noopener noreferrer">Documentation</a><a href="__GNOMCODE_BASE_URL__/pricing" target="_blank" rel="noopener noreferrer">Pricing</a></div></section>
+    </div>
   </main>
 
   <!-- ==================== VIEW 3: ACCOUNT ==================== -->
