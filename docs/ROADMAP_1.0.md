@@ -115,5 +115,5 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 
 - [x] Release follow-up: Remote action activity timer; see `docs/sessions/2026-11-13-remote-activity.md`.
 
-- [ ] Follow-up (from handoff fold): wire `IngestWatcher` into `DaemonOrchestrator::spawn_reconciler` so the D3 idle CPU budget holds at runtime; see `docs/sessions/2026-11-14-handoff-worker-a.md`.
+- [ ] **MUST SHIP IN 1.0.1 (release blocker for the next release, no exceptions):** wire `IngestWatcher` into `DaemonOrchestrator::spawn_reconciler` so the D3 idle CPU budget holds at runtime. 1.0.0 ships with D3 not delivered at runtime because the RC build had already started. See `docs/sessions/2026-11-14-handoff-worker-a.md`.
 - [ ] Follow-up (from handoff fold): roadmap housekeeping, tick merged section C items and drop stale duplicate F1/F2 lines.
