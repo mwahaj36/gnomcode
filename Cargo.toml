@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.9.4"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 license-file = "LICENSE"
 repository = "https://github.com/mwahaj36/spawnt"
 homepage = "https://gnomcode.vercel.app"

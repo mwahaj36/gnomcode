@@ -3,5 +3,5 @@ export const branding = {
   "productName": "Gnomcode",
   "baseUrl": "https://gnomcode.vercel.app",
   "sourceRepository": "https://github.com/mwahaj36/spawnt",
-  "releasesRepository": "https://github.com/mwahaj36/spawnt-releases"
+  "releasesRepository": "https://github.com/mwahaj36/gnomcode-releases"
 } as const;
