@@ -51,6 +51,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [ ] Website download page and version updated (Vercel)
 - [ ] Real-device checks: physical phone Remote + approvals, installed PWA; macOS/Linux runs recorded or listed as known gaps
 - [ ] Pricing decision (after release)
+<<<<<<< HEAD
 
 ## Worker A backend delivery details
 
@@ -71,3 +72,6 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - File viewer UI (read-only workspace-confined file browser/reader on console + Remote): implemented in Worker B PR (pending Worker A `C file listing and reading` backend/ADR).
 - [~] Section C artifacts alongside changes UI (`feat/artifacts-view-ui`; HTML rendered in `sandbox=""` iframe, Markdown, safe images; Remote awaits Worker A backend handler)
 - [~] Section C phone attachments UI (`feat/phone-attachments-ui`; 15 MiB client preview/ext validation, Remote `upload_attachment` & local composer staging; awaits Worker A backend receiver)
+=======
+- [x] Section C PWA app lock (`feat/pwa-app-lock`; ADR 0034; WebAuthn passkey or PBKDF2-SHA-256 PIN lock with 10-attempt cooldown and E2EE decoupling)
+>>>>>>> d445c6b (feat(web): add PWA app lock with passkey and device PIN (ADR 0034))

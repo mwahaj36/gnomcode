@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "../lib/supabase";
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, triggerServerPushTest, type NotificationStatus } from "../lib/notifications";
+import { AppLockSettings } from "./AppLockGate";
 
 export default function SettingsPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const [user, setUser] = useState<any>(null);
@@ -246,6 +247,7 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
           </div>
           <details><summary>Setup help</summary><p>Your laptop must stay awake with account Remote access enabled. On iPhone, open Gnomcode from the Home Screen. Enable and test alerts separately on each device.</p></details>
         </div>
+        <AppLockSettings />
       </section>
 
       {/* Account profile */}
