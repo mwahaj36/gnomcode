@@ -17,7 +17,7 @@
 | 7 | B / G5 | G5 interrupt button on phone and console chat | PR open | [#196](https://github.com/mwahaj36/spawnt/pull/196) | Worker A PR #187 |
 | 8 | Section E1 | Local console built from web/ React (Home) | PR open | [#198](https://github.com/mwahaj36/spawnt/pull/198) | None |
 | 9 | Section E1 | Local console built from web/ React (Workspace) | PR open | [#199](https://github.com/mwahaj36/spawnt/pull/199) | PR #198 |
-| 10 | Section E1 | Local console built from web/ React (Usage) | not started | - | - |
+| 10 | Section E1 | Local console built from web/ React (Usage) | PR open | [#201](https://github.com/mwahaj36/spawnt/pull/201) | PR #199 |
 | 11 | Section E1 | Local console built from web/ React (Settings + retire console-app.js) | not started | - | - |
 | 12 | Section F | F1 worktree per session UI | not started | - | Worker A / backend |
 | 13 | Section F | F2 "Continue here" for imported sessions UI | not started | - | Worker A / backend |
@@ -151,3 +151,16 @@
 - **Deviations:** Legacy Workspace markup remains hidden in `#legacy-ide-layout` until the final E1 PR retires `console-app.js`.
 - **Open risks/questions:** Same `api.rs` note as #198 when retiring `console-app.js`.
 - **Dependencies:** Depends on PR #198 (`feat/local-console-home`).
+
+### 10. Section E1 — Local console built from web/ React (Usage view)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/201 (`feat/local-console-usage`, commit `917b25d`)
+- **What changed:**
+  - `web/local-console/local-api.ts`, `web/local-console/UsageView.tsx`, `web/local-console/main.tsx`: React Usage view mounted on `#local-usage-root` (`window.__gnomcodeReactViews.usage = true`), hiding `[data-legacy-usage="true"]` at runtime, delegating provider cards, heatmap, daily totals, breakdown, subscription value, and project rollups to `web/lib/console-presentation.js`, with period selector and CSV/JSON `/api/v1/export`.
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`, `web/app/gnomcode-console.css`: marks legacy Usage markup with `data-legacy-usage="true"`, adds polling/DOM guards in `console-app.js`, and appends `.sp-usage-view` layout styling.
+  - `crates/daemon/src/console-react.js`: deterministic rebuild (`397,875` bytes, zero `sourceMappingURL`).
+  - `web/test/local-console-usage.test.mjs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-local-console-usage.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `console.html:28-47`, `console-app.js:326-355,646-795,1637`. Tests: `web/test/local-console-usage.test.mjs` (`1/1`), `web/` `npm test` (`103/103`). Gate: `build-local-console.mjs --check`, `check-console.mjs`, `check-local-console.mjs`, `web/` (`test`/`typecheck`/`lint`/`build`), `CARGO_INCREMENTAL=0` (`fmt`/`clippy`/`test`) all pass.
+- **Verification:** Visually verified unobscured Usage view in `chrome-headless-shell.exe` at `390x844` and `1440x900` (dark & light): `reactUsage=true`, `legacyHidden=true`, `overflowX=false`, Limits card, Activity heatmap + stats, and Projects list rendered cleanly. Live `/api/v1/export` download against a running daemon not verified.
+- **Deviations:** Legacy Usage markup stays hidden until the final E1 PR retires `console-app.js`.
+- **Open risks/questions:** Same `api.rs` note as #198/#199 when retiring `console-app.js`.
+- **Dependencies:** Depends on PR #199 (`feat/local-console-workspace`).
