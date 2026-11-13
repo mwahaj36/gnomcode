@@ -54,6 +54,7 @@ conpty-oxide = "0.1.2"
 tempfile = "3.13"
 insta = { version = "1.40", features = ["json", "yaml"] }
 ruzstd = "0.9.1"
+vt100 = "0.15"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
