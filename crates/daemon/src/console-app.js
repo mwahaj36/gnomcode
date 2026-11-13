@@ -1624,6 +1624,66 @@ function cycleTheme() {
       void renderArtifactsState();
     });
 
+    let interruptAttempt = null;
+    let interruptBusy = false;
+
+    async function updateInterruptButton() {
+      const btn = document.getElementById('chat-interrupt-btn');
+      if (!btn) return;
+      const session = ideSessions.find(s => s.id === activeChatSession);
+      const hosted = hostedSessions.find(s => s.session_id === activeChatSession);
+      const presentation = await import('/console-presentation.js');
+      const state = session?.state || hosted?.state || '';
+      const canInterrupt = Boolean(activeChatSession) && session?.source !== 'imported' && (hosted !== undefined || session?.hosted !== false) && presentation.isSessionRunningState(state);
+      btn.hidden = !canInterrupt;
+      btn.disabled = !canInterrupt || interruptBusy;
+      if (!canInterrupt && interruptAttempt?.sessionId === activeChatSession) {
+        interruptAttempt = null;
+      }
+    }
+
+    async function interruptChat() {
+      if (!activeChatSession || interruptBusy) return;
+      const sessionId = activeChatSession;
+      const presentation = await import('/console-presentation.js');
+      const session = ideSessions.find(s => s.id === sessionId);
+      const hosted = hostedSessions.find(s => s.session_id === sessionId);
+      if (!presentation.isSessionRunningState(session?.state || hosted?.state || '')) return;
+      if (!interruptAttempt || interruptAttempt.sessionId !== sessionId) {
+        interruptAttempt = { sessionId, requestId: presentation.createInterruptRequestId() };
+      }
+      const requestId = interruptAttempt.requestId;
+      interruptBusy = true;
+      void updateInterruptButton();
+      const statusEl = document.getElementById('session-action-status');
+      if (statusEl) statusEl.textContent = 'Sending interrupt signal (Esc)...';
+      try {
+        const res = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/interrupt`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_id: requestId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || 'Could not deliver interrupt. Retry or check Agent terminal.');
+        }
+        const ack = await res.json();
+        // The daemon answers 200 with { type: 'error', message } when it refuses the interrupt.
+        if (ack?.type === 'error') throw new Error(ack.message || 'Could not deliver interrupt. Retry or check Agent terminal.');
+        interruptAttempt = null;
+        if (sessionId === activeChatSession && statusEl) {
+          statusEl.textContent = presentation.formatInterruptAckMessage(ack);
+        }
+      } catch (err) {
+        if (sessionId === activeChatSession && statusEl) {
+          statusEl.textContent = err instanceof Error ? err.message : 'Interrupt failed. Retry or check Agent terminal.';
+        }
+      } finally {
+        interruptBusy = false;
+        void updateInterruptButton();
+      }
+    }
+
     async function loadChat(sessionId, earlier = false, silent = false) {
       if (!sessionId) return;
       if (silent && activeChatSession !== sessionId) return;
@@ -1637,6 +1697,7 @@ function cycleTheme() {
         void renderSessionAttachments();
         const attachStatus = document.getElementById('chat-attach-status');
         if (attachStatus) attachStatus.textContent = '';
+        if (activeChatSession !== sessionId) { selectChatSession(sessionId); interruptAttempt = null; }
         chatEvents = [];
         if (chatWs) { chatWs.close(); chatWs = null; }
         document.getElementById('chat-terminal-view').hidden = true;
@@ -1652,6 +1713,7 @@ function cycleTheme() {
       document.getElementById('chat-session-label').textContent = hosted?.agent || session?.agent || 'Agent';
       const imported = session?.source === 'imported';
       document.getElementById('chat-resume').hidden = !session?.can_resume;
+      void updateInterruptButton();
       document.getElementById('reset-arm').hidden = !session?.can_reset;
       document.getElementById('reset-capability').hidden = imported || Boolean(session?.can_reset);
 
@@ -2334,7 +2396,7 @@ function cycleTheme() {
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
       'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
       'schedule-message': scheduleDraft, 'cancel-schedule': cancelSchedule, 'save-routing': saveRouting, 'reconnect-reset': () => reconnectReset(true), 'cancel-reset': () => reconnectReset(false),
-      'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat,
+      'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat, 'interrupt-chat': interruptChat,
       'choose-workspace': chooseWorkspace,
         'copy-workspace': copySessionWorkspace, previous: prevPage, next: nextPage,
         'save-settings': saveSettings, 'save-notifications': saveNotificationSettings, 'add-pricing': addCustomPricingSettings,
