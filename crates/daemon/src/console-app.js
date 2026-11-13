@@ -157,7 +157,13 @@ function cycleTheme() {
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
       if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); void loadProjects(); }
       if (view === 'settings') { void loadProData(); }
-      if (view === 'overview') { void loadHeatmap(); void loadToday(true); }
+      if (view === 'overview') {
+        if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('gnomcode:view-change', { detail: { view } }));
+        } else {
+          void loadHeatmap(); void loadToday(true);
+        }
+      }
     }
 
     document.querySelector('.nav-tabs').addEventListener('keydown', event => {
@@ -197,6 +203,9 @@ function cycleTheme() {
       button.textContent = 'Refreshing...';
       try {
         while (pollBusy) await new Promise(resolve => setTimeout(resolve, 25));
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('gnomcode:reload-view', { detail: { view: activeView } }));
+        }
         if (CONSOLE_VIEWS.includes(activeView)) {
           const results = await Promise.all([loadReport(), loadSessions(), loadQuota(), loadOngoing()]);
           if (results.some(result => !result)) throw new Error('One or more local data sources failed');
@@ -710,7 +719,9 @@ function cycleTheme() {
         const data = await apiJson('/api/v1/activity/heatmap', { headers, signal: AbortSignal.timeout(15000) });
         const presentation = await import('/console-presentation.js');
         presentation.updateHeatmap(container, data);
-        presentation.updateHeatmap(mini, data, { weeks: 12, stats: false, legend: false, months: false });
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
+          presentation.updateHeatmap(mini, data, { weeks: 12, stats: false, legend: false, months: false });
+        }
         return true;
       } catch (_) {
         lastHeatmapAt = Date.now() - 50000;
@@ -2030,12 +2041,19 @@ function cycleTheme() {
         const response = await apiJson('/api/v1/sessions?page=1&limit=100', { headers, signal: AbortSignal.timeout(15000) });
         const presentation = await import('/console-presentation.js');
         presentation.updateOngoing(document.getElementById('sessions-ongoing'), response.sessions);
-        presentation.updateHomeSessions(document.getElementById('home-sessions'), response.sessions);
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
+          presentation.updateHomeSessions(document.getElementById('home-sessions'), response.sessions);
+        }
         homeGroups.clear(); response.sessions.forEach(session => homeGroups.set(session.id, session.home_group));
         homeActiveCount = response.sessions.filter(session => session.home_group === 'needs_you' || session.home_group === 'running').length;
-        if (activeView === 'overview') void loadToday();
+        if (activeView === 'overview' && !(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) void loadToday();
         return true;
-      } catch (_) { document.getElementById('home-sessions').textContent = 'Session status unavailable. Retry Reload view.'; return false; }
+      } catch (_) {
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
+          document.getElementById('home-sessions').textContent = 'Session status unavailable. Retry Reload view.';
+        }
+        return false;
+      }
     }
 
     async function loadQuota() {
@@ -2047,13 +2065,17 @@ function cycleTheme() {
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
         presentation.updateProviderCards(document.getElementById('quota-table'), res, { cost: true });
-        presentation.updateProviderCards(document.getElementById('home-limits'), res, { cost: false });
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
+          presentation.updateProviderCards(document.getElementById('home-limits'), res, { cost: false });
+        }
         presentation.updateProviderSources(document.getElementById('settings-provider-list'), res);
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
         lastQuotaJson = '';
-        document.getElementById('home-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
+          document.getElementById('home-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
+        }
         document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
         return false;
       }
