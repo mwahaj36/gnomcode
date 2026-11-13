@@ -14,7 +14,7 @@ Users installing Gnomcode's `/remote` or `/console` web app on shared or unlocke
 2. **Two local unlock modes:**
    - **Device PIN (4-8 digits):** Digested with WebCrypto `PBKDF2` (`SHA-256`, `210,000` iterations, random 16-byte per-device salt) and constant-time byte comparison. Plaintext PINs are never persisted.
    - **Passkey / WebAuthn (`isSecureContext` + `PublicKeyCredential`):** Uses platform authenticator (`userVerification: 'required'`) and validates `clientDataJSON.origin === window.location.origin` and non-empty `authenticatorData`.
-3. **Brute-force cooldown & safe recovery:** Consecutive failed unlock attempts (`10` max) trigger a `10`-minute persisted cooldown. Users who forget their PIN/passkey can recover only via **Reset & forget device**, which clears app lock AND invokes `forgetDevice()` to remove remembered paired desktop keys from IndexedDB, forcing fresh pairing.
+3. **Brute-force cooldown & safe recovery:** Consecutive failed unlock attempts (`10` max) trigger a `10`-minute persisted cooldown. Users who forget their PIN/passkey can recover only via **Reset & forget device**, which clears app lock AND invokes `forgetAllDevices()` to erase every remembered paired desktop key from IndexedDB (not only the legacy record), clears the stored pairing offer and reloads, so recovery can never reach a paired chat without pairing again.
 4. **Unlocked enrollment invariant:** Changing or enrolling a PIN or passkey fails closed unless the session is already unlocked.
 
 ## Consequences

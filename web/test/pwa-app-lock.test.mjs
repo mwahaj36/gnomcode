@@ -67,7 +67,8 @@ test('PWA app lock wires into Client, SettingsPanel, and tokens CSS without touc
   assert.match(client, /AppLockGate/);
   assert.match(settings, /AppLockSettings/);
   assert.match(gate, /sp-lock-screen/);
-  assert.match(gate, /forgetDevice/);
+  assert.match(gate, /forgetAllDevices/);
+  assert.match(remoteDevice, /export async function forgetAllDevices[\s\S]*objectStore\('devices'\)\.clear\(\)/);
   assert.doesNotMatch(remoteDevice, /app-lock|gnomcode-pwa-lock/);
 
   const marker = css.indexOf('/* Section C PWA app lock */');

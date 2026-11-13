@@ -56,6 +56,15 @@ export async function forgetDevice(owner:string,desktop?:string) {
   });} finally {db.close();}
 }
 
+/** Removes every remembered desktop and enrollment key on this browser, so the next connection must pair again. */
+export async function forgetAllDevices() {
+  const db=await database();
+  try {await new Promise<void>((resolve,reject)=>{
+    const tx=db.transaction('devices','readwrite');tx.objectStore('devices').clear();
+    tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+  });} finally {db.close();}
+}
+
 export async function deviceProof(key:CryptoKey,context:string) {
   const proof=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(context));
   return Array.from(new Uint8Array(proof),byte=>byte.toString(16).padStart(2,'0')).join('');

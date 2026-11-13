@@ -1,4 +1,4 @@
-# 2026-11-13 — PWA app lock (passkey / device PIN)
+# 2026-11-13 - PWA app lock (passkey / device PIN)
 
 ## Goals
 
@@ -6,9 +6,9 @@ Protect the PWA (`/remote` and `/console`) with an optional device passkey (WebA
 
 ## Outcomes
 
-- Authored [ADR 0034](../adr/0034-pwa-app-lock.md) and added its row to `docs/SPEC.md` §9.
+- Authored [ADR 0034](../adr/0034-pwa-app-lock.md) and added its row to `docs/SPEC.md` section 9.
 - Implemented `web/lib/app-lock.js` & `.d.ts`: WebCrypto PBKDF2 (`SHA-256`, 210,000 iterations, random salt) PIN hashing, constant-time verification, WebAuthn platform passkey enrollment/assertion (`isSecureContext` + origin check), 10-attempt / 10-minute cooldown lockout, and fail-closed unlocked enrollment checks.
-- Implemented `web/components/AppLockGate.tsx` (`AppLockGate` overlay + `AppLockSettings` panel) wired into `web/app/console/Client.tsx` and `web/components/SettingsPanel.tsx`, with safe `"Reset & forget device"` recovery that clears both lock state and remembered E2EE credentials (`forgetDevice`).
+- Implemented `web/components/AppLockGate.tsx` (`AppLockGate` overlay + `AppLockSettings` panel) wired into `web/app/console/Client.tsx` and `web/components/SettingsPanel.tsx`, with safe `"Reset & forget device"` recovery that clears both lock state and remembered E2EE credentials (`forgetAllDevices`; merge review replaced `forgetDevice('')`, which left account-bound remembered desktops in place and made recovery a lock bypass).
 - Appended responsive `--sp-*` CSS rules in `web/app/gnomcode-console.css` (zero raw hex tokens, 44px mobile touch targets, 16px mobile inputs).
 
 ## Verification

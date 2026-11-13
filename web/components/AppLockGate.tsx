@@ -16,7 +16,7 @@ import {
   unlockWithPin,
   type AppLockState,
 } from '../lib/app-lock';
-import { forgetDevice } from '../lib/remote-device';
+import { forgetAllDevices } from '../lib/remote-device';
 
 const APP_LOCK_EVENT = 'gnomcode-app-lock-change';
 
@@ -129,12 +129,14 @@ export default function AppLockGate({ children }: { children: ReactNode }) {
   async function handleResetLockAndDevice() {
     setBusy(true);
     try {
-      await forgetDevice('', undefined).catch(() => {});
+      // Recovery must not be a bypass: remembered desktops are erased first, so the app can only be used after pairing again.
+      await forgetAllDevices();
+      try { sessionStorage.removeItem('gnomcode-pairing-offer'); } catch {}
       clearAppLockState();
       setLockState(emptyAppLockState());
-      setUnlocked(true);
       setConfirmReset(false);
       notifyLockChanged();
+      window.location.reload();
     } finally {
       setBusy(false);
     }
