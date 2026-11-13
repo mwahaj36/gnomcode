@@ -249,6 +249,10 @@ pub fn build_router(state: AppState) -> Router {
             post(crate::approvals::decision_handler),
         )
         .route("/api/v1/repos/file", get(repo_file_get_handler))
+        .route(
+            "/api/v1/repos/files",
+            get(crate::workspace_files::list_handler),
+        )
         .route("/api/v1/repos/diff", get(repo_diff_get_handler))
         .route("/api/v1/sessions/{id}/switch", post(switch_session_handler))
         .route("/api/v1/sessions/{id}/resume", post(resume_session_handler))
