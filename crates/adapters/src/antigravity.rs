@@ -305,6 +305,42 @@ impl SourceAdapter for AntigravityAdapter {
                     }
                 }
             }
+
+            let is_error_step = obj
+                .get("status")
+                .and_then(Value::as_str)
+                .is_some_and(|s| s.eq_ignore_ascii_case("error"))
+                || step_type.eq_ignore_ascii_case("error")
+                || obj.get("error").is_some();
+            if is_error_step && step_mentions_resource_exhausted(obj) {
+                sess.state = SessionState::Error;
+                let limit_id = self
+                    .active_model
+                    .as_deref()
+                    .filter(|m| !m.trim().is_empty() && !m.contains("MODEL_PLACEHOLDER"))
+                    .unwrap_or("antigravity");
+                batch.activity_events.push(ActivityEvent {
+                    session_id: session_id.clone(),
+                    timestamp: ts,
+                    kind: ActivityKind::RateLimited,
+                    tool_name: None,
+                    summary_redacted: Some(redact_summary(
+                        "rate_limit",
+                        "Antigravity quota exhausted (RESOURCE_EXHAUSTED)",
+                    )),
+                    duration_ms: None,
+                });
+                batch.quota_snapshots.push(QuotaSnapshot {
+                    provider: AgentId::Antigravity.as_str().to_owned(),
+                    limit_id: limit_id.chars().take(64).collect(),
+                    window: QuotaWindow::FiveHour,
+                    used_pct: 100.0,
+                    resets_at: None,
+                    plan: None,
+                    basis: TrustLevel::Exact,
+                    observed_at: ts,
+                });
+            }
         }
 
         if let Some(sess) = current_session {
@@ -312,6 +348,23 @@ impl SourceAdapter for AntigravityAdapter {
         }
         batch
     }
+}
+
+fn step_mentions_resource_exhausted(obj: &serde_json::Map<String, Value>) -> bool {
+    for key in [
+        "content",
+        "error",
+        "error_message",
+        "message",
+        "status_message",
+    ] {
+        if let Some(text) = obj.get(key).and_then(Value::as_str) {
+            if text.contains("RESOURCE_EXHAUSTED") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Extracts the model name from `<USER_SETTINGS_CHANGE>` text:

@@ -31,7 +31,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 
 ## D. Audit Phase 2 leftovers
 - [x] D3 file watcher and idle back-off for ingest (CPU budget: idle under 1%)
-- [ ] Antigravity exhausted cross-check against RESOURCE_EXHAUSTED
+- [x] Antigravity exhausted cross-check against RESOURCE_EXHAUSTED
 - [ ] Failover demo end to end: Claude exhausted, continue in Codex with handoff
 
 ## E. Consolidation (audit Phase 3)
