@@ -12,7 +12,8 @@ Add `GET /api/v1/repos/files` (local, bearer-authenticated) and E2EE Remote requ
 - Relative paths reject `..`, root/prefix components, and control characters.
 - Both workspace root and target paths are canonicalized (`canonicalize()`), and any target or directory entry whose canonical path does not start with the canonical workspace root (e.g., symlink or junction escape) is rejected or skipped.
 - Directory listings skip `.git`, sort directories before files, and cap at 200 entries (`truncated: true`).
-- File reads enforce a 512 KiB size limit and require valid UTF-8.
+- File reads enforce a 512 KiB size limit (bounded read, not only a metadata check) and require valid UTF-8. Paths containing a `.git` component (and, on Windows, `:` stream or drive syntax) are rejected for reads and listings so repository credentials and alternate data streams stay unreachable.
+- The local `GET /api/v1/repos/files` endpoint takes a caller-supplied workspace root like the existing `/api/v1/repos/file`; it is reachable only with the loopback bearer token and Host/Origin checks. Remote never accepts a folder path.
 
 ## Consequences
 - Phone and local console can browse and read workspace files safely over E2EE Remote without exposing arbitrary filesystem paths or allowing writes.

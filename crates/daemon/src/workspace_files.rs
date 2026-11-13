@@ -87,7 +87,13 @@ fn validate_relative_path(raw: &str, allow_empty: bool) -> Result<PathBuf, FileA
     let mut clean = PathBuf::new();
     for component in Path::new(&normalized).components() {
         match component {
-            Component::Normal(part) => clean.push(part),
+            Component::Normal(part) => {
+                let name = part.to_string_lossy();
+                if name.eq_ignore_ascii_case(".git") || (cfg!(windows) && name.contains(':')) {
+                    return Err(FileAccessError::BadPath("Invalid workspace path"));
+                }
+                clean.push(part);
+            }
             Component::CurDir => {}
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
                 return Err(FileAccessError::BadPath(
@@ -194,7 +200,18 @@ fn read_workspace_file(
     if metadata.len() > MAX_FILE_BYTES {
         return Err(FileAccessError::TooLarge);
     }
-    let bytes = std::fs::read(&canonical_file).map_err(|_| FileAccessError::Io)?;
+    let mut bytes = Vec::new();
+    std::fs::File::open(&canonical_file)
+        .and_then(|file| {
+            std::io::Read::read_to_end(
+                &mut std::io::Read::take(file, MAX_FILE_BYTES + 1),
+                &mut bytes,
+            )
+        })
+        .map_err(|_| FileAccessError::Io)?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(FileAccessError::TooLarge);
+    }
     let content = String::from_utf8(bytes).map_err(|_| FileAccessError::BinaryOrInvalidUtf8)?;
     Ok((
         rel.to_string_lossy().replace('\\', "/"),
@@ -399,6 +416,15 @@ mod tests {
         )
         .await;
         assert_eq!(traversal["type"], "error");
+
+        std::fs::create_dir_all(root.path().join(".git")).expect("git dir");
+        std::fs::write(root.path().join(".git").join("config"), "token").expect("git config");
+        let git = remote_command(
+            &db,
+            &json!({"type": "repo_file", "session_id": "codex:files-test", "path": ".git/config"}),
+        )
+        .await;
+        assert_eq!(git["type"], "error", "git metadata must stay unreadable");
 
         let too_big = remote_command(
             &db,
