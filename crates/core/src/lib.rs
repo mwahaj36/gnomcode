@@ -4,6 +4,7 @@
 
 pub mod approval;
 pub mod branding;
+pub mod handoff_eval;
 pub mod license;
 pub mod notifications;
 pub mod presence;

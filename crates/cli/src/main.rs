@@ -7,6 +7,7 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+mod evals;
 mod integrate;
 
 use anyhow::{Context, Result};
@@ -102,6 +103,11 @@ enum Commands {
         /// Do not install the approval hooks (phone and console approve/deny).
         #[arg(long)]
         no_approvals: bool,
+    },
+    /// Run repeatable quality evaluations (reports only).
+    Evals {
+        #[command(subcommand)]
+        action: evals::EvalsCommands,
     },
     /// Manage gnomcode offline Pro / Team license.
     License {
@@ -230,6 +236,7 @@ async fn main() -> Result<()> {
             no_approvals,
         } => cmd_integrate(&agent, remove, !no_approvals),
         Commands::License { action } => cmd_license(action),
+        Commands::Evals { action } => evals::run(action),
         Commands::Hook => cmd_hook(),
         Commands::Limits {
             action,
