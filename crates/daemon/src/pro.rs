@@ -99,26 +99,25 @@ fn cloud_user_is_pro(user: &serde_json::Value) -> bool {
 #[must_use]
 pub fn get_license_status() -> LicenseStatus {
     // 1. First check offline signed license key
-    if let Ok(bytes) = fs::read(gnomcode_home().join("license.key")) {
-        if let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) {
-            if let Ok(tier) = verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX) {
-                let (tier_str, is_lic) = match tier {
-                    Tier::Pro => ("pro", true),
-                    Tier::Team => ("team", true),
-                    Tier::Free => ("free", false),
-                };
-                return LicenseStatus {
-                    tier: tier_str.to_owned(),
-                    licensed: is_lic,
-                    license_id: Some(format!(
-                        "lic-{}",
-                        &license.signature_hex[..12.min(license.signature_hex.len())]
-                    )),
-                    customer_name: Some(license.payload.licensee.clone()),
-                    expires_at: license.payload.expires_at.clone(),
-                };
-            }
-        }
+    if let Ok(bytes) = fs::read(gnomcode_home().join("license.key"))
+        && let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes)
+        && let Ok(tier) = verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX)
+    {
+        let (tier_str, is_lic) = match tier {
+            Tier::Pro => ("pro", true),
+            Tier::Team => ("team", true),
+            Tier::Free => ("free", false),
+        };
+        return LicenseStatus {
+            tier: tier_str.to_owned(),
+            licensed: is_lic,
+            license_id: Some(format!(
+                "lic-{}",
+                &license.signature_hex[..12.min(license.signature_hex.len())]
+            )),
+            customer_name: Some(license.payload.licensee.clone()),
+            expires_at: license.payload.expires_at.clone(),
+        };
     }
 
     LicenseStatus {
@@ -293,12 +292,11 @@ pub fn is_session_blocked(session_id: &str) -> bool {
     };
 
     // Stale check: if file is older than 30s, fail open
-    if let Ok(mtime) = meta.modified() {
-        if let Ok(elapsed) = SystemTime::now().duration_since(mtime) {
-            if elapsed > Duration::from_secs(30) {
-                return false;
-            }
-        }
+    if let Ok(mtime) = meta.modified()
+        && let Ok(elapsed) = SystemTime::now().duration_since(mtime)
+        && elapsed > Duration::from_secs(30)
+    {
+        return false;
     }
 
     let Ok(raw) = fs::read(block_path) else {

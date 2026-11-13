@@ -759,10 +759,10 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                         return json!({"type":"error","message":"Agent started but its conversation could not be saved. Check your laptop before retrying."});
                     }
                     let mut ack = json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent});
-                    if let (Some(isolated), Some(fields)) = (&isolated, ack.as_object_mut()) {
-                        if let Value::Object(extra) = crate::worktree_api::fields(isolated) {
-                            fields.extend(extra);
-                        }
+                    if let (Some(isolated), Some(fields)) = (&isolated, ack.as_object_mut())
+                        && let Value::Object(extra) = crate::worktree_api::fields(isolated)
+                    {
+                        fields.extend(extra);
                     }
                     ack
                 }
@@ -1030,10 +1030,10 @@ pub(crate) fn conversation_chat(
     if requested != native && db.conversation_target(requested)?.is_some() {
         // History can arrive after the new host was linked, including after restart.
         let target = db.conversation_target(requested)?;
-        if let Some((host, None, _)) = target {
-            if host == requested {
-                db.bind_conversation_host(&host, native)?;
-            }
+        if let Some((host, None, _)) = target
+            && host == requested
+        {
+            db.bind_conversation_host(&host, native)?;
         }
     }
     let id = if db.conversation_target(requested)?.is_some() {
@@ -1043,14 +1043,13 @@ pub(crate) fn conversation_chat(
     };
     let mut events = db.conversation_chat(id, limit, before)?;
     for event in &mut events {
-        if event.role == gnomcode_core::ChatRole::User {
-            if let Some((_, message)) = event
+        if event.role == gnomcode_core::ChatRole::User
+            && let Some((_, message)) = event
                 .content
                 .strip_prefix("<spawnt_context>")
                 .and_then(|text| text.split_once("</spawnt_context>"))
-            {
-                event.content = message.trim_start().to_owned();
-            }
+        {
+            event.content = message.trim_start().to_owned();
         }
     }
     Ok(events)
@@ -1297,12 +1296,11 @@ pub(crate) fn conversation_sessions(
             row["state"] = json!(displayed_state(session, host.is_some()));
         }
         row["id"] = json!(root);
-        if let Some(record) = worktrees.get(&root).or_else(|| worktrees.get(id)) {
-            if let (Value::Object(fields), Value::Object(extra)) =
+        if let Some(record) = worktrees.get(&root).or_else(|| worktrees.get(id))
+            && let (Value::Object(fields), Value::Object(extra)) =
                 (&mut row, crate::worktree_api::fields(record))
-            {
-                fields.extend(extra);
-            }
+        {
+            fields.extend(extra);
         }
         row["hosted"] = json!(host.is_some());
         row["can_prompt"] = json!(can_prompt);
@@ -1344,10 +1342,10 @@ pub(crate) fn conversation_sessions(
                     .unwrap_or("")
             ));
         }
-        if let Some(model) = launch.and_then(|launch| launch.model) {
-            if observed.and_then(|session| session.model.as_deref()) != Some(model.as_str()) {
-                row["requested_model"] = json!(model);
-            }
+        if let Some(model) = launch.and_then(|launch| launch.model)
+            && observed.and_then(|session| session.model.as_deref()) != Some(model.as_str())
+        {
+            row["requested_model"] = json!(model);
         }
         if !visible
             .iter()

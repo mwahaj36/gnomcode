@@ -61,10 +61,10 @@ pub fn agent_command(name: &str) -> (String, Vec<String>) {
         };
         if let Some(binary) = installed {
             #[cfg(windows)]
-            if let (Some(dir), Some(package)) = (binary.parent(), npm_package_name(name)) {
-                if let Some(resolved) = resolve_windows_npm_or_binary(dir, package, name) {
-                    return resolved;
-                }
+            if let (Some(dir), Some(package)) = (binary.parent(), npm_package_name(name))
+                && let Some(resolved) = resolve_windows_npm_or_binary(dir, package, name)
+            {
+                return resolved;
             }
             return (binary.to_string_lossy().into_owned(), Vec::new());
         }
@@ -100,18 +100,18 @@ fn resolve_windows_npm_or_binary(
     if native.is_file() {
         return Some((native.to_string_lossy().into_owned(), Vec::new()));
     }
-    if prefix.join(format!("{name}.cmd")).is_file() {
-        if let Some(entry) = npm_entry_point(prefix, package, name) {
-            let node = prefix.join("node.exe");
-            return Some((
-                if node.is_file() {
-                    node.to_string_lossy().into_owned()
-                } else {
-                    "node.exe".into()
-                },
-                vec![entry.to_string_lossy().into_owned()],
-            ));
-        }
+    if prefix.join(format!("{name}.cmd")).is_file()
+        && let Some(entry) = npm_entry_point(prefix, package, name)
+    {
+        let node = prefix.join("node.exe");
+        return Some((
+            if node.is_file() {
+                node.to_string_lossy().into_owned()
+            } else {
+                "node.exe".into()
+            },
+            vec![entry.to_string_lossy().into_owned()],
+        ));
     }
     None
 }
@@ -170,14 +170,13 @@ pub fn antigravity_ide_available() -> bool {
         if std::path::Path::new("/Applications/Antigravity.app").exists() {
             return true;
         }
-        if let Some(home) = std::env::var_os("HOME") {
-            if std::path::PathBuf::from(home)
+        if let Some(home) = std::env::var_os("HOME")
+            && std::path::PathBuf::from(home)
                 .join("Applications")
                 .join("Antigravity.app")
                 .exists()
-            {
-                return true;
-            }
+        {
+            return true;
         }
     }
     #[cfg(target_os = "linux")]

@@ -373,10 +373,10 @@ async fn fetch_antigravity() -> Result<Vec<QuotaSnapshot>, String> {
                 gnomcode_adapters::antigravity::parse_quota_summary(&body, now)
             };
             if !quota.is_empty() {
-                if method != "GetUserStatus" {
-                    if let Ok(mut members) = POOL_MEMBERS.lock() {
-                        *members = gnomcode_adapters::antigravity::parse_quota_pool_members(&body);
-                    }
+                if method != "GetUserStatus"
+                    && let Ok(mut members) = POOL_MEMBERS.lock()
+                {
+                    *members = gnomcode_adapters::antigravity::parse_quota_pool_members(&body);
                 }
                 return Ok(quota);
             }
