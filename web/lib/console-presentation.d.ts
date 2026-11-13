@@ -59,3 +59,14 @@ export function renderHourStrip(report: unknown): string;
 export function updateHeatmap(element: HTMLElement, data: ActivityHeatmap | null | undefined, options?: HeatmapOptions): void;
 export function renderValue(byProvider?: unknown[], combined?: unknown): string;
 export function updateValue(element: HTMLElement, byProvider?: unknown[], combined?: unknown): void;
+
+export type QuickAction = { id: string; label: string; prompt: string; builtin?: boolean };
+export const MAX_QUICK_ACTIONS: number;
+export const QUICK_ACTIONS_STORAGE_KEY: string;
+export const DEFAULT_QUICK_ACTIONS: readonly QuickAction[];
+export function normalizeQuickAction(item: unknown): QuickAction | null;
+export function mergeQuickActions(items: unknown): QuickAction[];
+export function toWireQuickActions(items: unknown): { id: string; label: string; prompt: string }[];
+export function loadStoredQuickActions(storage?: Storage | null): QuickAction[];
+export function saveStoredQuickActions(items: unknown, storage?: Storage | null): QuickAction[];
+export function renderQuickActionsStrip(actions?: QuickAction[], options?: { disabled?: boolean }): string;
