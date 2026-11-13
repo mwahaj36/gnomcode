@@ -37,3 +37,19 @@ Build-pinned Rust public key, no runtime bypass, offline owner-key signer, ADR 0
 ## Item 3 in progress
 
 Windows worktree based on 17267e5. Native release build uses a temporary version overlay from #243 (no duplicate version changes will be committed here). No signing key supplied: test candidate is unsigned/unpinned, not release-approved. User reports disk cleanup is running. Maintain >=20 GB free before dependencies/Electron packaging. Installer cannot be safely installed into a separate directory in this account because shared registration/shortcuts are affected; disposable account/VM required.
+
+## Item 3 delivered - PR #248
+
+https://github.com/mwahaj36/spawnt/pull/248
+
+Built Windows 1.0.0 test candidate from 17267e5 plus #243 version metadata and #245 verifier code, with local downloads integration. Final installer: 180,371,968 exact bytes; SHA-256 a8727e0d17bc66bf887fc5875da83272d9652c3bf7426dbbae846605a6ec4d94. Earlier baseline-only hash is superseded. Artifacts/checksums/unsigned manifest and build-record.json retained outside worktrees at C:\Users\Wahaj\Documents\GitHub\fleethud-codex-release\artifacts\windows-1.0.0-candidate.
+
+Full combined fmt/clippy/499 tests/cargo-deny passed; desktop 40 tests plus lint/typecheck/build and web 127 tests plus typecheck/build passed; 68 release-binary browser checks passed. Installer payload/options/notices/version and Explorer harnesses passed. Authenticode NotSigned, no embedded owner key and unsigned update manifest: not shipping acceptance. Later main changes need a final rebuild. No safe install/full desktop launch/uninstall ran because registration/shortcuts affect the existing per-user app; use a disposable account/VM. Windows worktree/target/node_modules/.next removed immediately after PR.
+
+Blocking review question: packager uses root LICENSE as installer/desktop EULA, while docs/legal/EULA.txt also exists. Which approved EULA should ship? No legal text/selection changed.
+
+Tag review: source already has historical v1.0.0 at 503aed81e55dd3474b440a2b262a7d8c3951d34f. Binary-only repo has v0.9.4 but no v1.0.0 release. No tags created/overwritten. Claude must resolve source tag policy at release time, alongside the missing source v0.9.4 tag.
+
+## Items 4 and 5 prepared
+
+Downloads source and local manifest generator passed dedicated web 127 tests/typecheck/build and Rust 499 tests; repeated after rebase onto 3943dbb. Version 1.0.0 integration HTTP/rendered version and desktop/mobile browser checks passed; actual local Windows manifest hashes match. Smoke document source/CLI-help checks and Rust 499-test gate passed, including after rebase. Separate PRs follow; installed/provider/phone acceptance remains pending.
