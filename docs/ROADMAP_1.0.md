@@ -55,6 +55,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## Worker A backend delivery details
 
 - [x] G5 backend: state-gated Esc request over E2EE Remote and authenticated local API, with bounded idempotency receipts (ADR 0035). Full gate passes on baseline PR #189. Phone button belongs to Worker B; native-provider cancellation and physical-phone acceptance remain unverified.
+
 ## Worker A native-resume delivery details
 
-- [ ] G6 agy native resume: draft command/capability passes Rust and web gates; agy 1.5.7 restores history, but bare resume changed Plan to native Auto. Held for owner mode-policy choice before acceptance. Depends on baseline PR #189 while unmerged; packaged/macOS/Linux acceptance remains unverified.
+- [x] G6 agy native resume: exact-ID command/capability with owner-approved explicit --mode plan, verified interactively on Windows with agy 1.5.7. Mode changes remain with the person in the native CLI. Depends on baseline PR #189 while unmerged; packaged/macOS/Linux acceptance remains unverified.

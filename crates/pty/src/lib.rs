@@ -122,6 +122,12 @@ pub fn resume_command(agent: &str, repo: &Path, native_id: &str) -> Result<Launc
         _ => return Err(Error::UnsupportedAgent(agent.to_owned())),
     };
     command.arguments = vec![verb.to_owned(), native_id.to_owned()];
+    // Native agy resume defaults to Auto rather than restoring the previous permission mode.
+    if matches!(agent, "antigravity" | "agy") {
+        command
+            .arguments
+            .extend(["--mode".to_owned(), "plan".to_owned()]);
+    }
     Ok(command)
 }
 
@@ -1335,7 +1341,7 @@ mod tests {
     }
 
     #[test]
-    fn resume_uses_the_exact_native_session_without_permission_flags() {
+    fn resume_uses_the_exact_native_session_without_permission_bypass() {
         let repo = tempfile::tempdir().expect("workspace");
         assert_eq!(
             resume_command("codex", repo.path(), "saved-123")
@@ -1360,7 +1366,12 @@ mod tests {
                 resume_command(agent, repo.path(), "saved-123").expect("agy native resume"),
                 LaunchCommand {
                     executable: "agy".into(),
-                    arguments: vec!["--conversation".into(), "saved-123".into()]
+                    arguments: vec![
+                        "--conversation".into(),
+                        "saved-123".into(),
+                        "--mode".into(),
+                        "plan".into()
+                    ]
                 }
             );
             for id in [
