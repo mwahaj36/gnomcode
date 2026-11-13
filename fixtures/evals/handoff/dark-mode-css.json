@@ -1,0 +1,20 @@
+{
+  "id": "dark-mode-css",
+  "title": "Dark mode tokens for the settings page",
+  "source_agent": "codex",
+  "target_agent": "gemini-cli",
+  "repo_name": "atlas-ui",
+  "touched_files": ["styles/tokens.css", "pages/settings.tsx"],
+  "events": [
+    {"role": "user", "content": "Introduce dark mode colour tokens in styles/tokens.css and use them on pages/settings.tsx."},
+    {"role": "tool", "tool_name": "apply_patch", "status": "success"},
+    {"role": "assistant", "content": "Tokens added and the settings page uses them. The focus ring still has insufficient contrast in dark mode."},
+    {"role": "user", "content": "Fix the focus ring contrast, then check the toggle at 390px width."},
+    {"role": "assistant", "content": "Focus ring fixed. Next: check the toggle at 390px width and look for hard-coded hex colours in pages/settings.tsx."}
+  ],
+  "expect": {
+    "goals": ["dark mode colour tokens", "focus ring contrast"],
+    "files": ["styles/tokens.css", "pages/settings.tsx"],
+    "open_tasks": ["toggle at 390px", "hard-coded hex colours"]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "small-budget",
+  "title": "Short session handed to a small-context provider",
+  "source_agent": "codex",
+  "target_agent": "antigravity",
+  "repo_name": "notes-app",
+  "budget_chars": 3000,
+  "touched_files": ["src/search.ts"],
+  "events": [
+    {"role": "user", "content": "Make the note search in src/search.ts case-insensitive."},
+    {"role": "assistant", "content": "Done with a lowercase comparison. Open: handle accented characters and add a test for empty queries."}
+  ],
+  "expect": {
+    "goals": ["note search", "case-insensitive"],
+    "files": ["src/search.ts"],
+    "open_tasks": ["accented characters", "test for empty queries"]
+  }
+}

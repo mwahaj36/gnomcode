@@ -1,0 +1,22 @@
+{
+  "id": "login-redirect",
+  "title": "Fix login redirect loop and add token refresh retry",
+  "source_agent": "claude-code",
+  "target_agent": "codex",
+  "repo_name": "acme-web",
+  "touched_files": ["src/auth/login.rs", "src/auth/refresh.rs"],
+  "events": [
+    {"role": "user", "content": "Fix the login redirect loop in src/auth/login.rs. When the session cookie expires the user bounces between /login and /dashboard forever."},
+    {"role": "assistant", "content": "The loop comes from login.rs treating an expired cookie as signed in. I will check expiry before redirecting."},
+    {"role": "tool", "tool_name": "Edit", "status": "success"},
+    {"role": "assistant", "content": "Fixed the expiry check in src/auth/login.rs. Remaining work: add a regression test in tests/auth_redirect.rs and update the changelog."},
+    {"role": "user", "content": "Also add retry with backoff to the token refresh in src/auth/refresh.rs."},
+    {"role": "tool", "tool_name": "Edit", "status": "success"},
+    {"role": "assistant", "content": "Retry with backoff is in place. Still open: cap the retries at five and log each attempt."}
+  ],
+  "expect": {
+    "goals": ["fix the login redirect loop", "retry with backoff"],
+    "files": ["src/auth/login.rs", "src/auth/refresh.rs", "tests/auth_redirect.rs"],
+    "open_tasks": ["regression test", "update the changelog", "cap the retries at five"]
+  }
+}
