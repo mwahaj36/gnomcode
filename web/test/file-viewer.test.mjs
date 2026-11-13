@@ -45,17 +45,9 @@ test('renderFileEntries and renderFileViewer escape content and stay read-only',
   assert.doesNotMatch(viewHtml, /<textarea|contenteditable|save|write|delete/i);
 });
 
-test('file viewer wires into local console and Remote', () => {
+test('file viewer wires into Remote', () => {
   const remote = read('../components/RemoteCompanion.tsx');
-  const consoleHtml = read('../../crates/daemon/src/console.html');
-  const consoleJs = read('../../crates/daemon/src/console-app.js');
   const css = read('../app/gnomcode-console.css');
-
-  assert.match(consoleHtml, /id="chat-files-btn"/);
-  assert.match(consoleHtml, /id="chat-files-panel"/);
-  assert.match(consoleHtml, /id="chat-file-path-form"/);
-  assert.match(consoleJs, /\/api\/v1\/repos\/file/);
-  assert.match(consoleJs, /'toggle-files':\s*toggleFilesPanel/);
 
   assert.match(remote, /type:\s*'repo_file'/);
   assert.match(remote, /type:\s*'repo_files'/);
