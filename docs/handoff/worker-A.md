@@ -1,5 +1,12 @@
 # Worker A handoff
 
+## 2026-11-13: Codex app-server protocol approvals (ADR 0045)
+
+- PR https://github.com/mwahaj36/spawnt/pull/215; branch `feat/codex-app-server-approvals`, head `4d94a63`, depends on baseline #189.
+- Changed files: `crates/pty/src/codex_app_server.rs` (new), `crates/pty/src/lib.rs`, `docs/adr/0045-codex-app-server-approvals.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-codex-app-server-approvals.md`, `docs/sessions/README.md`.
+- Evidence & tests: verified live `codex app-server` (`codex-cli 0.166.0`) `initialize` and `generate-json-schema` in temp workspace; `codex_app_server::tests::no_decision_never_auto_approves_codex_requests`, `codex_app_server::tests::pump_approvals_bridges_allow_and_deny_responses`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: G3 VT100 screen model and G14 guarded Enter recovery
 
 - PR https://github.com/mwahaj36/spawnt/pull/214; branch `feat/pty-screen-model`, head `6947bc9`, depends on baseline #189.
