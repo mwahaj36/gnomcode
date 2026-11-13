@@ -1,5 +1,9 @@
 # Engineering sessions
 
+- [2026-11-14 Handoff fold: Worker A](2026-11-14-handoff-worker-a.md)
+- [2026-11-14 Handoff fold: Worker B](2026-11-14-handoff-worker-b.md)
+- [2026-11-14 Handoff fold: codex-release](2026-11-14-handoff-codex-release.md)
+- [2026-11-14 Handoff fold: hydrogen-platforms](2026-11-14-handoff-hydrogen-platforms.md)
 - [2026-11-14 Release gaps: notes, key guard, CI key test](2026-11-14-release-gaps.md)
 - [2026-11-13 Remote action activity timer](2026-11-13-remote-activity.md)
 - [2026-11-13 Held approval alerts](2026-11-13-approval-alerts.md)
