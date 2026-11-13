@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: Section C quick-actions storage (ADR 0043)
+
+- PR https://github.com/mwahaj36/spawnt/pull/212; branch `feat/remote-quick-actions`, head `9435779`, depends on baseline #189.
+- Changed files: `crates/daemon/src/quick_actions.rs` (new), `crates/daemon/src/lib.rs`, `crates/daemon/src/api.rs` (`GET`/`PUT /api/v1/quick-actions`), `crates/daemon/src/remote.rs` (`quick_actions`), `docs/adr/0043-remote-quick-actions.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-remote-quick-actions.md`, `docs/sessions/README.md`.
+- JSON shape: HTTP `GET`/`PUT /api/v1/quick-actions` `{actions:[{id,label,prompt}]}`; Remote `quick_actions` (`action:"get"|"set"`) -> `{type:"quick_actions",actions:[...]}`. Bounds: max 20 actions, id <= 64, label <= 48, prompt <= 4000 UTF-16 code units, `deny_unknown_fields`, stored in `$GNOMCODE_HOME/quick_actions.json`.
+- Tests: `quick_actions::tests::quick_actions_roundtrip_and_reject_commands_or_unknown_fields`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: Section C attachments upload (ADR 0041)
 
 - PR https://github.com/mwahaj36/spawnt/pull/210; branch `feat/remote-attachments`, head `7272c9d`, depends on baseline #189, unblocks #194.
