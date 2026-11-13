@@ -1,5 +1,12 @@
 # Worker A handoff
 
+## 2026-11-13: G3 VT100 screen model and G14 guarded Enter recovery
+
+- PR https://github.com/mwahaj36/spawnt/pull/214; branch `feat/pty-screen-model`, head `6947bc9`, depends on baseline #189.
+- Changed files: `Cargo.toml`, `Cargo.lock`, `crates/pty/Cargo.toml` (`vt100 = "0.15"`, MIT), `crates/pty/src/lib.rs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-pty-screen-model.md`, `docs/sessions/README.md`.
+- Evidence & tests: `tests::vt100_screen_overwrites_stale_footer_in_place_without_clear`, `tests::composer_has_unsubmitted_prompt_requires_prompt_in_composer_without_dialog`, `tests::retry_enter_handler_rejects_unless_composer_holds_prompt`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo deny check` PASS, `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: G8 Claude usage-limit and API error parsing
 
 - PR https://github.com/mwahaj36/spawnt/pull/213; branch `feat/adapters-claude-errors`, head `0397405`, depends on baseline #189.
