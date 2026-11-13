@@ -170,14 +170,13 @@ pub fn antigravity_ide_available() -> bool {
         if std::path::Path::new("/Applications/Antigravity.app").exists() {
             return true;
         }
-        if let Some(home) = std::env::var_os("HOME") {
-            if std::path::PathBuf::from(home)
+        if let Some(home) = std::env::var_os("HOME")
+            && std::path::PathBuf::from(home)
                 .join("Applications")
                 .join("Antigravity.app")
                 .exists()
-            {
-                return true;
-            }
+        {
+            return true;
         }
     }
     #[cfg(target_os = "linux")]
