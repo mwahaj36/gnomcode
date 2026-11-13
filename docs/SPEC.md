@@ -366,7 +366,6 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0049](./adr/0049-freeze-unproven-features-behind-toggles.md) | Freeze scheduled messages and account sync behind off-by-default `FeatureToggles` (E3); Teams and extra-adapter toggles removed by 0058 | Partly superseded by 0058 |
 | [0053](./adr/0053-continue-here-imported-sessions.md) | Continue here: resume an imported session through its native resume id in its own recorded folder | Accepted |
 | [0034](./adr/0034-pwa-app-lock.md) | Client-side PWA passkey / PBKDF2 PIN app lock without altering E2EE keys | Accepted |
-
 | [0059](./adr/0059-embedded-update-signing-key.md) | Build-pinned update verification key and offline owner-key artifact signing | Accepted |
 
 ## 10. Open decisions
