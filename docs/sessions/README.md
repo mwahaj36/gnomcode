@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Platform support matrix for 1.0](2026-11-13-platforms-support-doc.md)
 - [2026-11-13 - Automated packaged-build smoke script](2026-11-13-packaged-smoke-script.md)
 - [2026-11-13 - macOS and Linux platform correctness](2026-11-13-macos-linux-correctness.md)
 - [2026-11-13 - CI packaging matrix for macOS and Linux desktop builds](2026-11-13-ci-macos-linux-packaging.md)
