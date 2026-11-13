@@ -1,5 +1,9 @@
 # Worker A handoff
 
+## 2026-11-13: G6 mode decision answered; implementation continues
+
+The owner selected explicit plan-mode resume. G6 will build `agy --conversation <native-id> --mode plan`, with any later mode change performed by the person in the native CLI. The earlier pending-mode/stop sections are historical. The updated full-argv regression is being run red before the production change, then the Rust gate will be rerun; #193 stays draft until that verification completes. No approval remains pending.
+
 ## 2026-11-13: G6 draft held for native resume-mode choice
 
 - Item/PR: G6, https://github.com/mwahaj36/spawnt/pull/193 (draft); branch `feat/agy-native-resume`, commit `4ef438307f37729aa9cbe74e805aac16b5b2953f`, based on baseline #189 at `0d439e6`.
