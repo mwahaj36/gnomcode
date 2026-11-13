@@ -278,6 +278,10 @@ pub fn build_router(state: AppState) -> Router {
             get(routing_policy_get_handler).post(routing_policy_post_handler),
         )
         .route(
+            "/api/v1/quick-actions",
+            get(crate::quick_actions::get_handler).put(crate::quick_actions::put_handler),
+        )
+        .route(
             "/api/v1/remote/devices",
             get(remote_devices_handler).post(remote_device_action_handler),
         )
