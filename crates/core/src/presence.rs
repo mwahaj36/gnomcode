@@ -66,16 +66,35 @@ impl SessionPresence {
 }
 /// Classifies source observations without assuming silence means completion.
 /// A thinking/tool state counts as Running only within [`OPEN_EXECUTION_LIMIT_MS`] of the last
-/// observation; `_open_execution` no longer extends it.
+/// observation, unless `classify_presence_with_host` confirms a live Gnomcode host for an open
+/// `tool_start`.
 #[must_use]
 pub fn classify_presence(
     state: &str,
     age_millis: Option<i64>,
-    _open_execution: bool,
+    open_execution: bool,
+) -> SessionPresence {
+    classify_presence_with_host(state, age_millis, open_execution, false)
+}
+
+/// Classifies source observations with Gnomcode host liveness.
+///
+/// A session in `"tool"` with an open `tool_start` (`open_execution`) and a positively alive
+/// Gnomcode host (`host_alive`) stays [`SessionPresence::Running`] past
+/// [`OPEN_EXECUTION_LIMIT_MS`]. Everything else keeps the standard time limits.
+#[must_use]
+pub fn classify_presence_with_host(
+    state: &str,
+    age_millis: Option<i64>,
+    open_execution: bool,
+    host_alive: bool,
 ) -> SessionPresence {
     let recent = age_millis.is_some_and(|age| (0..=RECENT_ACTIVITY_GRACE_MS).contains(&age));
     let unresolved = age_millis.is_some_and(|age| (0..=APPROVAL_WAIT_LIMIT_MS).contains(&age));
-    let executing = age_millis.is_some_and(|age| (0..=OPEN_EXECUTION_LIMIT_MS).contains(&age));
+    let executing = age_millis.is_some_and(|age| {
+        age >= 0
+            && (age <= OPEN_EXECUTION_LIMIT_MS || (state == "tool" && open_execution && host_alive))
+    });
     match state {
         "ended" => SessionPresence::Ended,
         "awaiting_approval" if unresolved => SessionPresence::AwaitingApproval,
@@ -163,6 +182,39 @@ mod tests {
         );
         assert_eq!(
             classify_presence("awaiting_approval", Some(15 * 86_400_000), false),
+            SessionPresence::Inactive
+        );
+    }
+
+    #[test]
+    fn live_host_keeps_open_tool_start_running_past_cutoff() {
+        assert_eq!(
+            classify_presence_with_host("tool", Some(OPEN_EXECUTION_LIMIT_MS + 1), true, true),
+            SessionPresence::Running
+        );
+        assert_eq!(
+            classify_presence_with_host("tool", Some(13 * 3_600_000), true, true),
+            SessionPresence::Running
+        );
+        assert_eq!(
+            classify_presence_with_host("tool", Some(OPEN_EXECUTION_LIMIT_MS + 1), false, true),
+            SessionPresence::Inactive
+        );
+        assert_eq!(
+            classify_presence_with_host("tool", Some(OPEN_EXECUTION_LIMIT_MS + 1), true, false),
+            SessionPresence::Inactive
+        );
+        assert_eq!(
+            classify_presence_with_host("thinking", Some(OPEN_EXECUTION_LIMIT_MS + 1), true, true),
+            SessionPresence::Inactive
+        );
+        assert_eq!(
+            classify_presence_with_host(
+                "awaiting_approval",
+                Some(APPROVAL_WAIT_LIMIT_MS + 1),
+                false,
+                true,
+            ),
             SessionPresence::Inactive
         );
     }

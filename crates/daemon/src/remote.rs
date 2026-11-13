@@ -1410,6 +1410,26 @@ pub(crate) fn session_host<'a>(
         .map(|(_, record)| record)
 }
 
+/// Returns native session IDs whose Gnomcode PTY host process is currently alive.
+pub(crate) fn live_hosted_native_ids(db: &Database) -> Vec<String> {
+    let hosted = gnomcode_pty::try_list_active_sessions().unwrap_or_default();
+    if hosted.is_empty() {
+        return Vec::new();
+    }
+    let host_ids: Vec<String> = hosted
+        .iter()
+        .map(|record| record.session_id.clone())
+        .collect();
+    let mut native_ids = db.native_ids_for_hosts(&host_ids).unwrap_or_default();
+    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
+    for (session, _) in session_bindings(&sessions, &hosted) {
+        if !native_ids.contains(&session.id) {
+            native_ids.push(session.id.clone());
+        }
+    }
+    native_ids
+}
+
 /// Resolves unique native/hosted pairs with repository discovery once per host.
 pub(crate) fn session_bindings<'s, 'h>(
     sessions: &'s [Session],
