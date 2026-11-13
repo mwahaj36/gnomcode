@@ -105,6 +105,15 @@ fn data_directory_decides_the_surface_and_cli_then_ide_own_shared_ids() {
         );
     }
     assert_eq!(gnomcode_core::surface_label("codex", "cli"), None);
+    assert_eq!(gnomcode_core::surface_label("claude-code", "cli"), None);
+    assert_eq!(
+        gnomcode_core::surface_label("claude-code", "desktop_app"),
+        Some("Claude desktop app")
+    );
+    assert_eq!(
+        gnomcode_core::surface_label("codex", "desktop_app"),
+        Some("Codex desktop app")
+    );
 }
 
 #[test]
