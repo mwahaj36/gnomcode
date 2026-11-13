@@ -96,8 +96,13 @@ function cycleTheme() {
         else localStorage.setItem('gnomcode-theme', next);
       } catch (_) {}
       const button = document.getElementById('theme-control');
-      button.textContent = `Theme / ${next}`;
-      button.setAttribute('aria-label', `Theme: ${next}. Switch mode`);
+      if (button) {
+        button.textContent = `Theme / ${next}`;
+        button.setAttribute('aria-label', `Theme: ${next}. Switch mode`);
+      }
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('gnomcode:theme-change', { detail: { theme: next } }));
+      }
     }
 
     const themeButton = document.getElementById('theme-control');
@@ -174,7 +179,13 @@ function cycleTheme() {
           scrollHeatmapToToday(); void loadHeatmap(); void loadProjects();
         }
       }
-      if (view === 'settings') { void loadProData(); }
+      if (view === 'settings') {
+        if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.settings && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('gnomcode:view-change', { detail: { view } }));
+        } else {
+          void loadProData();
+        }
+      }
       if (view === 'overview') {
         if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
           window.dispatchEvent(new CustomEvent('gnomcode:view-change', { detail: { view } }));
@@ -233,7 +244,9 @@ function cycleTheme() {
           if (['usage', 'overview'].includes(activeView) && !await loadHeatmap(true)) throw new Error('Activity could not be loaded');
           if (activeView === 'usage' && !await loadProjects()) throw new Error('Projects could not be loaded');
         } else if (activeView === 'settings') {
-          const results = await Promise.all([loadSettingsData(), loadProData(), loadQuota()]);
+          const results = typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.settings
+            ? [await loadQuota()]
+            : await Promise.all([loadSettingsData(), loadProData(), loadQuota()]);
           if (results.some(result => !result)) throw new Error('Settings could not be loaded');
         } else if (activeView === 'auth') {
           if (!await checkAuthSession()) throw new Error('Account status could not be loaded');
@@ -382,6 +395,7 @@ function cycleTheme() {
     }
     document.getElementById('guardrail-form').addEventListener('submit',event=>{event.preventDefault();void saveGuardrail();});
     async function loadProData() {
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.settings) return true;
       try {
         const licRes = await fetch('/api/v1/license', { headers, signal: AbortSignal.timeout(15000) });
         if (!licRes.ok) throw new Error('License status request failed');
@@ -2108,7 +2122,9 @@ function cycleTheme() {
         if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
           presentation.updateProviderCards(document.getElementById('home-limits'), res, { cost: false });
         }
-        presentation.updateProviderSources(document.getElementById('settings-provider-list'), res);
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.settings)) {
+          presentation.updateProviderSources(document.getElementById('settings-provider-list'), res);
+        }
         lastQuotaJson = jsonStr;
         return true;
       } catch (_) {
@@ -2123,6 +2139,7 @@ function cycleTheme() {
       }
     }
     async function loadSettingsData() {
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.settings) return true;
       void apiJson('/health',{headers}).then(health=>{document.getElementById('app-build').textContent=`Gnomcode ${health.version || 'version unavailable'}`;}).catch(()=>{document.getElementById('app-build').textContent='Installed version unavailable. Reload when the daemon is connected.';});
 
       try {
@@ -2383,6 +2400,7 @@ function cycleTheme() {
     let remoteNoticeTimer;
     let remoteDevicesMarkup = '';
     async function loadRemoteStatus() {
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.settings) return;
       try {
         const result=await apiJson('/api/v1/remote/devices',{headers});
         const connected=result.devices.some(device=>device.connected);
@@ -2519,6 +2537,22 @@ function cycleTheme() {
       else if (submit === 'add-quick-action') { void addQuickActionFromDialog(event); }
       else if (submit === 'open-repo-file') { event.preventDefault(); void readSessionFile(document.getElementById('chat-file-path-input')?.value); }
     });
+
+    if (typeof window !== 'undefined') {
+      window.__gnomcodeLocalActions = {
+        setView: view => { navigateView(view); },
+        openSession: id => {
+          navigateView('sessions');
+          if (reactWorkspaceActive()) {
+            dispatchWorkspaceAction({ type: 'open-session', sessionId: id });
+            return;
+          }
+          void loadChat(id);
+        },
+        startOnboarding: () => { startOnboarding(); },
+        refreshShell: () => { void pollLocalData(); void loadApprovals(); },
+      };
+    }
 
     normalizeHash();
     const hashView = resolveView(window.location.hash.slice(1));
