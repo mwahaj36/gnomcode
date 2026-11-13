@@ -42,8 +42,9 @@ impl SourceAdapter for ClaudeAdapter {
 
     fn parse(&mut self, ctx: &FileCtx, chunk: &[u8]) -> ParsedBatch {
         let mut batch = ParsedBatch::default();
-        let mut current_session: Option<Session> = None;
+        let mut sessions: Vec<Session> = Vec::new();
         let mut line_offset = ctx.source_offset;
+        let path_agent = subagent_identity(&ctx.source_path);
 
         for raw_line in chunk.split_inclusive(|byte| *byte == b'\n') {
             let current_offset = line_offset;
@@ -74,25 +75,47 @@ impl SourceAdapter for ClaudeAdapter {
                 .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                 .map(|dt| dt.with_timezone(&Utc));
 
+            // Session-less bookkeeping (for example `file-history-snapshot`) belongs to the
+            // session already open in this chunk; it never opens one of its own.
+            if obj.get("sessionId").is_none() && path_agent.is_none() && !sessions.is_empty() {
+                continue;
+            }
+
             let raw_sid = obj
                 .get("sessionId")
                 .and_then(Value::as_str)
+                .or(path_agent.as_ref().map(|(parent, _)| parent.as_str()))
                 .unwrap_or_else(|| fallback_id_from_path(&ctx.source_path));
-            // Subagent transcripts repeat the parent's sessionId; their own identity is agentId.
-            let sidechain_agent = obj
-                .get("agentId")
-                .and_then(Value::as_str)
-                .filter(|id| !id.is_empty() && obj.get("isSidechain") == Some(&Value::Bool(true)));
+            // Subagent transcripts repeat the parent's sessionId; their own identity is the
+            // file name (`subagents/agent-<id>.jsonl`) or agentId. Bookkeeping lines such as
+            // `api-request` carry agentId without isSidechain, so only an explicit
+            // `isSidechain:false` marks a line as parent-owned.
+            let sidechain_agent = path_agent
+                .as_ref()
+                .map(|(_, stem)| stem.clone())
+                .or_else(|| {
+                    obj.get("agentId")
+                        .and_then(Value::as_str)
+                        .filter(|id| {
+                            !id.is_empty() && obj.get("isSidechain") != Some(&Value::Bool(false))
+                        })
+                        .map(|id| format!("agent-{id}"))
+                });
             let session_id = match sidechain_agent {
                 Some(agent) => {
                     if self.parent_session_id.is_none() {
                         self.parent_session_id =
                             Some(Session::compose_id(AgentId::ClaudeCode, raw_sid));
                     }
-                    Session::compose_id(AgentId::ClaudeCode, &format!("agent-{agent}"))
+                    Session::compose_id(AgentId::ClaudeCode, &agent)
                 }
                 None => Session::compose_id(AgentId::ClaudeCode, raw_sid),
             };
+            // A session is never its own parent; such rows vanish from every session list.
+            let parent_for_session = self
+                .parent_session_id
+                .clone()
+                .filter(|parent| *parent != session_id);
 
             let cwd = obj
                 .get("cwd")
@@ -101,15 +124,24 @@ impl SourceAdapter for ClaudeAdapter {
                 .unwrap_or("/unknown");
             let git_branch = obj.get("gitBranch").and_then(Value::as_str);
 
-            let surface = match obj.get("entrypoint").and_then(Value::as_str) {
-                Some(ep)
-                    if ep.contains("vscode") || ep.contains("cursor") || ep.contains("ide") =>
-                {
-                    Surface::Ide
-                }
-                Some(ep) if ep.contains("desktop") => Surface::DesktopApp,
-                _ => Surface::Cli,
-            };
+            // Only lines that name their host decide the surface; `api-request` and similar
+            // bookkeeping lines carry neither field and must not reset it to Cli.
+            let line_surface = obj
+                .get("entrypoint")
+                .and_then(Value::as_str)
+                .map(|ep| {
+                    if ep.contains("vscode") || ep.contains("cursor") || ep.contains("ide") {
+                        Surface::Ide
+                    } else if ep.contains("desktop") {
+                        Surface::DesktopApp
+                    } else {
+                        Surface::Cli
+                    }
+                })
+                .or_else(|| {
+                    (obj.get("clientPlatform").and_then(Value::as_str) == Some("desktop_app"))
+                        .then_some(Surface::DesktopApp)
+                });
 
             let project = Project::from_origin(None, cwd, git_branch);
             if !batch.projects.iter().any(|p| p.id == project.id) {
@@ -127,7 +159,7 @@ impl SourceAdapter for ClaudeAdapter {
                     self.parent_session_id.clone_from(&parent_sid);
                 }
             }
-            if self.subagent_title.is_none() {
+            if parent_for_session.is_some() && self.subagent_title.is_none() {
                 let subagent_name = obj
                     .get("subagentName")
                     .or_else(|| obj.get("agentName"))
@@ -136,35 +168,43 @@ impl SourceAdapter for ClaudeAdapter {
                     .and_then(Value::as_str);
                 if let Some(name) = subagent_name {
                     self.subagent_title = Some(format!("{name} · Subagent"));
-                } else if self.parent_session_id.is_some() {
+                } else {
                     self.subagent_title = Some("Subagent".to_owned());
                 }
             }
 
             let initial_ts = parsed_ts.unwrap_or_else(Utc::now);
-            let sess = current_session.get_or_insert_with(|| Session {
-                id: session_id.clone(),
-                agent: AgentId::ClaudeCode,
-                surface,
-                project_id: project.id.clone(),
-                parent_session_id: self.parent_session_id.clone(),
-                model: None,
-                title: self.subagent_title.clone(),
-                state: SessionState::Idle,
-                pid: None,
-                started_at: initial_ts,
-                last_event_at: initial_ts,
-            });
-            if self.parent_session_id.is_some() && sess.parent_session_id.is_none() {
-                sess.parent_session_id.clone_from(&self.parent_session_id);
+            let index = if let Some(index) = sessions.iter().position(|s| s.id == session_id) {
+                index
+            } else {
+                sessions.push(Session {
+                    id: session_id.clone(),
+                    agent: AgentId::ClaudeCode,
+                    surface: line_surface.unwrap_or(Surface::Cli),
+                    project_id: project.id.clone(),
+                    parent_session_id: parent_for_session.clone(),
+                    model: None,
+                    title: parent_for_session.as_ref().and(self.subagent_title.clone()),
+                    state: SessionState::Idle,
+                    pid: None,
+                    started_at: initial_ts,
+                    last_event_at: initial_ts,
+                });
+                sessions.len() - 1
+            };
+            let sess = &mut sessions[index];
+            if parent_for_session.is_some() && sess.parent_session_id.is_none() {
+                sess.parent_session_id.clone_from(&parent_for_session);
             }
-            if self.subagent_title.is_some() && sess.title.is_none() {
+            if parent_for_session.is_some() && sess.title.is_none() {
                 sess.title.clone_from(&self.subagent_title);
             }
             if let Some(valid_ts) = parsed_ts {
                 sess.last_event_at = valid_ts;
             }
-            sess.surface = surface;
+            if let Some(surface) = line_surface {
+                sess.surface = surface;
+            }
             let ts = sess.last_event_at;
 
             let role = match obj.get("type").and_then(Value::as_str) {
@@ -263,12 +303,24 @@ impl SourceAdapter for ClaudeAdapter {
             handle_claude_error_or_rate_limit(obj, sess, &session_id, ts, &mut batch);
         }
 
-        if let Some(sess) = current_session {
-            batch.sessions.push(sess);
-        }
+        batch.sessions.extend(sessions);
         crate::titles::apply_native_titles(&mut batch, AgentId::ClaudeCode, chunk);
         batch
     }
+}
+
+/// Splits `.../<session-id>/subagents/agent-<id>.jsonl` into the parent id and the child file stem.
+fn subagent_identity(path: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = path
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty())
+        .collect();
+    let [.., parent, folder, file] = parts.as_slice() else {
+        return None;
+    };
+    let stem = file.strip_suffix(".jsonl")?;
+    (*folder == "subagents" && stem.starts_with("agent-"))
+        .then(|| ((*parent).to_owned(), stem.to_owned()))
 }
 
 fn build_usage_record(

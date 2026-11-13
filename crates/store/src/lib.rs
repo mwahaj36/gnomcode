@@ -207,6 +207,43 @@ pub struct SessionListItem {
     pub usage_available: bool,
     /// Trust level of the API-equivalent cost; unknown when pricing or usage is missing.
     pub cost_basis: TrustLevel,
+    /// Total subagent sessions linked to this session.
+    #[serde(default)]
+    pub subagent_count: usize,
+    /// Linked subagents that are running, waiting for approval or briefly idle.
+    #[serde(default)]
+    pub subagents_ongoing: usize,
+    /// Most recent linked subagents (capped), newest first.
+    #[serde(default)]
+    pub subagents: Vec<SubagentItem>,
+}
+
+/// Maximum nested subagents returned per session; the count still covers all of them.
+pub const SUBAGENT_LIST_LIMIT: usize = 50;
+
+/// Lean row for a subagent nested under its parent session.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SubagentItem {
+    /// Session ID.
+    pub id: String,
+    /// Subagent title if known.
+    pub title: Option<String>,
+    /// Model name, or "Unspecified".
+    pub model: String,
+    /// Stored state, "unknown" when a stale open execution can no longer be trusted.
+    pub state: String,
+    /// Source-independent presence classification.
+    pub presence: gnomcode_core::presence::SessionPresence,
+    /// Whether execution or an approval wait is established by source observations.
+    pub is_active: bool,
+    /// Running, approval-waiting or recently idle.
+    pub is_ongoing: bool,
+    /// Home board group derived from presence.
+    pub home_group: gnomcode_core::presence::HomeGroup,
+    /// Started at timestamp.
+    pub started_at: String,
+    /// Last event timestamp.
+    pub last_event_at: String,
 }
 
 /// Breakdown for a single model under a provider.
@@ -1867,6 +1904,7 @@ impl Database {
                 ON CONFLICT(id) DO UPDATE SET
                     parent_session_id = coalesce(excluded.parent_session_id,session.parent_session_id),
                     project_id = CASE WHEN (SELECT name FROM project WHERE id=session.project_id)='unknown' AND (SELECT name FROM project WHERE id=excluded.project_id)!='unknown' THEN excluded.project_id ELSE session.project_id END,
+                    surface = CASE WHEN excluded.surface <> 'cli' THEN excluded.surface ELSE session.surface END,
                     model = coalesce(excluded.model, session.model),
                     title = coalesce(excluded.title, session.title),
                     state = excluded.state,
@@ -2812,30 +2850,38 @@ impl Database {
         let status = status_filter
             .filter(|value| !value.is_empty())
             .unwrap_or("all");
+        // A parent with a live subagent is itself ongoing; this mirrors the child presence rules.
+        let child_clause = |recent: &str, approval: &str, exec: &str| {
+            format!(
+                "EXISTS (SELECT 1 FROM session c WHERE c.parent_session_id = s.id AND c.id <> s.id AND (c.state = 'awaiting_approval' AND julianday(c.last_event_at) >= julianday({approval}) OR (c.state IN ('thinking','tool') AND (julianday(c.last_event_at) >= julianday({recent}) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = c.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE c.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(c.last_event_at) >= julianday({exec})))))"
+            )
+        };
+        let child_count = child_clause("?3", "?5", "?6");
+        let child_page = child_clause("?3", "?7", "?8");
         let total_count: i64 = self.conn.query_row(
-            r#"SELECT COUNT(*) FROM session s
+            &format!(r#"SELECT COUNT(*) FROM session s
                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))))
-                   OR (?2 = 'idle' AND s.state = 'idle'))"#,
+                   OR (?2 = 'ongoing' AND ({child_count} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND ({child_count} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))))
+                   OR (?2 = 'idle' AND s.state = 'idle'))"#),
             params![agent, status, cutoff, project_filter, stale_cutoff, execution_cutoff],
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
-            r#"
+            &format!(r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
-                   OR (?2 = 'ongoing' AND ((s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))))
+                   OR (?2 = 'ongoing' AND ({child_page} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))))
                     OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
@@ -2867,7 +2913,7 @@ impl Database {
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
             ORDER BY s.active_rank DESC, s.last_event_at DESC
-            "#,
+            "#),
         )?;
 
         let rows = stmt.query_map(
@@ -2967,6 +3013,9 @@ impl Database {
                     } else {
                         TrustLevel::Estimated
                     },
+                    subagent_count: 0,
+                    subagents_ongoing: 0,
+                    subagents: Vec::new(),
                 })
             },
         )?;
@@ -2975,7 +3024,98 @@ impl Database {
         for r in rows {
             filtered.push(r?);
         }
+        self.attach_subagents(&mut filtered, now)?;
         Ok((filtered, total_count.max(0) as usize))
+    }
+
+    /// Nests each session's subagents and lifts a parent with a live subagent into the
+    /// ongoing groups, since the parent's own log is quiet while a subagent works.
+    fn attach_subagents(
+        &self,
+        items: &mut [SessionListItem],
+        now: DateTime<Utc>,
+    ) -> Result<(), Error> {
+        use gnomcode_core::presence::{HomeGroup, SessionPresence, classify_presence};
+        if items.is_empty() {
+            return Ok(());
+        }
+        let marks = vec!["?"; items.len()].join(",");
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT s.parent_session_id, s.id, s.title, s.model, s.state, s.started_at, s.last_event_at,
+                (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1)
+             FROM session s
+             WHERE s.parent_session_id IN ({marks}) AND s.id <> s.parent_session_id
+             ORDER BY julianday(s.last_event_at) DESC"
+        ))?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(items.iter().map(|item| item.id.as_str())),
+            |row| {
+                let parent: String = row.get(0)?;
+                let state: String = row.get(4)?;
+                let last_event_at: String = row.get(6)?;
+                let latest_kind: Option<String> = row.get(7)?;
+                let age = DateTime::parse_from_rfc3339(&last_event_at)
+                    .ok()
+                    .map(|date| (now - date.with_timezone(&Utc)).num_milliseconds());
+                let open_execution = matches!(
+                    (state.as_str(), latest_kind.as_deref()),
+                    ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
+                );
+                let presence = classify_presence(&state, age, open_execution);
+                let stale_open = presence == SessionPresence::Inactive
+                    && matches!(state.as_str(), "thinking" | "tool");
+                let model: Option<String> = row.get(3)?;
+                Ok((
+                    parent,
+                    SubagentItem {
+                        id: row.get(1)?,
+                        title: row.get(2)?,
+                        model: model
+                            .filter(|m| !m.trim().is_empty() && !m.contains("MODEL_PLACEHOLDER"))
+                            .unwrap_or_else(|| "Unspecified".to_owned()),
+                        state: if stale_open {
+                            "unknown".to_owned()
+                        } else {
+                            state
+                        },
+                        presence,
+                        is_active: presence.is_active(),
+                        is_ongoing: presence.is_ongoing(),
+                        home_group: presence.home_group(),
+                        started_at: row.get(5)?,
+                        last_event_at,
+                    },
+                ))
+            },
+        )?;
+        for row in rows {
+            let (parent, child) = row?;
+            let Some(item) = items.iter_mut().find(|item| item.id == parent) else {
+                continue;
+            };
+            item.subagent_count += 1;
+            item.subagents_ongoing += usize::from(child.is_ongoing);
+            if item.subagents.len() < SUBAGENT_LIST_LIMIT {
+                item.subagents.push(child);
+            }
+        }
+        for item in items.iter_mut().filter(|item| !item.is_ongoing) {
+            let live = item.subagents.iter().any(|child| child.is_active);
+            if live || item.subagents_ongoing > 0 {
+                item.presence = if live {
+                    SessionPresence::Running
+                } else {
+                    SessionPresence::RecentlyIdle
+                };
+                item.is_ongoing = true;
+                item.is_active = live;
+                item.home_group = Some(HomeGroup::Running);
+                if item.state == "unknown" {
+                    "idle".clone_into(&mut item.state);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Returns local project rollups using the same time bounds as the timeline report.
@@ -3761,6 +3901,110 @@ mod tests {
         );
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, "antigravity:recent");
+    }
+
+    fn commit_sessions(db: &mut Database, project: &Project, sessions: &[Session]) {
+        db.commit_batch(
+            std::slice::from_ref(project),
+            sessions,
+            &[],
+            &[],
+            &[],
+            &SourceCheckpoint {
+                file_path: "fixture".into(),
+                last_read_offset: 0,
+                file_size: 0,
+                fingerprint: "fixture".into(),
+                last_ingested_at: Utc::now(),
+            },
+        )
+        .expect("sessions");
+    }
+
+    #[test]
+    fn live_subagent_makes_a_quiet_parent_ongoing_and_nests_under_it() {
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "/w", None);
+        let now = Utc::now();
+        let session = |id: &str, parent: Option<&str>, state: SessionState, minutes: i64| Session {
+            id: format!("claude-code:{id}"),
+            agent: AgentId::ClaudeCode,
+            surface: Surface::DesktopApp,
+            project_id: project.id.clone(),
+            parent_session_id: parent.map(|p| format!("claude-code:{p}")),
+            model: None,
+            title: None,
+            state,
+            pid: None,
+            started_at: now - chrono::Duration::minutes(minutes),
+            last_event_at: now - chrono::Duration::minutes(minutes),
+        };
+        commit_sessions(
+            &mut db,
+            &project,
+            &[
+                session("quiet", None, SessionState::Idle, 45),
+                session("quiet-sub", Some("quiet"), SessionState::Tool, 1),
+                session("done", None, SessionState::Idle, 45),
+                session("done-sub", Some("done"), SessionState::Idle, 40),
+            ],
+        );
+        db.conn
+            .execute(
+                "INSERT INTO activity_event(session_id,timestamp,kind) VALUES ('claude-code:quiet-sub',?1,'tool_start')",
+                rusqlite::params![(now - chrono::Duration::minutes(1)).to_rfc3339()],
+            )
+            .expect("activity");
+        let (rows, count) = db
+            .list_sessions_paginated(None, Some("ongoing"), 0, 10)
+            .expect("ongoing");
+        assert_eq!(
+            (count, rows.len()),
+            (1, 1),
+            "only the parent with a live subagent"
+        );
+        let quiet = &rows[0];
+        assert_eq!(quiet.id, "claude-code:quiet");
+        assert!(quiet.is_active && quiet.is_ongoing);
+        assert_eq!(
+            quiet.home_group,
+            Some(gnomcode_core::presence::HomeGroup::Running)
+        );
+        assert_eq!((quiet.subagent_count, quiet.subagents_ongoing), (1, 1));
+        assert_eq!(quiet.subagents[0].id, "claude-code:quiet-sub");
+        let (all, total) = db.list_sessions_paginated(None, None, 0, 10).expect("all");
+        assert_eq!(total, 2, "subagents are nested, never top-level rows");
+        let done = all
+            .iter()
+            .find(|row| row.id == "claude-code:done")
+            .expect("done");
+        assert!(!done.is_ongoing);
+        assert_eq!((done.subagent_count, done.subagents_ongoing), (1, 0));
+    }
+
+    #[test]
+    fn a_later_chunk_without_a_host_marker_keeps_the_desktop_surface() {
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "/w", None);
+        let now = Utc::now();
+        let session = |surface: Surface| Session {
+            id: "claude-code:s".into(),
+            agent: AgentId::ClaudeCode,
+            surface,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        commit_sessions(&mut db, &project, &[session(Surface::Cli)]);
+        commit_sessions(&mut db, &project, &[session(Surface::DesktopApp)]);
+        commit_sessions(&mut db, &project, &[session(Surface::Cli)]);
+        let (rows, _) = db.list_sessions_paginated(None, None, 0, 10).expect("rows");
+        assert_eq!(rows[0].surface, "desktop_app");
     }
 
     #[test]

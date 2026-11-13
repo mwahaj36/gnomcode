@@ -126,6 +126,7 @@ pub fn build_router(state: AppState) -> Router {
             "/console-presentation.js",
             get(console_presentation_handler),
         )
+        .route("/provider-logos.js", get(provider_logos_handler))
         .route("/fonts/inter-variable.woff2", get(inter_font_handler))
         .route("/fonts/jetbrains-mono.woff2", get(mono_font_handler))
         .route("/auth/callback", get(auth_callback_handler))
@@ -730,6 +731,14 @@ async fn console_presentation_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
         include_str!("../../../web/lib/console-presentation.js"),
+    )
+}
+
+/// Imported by `console-presentation.js`; without this route the whole console fails to load.
+async fn provider_logos_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("../../../web/lib/provider-logos.js"),
     )
 }
 
@@ -1941,9 +1950,10 @@ async fn list_conversations_handler(
     let sessions = db
         .list_active_sessions(usize::MAX)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let rows =
+    let mut rows =
         crate::remote::conversation_sessions(&db, &sessions, &gnomcode_pty::list_active_sessions())
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    crate::remote::nest_subagents(&mut rows);
     let page = crate::remote::conversation_page(
         rows,
         &json!({"page":params.page,"limit":params.limit,"agent":params.agent,"status":params.status,"project":params.project,"search":params.search,"source":params.source,"include_subagents":params.include_subagents}),
@@ -3671,6 +3681,7 @@ mod tests {
                 "text/javascript",
                 "export function renderSummary",
             ),
+            ("/provider-logos.js", "text/javascript", "PROVIDER_LOGOS"),
             ("/gnomcode-console.css", "text/css", ".sp-console-workspace"),
             ("/gnomcode-tokens.css", "text/css", "--sp-bg"),
         ] {
