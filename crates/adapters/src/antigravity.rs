@@ -540,6 +540,60 @@ pub fn parse_user_status(value: &Value, observed_at: DateTime<Utc>) -> Vec<Quota
         })
 }
 
+/// Converts native `agy -p=/usage` tab-separated quota metadata into API readings.
+#[must_use]
+pub fn parse_cli_usage(text: &str, observed_at: DateTime<Utc>) -> Vec<QuotaSnapshot> {
+    if text.len() > 64 * 1024 {
+        return Vec::new();
+    }
+    let mut seen = std::collections::HashSet::new();
+    text.lines()
+        .filter_map(|line| {
+            let mut fields = line.split('\t');
+            let group = fields.next()?.trim();
+            let label = fields.next()?.trim();
+            let remaining: f64 = fields
+                .next()?
+                .trim()
+                .strip_suffix('%')?
+                .trim()
+                .parse()
+                .ok()?;
+            let resets_at = DateTime::parse_from_rfc3339(fields.next()?.trim())
+                .ok()?
+                .with_timezone(&Utc);
+            if fields.next().is_some()
+                || group.is_empty()
+                || group.chars().count() > 64
+                || group.chars().any(char::is_control)
+                || !remaining.is_finite()
+                || !(0.0..=100.0).contains(&remaining)
+            {
+                return None;
+            }
+            let window = match label {
+                "Weekly Limit Remaining" => QuotaWindow::Weekly,
+                "Five Hour Limit Remaining" => QuotaWindow::FiveHour,
+                _ if label == format!("{group} Weekly Limit") => QuotaWindow::Weekly,
+                _ => return None,
+            };
+            if !seen.insert((group, window)) {
+                return None;
+            }
+            Some(QuotaSnapshot {
+                provider: AgentId::Antigravity.as_str().to_owned(),
+                limit_id: group.to_owned(),
+                window,
+                used_pct: 100.0 - remaining,
+                resets_at: Some(resets_at),
+                plan: None,
+                basis: TrustLevel::Api,
+                observed_at,
+            })
+        })
+        .collect()
+}
+
 /// Converts `RetrieveUserQuotaSummary` into pooled quota rows: one per group and window.
 ///
 /// Groups (`Gemini Models`, `Claude and GPT models`, `Gemini 4 Argon`) hold `buckets` with
