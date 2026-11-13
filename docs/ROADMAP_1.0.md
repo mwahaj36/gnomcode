@@ -65,3 +65,5 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] G7: existing opt-in Antigravity limits now prefer the running server and fall back to bounded, no-inference usage metadata from verified agy 1.5.7; ADR 0029 amended. Other CLI versions stay gated; native macOS/Linux and independent network acceptance remain unverified. Depends on baseline #189 while unmerged.
 ## Section C UI status (Worker B)
 - Quick actions UI (console + Remote canned prompts strip and management dialog; daemon-persisted via `/api/v1/quick-actions` and Remote `quick_actions`, ADR 0043, plus the normal prompt path): implemented in Worker B PR.
+## Section C UI status (Worker B)
+- Changes view UI (read-only console panel via `GET /api/v1/repos/diff` + Remote `changes` E2EE stub sheet): implemented in Worker B PR (pending Worker A Remote `changes` backend/ADR).

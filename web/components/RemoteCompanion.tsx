@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
+import { DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -17,7 +17,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -27,6 +27,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [desktopPanel, setDesktopPanel] = useState(false);
   const [modelPanel, setModelPanel] = useState(false);
   const [limitsPanel, setLimitsPanel] = useState(false);
+  const [changesPanel, setChangesPanel] = useState(false);
+  const [changesLoading, setChangesLoading] = useState(false);
+  const [changesState, setChangesState] = useState<{ session_id: string; repo?: string; diff?: string; status?: string; lossy?: boolean; error?: string } | null>(null);
+  const changesRequested = useRef(false);
   const [phase, setPhase] = useState<'ready' | 'connecting' | 'reconnecting' | 'unavailable' | 'paired'>('ready');
   const [error, setError] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -124,8 +128,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const modelDialog=useRef<HTMLDialogElement|null>(null);
   const limitsDialog=useRef<HTMLDialogElement|null>(null);
   const quickActionsDialog=useRef<HTMLDialogElement|null>(null);
+  const changesDialog=useRef<HTMLDialogElement|null>(null);
   useEffect(()=>{if(limitsPanel)limitsDialog.current?.showModal();},[limitsPanel]);
   useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
+  useEffect(()=>{if(changesPanel)changesDialog.current?.showModal();},[changesPanel]);
   useEffect(()=>{setQuickActions(loadStoredQuickActions());},[]);
   const sidebarToggle=useRef<HTMLButtonElement|null>(null);
   const sidebarClose=useRef<HTMLButtonElement|null>(null);
@@ -309,6 +315,16 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     void send({ type: 'chat', session_id: sessionId, before, limit: 500 }).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN && authenticated.current)setError('Chat connection lost.');});
   }
 
+  async function loadChanges() {
+    if (!authenticated.current || !selectedRef.current) return;
+    changesRequested.current = true;
+    setChangesPanel(true);
+    setChangesLoading(true);
+    setChangesState(null);
+    try { await send({ type: 'changes', session_id: selectedRef.current }); }
+    catch { changesRequested.current = false; setChangesLoading(false); setChangesState({ session_id: selectedRef.current, error: 'Could not reach your desktop for workspace changes.' }); }
+  }
+
   function requestSessions(){return send({type:'sessions',...historyQuery.current});}
 
   async function beginPaired() {
@@ -410,9 +426,21 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     }
     else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await requestSessions(); if(reply.session_id) loadChat(reply.session_id); }
     else if (reply.type === 'quick_actions' && Array.isArray(reply.actions)) { setQuickActionError(''); setQuickActions(saveStoredQuickActions(reply.actions)); }
+    else if (reply.type === 'changes') {
+      changesRequested.current = false;
+      setChangesLoading(false);
+      if (!reply.session_id || reply.session_id === selectedRef.current) {
+        setChangesState({ session_id: reply.session_id || selectedRef.current, repo: reply.repo, diff: reply.diff || '', status: reply.status || '', lossy: Boolean(reply.lossy) });
+      }
+    }
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
     else if (reply.type === 'error') {
+      if(reply.request_type==='changes' || (changesRequested.current && /unsupported remote command/i.test(reply.message || ''))){
+        changesRequested.current=false;setChangesLoading(false);
+        setChangesState({session_id:selectedRef.current,error:/unsupported/i.test(reply.message || '') ? 'Update Gnomcode on your desktop to inspect git changes from your phone.' : (reply.message || 'Could not load git changes.')});
+        return;
+      }
       if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
       if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
       if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
@@ -533,6 +561,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     if (selectedRef.current) drafts.current.set(selectedRef.current, promptRef.current);
     changePrompt(drafts.current.get(id) || '');
     setHasEarlier(false); historyAnchor.current = null;
+    changesRequested.current = false; setChangesPanel(false); setChangesLoading(false); setChangesState(null);
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
@@ -579,6 +608,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         <div className="dialog-actions"><button type="button" onClick={()=>{setQuickActionError('');persistQuickActions([...DEFAULT_QUICK_ACTIONS]);}}>Reset defaults</button><button type="submit" className="sp-primary-action">Add prompt</button></div>
       </form>
     </dialog>}
+    {changesPanel && <dialog ref={changesDialog} className="remote-sheet sp-changes-sheet" aria-labelledby="remote-changes-heading" onClose={()=>setChangesPanel(false)}>
+      <header><h2 id="remote-changes-heading">Workspace changes</h2><div className="sp-changes-actions"><button type="button" disabled={!connected || changesLoading} onClick={()=>void loadChanges()}>Refresh</button><button type="button" aria-label="Close workspace changes" onClick={()=>changesDialog.current?.close()}>Close</button></div></header>
+      <div className="sp-changes-sheet-body" dangerouslySetInnerHTML={{__html:renderChangesView(changesLoading ? { loading: true } : changesState)}} />
+    </dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
@@ -617,6 +650,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <div className="sp-approval-actions"><button type="button" disabled={!connected} aria-label={`Deny ${item.tool}`} onClick={()=>decideApproval(item.id,'deny')}>Deny</button><button type="button" disabled={!connected} aria-label={`Approve ${item.tool} once`} onClick={()=>decideApproval(item.id,'approve')}>Approve once</button></div>
         </article>)}</section>}
         {selected ? <>
+        <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button></div>
         {historyLoading && <p role="status">Loading messages...</p>}
         {hasEarlier && <button type="button" disabled={!connected || historyLoading} onClick={() => {
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};
