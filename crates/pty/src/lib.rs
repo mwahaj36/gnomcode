@@ -18,6 +18,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::sync::broadcast;
+#[cfg(test)]
+mod environment_tests;
 
 /// Error type for PTY operations.
 #[derive(Debug, Error)]
@@ -368,6 +370,11 @@ pub async fn run_pty_host_resuming(
         let mut command = conpty_oxide::blocking::Command::new(cmd);
         command.args(&args);
         command.current_dir(repo);
+        if matches!(agent, "claude" | "claude-code") {
+            for key in gnomcode_platform::executables::CLAUDE_PARENT_ENV_VARS {
+                command.env_remove(key);
+            }
+        }
         let session = command.spawn().map_err(|e| Error::Process(e.to_string()))?;
         let parts = session.into_parts();
         let pid = parts.child.id();
@@ -402,6 +409,11 @@ pub async fn run_pty_host_resuming(
         let mut command = portable_pty::CommandBuilder::new(cmd);
         command.args(&args);
         command.cwd(repo);
+        if matches!(agent, "claude" | "claude-code") {
+            for key in gnomcode_platform::executables::CLAUDE_PARENT_ENV_VARS {
+                command.env_remove(key);
+            }
+        }
         let child = pair
             .slave
             .spawn_command(command)

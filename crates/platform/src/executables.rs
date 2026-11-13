@@ -23,12 +23,24 @@ pub fn resolve_agent_executable(name: &str) -> Option<(String, Vec<String>)> {
     Some((program, args))
 }
 
+/// Parent-session environment variables removed when launching Claude Code.
+pub const CLAUDE_PARENT_ENV_VARS: &[&str] = &[
+    "CLAUDECODE",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ID",
+];
+
 /// Builds a hidden, shell-free command for a known official coding-agent CLI.
 #[must_use]
 pub fn background_agent_command(name: &str) -> std::process::Command {
     let (program, args) = agent_command(name);
     let mut command = std::process::Command::new(program);
     command.args(args);
+    if matches!(name, "claude" | "claude-code") {
+        for key in CLAUDE_PARENT_ENV_VARS {
+            command.env_remove(key);
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt as _;
@@ -271,6 +283,26 @@ pub fn terminal_shell() -> (String, Vec<String>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn background_metadata_commands_remove_only_proven_parent_context() {
+        let command = super::background_agent_command("claude");
+        let removed: Vec<_> = command
+            .get_envs()
+            .filter_map(|(key, value)| {
+                value
+                    .is_none()
+                    .then_some(key.to_string_lossy().into_owned())
+            })
+            .collect();
+        assert_eq!(
+            removed,
+            [
+                "CLAUDECODE",
+                "CLAUDE_CODE_CHILD_SESSION",
+                "CLAUDE_CODE_SESSION_ID"
+            ]
+        );
+    }
     use super::*;
 
     #[test]
