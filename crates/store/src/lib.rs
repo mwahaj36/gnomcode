@@ -2226,7 +2226,43 @@ impl Database {
         }
 
         out.retain(|q| !q.limit_id.to_lowercase().contains("placeholder"));
+        self.apply_antigravity_resource_exhausted_crosscheck(&mut out)?;
         Ok(out)
+    }
+
+    fn apply_antigravity_resource_exhausted_crosscheck(
+        &self,
+        snapshots: &mut [QuotaSnapshot],
+    ) -> Result<(), Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT MAX(a.timestamp) FROM activity_event a
+             JOIN session s ON s.id = a.session_id
+             WHERE s.agent = 'antigravity' AND a.kind = 'rate_limited'",
+        )?;
+        let latest_rl: Option<String> = stmt.query_row([], |row| row.get(0)).ok().flatten();
+        let Some(rl_dt) = latest_rl.and_then(|s| {
+            DateTime::parse_from_rfc3339(&s)
+                .map(|dt| dt.with_timezone(&Utc))
+                .ok()
+        }) else {
+            return Ok(());
+        };
+
+        for snap in snapshots.iter_mut() {
+            if snap.provider != "antigravity" || snap.used_pct >= 100.0 {
+                continue;
+            }
+            let unreset = snap.resets_at.is_none_or(|reset| rl_dt < reset);
+            let recent_disagreement = rl_dt >= snap.observed_at - chrono::Duration::hours(5);
+            if unreset && recent_disagreement {
+                snap.used_pct = 100.0;
+                snap.basis = TrustLevel::Exact;
+                if rl_dt > snap.observed_at {
+                    snap.observed_at = rl_dt;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Every stored project, so derived identity can be recomputed.
@@ -4956,5 +4992,57 @@ mod tests {
             "a shared bucket has no folder of its own"
         );
         assert_eq!(folder("codex:unassigned"), None);
+    }
+
+    #[test]
+    fn antigravity_resource_exhausted_overrides_optimistic_api_quota() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut db = Database::open(&dir.path().join("store.db")).expect("open");
+        let now = Utc::now();
+        let proj = gnomcode_core::Project::from_origin(None, "/repo", None);
+        let sess = gnomcode_core::Session {
+            id: "antigravity:ag-1".to_owned(),
+            agent: gnomcode_core::AgentId::Antigravity,
+            surface: gnomcode_core::Surface::Cli,
+            project_id: proj.id.clone(),
+            parent_session_id: None,
+            model: Some("claude-opus-5-5".to_owned()),
+            title: None,
+            state: gnomcode_core::SessionState::Error,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let act = gnomcode_core::ActivityEvent {
+            session_id: sess.id.clone(),
+            timestamp: now,
+            kind: gnomcode_core::ActivityKind::RateLimited,
+            tool_name: None,
+            summary_redacted: Some("RESOURCE_EXHAUSTED".to_owned()),
+            duration_ms: None,
+        };
+        let api_snap = gnomcode_core::QuotaSnapshot {
+            provider: "antigravity".to_owned(),
+            limit_id: "Claude".to_owned(),
+            window: gnomcode_core::QuotaWindow::FiveHour,
+            used_pct: 0.0,
+            resets_at: Some(now + chrono::Duration::hours(4)),
+            plan: None,
+            basis: TrustLevel::Api,
+            observed_at: now + chrono::Duration::seconds(30),
+        };
+        let cp = SourceCheckpoint {
+            file_path: "ag.jsonl".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "fp".to_owned(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(&[proj], &[sess], &[], &[act], &[api_snap], &cp)
+            .expect("commit");
+        let latest = db.get_latest_quota_snapshots().expect("latest");
+        assert_eq!(latest.len(), 1);
+        assert_eq!(latest[0].used_pct, 100.0);
+        assert_eq!(latest[0].basis, TrustLevel::Exact);
     }
 }
