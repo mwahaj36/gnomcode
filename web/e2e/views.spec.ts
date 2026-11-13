@@ -198,3 +198,146 @@ test('the Home activity grid is separated from the Today tiles', async ({ page, 
   const activity = await page.locator('#home-activity').boundingBox();
   expect((activity?.y ?? 0) - ((today?.y ?? 0) + (today?.height ?? 0))).toBeGreaterThanOrEqual(16);
 });
+
+test.describe('Stale and reset quota states', () => {
+  test('ticks countdowns every 30s, re-fetches at reset boundary, and renders reset_unconfirmed and stale states honestly', async ({
+    page,
+    openConsole,
+  }) => {
+    const t0 = new Date('2026-11-13T12:00:00Z').getTime();
+    await page.clock.install({ time: t0 });
+
+    let overviewCalls = 0;
+    let crossedReset = false;
+    await page.route('**/api/v1/providers/overview*', async (route) => {
+      overviewCalls += 1;
+      const isAfterReset = crossedReset;
+      const codexWindow = isAfterReset
+        ? {
+            provider: 'codex',
+            limit_id: 'codex',
+            window: 'five_hour',
+            window_label: 'Session',
+            label: 'Session',
+            state: 'reset_unconfirmed',
+            used_pct: 0,
+            remaining_pct: 100,
+            resets_at: '2026-11-13T12:02:00Z',
+            reset_passed: true,
+            basis: 'estimated',
+            stale: true,
+            observed_at: '2026-11-13T10:00:00Z',
+            source_label: 'Local logs',
+            pace: {
+              stale: true,
+              stale_reason: 'based on data from 2h ago',
+              runs_out_at: null,
+            },
+          }
+        : {
+            provider: 'codex',
+            limit_id: 'codex',
+            window: 'five_hour',
+            window_label: 'Session',
+            label: 'Session',
+            state: 'low',
+            used_pct: 88,
+            remaining_pct: 12,
+            resets_at: '2026-11-13T12:02:00Z',
+            reset_passed: false,
+            basis: 'exact',
+            stale: false,
+            observed_at: '2026-11-13T11:59:30Z',
+            source_label: 'Local logs',
+            pace: {
+              stale: false,
+              runs_out_at: '2026-11-13T12:02:10Z',
+            },
+          };
+
+      const staleClaudeWindow = {
+        provider: 'claude-code',
+        limit_id: 'claude-code',
+        window: 'five_hour',
+        window_label: 'Session',
+        label: 'Session',
+        state: 'low',
+        used_pct: 99,
+        remaining_pct: 1,
+        resets_at: '2026-11-13T13:06:00Z',
+        reset_passed: false,
+        basis: 'exact',
+        stale: true,
+        observed_at: '2026-11-13T10:00:00Z',
+        source_label: 'Local logs',
+        pace: {
+          stale: true,
+          stale_reason: 'based on data from 2h ago',
+          runs_out_at: null,
+        },
+      };
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            provider: 'codex',
+            display_name: 'Codex',
+            plan: 'pro',
+            state: codexWindow.state,
+            source_label: 'Local logs',
+            observed_at: codexWindow.observed_at,
+            headline_window: codexWindow,
+            windows: [codexWindow],
+          },
+          {
+            provider: 'claude-code',
+            display_name: 'Claude Code',
+            plan: 'max',
+            state: staleClaudeWindow.state,
+            source_label: 'Local logs',
+            observed_at: staleClaudeWindow.observed_at,
+            headline_window: staleClaudeWindow,
+            windows: [staleClaudeWindow],
+          },
+        ]),
+      });
+    });
+
+    await openConsole();
+    const codexCard = page.locator('#home-limits .sp-provider-card[data-provider="codex"]');
+    const claudeCard = page.locator('#home-limits .sp-provider-card[data-provider="claude-code"]');
+
+    // Stale card never shows a live "Runs out in" projection and surfaces "Seen 2h ago" near the numbers.
+    await claudeCard.locator('summary').click();
+    await expect(claudeCard).toContainText('Last seen 2h ago');
+    await expect(claudeCard).toContainText('Based on data from 2h ago');
+    await expect(claudeCard).not.toContainText(/Runs out in/i);
+
+    await page.screenshot({
+      path: 'C:/Users/Wahaj/.gemini/antigravity/brain/5751486b-f1ee-46eb-aac7-95ecc2468411/scratch/stale-quota-after.png',
+    });
+
+    // Live card ticks its reset and runs-out countdowns every 30s without waiting for a poll.
+    await codexCard.locator('summary').click();
+    await expect(codexCard).toContainText('Resets in 2m');
+    await expect(codexCard).toContainText('Runs out in 2m');
+
+    await page.clock.runFor(61_000);
+    await expect(codexCard).toContainText('Resets in 1m');
+    await expect(codexCard).toContainText('Runs out in 1m');
+
+    // Crossing the reset boundary triggers an immediate overview re-fetch and shows Reset, not confirmed + EST.
+    const callsBeforeBoundary = overviewCalls;
+    crossedReset = true;
+    await page.clock.runFor(61_000);
+    await expect.poll(() => overviewCalls).toBeGreaterThan(callsBeforeBoundary);
+    await expect(codexCard).toContainText('Reset, not confirmed');
+    await expect(codexCard).toContainText('EST');
+
+    await page.screenshot({
+      path: 'C:/Users/Wahaj/.gemini/antigravity/brain/5751486b-f1ee-46eb-aac7-95ecc2468411/scratch/reset-unconfirmed-after.png',
+    });
+  });
+});

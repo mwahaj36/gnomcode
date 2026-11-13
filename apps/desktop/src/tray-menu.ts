@@ -128,7 +128,7 @@ export function windowHeadline(window: TrayWindow, now: Date, options: TrayForma
   if (window.state === 'exhausted') {
     return reset ? `${name} out ${MIDDLE_DOT} back ${clock(reset, now, options.timeZone, true)}` : `${name} out`;
   }
-  if (window.state === 'reset_awaiting') return `${name} reset`;
+  if (window.state === 'reset_unconfirmed' || window.state === 'reset_awaiting') return `${name} reset, not confirmed (EST)`;
   if (window.state === 'unknown' || percent === null) return `${name} unknown`;
   const head = window.state === 'low' ? `${name} low, ${percent} left` : `${name} ${percent} left`;
   const seen = window.stale ? ' (last seen)' : '';
@@ -140,13 +140,13 @@ export function windowDetail(window: TrayWindow, now: Date, options: TrayFormatO
   const name = windowName(window);
   const reset = resetDate(window);
   const percent = pct(window);
-  if (window.state === 'reset_awaiting') return `${name}: reset, awaiting reading`;
+  if (window.state === 'reset_unconfirmed' || window.state === 'reset_awaiting') return `${name}: Reset, not confirmed (EST)`;
   if (window.state === 'exhausted') {
     return reset ? `${name}: exhausted, back ${clock(reset, now, options.timeZone, true)}` : `${name}: exhausted`;
   }
   if (window.state === 'unknown' || percent === null) return `${name}: unknown`;
   const bits = [window.state === 'low' ? `${percent} left (low)` : `${percent} left`];
-  if (window.stale) bits.push('last seen');
+  if (window.stale) bits.push('stale');
   if (reset) bits.push(`resets ${clock(reset, now, options.timeZone, true)}`);
   return `${name}: ${bits.join(', ')}`;
 }
@@ -288,7 +288,7 @@ function tooltipPart(provider: TrayProvider): string | null {
   const window = typeof index === 'number' && windows[index] ? windows[index] : windows[0];
   const name = providerName(provider).replace(/ Code$/, '');
   if (window.state === 'exhausted') return `${name} out`;
-  if (window.state === 'reset_awaiting') return `${name} reset`;
+  if (window.state === 'reset_unconfirmed' || window.state === 'reset_awaiting') return `${name} reset, not confirmed (EST)`;
   const percent = pct(window);
   if (window.state === 'unknown' || percent === null) return null;
   return `${name} ${windowName(window).toLowerCase()} ${percent}`;

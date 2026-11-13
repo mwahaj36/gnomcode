@@ -408,13 +408,16 @@ export function updateQuota(element, pools, publishedAt) { updateProviderCards(e
 // ---- Provider limit cards (SPEC 3.9) ----
 // Rust supplies every state, label, pace, pool and headline window. Nothing below decides what is low,
 // exhausted or on pace; it only formats those fields into markup.
-const WINDOW_STATES = ['ok', 'low', 'exhausted', 'reset_awaiting', 'unknown'];
+const WINDOW_STATES = ['ok', 'low', 'exhausted', 'reset_unconfirmed', 'unknown'];
 // No Rust state (older desktop or synced payload): a window with a reading renders neutral ("plain"), not as No data.
-const stateOf = value => WINDOW_STATES.includes(value?.state) ? value.state : Number.isFinite(value?.remaining_pct) ? 'plain' : 'unknown';
+const stateOf = value => {
+  if (value?.state === 'reset_awaiting') return 'reset_unconfirmed';
+  return WINDOW_STATES.includes(value?.state) ? value.state : Number.isFinite(value?.remaining_pct) ? 'plain' : 'unknown';
+};
 // Payloads synced from an older desktop have no state but still say whether the reset has passed.
-const awaiting = win => stateOf(win) === 'reset_awaiting' || win.reset_passed === true;
-const CHIP_TEXT = { ok: 'OK', low: 'Low', exhausted: 'Out', reset_awaiting: 'Resetting', unknown: 'No data' };
-const CHIP_CLASS = { ok: 'ok', low: 'low', exhausted: 'exhausted', reset_awaiting: 'unknown', unknown: 'unknown', plain: 'neutral' };
+const awaiting = win => stateOf(win) === 'reset_unconfirmed' || win.reset_passed === true;
+const CHIP_TEXT = { ok: 'OK', low: 'Low', exhausted: 'Out', reset_unconfirmed: 'Resetting', unknown: 'No data' };
+const CHIP_CLASS = { ok: 'ok', low: 'low', exhausted: 'exhausted', reset_unconfirmed: 'unknown', unknown: 'unknown', plain: 'neutral' };
 const WINDOW_NAMES = { five_hour: 'Session', weekly: 'Weekly', monthly: 'Monthly' };
 const titleCase = text => String(text ?? '').replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()).trim();
 const windowName = win => win.window_label || WINDOW_NAMES[win.window] || titleCase(win.window) || 'Window';
@@ -441,27 +444,34 @@ function whenPart(iso, { short = false, bare = false } = {}) {
 function valueText(win) {
   const state = stateOf(win);
   if (state === 'exhausted') return 'Exhausted';
-  if (awaiting(win)) return 'Reset';
+  if (awaiting(win)) return 'Reset, not confirmed';
   return Number.isFinite(win.remaining_pct) && win.basis !== 'unknown' ? `${percent(win.remaining_pct)} left` : 'Unknown';
 }
 
 function detailText(win) {
-  const seen = seenText(win).toLowerCase();
+  const seen = seenText(win);
   if (win.source_issue) return seen ? `${win.source_issue} · ${seen}` : win.source_issue;
   const state = stateOf(win);
-  if (awaiting(win)) return 'Awaiting next reading';
+  if (awaiting(win)) return seen ? `0% used · awaiting fresh reading · ${seen}` : '0% used · awaiting fresh reading';
   const when = whenPart(win.resets_at);
-  if (state === 'exhausted') return when ? `Back ${when}` : 'Reset time unknown';
-  return when ? `Resets ${when}` : win.reset_label ? `Resets ${win.reset_label}` : 'Reset time unknown';
+  const reset = state === 'exhausted'
+    ? (when ? `Back ${when}` : 'Reset time unknown')
+    : (when ? `Resets ${when}` : win.reset_label ? `Resets ${win.reset_label}` : 'Reset time unknown');
+  return seen ? `${reset} · ${seen}` : reset;
 }
 
-function paceText(win) {
+function paceMarkup(win) {
   const pace = win.pace;
   if (!pace) return '';
+  if (pace.stale || win.stale) {
+    const age = Number.isFinite(Date.parse(win.observed_at)) ? relativeActivity(win.observed_at) : null;
+    const note = age ? `Based on data from ${age}` : (pace.stale_reason || 'Stale data');
+    return `<span class="sp-pace-stale">${escape(note)}</span>`;
+  }
   if (pace.verdict === 'on_pace') return 'On pace';
   if (pace.verdict === 'behind') return `${Math.round(Math.abs(pace.delta_pct))}% in reserve`;
   const runsOut = pace.runs_out_at ? whenPart(pace.runs_out_at) : null;
-  return runsOut ? `Runs out ${runsOut}` : `${Math.round(Math.abs(pace.delta_pct))}% ahead of pace`;
+  return runsOut ? `Runs out ${escape(runsOut)}` : `${Math.round(Math.abs(pace.delta_pct))}% ahead of pace`;
 }
 
 function meterTitle(win) {
@@ -483,15 +493,20 @@ const meterBar = (win, name) => {
 export function renderMeterRow(win, { detail = true } = {}) {
   const state = stateOf(win);
   const name = windowLabel(win);
-  return `<div class="sp-meter-row sp-meter-row--${state}${win.source_issue ? ' sp-meter-row--issue' : ''}" title="${escape(meterTitle(win))}"><div class="sp-meter-top"><span class="sp-meter-label">${escape(name)}</span><span class="sp-meter-value">${escape(valueText(win))}</span></div>${meterBar(win, name)}${detail ? `<div class="sp-meter-bottom"><span>${escape(detailText(win))}</span><span>${escape(paceText(win))}</span></div>` : ''}</div>`;
+  const estTag = awaiting(win) ? ' <span class="sp-trust-tag">EST</span>' : '';
+  const seenBadge = !detail && win.stale && seenText(win) ? ` <span class="sp-seen-inline">${escape(seenText(win))}</span>` : '';
+  const staleClass = win.stale ? ' sp-meter-row--stale' : '';
+  return `<div class="sp-meter-row sp-meter-row--${state}${staleClass}${win.source_issue ? ' sp-meter-row--issue' : ''}" title="${escape(meterTitle(win))}"><div class="sp-meter-top"><span class="sp-meter-label">${escape(name)}</span><span class="sp-meter-value">${escape(valueText(win))}${estTag}${seenBadge}</span></div>${meterBar(win, name)}${detail ? `<div class="sp-meter-bottom"><span>${escape(detailText(win))}</span><span>${paceMarkup(win)}</span></div>` : ''}</div>`;
 }
 
 function renderMiniRow(win) {
   const state = stateOf(win);
   const name = windowName(win);
   const when = whenPart(win.resets_at, { short: true, bare: true }) || '';
-  const value = state === 'exhausted' ? 'Out' : awaiting(win) ? 'Reset' : Number.isFinite(win.remaining_pct) && win.basis !== 'unknown' ? percent(win.remaining_pct) : 'Unknown';
-  return `<div class="sp-mini sp-mini--${state}${win.source_issue ? ' sp-mini--issue' : ''}" title="${escape(meterTitle(win))}"><span>${escape(name)}</span>${meterBar(win, windowLabel(win))}<span class="sp-mini-value"><b>${escape(value)}</b>${escape(awaiting(win) ? '' : when)}</span></div>`;
+  const value = state === 'exhausted' ? 'Out' : awaiting(win) ? 'Reset, not confirmed · EST' : Number.isFinite(win.remaining_pct) && win.basis !== 'unknown' ? percent(win.remaining_pct) : 'Unknown';
+  const staleClass = win.stale ? ' sp-mini--stale' : '';
+  const rightMeta = awaiting(win) ? '' : (win.stale && seenText(win) ? seenText(win) : when);
+  return `<div class="sp-mini sp-mini--${state}${staleClass}${win.source_issue ? ' sp-mini--issue' : ''}" title="${escape(meterTitle(win))}"><span>${escape(name)}</span>${meterBar(win, windowLabel(win))}<span class="sp-mini-value"><b>${escape(value)}</b>${escape(rightMeta)}</span></div>`;
 }
 
 /** Multi-pool providers: windows grouped under their Rust-supplied pool name as compact rows. */
@@ -526,9 +541,11 @@ function summaryLine(p, windows) {
   const state = stateOf(head);
   const label = escape(windowLabel(head));
   const when = whenPart(head.resets_at, { short: true });
-  const text = state === 'exhausted' ? `${label} <b>exhausted</b>${when ? ` · back ${escape(whenPart(head.resets_at))}` : ''}`
-    : awaiting(head) ? `${label} <b>reset</b> · awaiting reading`
-      : `${label} <b>${escape(valueText(head))}</b>${when ? ` · resets ${escape(when)}` : ''}`;
+  const seen = seenText(head);
+  const seenSuffix = (head.stale || awaiting(head)) && seen ? ` · <span class="sp-seen-inline">${escape(seen)}</span>` : '';
+  const text = state === 'exhausted' ? `${label} <b>exhausted</b>${when ? ` · back ${escape(whenPart(head.resets_at))}` : ''}${seenSuffix}`
+    : awaiting(head) ? `${label} <span class="sp-reset-muted">Reset, not confirmed</span> <span class="sp-trust-tag">EST</span>${seenSuffix}`
+      : `${label} <b>${escape(valueText(head))}</b>${when ? ` · resets ${escape(when)}` : ''}${seenSuffix}`;
   return `<span class="sp-provider-line">${text}</span>`;
 }
 
@@ -586,9 +603,10 @@ function writeProviderOpen(slug, open) {
   try { localStorage.setItem(PROVIDER_OPEN_KEY, JSON.stringify({ ...readProviderOpen(), [slug]: open })); } catch (_) { /* storage unavailable */ }
 }
 const toggleListeners = new WeakSet();
+const providerCardState = new WeakMap();
 
 /** Re-renders the cards without collapsing the ones the user opened; open state survives reloads. */
-export function updateProviderCards(element, list, options) {
+export function updateProviderCards(element, list, options = {}) {
   const first = !element.querySelector('details[data-provider]');
   updateMarkup(element, renderProviderCards(list, options));
   if (first) {
@@ -596,6 +614,45 @@ export function updateProviderCards(element, list, options) {
     const stored = readProviderOpen();
     for (const card of element.querySelectorAll('details[data-provider]')) card.open = stored[card.dataset.provider] === true;
   }
+
+  let entry = providerCardState.get(element);
+  if (!entry) {
+    entry = { list, options, tickId: null, resetId: null };
+    entry.tickId = setInterval(() => {
+      if (!element.isConnected) {
+        clearInterval(entry.tickId);
+        clearTimeout(entry.resetId);
+        providerCardState.delete(element);
+        return;
+      }
+      updateMarkup(element, renderProviderCards(entry.list, entry.options));
+    }, 30_000);
+    providerCardState.set(element, entry);
+  } else {
+    entry.list = list;
+    entry.options = options;
+  }
+
+  clearTimeout(entry.resetId);
+  entry.resetId = null;
+  if (typeof options.onResetBoundary === 'function') {
+    const nowMs = Date.now();
+    let earliest = Infinity;
+    for (const p of Array.isArray(list) ? list : []) {
+      for (const win of Array.isArray(p?.windows) ? p.windows : []) {
+        if (awaiting(win)) continue;
+        const at = Date.parse(win?.resets_at);
+        if (Number.isFinite(at) && at > nowMs && at < earliest) earliest = at;
+      }
+    }
+    if (Number.isFinite(earliest)) {
+      const delay = Math.min(2_147_483_647, Math.max(250, earliest - nowMs + 250));
+      entry.resetId = setTimeout(() => {
+        if (element.isConnected) options.onResetBoundary();
+      }, delay);
+    }
+  }
+
   if (toggleListeners.has(element)) return;
   toggleListeners.add(element);
   // toggle does not bubble, so listen during the capture phase.
@@ -609,7 +666,7 @@ export function updateProviderCards(element, list, options) {
 
 // Raw pools (web console, Remote, tour) carry per-window Rust fields but no provider overview.
 // Group them by provider and pick the headline from the Rust-supplied states.
-const WORST_FIRST = ['exhausted', 'low', 'unknown', 'reset_awaiting', 'ok', 'plain'];
+const WORST_FIRST = ['exhausted', 'low', 'unknown', 'reset_unconfirmed', 'ok', 'plain'];
 function quotaOverviews(pools) {
   const groups = new Map();
   for (const pool of Array.isArray(pools) ? pools : []) {
