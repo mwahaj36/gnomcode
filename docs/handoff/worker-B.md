@@ -15,7 +15,7 @@
 | 5 | Section C | Phone attachments UI | PR open | [#194](https://github.com/mwahaj36/spawnt/pull/194) | Optional Worker A `C attachments` |
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | PR open | [#195](https://github.com/mwahaj36/spawnt/pull/195) | None |
 | 7 | B / G5 | G5 interrupt button on phone and console chat | PR open | [#196](https://github.com/mwahaj36/spawnt/pull/196) | Worker A PR #187 |
-| 8 | Section E1 | Local console built from web/ React (Home) | not started | - | - |
+| 8 | Section E1 | Local console built from web/ React (Home) | PR open | [#198](https://github.com/mwahaj36/spawnt/pull/198) | None |
 | 9 | Section E1 | Local console built from web/ React (Workspace) | not started | - | - |
 | 10 | Section E1 | Local console built from web/ React (Usage) | not started | - | - |
 | 11 | Section E1 | Local console built from web/ React (Settings + retire console-app.js) | not started | - | - |
@@ -123,3 +123,17 @@
 - **Deviations:** None.
 - **Open risks/questions:** Waiting on Worker A PR #187 merge for live end-to-end interrupt cancellation.
 - **Dependencies:** Depends on Worker A PR #187 (`feat/remote-interrupt`).
+
+### 8. Section E1 — Local console built from web/ React (Home view)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/198 (`feat/local-console-home`, commit `1e4f975`)
+- **What changed:**
+  - `scripts/build-local-console.mjs`, `scripts/local-console-loader.cjs`, `web/package.json`: deterministic zero-sourcemap compilation of `web/local-console/main.tsx` into `crates/daemon/src/console-react.js` using `next`'s webpack (`mode: 'production'`, `devtool: false`) + `terser`, enforced via `prebuild` `--check`.
+  - `crates/daemon/src/api/console_react.rs` & append-only lines in `crates/daemon/src/api.rs`: serves `/console-react.js`.
+  - `web/local-console/local-api.ts`, `web/local-console/HomeView.tsx`, `web/local-console/main.tsx`, `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: mounts React Home (`overview`) on `#local-home-root`, delegates 100% of presentation to `web/lib/console-presentation.js`, keeps fallback views and script compatibility intact.
+  - `apps/desktop/tsconfig.json`, `apps/desktop/test/release-hygiene.test.cjs`: explicitly pins `sourceMap`/`inlineSourceMap`/`declarationMap` to `false` and verifies `devTools: !app.isPackaged`.
+  - `web/test/local-console-home.test.mjs`, `docs/SPEC.md` (§12), `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-local-console-home.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `crates/daemon/src/console.html`, `console-app.js`, and `apps/desktop/tsconfig.json`. Tests: `web/test/local-console-home.test.mjs` (`2/2`), `web/` `npm test` (`101/101`), `apps/desktop/` `npm test` (`40/40`). Gate: `build-local-console.mjs --check`, `check-console.mjs`, `check-local-console.mjs`, `web/` (`npm ci`/`test`/`typecheck`/`lint`/`build`), `apps/desktop/` (`npm ci`/`test`/`typecheck`/`build`), `CARGO_INCREMENTAL=0` (`fmt`/`clippy`/`test`), encoding/LF/mojibake all pass.
+- **Verification:** Visually verified live in `chrome-headless-shell.exe` against mocked daemon APIs at `390x844` and `1440x900` (dark & light): `reactMounted=true`, `overflowX=false`, populated Limits, grouped Sessions (`Needs you`/`Running`/`Recent`), Today tiles, and 12-week mini-heatmap. Not verified inside live packaged Electron installer. `scripts/check-native-navigation.mjs` has a pre-existing failure on `origin/main` (`resolveView is not defined`), and `apps/desktop/` `npm run lint` has pre-existing errors in untouched `src/main.ts` / `src/security.ts` lines.
+- **Deviations:** `console-app.js` stays until E1 Settings PR completes all four views.
+- **Open risks/questions:** Deleting `console-app.js` in the final E1 PR will require removing existing `include_str!("console-app.js")` and `/console-app.js` route/test lines in shared `crates/daemon/src/api.rs` (currently append-only under ownership rules).
+- **Dependencies:** Independent. Remaining E1 PRs (Workspace, Usage, Settings) base on `feat/local-console-home`.
