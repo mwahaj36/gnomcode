@@ -4,6 +4,9 @@ const path = require('node:path');
 const targets = ['win32-x64','win32-arm64','darwin-x64','darwin-arm64','linux-x64','linux-arm64','linux-x64-musl'];
 function inspectRelease(root, cargoPath) {
   const errors = [];
+  let approvedEula;
+  try { approvedEula = fs.readFileSync(path.join(path.dirname(cargoPath), 'docs/legal/EULA.txt')); }
+  catch { errors.push('Approved EULA source is missing'); }
   const shim = JSON.parse(fs.readFileSync(path.join(root, 'gnomcode/package.json'), 'utf8'));
   const cargo = fs.readFileSync(cargoPath, 'utf8');
   const workspaceVersion = cargo.match(/\[workspace\.package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/);
@@ -26,6 +29,7 @@ function inspectRelease(root, cargoPath) {
   }
   for (const file of ['EULA.txt', 'THIRD_PARTY_NOTICES.html']) checkFile(path.join(root, 'gnomcode'), file, 'gnomcode');
   for (const dir of [path.join(root, 'gnomcode'), ...targets.map(target => path.join(root, 'platform', target))]) {
+    try { if (approvedEula && !fs.readFileSync(path.join(dir, 'EULA.txt')).equals(approvedEula)) errors.push(`${dir}: does not match approved EULA`); } catch {}
     try { if (/\bdraft\b/i.test(fs.readFileSync(path.join(dir, 'EULA.txt'), 'utf8'))) errors.push(`${dir}: EULA is marked as a draft`); } catch {}
   }
   return errors;

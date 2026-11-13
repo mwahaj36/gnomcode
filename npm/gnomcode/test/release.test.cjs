@@ -29,3 +29,16 @@ test('rejects draft EULA release inputs', () => {
     assert.ok(inspectRelease(root,path.join(root,'Cargo.toml')).some(e=>/draft/i.test(e)));
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
 });
+
+test('rejects a non-draft EULA different from the approved legal source', () => {
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'gnomcode-eula-'));
+ try {
+  fs.mkdirSync(path.join(root,'gnomcode'),{recursive:true});
+  fs.mkdirSync(path.join(root,'docs/legal'),{recursive:true});
+  fs.writeFileSync(path.join(root,'docs/legal/EULA.txt'),'approved terms');
+  fs.writeFileSync(path.join(root,'Cargo.toml'),'[workspace.package]\nversion = "1.0.0"\n');
+  fs.writeFileSync(path.join(root,'gnomcode/package.json'),JSON.stringify({version:'1.0.0',optionalDependencies:{}}));
+  fs.writeFileSync(path.join(root,'gnomcode/EULA.txt'),'different terms');
+  assert.ok(inspectRelease(root,path.join(root,'Cargo.toml')).some(e=>/approved EULA/i.test(e)));
+ } finally {fs.rmSync(root,{recursive:true,force:true});}
+});

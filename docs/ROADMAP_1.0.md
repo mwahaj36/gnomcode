@@ -86,3 +86,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [ ] F1 Worktree per session UI (`web/local-console/WorkspaceView.tsx`, `web/components/RemoteCompanion.tsx`, ADR `0036`) - launch isolation toggle, read-only diff review, and inline-confirmed Merge / Discard / Open PR controls wired to daemon HTTP & E2EE stubs (awaiting Worker A Rust backend before checking off F1)
 - [ ] F2 "Continue here" for imported sessions UI (`web/local-console/WorkspaceView.tsx`, `web/components/RemoteCompanion.tsx`) - primary `Continue here` action wired to `POST /api/v1/sessions/{id}/continue-here` / E2EE `continue_here` with managed-launcher prefill fallback (awaiting Worker A backend adoption endpoint before checking off F2)
 - [x] F3 Handoff quality eval report UI (`web/local-console/UsageView.tsx`, `web/lib/eval-presentation.mjs`, ADR `0038`) - pre-computed pass rate, trust badge, and per-case outcome report fetching `GET /api/v1/evals/handoff` with zero client calculation (ADR 0055)
+
+## codex-release preparation - 2026-11-13
+
+- [x] G1 preparation: lockstep 1.0.0 versions, CHANGELOG and release notes from approved 7cec4e6 baseline. Candidate only; publication and release acceptance stay unchecked in section G.

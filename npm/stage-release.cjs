@@ -9,6 +9,9 @@ if (!artifactRoot || !eulaFile || !noticesFile) {
   process.exit(2);
 }
 const eula = fs.readFileSync(eulaFile);
+if (!eula.equals(fs.readFileSync(path.join(__dirname, '../docs/legal/EULA.txt')))) {
+  throw new Error('Use docs/legal/EULA.txt as-is; draft or alternative legal text must not ship.');
+}
 const notices = fs.readFileSync(noticesFile);
 if (!eula.length || /\bdraft\b/i.test(eula.toString('utf8')) || !notices.length) {
   throw new Error('An approved EULA and non-empty third-party notices are required.');
