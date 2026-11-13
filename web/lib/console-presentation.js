@@ -864,6 +864,8 @@ export function renderChangesView(data) {
     ? `<pre class="sp-diff-code" tabindex="0" aria-label="Unified git diff">${diffLines}</pre>`
     : '<p class="sp-provider-empty">No modified tracked diff hunks (untracked files listed above).</p>';
   return `<div class="sp-changes-meta">${badges}</div>${fileMarkup}${diffMarkup}`;
+}
+
 export function normalizeWorkspaceRelPath(input) {
   if (typeof input !== 'string') return { ok: false, error: 'Enter a relative file path inside the workspace.' };
   const raw = input.trim().replaceAll('\\', '/');

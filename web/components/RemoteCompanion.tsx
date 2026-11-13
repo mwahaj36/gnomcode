@@ -330,6 +330,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     setChangesState(null);
     try { await send({ type: 'changes', session_id: selectedRef.current }); }
     catch { changesRequested.current = false; setChangesLoading(false); setChangesState({ session_id: selectedRef.current, error: 'Could not reach your desktop for workspace changes.' }); }
+  }
+
   async function browseRepoFiles(path = '') {
     if (!authenticated.current || !selectedRef.current) return;
     filesRequested.current = true;
@@ -456,6 +458,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       setChangesLoading(false);
       if (!reply.session_id || reply.session_id === selectedRef.current) {
         setChangesState({ session_id: reply.session_id || selectedRef.current, repo: reply.repo, diff: reply.diff || '', status: reply.status || '', lossy: Boolean(reply.lossy) });
+      }
+    }
     else if (reply.type === 'repo_files') {
       filesRequested.current = false;
       if (!reply.session_id || reply.session_id === selectedRef.current) {
@@ -474,6 +478,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(reply.request_type==='changes' || (changesRequested.current && /unsupported remote command/i.test(reply.message || ''))){
         changesRequested.current=false;setChangesLoading(false);
         setChangesState({session_id:selectedRef.current,error:/unsupported/i.test(reply.message || '') ? 'Update Gnomcode on your desktop to inspect git changes from your phone.' : (reply.message || 'Could not load git changes.')});
+        return;
+      }
       if (reply.request_type === 'repo_files' || reply.request_type === 'repo_file' || (filesRequested.current && /unsupported remote command/i.test(reply.message || ''))) {
         filesRequested.current = false;
         const msg = /unsupported/i.test(reply.message || '')
