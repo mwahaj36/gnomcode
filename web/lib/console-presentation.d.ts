@@ -92,3 +92,6 @@ export type AttachmentItem = { id: string; filename: string; size: number; mime_
 export function validateAttachmentCandidate(file: { name?: string; size?: number; type?: string } | null | undefined): { ok: true; filename: string; size: number; mime_type: string } | { ok: false; reason: string };
 export function renderAttachmentPills(items?: AttachmentItem[]): string;
 export function formatPromptWithAttachments(promptText: string, attachments?: AttachmentItem[]): string;
+export function isSessionRunningState(state: string | null | undefined): boolean;
+export function createInterruptRequestId(): string;
+export function formatInterruptAckMessage(ack?: { sent?: boolean } | null): string;
