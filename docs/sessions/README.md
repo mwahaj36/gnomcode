@@ -1,6 +1,6 @@
-- [2026-11-13 Handoff original-goal repair](2026-11-13-handoff-original-goal.md)
 # Engineering sessions
 
+- [2026-11-13 Handoff original-goal repair](2026-11-13-handoff-original-goal.md)
 - [2026-11-13 Release 1.0.0 packaged smoke procedure](2026-11-13-release-1-0-smoke.md)
 - [2026-11-13 Windows downloads and update manifest](2026-11-13-release-download-manifest.md)
 - [2026-11-13 Windows 1.0.0 packaging evidence](2026-11-13-release-windows-package.md)
