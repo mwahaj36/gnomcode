@@ -53,3 +53,9 @@ Tag review: source already has historical v1.0.0 at 503aed81e55dd3474b440a2b262a
 ## Items 4 and 5 prepared
 
 Downloads source and local manifest generator passed dedicated web 127 tests/typecheck/build and Rust 499 tests; repeated after rebase onto 3943dbb. Version 1.0.0 integration HTTP/rendered version and desktop/mobile browser checks passed; actual local Windows manifest hashes match. Smoke document source/CLI-help checks and Rust 499-test gate passed, including after rebase. Separate PRs follow; installed/provider/phone acceptance remains pending.
+
+## Item 4 delivered - PR #250
+
+https://github.com/mwahaj36/spawnt/pull/250
+
+Version-derived Windows downloads/SEO/llms copy, branding redirects, checksum/latest.json allow-list, and local real-artifact Windows-only manifest generation wired after packaging checks. No invented hashes/signatures, macOS/Linux claims or publication. Generator red/green and tamper-preservation test pass. Dedicated web 127 tests/typecheck/build and Rust fmt/clippy/499 tests passed, repeated after rebase onto 3943dbb. 1.0.0 integration HTTP/browser and actual artifact manifest checks passed. Public v1.0.0 assets absent, as disclosed. Depends on #243/#245/#248 in review order. Downloads worktree/target/node_modules/.next removed immediately after PR; smoke gate using that target had finished first.
