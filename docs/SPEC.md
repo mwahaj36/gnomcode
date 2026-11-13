@@ -443,4 +443,4 @@ The local Windows packaging workflow prepares an unsigned latest.json only after
 
 ## Packaged acceptance procedure addendum - 2026-11-13
 
-Section 5/M3 and section 6 release acceptance: docs/sessions/2026-11-13-release-1-0-smoke.md defines the exact review procedure for final packaged artifacts, agents, limits, tray, Remote, approvals, notifications, pinned-key auto-update and doctor. Preparing this checklist does not close acceptance. Windows install/upgrade/uninstall requires a disposable account or VM because current packaging owns shared per-user integration state even with a separate destination.
+Section 5/M3 and section 6 release acceptance: docs/sessions/2026-11-13-release-1-0-smoke.md defines the exact review procedure for final packaged artifacts, agents, limits, tray, Remote, approvals, notifications, pinned-key auto-update and doctor. Preparing this checklist does not close acceptance. Windows install/upgrade/uninstall is performed by Claude on Wahaj’s machine at release smoke (owner decision); a disposable VM is not required, though current packaging owns shared per-user integration state even with a separate destination.

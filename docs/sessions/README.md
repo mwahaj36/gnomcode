@@ -1,6 +1,6 @@
-- [2026-11-13 Release 1.0.0 packaged smoke procedure](2026-11-13-release-1-0-smoke.md)
 # Engineering sessions
 
+- [2026-11-13 Release 1.0.0 packaged smoke procedure](2026-11-13-release-1-0-smoke.md)
 - [2026-11-13 Windows downloads and update manifest](2026-11-13-release-download-manifest.md)
 - [2026-11-13 Windows 1.0.0 packaging evidence](2026-11-13-release-windows-package.md)
 - [2026-11-13 Build-pinned update signing](2026-11-13-release-update-signing.md)
