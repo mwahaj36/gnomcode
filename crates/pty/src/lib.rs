@@ -2,6 +2,7 @@
 
 pub mod acp_approvals;
 pub mod codex_app_server;
+pub mod protocol_host;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -321,11 +322,12 @@ struct HostState {
     input_tx: std::sync::mpsc::Sender<PtyInput>,
     stopping: Arc<AtomicBool>,
     resize: Arc<dyn Fn(u16, u16) + Send + Sync>,
+    protocol: bool,
 }
 
-struct PtyInput {
-    bytes: Vec<u8>,
-    written: Option<tokio::sync::oneshot::Sender<bool>>,
+pub(crate) struct PtyInput {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) written: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
 /// Runs the independent PTY session host server.
@@ -529,6 +531,56 @@ pub async fn run_pty_host_resuming(
         let _ = child.kill();
     });
 
+    serve_host(HostParts {
+        session_id,
+        agent,
+        repo,
+        model,
+        token,
+        child_pid,
+        scrollback,
+        output_tx,
+        input_tx,
+        stopping,
+        resize,
+        protocol: false,
+    })
+    .await
+}
+
+/// Everything the loopback host needs once its child (PTY or protocol driver) is running.
+pub(crate) struct HostParts<'a> {
+    pub(crate) session_id: &'a str,
+    pub(crate) agent: &'a str,
+    pub(crate) repo: &'a Path,
+    pub(crate) model: Option<&'a str>,
+    pub(crate) token: String,
+    pub(crate) child_pid: u32,
+    pub(crate) scrollback: Arc<Mutex<Scrollback>>,
+    pub(crate) output_tx: broadcast::Sender<Vec<u8>>,
+    pub(crate) input_tx: std::sync::mpsc::Sender<PtyInput>,
+    pub(crate) stopping: Arc<AtomicBool>,
+    pub(crate) resize: Arc<dyn Fn(u16, u16) + Send + Sync>,
+    /// Protocol hosts have no terminal screen, so the PTY readiness checks do not apply.
+    pub(crate) protocol: bool,
+}
+
+/// Binds the authenticated loopback listener, records the session and serves until the child exits.
+pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
+    let HostParts {
+        session_id,
+        agent,
+        repo,
+        model,
+        token,
+        child_pid,
+        scrollback,
+        output_tx,
+        input_tx,
+        stopping,
+        resize,
+        protocol,
+    } = parts;
     // Bind loopback HTTP/WebSocket listener
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
@@ -557,6 +609,7 @@ pub async fn run_pty_host_resuming(
         input_tx,
         stopping: Arc::clone(&stopping),
         resize,
+        protocol,
     });
 
     let app = Router::new()
@@ -752,10 +805,12 @@ async fn host_input_handler(
     if body.is_empty() {
         return StatusCode::BAD_REQUEST;
     }
-    if matches!(
-        state.agent.as_str(),
-        "antigravity" | "agy" | "codex" | "claude" | "claude-code" | "gemini" | "gemini-cli"
-    ) && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
+    if !state.protocol
+        && matches!(
+            state.agent.as_str(),
+            "antigravity" | "agy" | "codex" | "claude" | "claude-code" | "gemini" | "gemini-cli"
+        )
+        && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
         && state.scrollback.lock().map_or(true, |output| {
             let bytes = output.bytes();
             startup_needs_setup(&state.agent, &bytes)
@@ -872,10 +927,11 @@ async fn host_retry_enter_handler(
     if !authenticated {
         return StatusCode::UNAUTHORIZED;
     }
-    let confirmed = state.scrollback.lock().is_ok_and(|output| {
-        let bytes = output.bytes();
-        composer_has_unsubmitted_prompt(&state.agent, &bytes, &payload.prompt)
-    });
+    let confirmed = !state.protocol
+        && state.scrollback.lock().is_ok_and(|output| {
+            let bytes = output.bytes();
+            composer_has_unsubmitted_prompt(&state.agent, &bytes, &payload.prompt)
+        });
     if !confirmed {
         return StatusCode::CONFLICT;
     }
@@ -1216,6 +1272,7 @@ mod tests {
         let (input_tx, input_rx) = std::sync::mpsc::channel();
         let (output_tx, _) = broadcast::channel(8);
         let state = Arc::new(HostState {
+            protocol: false,
             agent: "codex".into(),
             token: "startup-test".into(),
             session_id: "startup-test".into(),
@@ -1280,6 +1337,7 @@ mod tests {
         scrollback
             .append(b"Do you trust the contents of this project?\r\n> Yes, I trust this folder");
         let state = Arc::new(HostState {
+            protocol: false,
             agent: "antigravity".into(),
             token: "setup-test".into(),
             session_id: "setup-test".into(),
@@ -1405,6 +1463,7 @@ mod tests {
             let mut scrollback = Scrollback::new(SCROLLBACK_BYTES);
             scrollback.append(screen);
             let state = Arc::new(HostState {
+                protocol: false,
                 agent: agent.into(),
                 token: "setup-test".into(),
                 session_id: "setup-test".into(),
@@ -1439,6 +1498,7 @@ mod tests {
         let mut scrollback = Scrollback::new(4096);
         scrollback.append(b"? for shortcuts\r\nHooks need review\r\n2 hooks are new or changed.\r\n1. Review hooks\r\n2. Trust all and continue\r\n3. Continue without trusting");
         let state = Arc::new(HostState {
+            protocol: false,
             agent: "codex".into(),
             token: "setup-test".into(),
             session_id: "setup-test".into(),
@@ -1523,6 +1583,7 @@ mod tests {
         let (input_tx, input_rx) = std::sync::mpsc::channel();
         let (output_tx, _) = broadcast::channel(8);
         let state = Arc::new(HostState {
+            protocol: false,
             agent: "codex".into(),
             token: "input-test".into(),
             session_id: "input-test".into(),
@@ -1884,6 +1945,7 @@ mod tests {
         let mut scrollback = Scrollback::new(SCROLLBACK_BYTES);
         scrollback.append(CLAUDE_READY);
         let state = Arc::new(HostState {
+            protocol: false,
             agent: "claude-code".into(),
             token: "retry-test".into(),
             session_id: "retry-test".into(),
