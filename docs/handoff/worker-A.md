@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: Section C session artifacts (ADR 0039)
+
+- PR https://github.com/mwahaj36/spawnt/pull/208; branch `feat/remote-session-artifacts`, head `077c4e5`, depends on baseline #189, unblocks #192.
+- Changed files: `crates/daemon/src/session_artifacts.rs` (new), `crates/daemon/src/lib.rs`, `crates/daemon/src/api.rs` (`GET /api/v1/sessions/{id}/artifacts`), `crates/daemon/src/remote.rs` (`artifacts`), `docs/adr/0039-remote-session-artifacts.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-remote-session-artifacts.md`, `docs/sessions/README.md`.
+- JSON shape: `{type:"artifacts",session_id,artifacts:[{id,title,path,kind,mime_type,status,content?,data_url?}],changes_count}` (30 items, 256 KiB text, 512 KiB image cap).
+- Tests: `session_artifacts::tests::remote_artifacts_collects_html_markdown_and_image_outputs`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: Section C per-session changes/diff (ADR 0037)
 
 - PR https://github.com/mwahaj36/spawnt/pull/207; branch `feat/remote-session-changes`, head `28dae6e`, depends on baseline #189, unblocks #190 Remote parity.
