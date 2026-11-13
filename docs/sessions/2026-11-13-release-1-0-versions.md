@@ -34,3 +34,7 @@ Reviewed 496d740..47a24a0 and extended release-note coverage for consistent cons
 Final notes cutoff: reviewed 47a24a0..3943dbb (account-view refinement), already covered by the consistent account/approval dialog release note. The coverage line now records 3943dbb. No product/version code changed in this documentation follow-up.
 
 The final fetch also included 175f821 (React console shell retirement). Reviewed as implementation consolidation under the existing four-place console note; source-note coverage cutoff is 175f821. Shipping builds still require final integration after all release PRs merge.
+
+Wahaj follow-up: npm release validation and staging now require byte-identical docs/legal/EULA.txt. A non-draft alternative regression failed first, then passed. Release steps record Claude-owned FleetHUD tag rename and pending release smoke; no tag/release changes performed.
+
+Decision follow-up gate: fmt/clippy and 499 workspace tests passed, npm 5 tests passed, desktop npm ci/lint/40 tests/typecheck/build and web npm ci/128 tests/typecheck/build passed. No keys/tags/releases changed.
