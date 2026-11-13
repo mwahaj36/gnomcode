@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: Section C read-only workspace file list/read (ADR 0035)
+
+- PR https://github.com/mwahaj36/spawnt/pull/205; branch `feat/remote-workspace-files`, head `313cd52`, depends on baseline #189, unblocks #191 Remote parity.
+- Changed files: `crates/daemon/src/workspace_files.rs` (new), `crates/daemon/src/lib.rs`, `crates/daemon/src/api.rs` (`GET /api/v1/repos/files`), `crates/daemon/src/remote.rs` (`repo_files`, `repo_file`), `docs/adr/0035-remote-workspace-files.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-remote-workspace-files.md`, `docs/sessions/README.md`.
+- JSON shapes: `repo_files` -> `{type:"repo_files",session_id,path,entries:[{name,path,kind,size}],truncated}` (200 cap); `repo_file` -> `{type:"repo_file",session_id,path,content,size}` (512 KiB UTF-8 cap).
+- Tests: `workspace_files::tests::remote_repo_files_and_file_stay_confined_and_enforce_size_limit`, `remote_repo_files_rejects_symlinks_escaping_workspace` (`#[cfg(unix)]`).
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: G13 Codex and Gemini native-install discovery
 
 - PR https://github.com/mwahaj36/spawnt/pull/203; branch `feat/codex-gemini-discovery`, head `b4c841b`, depends on baseline #189, independent of #187/#193/#197/#200/#202.
