@@ -137,6 +137,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions/hosted", get(list_hosted_sessions_handler))
         .route("/api/v1/sessions/launch", post(launch_session_handler))
         .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
+        .route(
+            "/api/v1/sessions/{id}/interrupt",
+            post(crate::interrupt::handler),
+        )
         .route("/api/v1/sessions/{id}/prompt", post(prompt_session_handler))
         .route("/api/v1/sessions/{id}/pty", get(pty_stream_handler))
         .route(

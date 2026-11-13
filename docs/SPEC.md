@@ -220,6 +220,8 @@ Paired commands include history paging, live subsequent responses, supported CLI
 
 Public-relay/browser automated acceptance exists. Physical-phone, independent security review and production approval remain open. Do not imply the relay hides connection metadata or is independently certified.
 
+**G5 backend interruption (ADR 0035).** Encrypted Remote accepts `{"type":"interrupt","session_id":"<conversation>","request_id":"<unique-id>"}`; authenticated local `POST /api/v1/sessions/{id}/interrupt` accepts `{"request_id":"<unique-id>"}`. Request IDs contain 8–64 ASCII letters, digits, hyphens or underscores. Rust serializes interruption with prompt/resume/switch control, resolves only an existing uniquely bound official-agent host and sends one Esc byte through its authenticated acknowledged input endpoint only when a post-launch, nonfuture source observation classifies as Running. Pending hook approvals also block interruption. Other states or missing hosts return `{"type":"interrupt_ack","session_id":"...","request_id":"...","sent":false}` without launching or resuming anything. `sent:true` confirms the PTY write, never cancellation by the native CLI. At most 256 receipts live in memory for ten minutes; retries of the same request ID and conversation return the original result without another write, including ambiguous write errors. Reusing an ID for another conversation is rejected. Capacity exhaustion rejects new requests. After receipt expiry or daemon restart, clients must inspect current state and must not automatically replay old requests. No process is killed, no chat content is persisted, and no arbitrary keystroke interface is exposed over Remote. Provider-specific live Esc cancellation and physical-phone acceptance remain release evidence gaps.
+
 ### 3.15.1 Withdrawn cloud collectors
 
 Hosted vendor-cloud-session collectors and legacy unencrypted cloud command intake are withdrawn. Existing migration/history records are retained. Do not reintroduce credential capture or remote commands through metadata sync.
@@ -250,6 +252,7 @@ Follow [AGENTS](../AGENTS.md), installed engineering skills and relevant ADRs. R
 | M8 routing/handoff | Continuous conversations, named-model controls, quota-based automatic failover, hidden cross-provider context and saved-session resume | Authenticated cross-model/provider outcome confirmation |
 | M9 encrypted Remote | Account-wide consent, automatic signed-in access, durable trust and bounded commands | Physical phone, independent security and owner production approval |
 | Marketing/documentation | Outcome-first positioning, guide/legal routes and SEO in this phase | Production crawl checks and legal approval |
+| 1.0 G5 interrupt backend | State-gated, idempotent Esc delivery over local API and E2EE Remote | Worker B button, native-provider cancellation and physical-phone acceptance |
 
 v1.0 criteria are not met. See [LAUNCH_CHECKLIST](LAUNCH_CHECKLIST.md) for blockers, causes, closure steps and evidence. Historical green checks are not new verification for this phase.
 
@@ -331,6 +334,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0031](./adr/0031-console-four-places.md) | Console has four places (Home, Workspace, Usage, Settings); toggle-only grid rail, top bar under 720px | Accepted |
 | [0032](./adr/0032-phone-approvals.md) | Approve or deny Claude Code permission prompts from the phone (Remote, E2EE) and console through a fail-open `PermissionRequest` hook; Codex, Antigravity and Gemini detection only | Accepted |
 | [0033](./adr/0033-desktop-auto-update.md) | Rust-verified background desktop auto-update staged for user restart or quit | Accepted |
+| [0035](./adr/0035-remote-turn-interruption.md) | Bounded, state-gated and idempotent Esc delivery through the existing PTY input path | Accepted |
 
 ## 10. Open decisions
 
