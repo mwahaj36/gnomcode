@@ -1,5 +1,12 @@
 # Worker A handoff
 
+## 2026-11-13: G8 Claude usage-limit and API error parsing
+
+- PR https://github.com/mwahaj36/spawnt/pull/213; branch `feat/adapters-claude-errors`, head `0397405`, depends on baseline #189.
+- Changed files: `fixtures/claude-code/2026-11-13/usage-limit.jsonl` (anonymized real 429 fixture), `crates/adapters/src/claude.rs`, `crates/adapters/src/lib.rs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-claude-usage-limit-errors.md`, `docs/sessions/README.md`.
+- Evidence & tests: `tests::claude_usage_limit_fixture_marks_error_rate_limited_and_quota`, `tests::claude_api_error_and_stream_json_rate_limit_emit_error_or_rate_limited`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: Section C quick-actions storage (ADR 0043)
 
 - PR https://github.com/mwahaj36/spawnt/pull/212; branch `feat/remote-quick-actions`, head `9435779`, depends on baseline #189.
