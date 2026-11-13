@@ -167,16 +167,18 @@ pub fn antigravity_ide_available() -> bool {
     }
     #[cfg(target_os = "macos")]
     {
-        if std::path::Path::new("/Applications/Antigravity.app").exists() {
-            return true;
-        }
-        if let Some(home) = std::env::var_os("HOME")
-            && std::path::PathBuf::from(home)
-                .join("Applications")
-                .join("Antigravity.app")
-                .exists()
-        {
-            return true;
+        for bundle in ["Antigravity.app", "Antigravity IDE.app"] {
+            if std::path::Path::new("/Applications").join(bundle).exists() {
+                return true;
+            }
+            if let Some(home) = std::env::var_os("HOME")
+                && std::path::PathBuf::from(home)
+                    .join("Applications")
+                    .join(bundle)
+                    .exists()
+            {
+                return true;
+            }
         }
     }
     #[cfg(target_os = "linux")]
@@ -233,20 +235,34 @@ fn standard_cli(name: &str) -> Option<std::path::PathBuf> {
 
 fn antigravity_cli() -> Option<std::path::PathBuf> {
     #[cfg(windows)]
-    let binary = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
-        .join("agy")
-        .join("bin")
-        .join("agy.exe");
+    {
+        let binary = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
+            .join("agy")
+            .join("bin")
+            .join("agy.exe");
+        let directory = binary.parent()?;
+        (binary.is_file() && executable_in(directory, "agy")).then_some(binary)
+    }
     #[cfg(not(windows))]
-    let binary = std::path::PathBuf::from(std::env::var_os("HOME")?)
-        .join(".local")
-        .join("bin")
-        .join("agy");
-    let directory = binary.parent()?;
-    (binary.is_file() && executable_in(directory, "agy")).then_some(binary)
+    {
+        let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
+        for candidate in [
+            home.join(".local").join("bin").join("agy"),
+            home.join(".gemini").join("bin").join("agy"),
+        ] {
+            if candidate.is_file()
+                && candidate
+                    .parent()
+                    .is_some_and(|dir| executable_in(dir, "agy"))
+            {
+                return Some(candidate);
+            }
+        }
+        standard_cli("agy")
+    }
 }
 
-/// Finds Claude Code outside PATH: the native installer, then the copy bundled with the Claude desktop app.
+/// Finds Claude Code outside PATH: the native installer, then the copy bundled with the Claude desktop app or standard CLI prefixes.
 fn claude_cli() -> Option<std::path::PathBuf> {
     let file = if cfg!(windows) {
         "claude.exe"
@@ -260,33 +276,39 @@ fn claude_cli() -> Option<std::path::PathBuf> {
     {
         return Some(native);
     }
-    // Windows desktop app layout: Claude-Data/<install>/claude-code/<version>/<build>/claude.exe.
-    // The packaged (MSIX) app keeps it under Packages/Claude_*/LocalCache/Local when seen from outside.
-    let local = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA")?);
-    let children = |dir: &Path| {
-        std::fs::read_dir(dir)
+    #[cfg(windows)]
+    if let Some(local) = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from) {
+        // Windows desktop app layout: Claude-Data/<install>/claude-code/<version>/<build>/claude.exe.
+        // The packaged (MSIX) app keeps it under Packages/Claude_*/LocalCache/Local when seen from outside.
+        let children = |dir: &Path| {
+            std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|entry| entry.path())
+                .collect::<Vec<_>>()
+        };
+        let packaged = children(&local.join("Packages"))
             .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| entry.path())
-            .collect::<Vec<_>>()
-    };
-    let packaged = children(&local.join("Packages"))
-        .into_iter()
-        .filter(|package| {
-            package
-                .file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with("Claude_"))
-        })
-        .map(|package| package.join("LocalCache").join("Local").join("Claude-Data"));
-    std::iter::once(local.join("Claude-Data"))
-        .chain(packaged)
-        .flat_map(|root| children(&root))
-        .flat_map(|install| children(&install.join("claude-code")))
-        .flat_map(|version| children(&version))
-        .map(|build| build.join(file))
-        .filter(|binary| binary.is_file())
-        .max_by_key(|binary| binary.metadata().and_then(|m| m.modified()).ok())
+            .filter(|package| {
+                package
+                    .file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with("Claude_"))
+            })
+            .map(|package| package.join("LocalCache").join("Local").join("Claude-Data"));
+        if let Some(found) = std::iter::once(local.join("Claude-Data"))
+            .chain(packaged)
+            .flat_map(|root| children(&root))
+            .flat_map(|install| children(&install.join("claude-code")))
+            .flat_map(|version| children(&version))
+            .map(|build| build.join(file))
+            .filter(|binary| binary.is_file())
+            .max_by_key(|binary| binary.metadata().and_then(|m| m.modified()).ok())
+        {
+            return Some(found);
+        }
+    }
+    standard_cli("claude")
 }
 
 fn find_executable_in(directory: &Path, name: &str) -> Option<std::path::PathBuf> {
@@ -602,6 +624,93 @@ mod tests {
             .env("USERPROFILE", root.path())
             .env("LOCALAPPDATA", root.path())
             .env("APPDATA", root.path())
+            .env("PATH", empty_path.path())
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
+    }
+
+    #[test]
+    fn claude_standard_install_works_without_path_entry() {
+        const CHILD: &str = "GNOMCODE_TEST_CLAUDE_STD_INSTALL";
+        if let Some(root) = std::env::var_os(CHILD) {
+            let root = std::path::PathBuf::from(root);
+            let expected = root.join(".npm-global").join("bin").join(if cfg!(windows) {
+                "claude.exe"
+            } else {
+                "claude"
+            });
+            assert!(executable_available("claude"));
+            assert_eq!(
+                agent_command("claude"),
+                (expected.to_string_lossy().into_owned(), vec![])
+            );
+            return;
+        }
+        let root = tempfile::tempdir().expect("install root");
+        let empty_path = tempfile::tempdir().expect("empty path");
+        let directory = root.path().join(".npm-global").join("bin");
+        std::fs::create_dir_all(&directory).expect("bin directory");
+        let binary = directory.join(if cfg!(windows) {
+            "claude.exe"
+        } else {
+            "claude"
+        });
+        std::fs::write(&binary, "fixture").expect("binary");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))
+                .expect("executable");
+        }
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "executables::tests::claude_standard_install_works_without_path_entry",
+            ])
+            .env(CHILD, root.path())
+            .env("HOME", root.path())
+            .env("USERPROFILE", root.path())
+            .env("LOCALAPPDATA", root.path())
+            .env("APPDATA", root.path())
+            .env("PATH", empty_path.path())
+            .status()
+            .expect("isolated test");
+        assert!(status.success());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn agy_gemini_bin_install_works_without_path_entry() {
+        use std::os::unix::fs::PermissionsExt;
+        const CHILD: &str = "GNOMCODE_TEST_AGY_GEMINI_BIN";
+        if let Some(root) = std::env::var_os(CHILD) {
+            let expected = std::path::PathBuf::from(root)
+                .join(".gemini")
+                .join("bin")
+                .join("agy");
+            assert!(executable_available("agy"));
+            assert_eq!(
+                agent_command("agy"),
+                (expected.to_string_lossy().into_owned(), vec![])
+            );
+            return;
+        }
+        let root = tempfile::tempdir().expect("install root");
+        let empty_path = tempfile::tempdir().expect("empty path");
+        let directory = root.path().join(".gemini").join("bin");
+        std::fs::create_dir_all(&directory).expect("bin directory");
+        let binary = directory.join("agy");
+        std::fs::write(&binary, "fixture").expect("binary");
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))
+            .expect("executable");
+        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "executables::tests::agy_gemini_bin_install_works_without_path_entry",
+            ])
+            .env(CHILD, root.path())
+            .env("HOME", root.path())
             .env("PATH", empty_path.path())
             .status()
             .expect("isolated test");
