@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: Section C attachments upload (ADR 0041)
+
+- PR https://github.com/mwahaj36/spawnt/pull/210; branch `feat/remote-attachments`, head `7272c9d`, depends on baseline #189, unblocks #194.
+- Changed files: `crates/daemon/src/attachments.rs` (new), `crates/daemon/src/lib.rs`, `crates/daemon/src/api.rs` (`POST /api/v1/sessions/{id}/attachments`), `crates/daemon/src/remote.rs` (`upload_attachment`), `docs/adr/0041-remote-attachments.md`, `docs/SPEC.md`, `docs/sessions/2026-11-13-remote-attachments.md`, `docs/sessions/README.md`.
+- JSON shape: `upload_attachment` -> `attachment_ack` `{type:"attachment_ack",session_id,request_id,filename,mime_type,size,workspace_path}` (15 MiB/file, 200 MiB/session, allowlisted extensions, random prefix in `.gnomcode/attachments/`).
+- Tests: `attachments::tests::remote_upload_attachment_saves_sanitized_file_and_enforces_limits`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: Section C session artifacts (ADR 0039)
 
 - PR https://github.com/mwahaj36/spawnt/pull/208; branch `feat/remote-session-artifacts`, head `077c4e5`, depends on baseline #189, unblocks #192.
