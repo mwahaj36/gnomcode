@@ -2941,21 +2941,21 @@ impl Database {
             .filter(|value| !value.is_empty())
             .unwrap_or("all");
         // A parent with a live subagent is itself ongoing; this mirrors the child presence rules.
-        let child_clause = |recent: &str, approval: &str, exec: &str| {
+        let child_clause = |approval: &str, exec: &str| {
             format!(
-                "EXISTS (SELECT 1 FROM session c WHERE c.parent_session_id = s.id AND c.id <> s.id AND (c.state = 'awaiting_approval' AND julianday(c.last_event_at) >= julianday({approval}) OR (c.state IN ('thinking','tool') AND (julianday(c.last_event_at) >= julianday({recent}) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = c.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE c.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(c.last_event_at) >= julianday({exec})))))"
+                "EXISTS (SELECT 1 FROM session c WHERE c.parent_session_id = s.id AND c.id <> s.id AND (c.state = 'awaiting_approval' AND julianday(c.last_event_at) >= julianday({approval}) OR (c.state IN ('thinking','tool') AND julianday(c.last_event_at) >= julianday({exec}))))"
             )
         };
-        let child_count = child_clause("?3", "?5", "?6");
-        let child_page = child_clause("?3", "?7", "?8");
+        let child_count = child_clause("?5", "?6");
+        let child_page = child_clause("?7", "?8");
         let total_count: i64 = self.conn.query_row(
             &format!(r#"SELECT COUNT(*) FROM session s
                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
-                   OR (?2 = 'ongoing' AND ({child_count} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND ({child_count} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?6)))))
+                   OR (?2 = 'ongoing' AND ({child_count} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?6))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND ({child_count} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?6))))
                    OR (?2 = 'idle' AND s.state = 'idle'))"#),
             params![agent, status, cutoff, project_filter, stale_cutoff, execution_cutoff],
             |row| row.get(0),
@@ -2964,14 +2964,14 @@ impl Database {
             &format!(r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
-                   OR (?2 = 'ongoing' AND ({child_page} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND (julianday(s.last_event_at) >= julianday(?3) OR (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = CASE s.state WHEN 'tool' THEN 'tool_start' ELSE 'prompt' END AND julianday(s.last_event_at) >= julianday(?8)))))
+                   OR (?2 = 'ongoing' AND ({child_page} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))))
                     OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
@@ -3936,7 +3936,7 @@ mod tests {
     };
 
     #[test]
-    fn open_execution_counts_as_ongoing_only_within_the_presence_limit() {
+    fn unresolved_tool_step_is_running_only_within_ten_minutes() {
         let mut db = Database::open_in_memory().expect("db");
         let project = Project::from_origin(None, "/w", None);
         let now = Utc::now();
@@ -3956,7 +3956,8 @@ mod tests {
         db.commit_batch(
             std::slice::from_ref(&project),
             &[
-                session("recent", chrono::Duration::minutes(30)),
+                session("recent", chrono::Duration::minutes(5)),
+                session("stalled", chrono::Duration::minutes(60)),
                 session("abandoned", chrono::Duration::hours(13)),
             ],
             &[],
@@ -3971,7 +3972,7 @@ mod tests {
             },
         )
         .expect("sessions");
-        for (name, age) in [("recent", 30), ("abandoned", 13 * 60)] {
+        for (name, age) in [("recent", 5), ("stalled", 60), ("abandoned", 13 * 60)] {
             db.conn
                 .execute(
                     "INSERT INTO activity_event(session_id,timestamp,kind) VALUES (?1,?2,'tool_start')",
@@ -4512,9 +4513,10 @@ mod tests {
             .expect("open tool");
         assert_eq!(
             db.list_sessions_paginated(None, Some("ongoing"), 0, 10)
-                .expect("long tool")
+                .expect("stalled tool")
                 .1,
-            1
+            0,
+            "an unresolved tool step older than ten minutes is not Running"
         );
         let ancient = (Utc::now() - chrono::Duration::days(15)).to_rfc3339();
         db.conn
