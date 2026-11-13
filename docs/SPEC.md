@@ -456,4 +456,9 @@ Selection reserves the optional redacted title (up to 256 characters) and origin
 
 Successful phone/console holds now queue the existing structured ApprovalWaiting notification asynchronously for Claude Code, Codex and Antigravity. Hook hints and periodic observations share the same notification engine, dedupe and rate limits. Push payloads never include approval tool names or summaries; notification preferences remain authoritative. Failed or unavailable delivery cannot delay the hold response or block agent use.
 
+
+## Release follow-up: Remote action activity timer (2026-11-13)
+
+Authenticated, trusted Remote requests continue_here, worktree_merge, worktree_discard, worktree_open_pr and approvals refresh room activity, alongside existing interrupt and approval requests. Existing authorization and dispatch behavior are unchanged.
+
 SPEC section 5 delivery: complete; verification is recorded in the session below.
