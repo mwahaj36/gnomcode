@@ -748,6 +748,8 @@ export function renderConversationLimits(limits = []) {
   return limits.map(limit => `<span class="sp-chip sp-chip--${CHIP_CLASS[stateOf(limit)]} sp-conversation-limit" title="${escape(meterTitle(limit))}">${escape(limit.label)} ${escape(valueText(limit))}</span>`).join('');
 }
 
+export const MAX_QUICK_ACTIONS = 20;
+
 export const QUICK_ACTIONS_STORAGE_KEY = 'gnomcode-quick-actions-v1';
 
 export const DEFAULT_QUICK_ACTIONS = Object.freeze([
@@ -768,7 +770,7 @@ export function normalizeQuickAction(item) {
   const rawId = typeof item.id === 'string' && item.id.trim()
     ? item.id.trim()
     : label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'custom';
-  return { id: rawId.slice(0, 48), label, prompt, builtin: Boolean(item.builtin) };
+  return { id: rawId.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 48), label, prompt, builtin: Boolean(item.builtin) };
 }
 
 export function mergeQuickActions(items) {
@@ -780,8 +782,14 @@ export function mergeQuickActions(items) {
     if (!clean || seen.has(clean.id)) continue;
     seen.add(clean.id);
     normalized.push(clean);
+    if (normalized.length >= MAX_QUICK_ACTIONS) break;
   }
   return normalized.length ? normalized : DEFAULT_QUICK_ACTIONS.map(item => ({ ...item }));
+}
+
+/** Daemon wire shape: only id, label and prompt (the daemon rejects unknown fields). */
+export function toWireQuickActions(items) {
+  return mergeQuickActions(items).map(({ id, label, prompt }) => ({ id, label, prompt }));
 }
 
 export function loadStoredQuickActions(storage = typeof localStorage !== 'undefined' ? localStorage : null) {

@@ -14,7 +14,7 @@ Add one-tap canned quick prompts (`Continue`, `Summarize changes`, `Run tests`, 
 ## Problems and root causes
 
 - **Mobile quick-prompt pill specificity:** Generic button rules in `gnomcode-console.css` overrode `.sp-quick-action`, and `#chat-quick-actions` did not match `#chat-prompt-form`'s `900px` centered alignment. Fixed by qualifying `.sp-native-console .sp-quick-action,.sp-remote .sp-quick-action` and matching `#chat-quick-actions` width/alignment to `#chat-prompt-form`.
-- **Safe Remote compatibility without Worker A backend:** Sending an unknown Remote request like `quick_prompts` to an un-updated daemon returns `{ type: 'error', message: 'Unsupported remote command' }`. Avoided speculative Remote RPC calls; quick prompts persist locally and dispatch solely via `{ type: 'prompt', session_id, text }`.
+- **Backend contract (merge review):** the merged backend (ADR 0043) persists the list and rejects unknown fields (`deny_unknown_fields`) and more than 20 entries. The UI now loads and saves through `GET`/`PUT /api/v1/quick-actions` and Remote `quick_actions` get/set, sends only `{ id, label, prompt }`, caps the list at 20, and keeps local storage only as an offline fallback.
 
 ## Decisions
 

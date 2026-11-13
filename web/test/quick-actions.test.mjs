@@ -88,3 +88,11 @@ test('quick actions wire into console and remote using plain prompt delivery onl
   assert.doesNotMatch(cssSlice, /#[0-9a-f]{3,6}\b/i);
   assert.match(cssSlice, /max-height:450px/);
 });
+
+test('toWireQuickActions sends only id, label and prompt and caps the list at the daemon limit', async () => {
+  const { toWireQuickActions, MAX_QUICK_ACTIONS } = await import('../lib/console-presentation.js');
+  const wire = toWireQuickActions([{ id: 'a b', label: 'A', prompt: 'Do A', builtin: true, argv: ['x'] }]);
+  assert.deepEqual(wire, [{ id: 'a-b', label: 'A', prompt: 'Do A' }]);
+  const many = Array.from({ length: 30 }, (_, i) => ({ id: `q${i}`, label: `Q${i}`, prompt: 'p' }));
+  assert.equal(toWireQuickActions(many).length, MAX_QUICK_ACTIONS);
+});

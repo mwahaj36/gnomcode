@@ -1173,13 +1173,27 @@ function cycleTheme() {
     let quickActionsCache = null;
     async function getQuickActions() {
       const presentation = await import('/console-presentation.js');
-      if (!quickActionsCache) quickActionsCache = presentation.loadStoredQuickActions();
+      if (!quickActionsCache) {
+        quickActionsCache = presentation.loadStoredQuickActions();
+        try {
+          const remote = await apiJson('/api/v1/quick-actions');
+          if (Array.isArray(remote?.actions)) quickActionsCache = presentation.saveStoredQuickActions(remote.actions);
+        } catch { /* daemon list unavailable: keep the local cache */ }
+      }
       return { presentation, items: quickActionsCache };
     }
 
     async function persistQuickActions(items) {
       const presentation = await import('/console-presentation.js');
-      quickActionsCache = presentation.saveStoredQuickActions(items);
+      const err = document.getElementById('quick-actions-error');
+      try {
+        const saved = await apiJson('/api/v1/quick-actions', { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ actions: presentation.toWireQuickActions(items) }) });
+        quickActionsCache = presentation.saveStoredQuickActions(Array.isArray(saved?.actions) ? saved.actions : items);
+        if (err) { err.hidden = true; err.textContent = ''; }
+      } catch (error) {
+        if (err) { err.textContent = `Could not save quick prompts: ${error.message}`; err.hidden = false; }
+        return;
+      }
       void renderChatQuickActions();
       renderQuickActionsDialogList(quickActionsCache);
     }
@@ -1231,6 +1245,10 @@ function cycleTheme() {
       }
       if (err) { err.hidden = true; err.textContent = ''; }
       const { items } = await getQuickActions();
+      if (items.length >= presentation.MAX_QUICK_ACTIONS) {
+        if (err) { err.textContent = `Up to ${presentation.MAX_QUICK_ACTIONS} quick prompts. Remove one first.`; err.hidden = false; }
+        return;
+      }
       await persistQuickActions([...items, clean]);
       if (labelEl) labelEl.value = '';
       if (promptEl) promptEl.value = '';

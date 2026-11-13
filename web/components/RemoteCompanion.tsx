@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
+import { DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat } from '../lib/console-presentation';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
@@ -17,7 +17,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -250,6 +250,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     catch { setOptimistic(current=>({...current,[sourceSession]:(current[sourceSession] || []).filter(item=>item.id !== id)})); pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
   }
 
+  function persistQuickActions(items: QuickAction[]) {
+    setQuickActions(saveStoredQuickActions(items));
+    void send({ type: 'quick_actions', action: 'set', actions: toWireQuickActions(items) }).catch(() => setQuickActionError('Saved on this phone only. Reconnect to sync quick prompts with your laptop.'));
+  }
+
   function submitPrompt() { return submitPromptText(promptRef.current, true); }
 
   function submitQuickAction(action: QuickAction) {
@@ -265,7 +270,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       return;
     }
     setQuickActionError('');
-    setQuickActions(saveStoredQuickActions([...quickActions, clean]));
+    if (quickActions.length >= MAX_QUICK_ACTIONS) { setQuickActionError(`Up to ${MAX_QUICK_ACTIONS} quick prompts. Remove one first.`); return; }
+    persistQuickActions([...quickActions, clean]);
     setNewQuickLabel('');
     setNewQuickPrompt('');
   }
@@ -315,6 +321,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(!result.ok)setNotice(result.error || 'Background notification setup could not be confirmed. Use the notification button to retry.');
     });
     await requestSessions();
+    void send({type:'quick_actions',action:'get'}).catch(()=>{});
     await send({type:'routing'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
@@ -402,6 +409,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       }
     }
     else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await requestSessions(); if(reply.session_id) loadChat(reply.session_id); }
+    else if (reply.type === 'quick_actions' && Array.isArray(reply.actions)) { setQuickActionError(''); setQuickActions(saveStoredQuickActions(reply.actions)); }
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
     else if (reply.type === 'error') {
@@ -561,14 +569,14 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     {quickActionsPanel && <dialog ref={quickActionsDialog} className="remote-sheet" aria-labelledby="remote-quick-actions-heading" onClose={()=>setQuickActionsPanel(false)}>
       <header><h2 id="remote-quick-actions-heading">Quick prompts</h2><button type="button" aria-label="Close quick prompts" onClick={()=>quickActionsDialog.current?.close()}>Close</button></header>
       <p className="sp-field-note">Canned prompts are sent as plain chat messages, never shell commands.</p>
-      <div className="sp-quick-actions-list">{quickActions.map(item=><div key={item.id} className="sp-quick-action-row"><div><strong>{item.label}</strong><p>{item.prompt}</p></div><button type="button" disabled={quickActions.length<=1} onClick={()=>setQuickActions(saveStoredQuickActions(quickActions.filter(row=>row.id!==item.id)))}>Remove</button></div>)}</div>
+      <div className="sp-quick-actions-list">{quickActions.map(item=><div key={item.id} className="sp-quick-action-row"><div><strong>{item.label}</strong><p>{item.prompt}</p></div><button type="button" disabled={quickActions.length<=1} onClick={()=>persistQuickActions(quickActions.filter(row=>row.id!==item.id))}>Remove</button></div>)}</div>
       <form className="sp-quick-actions-form" onSubmit={addRemoteQuickAction}>
         <label htmlFor="remote-quick-label">Button label</label>
         <input id="remote-quick-label" value={newQuickLabel} onChange={event=>setNewQuickLabel(event.target.value)} maxLength={40} required placeholder="Review tests" />
         <label htmlFor="remote-quick-prompt">Prompt message</label>
         <textarea id="remote-quick-prompt" value={newQuickPrompt} onChange={event=>setNewQuickPrompt(event.target.value)} maxLength={4000} rows={3} required placeholder="Run the test suite and summarize any failures." />
         {quickActionError && <p className="remote-feedback" role="alert">{quickActionError}</p>}
-        <div className="dialog-actions"><button type="button" onClick={()=>{setQuickActionError('');setQuickActions(saveStoredQuickActions(DEFAULT_QUICK_ACTIONS));}}>Reset defaults</button><button type="submit" className="sp-primary-action">Add prompt</button></div>
+        <div className="dialog-actions"><button type="button" onClick={()=>{setQuickActionError('');persistQuickActions([...DEFAULT_QUICK_ACTIONS]);}}>Reset defaults</button><button type="submit" className="sp-primary-action">Add prompt</button></div>
       </form>
     </dialog>}
 
