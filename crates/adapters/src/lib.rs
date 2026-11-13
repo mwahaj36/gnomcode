@@ -70,6 +70,9 @@ pub trait SourceAdapter {
 }
 
 #[cfg(test)]
+mod antigravity_tests;
+
+#[cfg(test)]
 mod tests {
     #[test]
     fn antigravity_cli_usage_has_api_pools_and_remaining_percentages() {

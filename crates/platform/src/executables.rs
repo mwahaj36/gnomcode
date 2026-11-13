@@ -142,17 +142,18 @@ pub fn executable_available(name: &str) -> bool {
         || (name == "antigravity" && (antigravity_cli().is_some() || antigravity_ide_available()))
 }
 
-/// Checks whether Google Antigravity IDE is available or running on this system.
+/// Checks whether the Google Antigravity IDE or 2.0 app is installed on this system.
 #[must_use]
 pub fn antigravity_ide_available() -> bool {
     #[cfg(windows)]
     {
         if let Some(local_appdata) = std::env::var_os("LOCALAPPDATA") {
-            let path = std::path::PathBuf::from(local_appdata)
-                .join("Programs")
-                .join("Antigravity")
-                .join("Antigravity.exe");
-            if path.is_file() {
+            let programs = std::path::PathBuf::from(local_appdata).join("Programs");
+            // The 2.0 app installs as `Antigravity`, the IDE 1.x as `Antigravity IDE`.
+            if ["Antigravity", "Antigravity IDE"]
+                .iter()
+                .any(|name| programs.join(name).join(format!("{name}.exe")).is_file())
+            {
                 return true;
             }
         }
