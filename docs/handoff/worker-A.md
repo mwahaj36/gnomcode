@@ -1,5 +1,13 @@
 # Worker A handoff
 
+## 2026-11-13: G13 Codex and Gemini native-install discovery
+
+- PR https://github.com/mwahaj36/spawnt/pull/203; branch `feat/codex-gemini-discovery`, head `b4c841b`, depends on baseline #189, independent of #187/#193/#197/#200/#202.
+- Changed files: `crates/platform/src/executables.rs` (`standard_cli`, `resolve_windows_npm_or_binary`, `executable_available`, `agent_command`), `crates/cli/tests/launch_lifecycle.rs` (isolate `APPDATA`/`USERPROFILE` in `models_command_reports_missing_catalog_without_inventing_models`), `docs/SPEC.md` §3.8, `docs/ROADMAP_1.0.md` (ticked Batch row), `docs/sessions/2026-11-13-codex-gemini-discovery.md`, `docs/sessions/README.md`.
+- Tests: `executables::tests::codex_standard_install_works_without_path_entry` and `executables::tests::gemini_standard_install_works_without_path_entry` (red -> green with fake executables in temp dirs and empty `PATH`).
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+- Verified live: `where.exe codex` resolves `AppData\Roaming\npm\codex.cmd`; not verified: macOS/Linux fallback paths locally.
+
 ## 2026-11-13: G12 Unix process-group stop escalation
 
 - PR https://github.com/mwahaj36/spawnt/pull/202; branch `fix/unix-process-group-stop`, head `12b04fc`, depends on baseline #189, independent of #187/#193/#197/#200.
