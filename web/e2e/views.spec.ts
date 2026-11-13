@@ -1,0 +1,192 @@
+import { expect, test } from './fixtures';
+
+test.describe('Home', () => {
+  test('shows limits, sessions, today tiles and the activity grid in that order', async ({ page, openConsole }) => {
+    await openConsole();
+    await expect(page.locator('#console-title')).toHaveText('Home');
+    await expect(page.locator('#home-limits .sp-provider-card')).toHaveCount(3);
+    for (const name of ['Claude Code', 'Codex', 'Antigravity']) {
+      await expect(page.locator('#home-limits')).toContainText(name);
+    }
+    await expect(page.locator('#home-sessions')).toContainText('Recent');
+    await expect(page.locator('#home-sessions .sp-session-row')).toHaveCount(2);
+    await expect(page.locator('#home-today')).toContainText('Tokens today');
+    await expect(page.locator('#home-today')).toContainText('Active sessions');
+    await expect(page.locator('#home-activity')).toContainText('Last 12 weeks');
+    const order = await page
+      .locator('#home-limits, #home-sessions, #home-today, #home-activity')
+      .evaluateAll((nodes) => nodes.map((node) => node.id));
+    expect(order).toEqual(['home-limits', 'home-sessions', 'home-today', 'home-activity']);
+  });
+
+  test('a session row opens that conversation in Workspace', async ({ page, openConsole }) => {
+    await openConsole();
+    await page.locator('#home-sessions .sp-session-row', { hasText: 'sample-project' }).click();
+    await expect(page.locator('#console-title')).toHaveText('Workspace');
+    expect(new URL(page.url()).hash).toBe('#sessions');
+    await expect(page.locator('.ide-session[aria-current="true"]')).toHaveCount(1);
+  });
+
+  test('View all opens the Workspace list', async ({ page, openConsole }) => {
+    await openConsole();
+    await page.getByRole('button', { name: /View all/ }).click();
+    await expect(page.locator('#console-title')).toHaveText('Workspace');
+    await expect(page.locator('.ide-session')).toHaveCount(2);
+  });
+
+  test('a provider with limits off offers a command that copies', async ({ page, context, openConsole }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await openConsole();
+    const copy = page.locator('#home-limits .sp-provider-card[data-provider="claude-code"] [data-copy]');
+    await copy.click();
+    await expect(copy).toContainText('Copied');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('gnomcode limits enable claude');
+  });
+});
+
+test.describe('Workspace', () => {
+  test('lists conversations and opens one', async ({ page, openConsole }) => {
+    await openConsole('#sessions');
+    const rows = page.locator('.ide-session');
+    await expect(rows).toHaveCount(2);
+    await expect(page.getByText('1 / 1 · 2 conversations')).toBeVisible();
+    await expect(page.locator('.sp-workspace-empty')).toContainText('Pick a conversation or start a new one.');
+    await rows.first().click();
+    await expect(page.locator('.ide-session[aria-current="true"]')).toHaveCount(1);
+    await expect(page.locator('.sp-workspace-empty')).toHaveCount(0);
+  });
+
+  test('New opens the launcher with the agent, folder and model fields', async ({ page, openConsole }) => {
+    await openConsole('#sessions');
+    const root = page.locator('#local-workspace-root');
+    await root.getByRole('button', { name: 'New', exact: true }).click();
+    await expect(root.getByRole('heading', { name: 'New agent session' })).toBeVisible();
+    await expect(root.locator('.ide-launcher').getByLabel('Agent')).toBeVisible();
+    await expect(root.getByLabel('Workspace directory')).toBeVisible();
+    await expect(root.getByLabel('Model (optional)')).toBeVisible();
+    await expect(root.getByRole('button', { name: 'Launch Agent' })).toBeVisible();
+  });
+
+  test('the conversation list collapses and expands and remembers the choice', async ({ page, openConsole }) => {
+    await openConsole('#sessions');
+    const toggle = page.locator('#chat-list-toggle');
+    await expect(page.locator('body')).not.toHaveClass(/chat-list-collapsed/);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await toggle.click();
+    await expect(page.locator('body')).toHaveClass(/chat-list-collapsed/);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await page.reload();
+    await expect(page.locator('body')).toHaveClass(/chat-list-collapsed/);
+    await page.locator('#chat-list-toggle').click();
+    await expect(page.locator('body')).not.toHaveClass(/chat-list-collapsed/);
+  });
+});
+
+test.describe('Usage', () => {
+  test('shows limits, the activity grid, spend by agent, projects and eval report', async ({ page, openConsole }) => {
+    await openConsole('#usage');
+    const root = page.locator('#local-usage-root');
+    for (const text of ['Limits', 'Activity', 'Agent and model usage', 'Subscription value', 'Projects', 'Handoff quality evals']) {
+      await expect(root).toContainText(text);
+    }
+    await expect(root).toContainText('sample-project');
+  });
+
+  test('the reporting period changes the report', async ({ page, openConsole }) => {
+    await openConsole('#usage');
+    const root = page.locator('#local-usage-root');
+    const period = root.getByLabel('Reporting period');
+    await expect(root).toContainText('Showing: All Time');
+    await expect(period).toHaveValue('all');
+    await period.selectOption('today');
+    await expect(period).toHaveValue('today');
+    await expect(root).toContainText('No recorded agent usage in this period.');
+    await period.selectOption('all');
+    await expect(root).toContainText('Showing: All Time');
+  });
+
+  test('export downloads a CSV and a JSON report', async ({ page, openConsole }) => {
+    await openConsole('#usage');
+    const root = page.locator('#local-usage-root');
+    for (const extension of ['csv', 'json']) {
+      await root.locator('summary', { hasText: 'Export' }).click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        root.getByRole('button', { name: extension.toUpperCase(), exact: true }).click(),
+      ]);
+      expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${extension}$`));
+    }
+  });
+
+  test('selecting a project opens Workspace', async ({ page, openConsole }) => {
+    await openConsole('#usage');
+    await page.locator('#local-usage-root [data-project-id]').first().click();
+    await expect(page.locator('#console-title')).toHaveText('Workspace');
+  });
+});
+
+test.describe('Settings', () => {
+  test('lists providers, appearance, devices, automations, notifications, updates and guide', async ({ page, openConsole }) => {
+    await openConsole('#settings');
+    const root = page.locator('#local-settings-root');
+    for (const heading of ['Providers', 'Appearance', 'Devices and Remote', 'Automations', 'Notifications', 'Desktop updates', 'Guide', 'Account', 'Data']) {
+      await expect(root.getByRole('heading', { name: heading })).toBeVisible();
+    }
+    await expect(root.getByText('Sign in to your account to make this desktop available.')).toBeVisible();
+    await expect(root.getByText(/^Gnomcode \d/)).toBeVisible();
+  });
+
+  test('theme cycles system, light, dark and persists', async ({ page, openConsole }) => {
+    await openConsole('#settings');
+    const theme = page.locator('#local-settings-root').getByRole('button', { name: /^Theme/ });
+    const html = page.locator('html');
+    await expect(theme).toContainText('system');
+    await theme.click();
+    await expect(theme).toContainText('light');
+    await expect(html).toHaveAttribute('data-theme', 'light');
+    await theme.click();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    expect(await page.evaluate(() => localStorage.getItem('gnomcode-theme'))).toBe('dark');
+    await theme.click();
+    await expect(html).not.toHaveAttribute('data-theme', /.+/);
+    expect(await page.evaluate(() => localStorage.getItem('gnomcode-theme'))).toBeNull();
+  });
+
+  test('notification preferences save and survive a reload', async ({ page, openConsole }) => {
+    await openConsole('#settings');
+    const root = page.locator('#local-settings-root');
+    await root.getByLabel(/Limit low/).setChecked(false);
+    await root.getByRole('button', { name: 'Save notifications' }).click();
+    await expect(root.getByText('Saved notification preferences.')).toBeVisible();
+    await page.reload();
+    await expect(root.getByLabel(/Limit low/)).not.toBeChecked();
+    await root.getByLabel(/Limit low/).setChecked(true);
+    await root.getByRole('button', { name: 'Save notifications' }).click();
+  });
+
+  test('usage rules can be added and removed', async ({ page, openConsole }) => {
+    await openConsole('#settings');
+    const root = page.locator('#local-settings-root');
+    await root.getByLabel('Spend limit (USD)').fill('7.5');
+    await root.getByRole('button', { name: 'Add rule' }).click();
+    const row = root.locator('tr', { hasText: '$7.50' });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await expect(root.locator('tr', { hasText: '$7.50' })).toHaveCount(0);
+  });
+
+  test('Getting started opens the tour', async ({ page, openConsole }) => {
+    await openConsole('#settings');
+    await page.locator('#local-settings-root').getByRole('button', { name: 'Getting started' }).click();
+    await expect(page.locator('#onboarding-dialog')).toBeVisible();
+  });
+
+  test('Manage account opens the account view', async ({ page, openConsole }) => {
+    await openConsole('#settings');
+    await page.locator('#local-settings-root').getByRole('button', { name: 'Manage account' }).click();
+    await expect(page.locator('#console-title')).toHaveText('Account');
+    expect(new URL(page.url()).hash).toBe('#auth');
+  });
+});

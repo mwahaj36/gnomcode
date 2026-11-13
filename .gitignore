@@ -54,3 +54,7 @@ apps/desktop/staging/
 web/public/downloads/*.exe
 web/public/downloads/*.zip
 supabase/.temp/
+
+# Playwright
+web/test-results/
+web/playwright-report/

@@ -11,7 +11,8 @@
     "bump-version": "node ../.agents/skills/cut-release/scripts/bump-version.mjs",
     "release-pack": "powershell -ExecutionPolicy Bypass -File ../.agents/skills/cut-release/scripts/package-release.ps1",
     "typecheck": "tsc --noEmit --incremental false",
-    "test": "node ../scripts/check-console-presentation.mjs && node --test test/*.test.mjs"
+    "test": "node ../scripts/check-console-presentation.mjs && node --test test/*.test.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -25,6 +26,7 @@
     "web-push": "3.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
     "@types/react": "^19.0.0",
