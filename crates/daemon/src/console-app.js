@@ -1500,52 +1500,19 @@ function cycleTheme() {
       if (list) list.innerHTML = '<p class="sp-empty">Loading artifacts...</p>';
       if (preview) preview.innerHTML = '';
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const session = ideSessions.find(s => s.id === sessionId);
-      const hosted = hostedSessions.find(s => s.session_id === sessionId);
-      const repoPath = session?.repo_path || hosted?.repo_path || '';
       let items = [];
-      let changedPaths = [];
+      let changesCount = null;
+      let failed = false;
       try {
         const res = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/artifacts`, { headers, signal: AbortSignal.timeout(10000) });
         if (res.ok) {
           const data = await res.json();
-          items = Array.isArray(data.artifacts) ? data.artifacts : Array.isArray(data.items) ? data.items : [];
-          if (Array.isArray(data.changed_files)) changedPaths = data.changed_files;
-          else if (typeof data.changes_count === 'number' && changesBadge) changesBadge.textContent = `${data.changes_count} workspace change${data.changes_count === 1 ? '' : 's'}`;
-        }
-      } catch (_) {}
-      if (repoPath) {
-        try {
-          const diff = await apiJson(`/api/v1/repos/diff?repo=${encodeURIComponent(repoPath)}`, { headers, signal: AbortSignal.timeout(10000) });
-          const lines = String(diff?.status || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-          if (changesBadge && !changesBadge.textContent) {
-            changesBadge.textContent = lines.length ? `${lines.length} workspace change${lines.length === 1 ? '' : 's'}` : 'No uncommitted changes';
-          }
-          if (!items.length && lines.length) {
-            const candidateRows = lines.map(line => {
-              const status = line.slice(0, 2).trim() || 'M';
-              const path = line.slice(3).trim().replace(/^"(.*)"$/, '$1');
-              return { status, path };
-            }).filter(row => /\.(md|markdown|mdx|html?|png|jpe?g|webp|gif|svg)$/i.test(row.path)).slice(0, 8);
-            for (const row of candidateRows) {
-              if (/\.(png|jpe?g|webp|gif|svg)$/i.test(row.path)) {
-                items.push({ id: row.path, path: row.path, status: row.status, kind: 'image' });
-              } else {
-                try {
-                  const fileData = await apiJson(`/api/v1/repos/file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(row.path)}`, { headers, signal: AbortSignal.timeout(8000) });
-                  items.push({ id: row.path, path: row.path, status: row.status, content: String(fileData?.content || '') });
-                } catch (_) {
-                  items.push({ id: row.path, path: row.path, status: row.status, content: '' });
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
+          items = Array.isArray(data.artifacts) ? data.artifacts : [];
+          if (typeof data.changes_count === 'number') changesCount = data.changes_count;
+        } else failed = true;
+      } catch (_) { failed = true; }
       if (sessionId !== activeChatSession) return;
-      if (changesBadge && !changesBadge.textContent) {
-        changesBadge.textContent = changedPaths.length ? `${changedPaths.length} workspace changes` : 'Artifacts';
-      }
+      if (changesBadge) changesBadge.textContent = failed ? 'Artifacts unavailable for this conversation' : changesCount === null ? 'Artifacts' : `${changesCount} workspace change${changesCount === 1 ? '' : 's'}`;
       artifactItems = items;
       selectedArtifactId = items[0] ? String(items[0].id || items[0].path || 0) : '';
       await renderArtifactsState();

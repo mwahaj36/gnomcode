@@ -46,6 +46,7 @@ test('renderArtifactPreview isolates HTML in sandbox="" iframe and escapes markd
   assert.doesNotMatch(htmlPreview, /allow-scripts|allow-same-origin/);
   assert.doesNotMatch(htmlPreview, /<script>/);
   assert.match(htmlPreview, /srcdoc=/);
+  assert.match(htmlPreview, /Content-Security-Policy[^>]*default-src &#39;none&#39;/);
 
   const mdPreview = presentation.renderArtifactPreview(items[1]);
   assert.match(mdPreview, /<h1>Notes<\/h1>/);

@@ -379,6 +379,6 @@ Changes and verification are recorded per session under [docs/sessions](sessions
 ## 11. Artifacts Viewer UI (Section C)
 
 - Local console (`#chat-artifacts-btn`, `#chat-artifacts-panel`) and Remote (`Artifacts` button + `.sp-artifacts-sheet`) inspect session artifacts alongside uncommitted workspace changes cleanly and read-only.
-- Local console calls `GET /api/v1/sessions/{id}/artifacts` and supplements change counts from `GET /api/v1/repos/diff` (falling back to changed markdown/HTML files via `/api/v1/repos/file` when the session artifacts endpoint is unavailable).
+- Local console calls `GET /api/v1/sessions/{id}/artifacts` (ADR 0039) and shows its `changes_count`; Remote sends `{ type: 'artifacts', session_id }`.
 - Remote sends on-demand `{ type: 'artifacts', session_id }` over E2EE and handles `Unsupported remote command` calmly inside the sheet.
-- HTML artifacts always render inside `<iframe sandbox="" referrerPolicy="no-referrer" srcdoc="...">` with zero script or origin permissions; Markdown renders through MarkdownIt with `html: false`; images accept only validated `data:image/*;base64,...` or same-origin `/api/v1/...` sources.
+- HTML artifacts always render inside `<iframe sandbox="" referrerPolicy="no-referrer" srcdoc="...">` with zero script or origin permissions and an in-document `default-src 'none'; img-src data:; style-src 'unsafe-inline'` Content-Security-Policy; Markdown renders through MarkdownIt with `html: false`; images accept only validated `data:image/*;base64,...` or same-origin `/api/v1/...` sources.

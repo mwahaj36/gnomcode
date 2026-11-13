@@ -955,6 +955,9 @@ export function renderArtifactsList(items = [], selectedId = '') {
   }).join('');
 }
 
+// The frame is sandboxed with no permissions; the CSP additionally blocks every network fetch.
+const ARTIFACT_HTML_CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">`;
+
 export function renderArtifactPreview(artifact) {
   if (!artifact || typeof artifact !== 'object') {
     return '<p class="sp-empty">Select an artifact to preview.</p>';
@@ -962,7 +965,7 @@ export function renderArtifactPreview(artifact) {
   const kind = classifyArtifactKind(artifact);
   const title = String(artifact.title || artifact.path || 'Artifact preview');
   if (kind === 'html') {
-    return `<div class="sp-artifact-html-wrap"><p class="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe class="sp-artifact-frame" title="${escape(title)}" sandbox="" referrerpolicy="no-referrer" srcdoc="${escape(String(artifact.content || ''))}"></iframe></div>`;
+    return `<div class="sp-artifact-html-wrap"><p class="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe class="sp-artifact-frame" title="${escape(title)}" sandbox="" referrerpolicy="no-referrer" srcdoc="${escape(ARTIFACT_HTML_CSP + String(artifact.content || ''))}"></iframe></div>`;
   }
   if (kind === 'markdown') {
     return `<div class="sp-artifact-markdown sp-chat-body">${chatMarkdown(String(artifact.content || ''))}</div>`;
