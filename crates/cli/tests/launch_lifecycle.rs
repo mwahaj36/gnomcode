@@ -12,6 +12,8 @@ fn models_command_reports_missing_catalog_without_inventing_models() {
         .env("GNOMCODE_HOME", root.path())
         .env("CODEX_HOME", root.path())
         .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .env("APPDATA", root.path())
         .env("LOCALAPPDATA", root.path())
         .env("PATH", root.path())
         .output()
