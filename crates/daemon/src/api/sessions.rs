@@ -433,11 +433,13 @@ pub(super) async fn list_sessions_handler(
     let offset = (page - 1).saturating_mul(limit);
 
     let db = state.db.lock().await;
+    let live_hosted = crate::remote::live_hosted_native_ids(&db);
     let (mut sessions, total_count) = db
-        .list_sessions_filtered(
+        .list_sessions_filtered_with_hosts(
             params.agent.as_deref(),
             params.status.as_deref(),
             params.project.as_deref().filter(|value| !value.is_empty()),
+            &live_hosted,
             offset,
             limit,
         )
@@ -452,13 +454,13 @@ pub(super) async fn list_sessions_handler(
     }
 
     let (_, ongoing_count) = db
-        .list_sessions_paginated(None, Some("ongoing"), 0, 1)
+        .list_sessions_paginated_with_hosts(None, Some("ongoing"), &live_hosted, 0, 1)
         .unwrap_or_default();
     let (_, active_count) = db
-        .list_sessions_paginated(None, Some("active"), 0, 1)
+        .list_sessions_paginated_with_hosts(None, Some("active"), &live_hosted, 0, 1)
         .unwrap_or_default();
     let (_, awaiting_approval_count) = db
-        .list_sessions_paginated(None, Some("awaiting_approval"), 0, 1)
+        .list_sessions_paginated_with_hosts(None, Some("awaiting_approval"), &live_hosted, 0, 1)
         .unwrap_or_default();
 
     #[derive(Serialize)]
@@ -519,10 +521,12 @@ pub(super) async fn live_snapshot_handler(
         .get_user_profile()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    let live_hosted = crate::remote::live_hosted_native_ids(&db);
     let (mut sessions, total_count) = db
-        .list_sessions_paginated(
+        .list_sessions_paginated_with_hosts(
             params.agent.as_deref(),
             params.status.as_deref(),
+            &live_hosted,
             offset,
             limit,
         )
@@ -536,10 +540,10 @@ pub(super) async fn live_snapshot_handler(
     }
 
     let (_, ongoing_count) = db
-        .list_sessions_paginated(None, Some("ongoing"), 0, 1)
+        .list_sessions_paginated_with_hosts(None, Some("ongoing"), &live_hosted, 0, 1)
         .unwrap_or_default();
     let (_, active_count) = db
-        .list_sessions_paginated(None, Some("active"), 0, 1)
+        .list_sessions_paginated_with_hosts(None, Some("active"), &live_hosted, 0, 1)
         .unwrap_or_default();
 
     let quota = db

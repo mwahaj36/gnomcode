@@ -294,7 +294,77 @@ impl Database {
         offset: usize,
         limit: usize,
     ) -> Result<(Vec<SessionListItem>, usize), Error> {
-        let now = Utc::now();
+        self.list_sessions_filtered_with_hosts(
+            agent_filter,
+            status_filter,
+            project_filter,
+            &[],
+            offset,
+            limit,
+        )
+    }
+
+    /// Lists sessions with optional filtering and live Gnomcode-hosted native session IDs.
+    ///
+    /// # Errors
+    /// Returns an error on SQLite failure.
+    pub fn list_sessions_paginated_with_hosts(
+        &self,
+        agent_filter: Option<&str>,
+        status_filter: Option<&str>,
+        live_hosted_ids: &[String],
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<SessionListItem>, usize), Error> {
+        self.list_sessions_filtered_with_hosts(
+            agent_filter,
+            status_filter,
+            None,
+            live_hosted_ids,
+            offset,
+            limit,
+        )
+    }
+
+    /// Lists sessions with an optional exact local project ID and live hosted native session IDs.
+    ///
+    /// # Errors
+    /// Returns an error on SQLite failure.
+    pub fn list_sessions_filtered_with_hosts(
+        &self,
+        agent_filter: Option<&str>,
+        status_filter: Option<&str>,
+        project_filter: Option<&str>,
+        live_hosted_ids: &[String],
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<SessionListItem>, usize), Error> {
+        self.list_sessions_filtered_at(
+            agent_filter,
+            status_filter,
+            project_filter,
+            live_hosted_ids,
+            Utc::now(),
+            offset,
+            limit,
+        )
+    }
+
+    /// Lists sessions at a caller-supplied timestamp `now` with live hosted native session IDs.
+    ///
+    /// # Errors
+    /// Returns an error on SQLite failure.
+    #[allow(clippy::too_many_arguments)]
+    pub fn list_sessions_filtered_at(
+        &self,
+        agent_filter: Option<&str>,
+        status_filter: Option<&str>,
+        project_filter: Option<&str>,
+        live_hosted_ids: &[String],
+        now: DateTime<Utc>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<(Vec<SessionListItem>, usize), Error> {
         let cutoff = (now
             - chrono::Duration::milliseconds(gnomcode_core::presence::RECENT_ACTIVITY_GRACE_MS))
         .to_rfc3339();
@@ -317,32 +387,59 @@ impl Database {
                 "EXISTS (SELECT 1 FROM session c WHERE c.parent_session_id = s.id AND c.id <> s.id AND (c.state = 'awaiting_approval' AND julianday(c.last_event_at) >= julianday({approval}) OR (c.state IN ('thinking','tool') AND julianday(c.last_event_at) >= julianday({exec}))))"
             )
         };
+        let hosted_tool_clause = |start_param: usize| {
+            if live_hosted_ids.is_empty() {
+                "0".to_owned()
+            } else {
+                let marks = (0..live_hosted_ids.len())
+                    .map(|idx| format!("?{}", start_param + idx))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(
+                    "{} ({marks}))",
+                    obfstr::obfstr!(
+                        "(s.state = 'tool' AND (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = 'tool_start' AND s.id IN"
+                    )
+                )
+            }
+        };
         let child_count = child_clause("?5", "?6");
         let child_page = child_clause("?7", "?8");
+        let hosted_tool_count = hosted_tool_clause(7);
+        let hosted_tool_page = hosted_tool_clause(9);
+        let mut count_params: Vec<rusqlite::types::Value> = vec![
+            agent.to_owned().into(),
+            status.to_owned().into(),
+            cutoff.clone().into(),
+            project_filter.map(str::to_owned).into(),
+            stale_cutoff.clone().into(),
+            execution_cutoff.clone().into(),
+        ];
+        count_params.extend(live_hosted_ids.iter().cloned().map(Into::into));
         let total_count: i64 = self.conn.query_row(
             &format!(r#"SELECT COUNT(*) FROM session s
                WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                  AND (?2 = 'all'
                    OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5))
-                   OR (?2 = 'ongoing' AND ({child_count} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?6))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND ({child_count} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?6))))
+                   OR (?2 = 'ongoing' AND ({child_count} OR {hosted_tool_count} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?6))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND ({child_count} OR {hosted_tool_count} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?5) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?6))))
                    OR (?2 = 'idle' AND s.state = 'idle'))"#),
-            params![agent, status, cutoff, project_filter, stale_cutoff, execution_cutoff],
+            rusqlite::params_from_iter(count_params),
             |row| row.get(0),
         )?;
         let mut stmt = self.conn.prepare(
             &format!(r#"
             WITH page AS (
                 SELECT s.*, p.name AS project_name,
-                    CASE WHEN ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))) THEN 1 ELSE 0 END AS active_rank
+                    CASE WHEN ({child_page} OR {hosted_tool_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))) THEN 1 ELSE 0 END AS active_rank
                 FROM session s JOIN project p ON s.project_id = p.id
                 WHERE (?4 IS NULL OR s.project_id = ?4) AND s.surface <> 'cloud' AND s.parent_session_id IS NULL AND s.id NOT GLOB 'codex:ctc_*' AND s.id NOT GLOB 'codex:ctco_*' AND s.id NOT GLOB 'codex:fc_*' AND s.id NOT GLOB 'codex:call_*' AND s.id NOT GLOB 'codex:rs_*' AND s.id NOT GLOB 'codex:msg_*' AND (?1 = 'all' OR s.agent = ?1)
                   AND (?2 = 'all'
                     OR (?2 = 'ended' AND s.state = 'ended')
                    OR (?2 = 'awaiting_approval' AND s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7))
-                   OR (?2 = 'ongoing' AND ({child_page} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
-                   OR (?2 = 'active' AND ({child_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))))
+                   OR (?2 = 'ongoing' AND ({child_page} OR {hosted_tool_page} OR (s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))) OR (s.state = 'idle' AND julianday(s.last_event_at) >= julianday(?3))))
+                   OR (?2 = 'active' AND ({child_page} OR {hosted_tool_page} OR s.state = 'awaiting_approval' AND julianday(s.last_event_at) >= julianday(?7) OR (s.state IN ('thinking','tool') AND julianday(s.last_event_at) >= julianday(?8))))
                     OR (?2 = 'idle' AND s.state = 'idle'))
                 ORDER BY active_rank DESC, s.last_event_at DESC
                 LIMIT ?5 OFFSET ?6
@@ -377,111 +474,114 @@ impl Database {
             "#),
         )?;
 
-        let rows = stmt.query_map(
-            params![
-                agent,
-                status,
-                cutoff,
-                project_filter,
-                limit as i64,
-                offset as i64,
-                stale_cutoff,
-                execution_cutoff
-            ],
-            |row| {
-                let id: String = row.get(0)?;
-                let agent: String = row.get(1)?;
-                let surface: String = row.get(2)?;
-                let project_name: String = row.get(3)?;
-                let raw_model: Option<String> = row.get(4)?;
-                let state_str: String = row.get(5)?;
-                let started_at: String = row.get(6)?;
-                let last_event_at_str: String = row.get(7)?;
-                let input_tokens: i64 = row.get(8)?;
-                let output_tokens: i64 = row.get(9)?;
-                let total_cost_usd: f64 = row.get(10)?;
-                let cache_read_tokens: i64 = row.get(11)?;
-                let context_tokens: i64 = row.get(12)?;
-                let context_window: Option<i64> = row.get(13)?;
-                let title: Option<String> = row.get(14)?;
-                let usage_count: i64 = row.get(15)?;
-                let unknown_pricing: Option<i64> = row.get(16)?;
+        let mut page_params: Vec<rusqlite::types::Value> = vec![
+            agent.to_owned().into(),
+            status.to_owned().into(),
+            cutoff.into(),
+            project_filter.map(str::to_owned).into(),
+            (limit as i64).into(),
+            (offset as i64).into(),
+            stale_cutoff.into(),
+            execution_cutoff.into(),
+        ];
+        page_params.extend(live_hosted_ids.iter().cloned().map(Into::into));
+        let rows = stmt.query_map(rusqlite::params_from_iter(page_params), |row| {
+            let id: String = row.get(0)?;
+            let agent: String = row.get(1)?;
+            let surface: String = row.get(2)?;
+            let project_name: String = row.get(3)?;
+            let raw_model: Option<String> = row.get(4)?;
+            let state_str: String = row.get(5)?;
+            let started_at: String = row.get(6)?;
+            let last_event_at_str: String = row.get(7)?;
+            let input_tokens: i64 = row.get(8)?;
+            let output_tokens: i64 = row.get(9)?;
+            let total_cost_usd: f64 = row.get(10)?;
+            let cache_read_tokens: i64 = row.get(11)?;
+            let context_tokens: i64 = row.get(12)?;
+            let context_window: Option<i64> = row.get(13)?;
+            let title: Option<String> = row.get(14)?;
+            let usage_count: i64 = row.get(15)?;
+            let unknown_pricing: Option<i64> = row.get(16)?;
 
-                let age = DateTime::parse_from_rfc3339(&last_event_at_str)
-                    .ok()
-                    .map(|date| (now - date.with_timezone(&Utc)).num_milliseconds());
-                let latest_kind: Option<String> = row.get(18)?;
-                let open_execution = matches!(
-                    (state_str.as_str(), latest_kind.as_deref()),
-                    ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
-                );
-                let presence =
-                    gnomcode_core::presence::classify_presence(&state_str, age, open_execution);
-                let is_ongoing = presence.is_ongoing();
-                let is_active = presence.is_active();
-                let state = if presence == gnomcode_core::presence::SessionPresence::Inactive
-                    && matches!(state_str.as_str(), "thinking" | "tool")
-                {
-                    "unknown".to_owned()
+            let age = DateTime::parse_from_rfc3339(&last_event_at_str)
+                .ok()
+                .map(|date| (now - date.with_timezone(&Utc)).num_milliseconds());
+            let latest_kind: Option<String> = row.get(18)?;
+            let open_execution = matches!(
+                (state_str.as_str(), latest_kind.as_deref()),
+                ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
+            );
+            let host_alive = live_hosted_ids.iter().any(|live_id| live_id == &id);
+            let presence = gnomcode_core::presence::classify_presence_with_host(
+                &state_str,
+                age,
+                open_execution,
+                host_alive,
+            );
+            let is_ongoing = presence.is_ongoing();
+            let is_active = presence.is_active();
+            let state = if presence == gnomcode_core::presence::SessionPresence::Inactive
+                && matches!(state_str.as_str(), "thinking" | "tool")
+            {
+                "unknown".to_owned()
+            } else {
+                state_str
+            };
+
+            let model = match raw_model {
+                Some(ref m) if m.contains("MODEL_PLACEHOLDER") => "Unspecified".to_owned(),
+                Some(m) if !m.trim().is_empty() => m,
+                _ => "Unspecified".to_owned(),
+            };
+
+            Ok(SessionListItem {
+                priced_turns: (usage_count - unknown_pricing.unwrap_or(0)).max(0) as u64,
+                unpriced_turns: unknown_pricing.unwrap_or(0).max(0) as u64,
+                total_tokens: if usage_count > 0 {
+                    Some(row.get::<_, i64>(17)?.max(0) as u64)
                 } else {
-                    state_str
-                };
-
-                let model = match raw_model {
-                    Some(ref m) if m.contains("MODEL_PLACEHOLDER") => "Unspecified".to_owned(),
-                    Some(m) if !m.trim().is_empty() => m,
-                    _ => "Unspecified".to_owned(),
-                };
-
-                Ok(SessionListItem {
-                    priced_turns: (usage_count - unknown_pricing.unwrap_or(0)).max(0) as u64,
-                    unpriced_turns: unknown_pricing.unwrap_or(0).max(0) as u64,
-                    total_tokens: if usage_count > 0 {
-                        Some(row.get::<_, i64>(17)?.max(0) as u64)
-                    } else {
-                        None
-                    },
-                    context_fill_pct: context_window
-                        .filter(|window| *window > 0)
-                        .filter(|_| usage_count > 0)
-                        .map(|window| {
-                            (context_tokens.max(0) as f64 / window as f64 * 100.0).clamp(0.0, 100.0)
-                        }),
-                    surface_label: gnomcode_core::surface_label(&agent, &surface)
-                        .map(str::to_owned),
-                    id,
-                    agent,
-                    surface: surface.clone(),
-                    project_name,
-                    model,
-                    state,
-                    is_active,
-                    is_ongoing,
-                    presence,
-                    home_group: Some(presence.home_group()),
-                    started_at,
-                    last_event_at: last_event_at_str,
-                    input_tokens: input_tokens.max(0) as u64,
-                    output_tokens: output_tokens.max(0) as u64,
-                    cache_read_tokens: cache_read_tokens.max(0) as u64,
-                    context_tokens: context_tokens.max(0) as u64,
-                    context_window: context_window.map(|w| w.max(0) as u64),
-                    total_cost_usd,
-                    title,
-                    parent_session_id: row.get(19)?,
-                    device_name: None,
-                    usage_available: true,
-                    cost_basis: if usage_count == 0 || unknown_pricing.unwrap_or(0) > 0 {
-                        TrustLevel::Unknown
-                    } else {
-                        TrustLevel::Estimated
-                    },
-                    subagent_count: 0,
-                    subagents_ongoing: 0,
-                    subagents: Vec::new(),
-                })
-            },
-        )?;
+                    None
+                },
+                context_fill_pct: context_window
+                    .filter(|window| *window > 0)
+                    .filter(|_| usage_count > 0)
+                    .map(|window| {
+                        (context_tokens.max(0) as f64 / window as f64 * 100.0).clamp(0.0, 100.0)
+                    }),
+                surface_label: gnomcode_core::surface_label(&agent, &surface).map(str::to_owned),
+                id,
+                agent,
+                surface: surface.clone(),
+                project_name,
+                model,
+                state,
+                is_active,
+                is_ongoing,
+                presence,
+                home_group: Some(presence.home_group()),
+                started_at,
+                last_event_at: last_event_at_str,
+                input_tokens: input_tokens.max(0) as u64,
+                output_tokens: output_tokens.max(0) as u64,
+                cache_read_tokens: cache_read_tokens.max(0) as u64,
+                context_tokens: context_tokens.max(0) as u64,
+                context_window: context_window.map(|w| w.max(0) as u64),
+                total_cost_usd,
+                title,
+                parent_session_id: row.get(19)?,
+                device_name: None,
+                usage_available: true,
+                cost_basis: if usage_count == 0 || unknown_pricing.unwrap_or(0) > 0 {
+                    TrustLevel::Unknown
+                } else {
+                    TrustLevel::Estimated
+                },
+                subagent_count: 0,
+                subagents_ongoing: 0,
+                subagents: Vec::new(),
+            })
+        })?;
 
         let mut filtered = Vec::new();
         for r in rows {
@@ -1084,5 +1184,81 @@ mod tests {
             "a shared bucket has no folder of its own"
         );
         assert_eq!(folder("codex:unassigned"), None);
+    }
+
+    #[test]
+    fn hosted_alive_open_tool_stays_running_past_cutoff_and_counts_match() {
+        let db = Database::open_in_memory().expect("in-memory db");
+        let project = Project::from_origin(None, "/work/hosted-presence", None);
+        db.conn
+            .execute(
+                "INSERT INTO project(id,canonical_key,repo_root,name) VALUES (?1,?2,?3,?4)",
+                rusqlite::params![
+                    project.id,
+                    project.canonical_key,
+                    project.repo_root,
+                    project.name
+                ],
+            )
+            .expect("project");
+        let now = DateTime::parse_from_rfc3339("2026-11-13T12:00:00Z")
+            .expect("now")
+            .with_timezone(&Utc);
+        let old = (now - chrono::Duration::minutes(25)).to_rfc3339();
+        let insert_tool = |id: &str, kind: &str| {
+            db.conn
+                .execute(
+                    "INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at) VALUES (?1,'claude-code','cli',?2,'tool',?3,?3)",
+                    rusqlite::params![id, project.id, old],
+                )
+                .expect("session");
+            db.conn
+                .execute(
+                    "INSERT INTO activity_event(session_id,timestamp,kind) VALUES (?1,?2,?3)",
+                    rusqlite::params![id, old, kind],
+                )
+                .expect("event");
+        };
+        insert_tool("hosted-alive", "tool_start");
+        insert_tool("hosted-dead", "tool_start");
+        insert_tool("non-hosted", "tool_start");
+
+        db.bind_conversation_host("h-alive", "hosted-alive")
+            .expect("bind");
+        let live_hosted = db
+            .native_ids_for_hosts(&["h-alive".to_owned()])
+            .expect("live native ids");
+        assert_eq!(live_hosted, vec!["hosted-alive".to_owned()]);
+
+        let (all_rows, all_total) = db
+            .list_sessions_filtered_at(None, None, None, &live_hosted, now, 0, 10)
+            .expect("all");
+        assert_eq!(all_total, 3);
+        assert_eq!(all_rows.len(), 3);
+        let by_id = |id: &str| all_rows.iter().find(|r| r.id == id).expect("row");
+        assert_eq!(
+            by_id("hosted-alive").presence,
+            gnomcode_core::presence::SessionPresence::Running
+        );
+        assert!(by_id("hosted-alive").is_active);
+        assert_eq!(
+            by_id("hosted-dead").presence,
+            gnomcode_core::presence::SessionPresence::Inactive
+        );
+        assert_eq!(by_id("hosted-dead").state, "unknown");
+        assert_eq!(
+            by_id("non-hosted").presence,
+            gnomcode_core::presence::SessionPresence::Inactive
+        );
+        assert_eq!(by_id("non-hosted").state, "unknown");
+
+        for filter in ["active", "ongoing"] {
+            let (rows, total) = db
+                .list_sessions_filtered_at(None, Some(filter), None, &live_hosted, now, 0, 10)
+                .expect("filtered");
+            assert_eq!(total, 1, "filter {filter} count");
+            assert_eq!(rows.len(), 1, "filter {filter} rows");
+            assert_eq!(rows[0].id, "hosted-alive");
+        }
     }
 }
