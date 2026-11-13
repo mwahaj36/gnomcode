@@ -13,6 +13,7 @@ pub mod doctor;
 mod interrupt;
 pub mod model_catalog;
 pub mod pro;
+mod quick_actions;
 pub mod remote;
 mod remote_trust;
 mod session_artifacts;
