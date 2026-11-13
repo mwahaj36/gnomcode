@@ -32,7 +32,7 @@ async function freePort(): Promise<number> {
 }
 
 /** Copies anonymized agent logs from `fixtures/` into the temp agent homes the daemon scans. */
-async function seed(home: string): Promise<void> {
+async function seed(home: string, desktopClaude: boolean): Promise<void> {
   const fixtures = path.join(repoRoot, 'fixtures');
   const claudeProject = path.join(home, 'claude', 'projects', '-work-console-demo');
   await mkdir(claudeProject, { recursive: true });
@@ -40,6 +40,12 @@ async function seed(home: string): Promise<void> {
     path.join(fixtures, 'claude-code', 'v2.1', 'session_sample.jsonl'),
     path.join(claudeProject, '11111111-1111-4111-8111-111111111111.jsonl'),
   );
+  if (desktopClaude) {
+    await cp(
+      path.join(fixtures, 'claude-code', 'v2.1.321', 'desktop-main.jsonl'),
+      path.join(claudeProject, '33333333-3333-4333-8333-333333333333.jsonl'),
+    );
+  }
   const codexDay = path.join(home, 'codex', 'sessions', '2026', '11', '06');
   await mkdir(codexDay, { recursive: true });
   await cp(
@@ -49,9 +55,9 @@ async function seed(home: string): Promise<void> {
 }
 
 /** Starts the real daemon on a free loopback port with an isolated `GNOMCODE_HOME` and fixture data. */
-export async function startDaemon(options: { seed?: boolean } = {}): Promise<Daemon> {
+export async function startDaemon(options: { seed?: boolean; desktopClaude?: boolean } = {}): Promise<Daemon> {
   const home = await mkdtemp(path.join(tmpdir(), 'gnomcode-e2e-'));
-  if (options.seed !== false) await seed(home);
+  if (options.seed !== false) await seed(home, options.desktopClaude === true);
   const env = {
     ...process.env,
     GNOMCODE_HOME: home,

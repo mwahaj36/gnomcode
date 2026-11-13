@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const { renderOngoing, renderActivity, renderProviders, renderQuota, renderSessions, renderProjects, renderSummary, updateSummary } = await import(new URL('../lib/console-presentation.js',import.meta.url));
+const { renderHomeSessions, renderSessionList, renderOngoing, renderActivity, renderProviders, renderQuota, renderSessions, renderProjects, renderSummary, updateSummary } = await import(new URL('../lib/console-presentation.js',import.meta.url));
 const {renderConversationLimits}=await import(new URL('../lib/console-presentation.js',import.meta.url));
 
 test("shared console escaping, unknown data, trust, reset and freshness states", async () => {
@@ -103,4 +103,13 @@ test("project rows, shared styles and ongoing sessions keep their contracts", as
   assert.match(stale,/Claude sign-in expired/,'a stale live source is named instead of showing a current-looking reset time');
   assert.match(stale,/seen 9h ago/);
 
+});
+
+test('session rows name the product surface from Rust and fall back to the agent', () => {
+  const row = { id: 'a', agent: 'antigravity', title: 'T', project_name: 'p', model: 'm', state: 'idle', home_group: 'recent', last_event_at: '2026-10-28T00:00:00Z' };
+  assert.match(renderHomeSessions([{ ...row, surface_label: 'Antigravity IDE' }]), /p · Antigravity IDE · m/);
+  assert.match(renderHomeSessions([row]), /p · Antigravity · m/);
+  assert.match(renderSessionList([{ ...row, agent: 'claude-code', surface_label: 'Claude desktop app' }]), /<span>Claude desktop app · /);
+  assert.match(renderSessionList([{ ...row, agent: 'claude-code' }]), /<span>claude-code · /);
+  assert.doesNotMatch(renderSessionList([{ ...row, surface_label: '<img src=x>' }]), /<img/);
 });

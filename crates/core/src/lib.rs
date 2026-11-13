@@ -113,13 +113,16 @@ impl Surface {
 
 /// Product name for an agent whose surfaces are separate products, from the stored agent and
 /// surface identifiers. Antigravity ships as a CLI (`agy`), an IDE (1.x, editor and Agent Manager)
-/// and the standalone 2.0 app; other agents have one name per agent.
+/// and the standalone 2.0 app; Claude and Codex also ship desktop apps. Other surfaces use the plain
+/// agent name.
 #[must_use]
 pub fn surface_label(agent: &str, surface: &str) -> Option<&'static str> {
     match (agent, surface) {
         ("antigravity", "cli") => Some("Antigravity CLI"),
         ("antigravity", "ide") => Some("Antigravity IDE"),
         ("antigravity", "desktop_app") => Some("Antigravity 2.0"),
+        ("claude-code", "desktop_app") => Some("Claude desktop app"),
+        ("codex", "desktop_app") => Some("Codex desktop app"),
         _ => None,
     }
 }
