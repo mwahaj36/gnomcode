@@ -10,7 +10,6 @@ use gnomcode_adapters::{
     antigravity::{AntigravityAdapter, extract_conversation_id},
     claude::ClaudeAdapter,
     codex::{CodexAdapter, codex_session_id_from_path},
-    gemini::GeminiAdapter,
 };
 use gnomcode_core::{AgentId, Project, Session, Surface};
 use gnomcode_platform::{
@@ -46,21 +45,12 @@ pub struct DiscoveredFile {
     pub path: PathBuf,
 }
 
-/// Recursively scans agent log directories for parseable log files (`.jsonl`, `.json`).
+/// Recursively scans agent log directories for parseable log files.
 #[must_use]
 pub fn scan_log_files(roots: &[AgentRoot]) -> Vec<DiscoveredFile> {
-    scan_log_files_with_extra(roots, true)
-}
-
-/// Scans agent log directories, optionally including extra adapters (`GeminiCli`) when enabled.
-#[must_use]
-pub fn scan_log_files_with_extra(
-    roots: &[AgentRoot],
-    include_extra_adapters: bool,
-) -> Vec<DiscoveredFile> {
     let mut files = Vec::new();
     for root in roots {
-        if !root.exists || (!include_extra_adapters && root.agent == AgentId::GeminiCli) {
+        if !root.exists {
             continue;
         }
         if root.path.is_file() {
@@ -127,7 +117,6 @@ fn is_agent_log_file(agent: AgentId, path: &Path) -> bool {
                     .and_then(|s| s.to_str())
                     .is_some_and(|n| n == "transcript.jsonl")
         }
-        AgentId::GeminiCli => ext.eq_ignore_ascii_case("json"),
     }
 }
 
@@ -270,9 +259,8 @@ pub fn reproject_all(db: &mut Database) -> Result<usize, Error> {
 /// Returns [`Error`] if database commit or reading fails.
 pub fn ingest_all(db: &mut Database) -> Result<u64, Error> {
     reproject_all(db)?;
-    let include_extra = db.get_feature_toggles()?.extra_adapters_enabled;
     let roots = discover_agent_roots();
-    let discovered = scan_log_files_with_extra(&roots, include_extra);
+    let discovered = scan_log_files(&roots);
     let repair_chat_format = db.chat_format_needs_repair()?;
     let total = ingest_files(db, &roots, &discovered, repair_chat_format)?;
     ingest_claude_status_limits(
@@ -341,9 +329,8 @@ fn ingest_files(
         };
         let start_offset = checkpoint.as_ref().map_or(0, |c| c.last_read_offset);
         let archived = is_archived_codex_rollout(&file.path);
-        let is_rewritten = file.agent == AgentId::GeminiCli || archived;
 
-        let file_fingerprint = if is_rewritten {
+        let file_fingerprint = if archived {
             fs::metadata(&file.path).ok().and_then(|meta| {
                 let modified = meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()?;
                 Some(format!("{}:{}", meta.len(), modified.as_nanos()))
@@ -361,7 +348,7 @@ fn ingest_files(
             continue;
         }
 
-        let read_offset = if is_rewritten || repair_chat_format {
+        let read_offset = if archived || repair_chat_format {
             0
         } else {
             start_offset
@@ -430,10 +417,9 @@ fn ingest_files(
             AgentId::Antigravity => Box::new(AntigravityAdapter::new().with_usage_from_trajectory(
                 agy.usage_from_trajectory(db, extract_conversation_id(&path_str)),
             )),
-            AgentId::GeminiCli => Box::new(GeminiAdapter::new()),
         };
 
-        let parsed_len = if is_rewritten {
+        let parsed_len = if archived {
             read_result.bytes.len()
         } else {
             complete_jsonl_prefix_len(&read_result.bytes)
@@ -456,7 +442,7 @@ fn ingest_files(
             record_cwds(db, &cwds);
             continue;
         }
-        if is_rewritten
+        if archived
             && batch.parse_errors > 0
             && batch.usage_records.is_empty()
             && batch.chat_events.is_empty()
@@ -798,31 +784,15 @@ mod tests {
         fs::write(claude_dir.join("session-1.jsonl"), b"{}").expect("write claude");
         fs::write(claude_dir.join("ignore.txt"), b"").expect("write ignore");
 
-        let roots = [
-            AgentRoot {
-                agent: AgentId::ClaudeCode,
-                path: claude_dir,
-                exists: true,
-            },
-            AgentRoot {
-                agent: AgentId::GeminiCli,
-                path: dir.path().join("gemini"),
-                exists: true,
-            },
-        ];
-        let gemini_dir = dir.path().join("gemini");
-        fs::create_dir_all(&gemini_dir).expect("create gemini dir");
-        fs::write(gemini_dir.join("session.json"), b"{}").expect("write gemini");
+        let roots = [AgentRoot {
+            agent: AgentId::ClaudeCode,
+            path: claude_dir,
+            exists: true,
+        }];
 
         let files = scan_log_files(&roots);
-        assert_eq!(files.len(), 2);
+        assert_eq!(files.len(), 1);
         assert!(files.iter().any(|f| f.agent == AgentId::ClaudeCode));
-        assert!(files.iter().any(|f| f.agent == AgentId::GeminiCli));
-
-        let core_only = super::scan_log_files_with_extra(&roots, false);
-        assert_eq!(core_only.len(), 1);
-        assert!(core_only.iter().any(|f| f.agent == AgentId::ClaudeCode));
-        assert!(!core_only.iter().any(|f| f.agent == AgentId::GeminiCli));
     }
 
     #[test]

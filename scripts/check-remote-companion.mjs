@@ -28,7 +28,7 @@ function bindDesktop(){const connection=desktop;channel=null;desktop.onmessage=e
     if(message.type==='enroll') {await reply({type:'trusted',secret:secretHex});}
     else if(message.type==='resume'){const proof=Uint8Array.from(message.proof.match(/../g),part=>parseInt(part,16));assert.equal(await crypto.subtle.verify('HMAC',proofKey,proof,new TextEncoder().encode(resumeContext)),true);resumes++;await reply({type:'resumed'});}
     else if(message.type==='sessions') { sessionReads++; await reply({type:'sessions',sessions:sessionReads===1?[]:[{id:'saved-session',title:'Saved conversation',agent:'codex',state:savedResumed?'idle':'ended',hosted:savedResumed,can_prompt:savedResumed,can_resume:!savedResumed},{id:'external-history',title:'External history',agent:'codex',state:'idle',hosted:false,can_prompt:false},...(launched?[{id:'codex:new',title:'New phone conversation',agent:'codex',state:'waiting_for_history',hosted:true,can_prompt:true}]:[]),{hosted:true,id:'codex-hosted',limits:[{label:'5h',remaining_pct:sessionReads>4?37:75,basis:'exact',observed_at:new Date().toISOString(),stale:false}],title:'Review authentication',agent:'codex',model:sessionReads>2?'gpt-6.1-sol':null,state:sessionReads>2?'idle':'waiting_for_history',can_prompt:sessionReads>2}]}); }
-    else if(message.type==='models') await reply(modelCatalogError?{type:'error',request_type:'models',message:'Update desktop model service.'}:{type:'models',providers:[{agent:'codex',name:'OpenAI Codex',status:'authenticated',message:'Signed in',models:[{agent:'codex',model:'gpt-test',display_name:'GPT test'}]},{agent:'claude',name:'Claude Code',status:'authenticated',message:'Signed in',models:[{agent:'claude',model:'sonnet',display_name:'Sonnet test'}]},{agent:'gemini',name:'Gemini CLI',status:'configured',message:'Account configured',models:[{agent:'gemini',model:'gemini-test',display_name:'Gemini test'}]},{agent:'antigravity',name:'Antigravity',status:'unknown',message:'Native catalog unavailable.',models:[]}]});
+    else if(message.type==='models') await reply(modelCatalogError?{type:'error',request_type:'models',message:'Update desktop model service.'}:{type:'models',providers:[{agent:'codex',name:'OpenAI Codex',status:'authenticated',message:'Signed in',models:[{agent:'codex',model:'gpt-test',display_name:'GPT test'}]},{agent:'claude',name:'Claude Code',status:'authenticated',message:'Signed in',models:[{agent:'claude',model:'sonnet',display_name:'Sonnet test'}]},{agent:'antigravity',name:'Antigravity',status:'unknown',message:'Native catalog unavailable.',models:[]}]});
     else if(message.type==='chat') await reply({type:'chat',session_id:message.session_id,events:message.session_id==='codex:new' ? (firstPrompt?[{event_id:'new-reply',turn_index:1,role:'assistant',content:'First phone prompt received.',created_at:new Date().toISOString()}]:[]) : [
       {event_id:'0',turn_index:0,role:'system',status:'model_active',content:'Model active: gpt-6.1-sol',created_at:'2026-10-29T00:00:00Z'},
       {event_id:'1',turn_index:1,role:'user',content:'Review authentication',created_at:'2026-10-29T00:00:00Z'},
@@ -127,7 +127,6 @@ try {
   await page.getByRole('button',{name:'Change model',exact:true}).click();
   await page.getByRole('button',{name:'Sonnet test',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'GPT test',exact:true}).isVisible(),true);
-  assert.equal(await page.getByRole('button',{name:'Gemini test',exact:true}).isVisible(),true);
   assert.equal(await page.getByText('Native catalog unavailable.',{exact:true}).isVisible(),true);
   assert.equal(await page.locator('#remote-model').count(),0,'model selection never requires typing a model ID');
   await page.screenshot({path:new URL('../.tmp/remote-verification/model-picker-390.png',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'),fullPage:true});
@@ -256,7 +255,6 @@ try {
   await page.getByRole('button',{name:'Change model',exact:true}).click();
   await page.getByRole('button',{name:'Sonnet test',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'GPT test',exact:true}).isVisible(),true);
-  assert.equal(await page.getByRole('button',{name:'Gemini test',exact:true}).isVisible(),true);
   await page.getByRole('button',{name:'Sonnet test',exact:true}).click();
   await page.getByText('Switching model...',{exact:true}).waitFor();
   assert.equal(requests.filter(request=>request.type==='switch').at(-1).agent,'claude');

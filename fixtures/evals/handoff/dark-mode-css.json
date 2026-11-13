@@ -2,7 +2,7 @@
   "id": "dark-mode-css",
   "title": "Dark mode tokens for the settings page",
   "source_agent": "codex",
-  "target_agent": "gemini-cli",
+  "target_agent": "antigravity",
   "repo_name": "atlas-ui",
   "touched_files": ["styles/tokens.css", "pages/settings.tsx"],
   "events": [

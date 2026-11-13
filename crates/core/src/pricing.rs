@@ -764,8 +764,7 @@ pub fn format_agent_display(agent_slug: &str) -> &'static str {
         "antigravity" => "Google Antigravity",
         "codex" => "OpenAI Codex",
         "claude-code" => "Claude Code",
-        "gemini-cli" => "Google Gemini CLI",
-        _ => "Other Agent",
+        _ => "Unsupported agent",
     }
 }
 
@@ -789,7 +788,6 @@ pub fn classify_provider(agent_slug: &str, model: &str) -> &'static str {
     {
         "OpenAI"
     } else if a.contains("antigravity")
-        || a.contains("gemini")
         || m.contains("gemini")
         || m.contains("argon")
         || m.contains("flash")

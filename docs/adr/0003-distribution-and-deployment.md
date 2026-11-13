@@ -1,6 +1,6 @@
 # 0003 — Distribution & deployment (closed-source binaries)
 
-- **Status:** Accepted
+- **Status:** Accepted. Superseded in part by [0058](./0058-1.0-scope-three-agents.md) (no Teams tier in 1.0).
 - **Date:** 2026-10-26
 
 ## Context

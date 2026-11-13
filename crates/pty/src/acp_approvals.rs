@@ -196,7 +196,7 @@ where
     Ok(())
 }
 
-/// Forwards an ACP permission request for `agent` (`"antigravity"` or `"gemini-cli"`)
+/// Forwards an ACP permission request for `agent` (`"antigravity"`)
 /// to the daemon's ADR 0032 `/api/v1/approvals` API.
 pub async fn request_daemon_approval(
     daemon_port: u16,

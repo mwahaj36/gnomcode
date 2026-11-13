@@ -1,7 +1,7 @@
 {
-  "id": "gemini-to-claude",
-  "title": "Gemini quota exhausted mid-task, continue in Claude Code",
-  "source_agent": "gemini-cli",
+  "id": "antigravity-to-claude",
+  "title": "Antigravity quota exhausted mid-task, continue in Claude Code",
+  "source_agent": "antigravity",
   "target_agent": "claude-code",
   "repo_name": "shipper-cli",
   "touched_files": ["cmd/release.go", "cmd/release_test.go"],

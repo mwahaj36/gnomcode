@@ -5,7 +5,6 @@
 pub mod antigravity;
 pub mod claude;
 pub mod codex;
-pub mod gemini;
 pub mod titles;
 
 use gnomcode_core::{ActivityEvent, AgentId, Project, QuotaSnapshot, Session, UsageRecord};
@@ -16,8 +15,6 @@ use serde::{Deserialize, Serialize};
 pub enum FileKind {
     /// New lines are appended to the end of the file (`.jsonl`).
     AppendOnlyJsonl,
-    /// The entire JSON file is rewritten on each turn (`.json`).
-    RewrittenJson,
 }
 
 /// Context about the file being parsed, passed by `crates/ingest`.
@@ -130,16 +127,6 @@ mod tests {
         }
     }
     #[test]
-    fn gemini_tool_execution_ends_when_the_native_final_reply_arrives() {
-        use super::{FileCtx, SourceAdapter, gemini::GeminiAdapter};
-        let batch = GeminiAdapter::new().parse(
-            &FileCtx::default(),
-            include_bytes!("../../../fixtures/gemini-cli/2026-11-06/tool-final.json"),
-        );
-        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Idle);
-        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_debug_snapshot!("gemini_tool_final",(batch.sessions,batch.chat_events));});
-    }
-    #[test]
     fn claude_user_turn_does_not_inherit_the_previous_completion() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let batch = ClaudeAdapter::new().parse(
@@ -230,7 +217,6 @@ mod tests {
             (Box::new(super::claude::ClaudeAdapter::new()), br#"{"type":"user","sessionId":"native","timestamp":"2026-10-26T12:00:00Z","cwd":"/workspace","message":{"role":"user","content":"Question"}}
 {"type":"custom-title","sessionId":"native","customTitle":"Saved chat name"}
 "#),
-            (Box::new(super::gemini::GeminiAdapter::new()), br#"{"sessionId":"native","summary":"Saved chat name","messages":[]}"#),
         ];
         for (mut adapter, bytes) in cases {
             let batch = adapter.parse(&FileCtx::default(), bytes);
@@ -699,22 +685,6 @@ mod tests {
     }
 
     #[test]
-    fn gemini_rewritten_chat_keeps_only_user_and_model_text() {
-        use super::{FileCtx, SourceAdapter, gemini::GeminiAdapter};
-        let bytes = br#"{"sessionId":"gem-chat","messages":[{"id":"u1","type":"user","content":"Question"},{"id":"m1","type":"gemini","content":"Answer","toolCalls":[{"name":"run_shell_command","args":{"command":"secret"}}]}]}"#;
-        let batch = GeminiAdapter::new().parse(&FileCtx::default(), bytes);
-        assert_eq!(batch.chat_events.len(), 2);
-        assert_eq!(batch.chat_events[0].content, "Question");
-        assert_eq!(batch.chat_events[1].content, "Answer");
-        assert!(
-            batch
-                .chat_events
-                .iter()
-                .all(|event| !event.content.contains("secret"))
-        );
-    }
-
-    #[test]
     fn antigravity_chat_skips_settings_and_tool_outputs() {
         use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
         let bytes = concat!(
@@ -767,7 +737,7 @@ mod tests {
 
     use super::{
         FileCtx, SourceAdapter, antigravity::AntigravityAdapter, claude::ClaudeAdapter,
-        codex::CodexAdapter, gemini::GeminiAdapter,
+        codex::CodexAdapter,
     };
     use gnomcode_core::{AgentId, Surface, TrustLevel};
     use std::fs;
@@ -934,26 +904,6 @@ mod tests {
     }
 
     #[test]
-    fn gemini_adapter_parses_rewritten_session_json() {
-        let path = workspace_root().join("fixtures/gemini-cli/v0.5/session_sample.json");
-        let bytes = fs::read(&path).expect("read gemini fixture");
-        let mut adapter = GeminiAdapter::new();
-        let ctx = FileCtx {
-            source_path: path.to_string_lossy().into_owned(),
-            ..FileCtx::default()
-        };
-
-        let batch = adapter.parse(&ctx, &bytes);
-        assert_eq!(batch.parse_errors, 0);
-        assert_eq!(batch.sessions.len(), 1);
-        assert_eq!(batch.usage_records.len(), 1);
-        assert_eq!(batch.usage_records[0].dedup_key, "gem-sess-0001:msg-0002");
-        assert_eq!(batch.usage_records[0].model, "gemini-2.5-pro");
-        assert_eq!(batch.usage_records[0].input_tokens, 12_400);
-        assert_eq!(batch.usage_records[0].cache_read_tokens, 8_000);
-    }
-
-    #[test]
     fn adapters_tolerate_corrupted_lines_and_crlf_without_panicking() {
         let mut adapter = ClaudeAdapter::new();
         let ctx = FileCtx::default();
@@ -973,10 +923,6 @@ mod tests {
             (
                 Box::new(CodexAdapter::new()),
                 include_bytes!("../../../fixtures/codex/synthetic/missing-model.jsonl"),
-            ),
-            (
-                Box::new(super::gemini::GeminiAdapter::new()),
-                include_bytes!("../../../fixtures/gemini-cli/synthetic/missing-model.json"),
             ),
             (
                 Box::new(super::antigravity::AntigravityAdapter::new()),
@@ -1013,7 +959,6 @@ mod tests {
             Box::new(ClaudeAdapter::new()),
             Box::new(CodexAdapter::new()),
             Box::new(super::antigravity::AntigravityAdapter::new()),
-            Box::new(super::gemini::GeminiAdapter::new()),
         ];
         for mut adapter in adapters {
             let batch = adapter.parse(&FileCtx::default(), b"{\"truncated\":\r\n");

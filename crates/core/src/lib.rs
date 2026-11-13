@@ -62,8 +62,6 @@ pub enum AgentId {
     Codex,
     /// Google Antigravity (App, IDE & CLI).
     Antigravity,
-    /// Google Gemini CLI.
-    GeminiCli,
 }
 
 impl AgentId {
@@ -74,7 +72,6 @@ impl AgentId {
             Self::ClaudeCode => "claude-code",
             Self::Codex => "codex",
             Self::Antigravity => "antigravity",
-            Self::GeminiCli => "gemini-cli",
         }
     }
 
@@ -85,7 +82,6 @@ impl AgentId {
             "claude-code" => Some(Self::ClaudeCode),
             "codex" => Some(Self::Codex),
             "antigravity" => Some(Self::Antigravity),
-            "gemini-cli" => Some(Self::GeminiCli),
             _ => None,
         }
     }
@@ -97,7 +93,7 @@ impl AgentId {
 pub enum Surface {
     /// Terminal / command-line session.
     Cli,
-    /// Editor extension (VS Code, Cursor, Windsurf, Antigravity IDE).
+    /// Editor extension (VS Code, Antigravity IDE).
     Ide,
     /// Standalone desktop app (Antigravity App, ChatGPT / Codex Desktop).
     DesktopApp,
@@ -414,7 +410,7 @@ pub enum QuotaWindow {
 /// Point-in-time snapshot of a per-model quota pool `(provider, limit_id, window)` (SPEC §3.9).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuotaSnapshot {
-    /// Provider slug (`codex`, `antigravity`, `claude-code`, `gemini-cli`, `cursor`).
+    /// Provider slug (`codex`, `antigravity`, `claude-code`).
     pub provider: String,
     /// Model family or pool identifier (`codex`, `premium`, `claude-opus`, `gemini`, `fable`, etc.).
     pub limit_id: String,
@@ -495,10 +491,6 @@ impl Default for UserSettings {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FeatureToggles {
-    /// Enable Teams tier and team-rollup workflows (default `false`).
-    pub teams_enabled: bool,
-    /// Enable extra/experimental adapters beyond Claude Code, Codex, and Antigravity (default `false`).
-    pub extra_adapters_enabled: bool,
     /// Enable scheduled prompt delivery and creation (default `false`).
     pub scheduled_messages_enabled: bool,
     /// Enable cloud account usage synchronization (default `false`).

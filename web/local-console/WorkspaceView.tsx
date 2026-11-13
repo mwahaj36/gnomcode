@@ -113,7 +113,6 @@ const PAGE_LIMIT = 50;
 const LAST_CHAT_STORAGE_KEY = 'gnomcode-last-chat';
 const CLI_AGENT_MAP: Record<string, string> = {
   'claude-code': 'claude',
-  'gemini-cli': 'gemini',
 };
 
 function isWorkspaceVisible(): boolean {
@@ -833,11 +832,7 @@ export function WorkspaceView() {
     } catch (error) {
       const reason = error instanceof Error && error.message ? error.message : 'Could not continue this session here.';
       const agentId =
-        activeSession?.agent === 'claude-code'
-          ? 'claude'
-          : activeSession?.agent === 'gemini-cli'
-            ? 'gemini'
-            : activeSession?.agent || 'claude';
+        activeSession?.agent === 'claude-code' ? 'claude' : activeSession?.agent || 'claude';
       openLauncher(true, activeSession?.repo_path || '');
       setLaunchAgent(agentId);
       // ADR 0053: refusal messages are user-readable; keep the launcher prefill as the fallback.
@@ -1430,7 +1425,6 @@ export function WorkspaceView() {
               <option value="antigravity">Antigravity</option>
               <option value="codex">OpenAI Codex</option>
               <option value="claude-code">Claude Code</option>
-              <option value="gemini-cli">Gemini CLI</option>
             </select>
             <select
               aria-label="Session status"
@@ -1536,7 +1530,6 @@ export function WorkspaceView() {
                       <>
                         <option value="claude">Claude Code</option>
                         <option value="codex">OpenAI Codex</option>
-                        <option value="gemini">Gemini CLI</option>
                         <option value="antigravity">Google Antigravity</option>
                         <option value="terminal">Terminal Shell</option>
                       </>

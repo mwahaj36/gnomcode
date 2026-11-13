@@ -375,9 +375,9 @@ mod tests {
         let report = build_report(
             Utc::now(),
             vec![
-                result("a", "codex", 100.0, true),
-                result("b", "codex", 50.0, false),
-                result("c", "gemini-cli", 90.0, true),
+                result("a", "antigravity", 100.0, true),
+                result("b", "antigravity", 50.0, false),
+                result("c", "codex", 90.0, true),
             ],
         );
         assert_eq!(report.summary.total_cases, 3);
@@ -390,7 +390,7 @@ mod tests {
             .iter()
             .map(|p| p.target_agent.as_str())
             .collect();
-        assert_eq!(names, ["codex", "gemini-cli"]);
+        assert_eq!(names, ["antigravity", "codex"]);
         assert_eq!(report.by_provider[0].pass_rate_pct, 50.0);
         assert_eq!(report.by_provider[0].mean_score_pct, 75.0);
     }

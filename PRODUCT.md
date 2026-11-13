@@ -23,7 +23,7 @@ The intended user is a developer already using one or more supported coding agen
 
 ## Agent support is not uniform
 
-Source contains observation adapters for Claude Code, Codex, Gemini CLI and Antigravity (Cline/Roo, Cursor and Aider were removed 2026-11-12). The launcher accepts Claude, Codex, Gemini and Antigravity CLI names; observation does not establish hosted control, complete history, model switching or quota coverage for each. Installed CLI versions, authentication and available provider entitlements govern what actually works. Test real versions before making support claims.
+1.0 supports exactly Claude Code, Codex and Antigravity (ADR 0058). Cline/Roo, Cursor and Aider adapters were removed 2026-11-12 and the Gemini CLI adapter 2026-11-13. The launcher accepts Claude, Codex and Antigravity CLI names; observation does not establish hosted control, complete history, model switching or quota coverage for each. Installed CLI versions, authentication and available provider entitlements govern what actually works. Test real versions before making support claims.
 
 ## Why someone might choose it
 
@@ -35,4 +35,4 @@ Gnomcode-owned state is local by default, including redacted conversation record
 
 ## Commercial and release state
 
-The repository describes local features as free and Remote/Teams as paid directions, but pricing, terms and distribution are not finalized. Teams is not a complete service. Before a public release or sale, close the security, actual device/agent, platform, privacy, legal and distribution gates in the launch checklist or explicitly narrow the offer. This audit did not run Rust tests or exercise a real desktop, account, agent or phone; its findings should guide further validation, not replace it.
+The repository describes local features as free and Remote as a paid direction, but pricing, terms and distribution are not finalized. There is no Teams product in 1.0. Before a public release or sale, close the security, actual device/agent, platform, privacy, legal and distribution gates in the launch checklist or explicitly narrow the offer. This audit did not run Rust tests or exercise a real desktop, account, agent or phone; its findings should guide further validation, not replace it.

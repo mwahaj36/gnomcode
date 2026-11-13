@@ -1,6 +1,6 @@
 # ADR 0049: Freeze unproven 1.0 subsystems behind off-by-default toggles (E3)
 
-- Status: Accepted
+- Status: Accepted; partly superseded by [0058](./0058-1.0-scope-three-agents.md) (the `teams_enabled` and `extra_adapters_enabled` toggles were removed with their code)
 - Date: 2026-11-13
 
 ## Context

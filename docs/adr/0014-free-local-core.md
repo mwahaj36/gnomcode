@@ -1,6 +1,6 @@
 # 0014 — Free local core
 
-- **Status:** Accepted; implementation pending
+- **Status:** Accepted; implementation pending. Superseded in part by [0058](./0058-1.0-scope-three-agents.md) (Teams is not in 1.0).
 - **Date:** 2026-10-28
 - **Supersedes:** local Pro gating in 0002
 

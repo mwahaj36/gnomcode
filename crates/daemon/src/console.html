@@ -57,7 +57,7 @@
         <input id="ide-session-search" type="search" placeholder="Search conversations" />
         <details class="conversation-filters"><summary>Filters</summary><div class="filters"><label class="subagent-filter"><input id="include-subagents" type="checkbox"> Include subagents</label>
           <label>Project <select id="project-filter" data-change="project-filter"><option value="">All projects</option></select></label>
-          <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option><option value="gemini-cli">Gemini CLI</option></select>
+          <select id="agent-filter" aria-label="Agent" data-change="filter"><option value="all">All agents</option><option value="antigravity">Antigravity</option><option value="codex">OpenAI Codex</option><option value="claude-code">Claude Code</option></select>
           <select id="status-filter" aria-label="Session status" data-change="filter"><option value="all">All statuses</option><option value="ongoing">Ongoing</option><option value="active">Running or waiting</option><option value="idle">Idle</option><option value="ended">Ended</option></select>
         </div>
         </details><div id="ide-session-list">Loading conversations...</div>
@@ -71,7 +71,7 @@
           <h2 id="launcher-heading">New agent session</h2>
           <p>Choose an agent and the folder it should work in.</p>
           <form id="launch-agent-form" data-submit="launch-agent">
-            <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Google Antigravity</option><option value="terminal">Terminal Shell</option></select></div>
+            <div><label for="launch-agent-select">Agent</label><select id="launch-agent-select"><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="antigravity">Google Antigravity</option><option value="terminal">Terminal Shell</option></select></div>
             <div><label for="launch-repo-input">Workspace directory</label><div class="workspace-field"><input id="launch-repo-input" type="text" placeholder="Choose a folder or enter its path" required /><button id="launch-workspace-browse" type="button" class="btn-control" data-action="choose-workspace" aria-label="Choose folder" title="Choose folder"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3V6Z"/></svg></button></div></div>
             <div><label for="launch-model-input">Model (optional)</label><input id="launch-model-input" type="text" placeholder="Use the agent default" maxlength="128" /></div>
             <p id="launch-agent-hint" role="status">Checking installed agents...</p>
@@ -182,7 +182,7 @@
         <div><h3>Usage rules</h3><p>Get an alert when a session reaches a spend or turn limit.</p></div>
       </div>
       <form id="guardrail-form" class="sp-rule-form">
-        <label>Agent<select id="rule-agent"><option value="">All agents</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="gemini-cli">Gemini CLI</option></select></label>
+        <label>Agent<select id="rule-agent"><option value="">All agents</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="antigravity">Antigravity</option></select></label>
         <label>Spend limit (USD)<input id="rule-spend" type="number" min="0.01" step="0.01" placeholder="e.g. 5"></label>
         <label>Turn limit<input id="rule-turns" type="number" min="1" step="1" placeholder="e.g. 30"></label>
         <label>When reached<select id="rule-action"><option value="Warn">Send an alert</option><option value="HardStop">Stop via Claude hook; alert other agents</option></select></label>
