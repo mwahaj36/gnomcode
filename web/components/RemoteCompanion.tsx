@@ -87,6 +87,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [worktreeDiffData, setWorktreeDiffData] = useState<WorktreeDiffData | null>(null);
   const [worktreeConfirm, setWorktreeConfirm] = useState<'worktree_merge' | 'worktree_discard' | 'worktree_open_pr' | null>(null);
   const [worktreeActionBusy, setWorktreeActionBusy] = useState(false);
+  const [continueHereBusy, setContinueHereBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -560,6 +561,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         setFileData({ path: reply.path || '', content: reply.content || '', lossy: Boolean(reply.lossy), truncated: Boolean(reply.truncated) });
       }
     }
+    else if (reply.type === 'continue_here_ack') {
+      setContinueHereBusy(false);
+      setNotice('Continued imported session in Gnomcode.');
+      await requestSessions();
+      const targetId = reply.new_session_id || reply.session_id;
+      if (targetId) selectSession(targetId);
+    }
     else if (reply.type === 'models') {modelRequest.current=false;setModelsLoading(false);setModelsError('');setModelProviders(Array.isArray(reply.providers)?reply.providers:[]);}
     else if (reply.type === 'artifacts' || reply.type === 'artifacts_result') {
       artifactsRequest.current = false;
@@ -653,6 +661,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     }
     else if (reply.type === 'error') {
       if(reply.request_type && reply.request_type.startsWith('worktree_')){setWorktreeActionBusy(false);setWorktreeConfirm(null);}
+      if(reply.request_type==='continue_here'){setContinueHereBusy(false);}
       if(reply.request_type==='session_changes'){setWorktreeDiffData({error: reply.message || 'Could not load worktree diff.'});return;}
       if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
       if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
@@ -925,7 +934,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <p role="status">{resetArmed?'Reset reconnection armed. Waiting for fresh quota confirmation.':'Reset reconnection is not armed.'}</p>
           <button type="button" disabled={!connected || !active?.can_reset} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:true})}>Reconnect after reset</button><button type="button" disabled={!connected} onClick={()=>requestAutomation({type:'resume_on_reset',session_id:selected,enabled:false})}>Cancel reset reconnection</button>
           <div aria-label="Recent events">{automationNotices.filter(item=>(item.conversation_id===selected || !item.conversation_id)).slice(0,8).map(item=><p key={item.id}>{item.message}</p>)}</div>
-        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Read-only history.'}</p>{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div> : <>
+        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Imported session history.'}</p><div className="sp-imported-actions">{active?.source === 'imported' && <button type="button" className="sp-primary-action" disabled={!connected || continueHereBusy} onClick={() => { setContinueHereBusy(true); setNotice('Continuing imported session in Gnomcode...'); void send({type:'continue_here',session_id:selected}).catch(() => { setContinueHereBusy(false); setError('Continue here requires desktop support.'); }); }}>{continueHereBusy ? 'Continuing...' : 'Continue here'}</button>}{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div></div> : <>
           <div className="sp-quick-actions" role="toolbar" aria-label="Quick prompts">
             {quickActions.map(action => <button key={action.id} type="button" className="sp-quick-action" title={action.prompt} disabled={!connected || sending || !active?.can_prompt} onClick={() => submitQuickAction(action)}>{action.label}</button>)}
             <button type="button" className="sp-quick-action sp-quick-action--manage" aria-label="Manage quick prompts" onClick={() => setQuickActionsPanel(true)}>Customize</button>
