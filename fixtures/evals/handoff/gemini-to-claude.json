@@ -1,0 +1,20 @@
+{
+  "id": "gemini-to-claude",
+  "title": "Gemini quota exhausted mid-task, continue in Claude Code",
+  "source_agent": "gemini-cli",
+  "target_agent": "claude-code",
+  "repo_name": "shipper-cli",
+  "touched_files": ["cmd/release.go", "cmd/release_test.go"],
+  "events": [
+    {"role": "user", "content": "Add a --dry-run flag to cmd/release.go that prints the steps without pushing a tag."},
+    {"role": "assistant", "content": "The flag is parsed and the tag push is skipped. I still need to skip the changelog write in dry-run mode."},
+    {"role": "tool", "tool_name": "replace", "status": "success"},
+    {"role": "user", "content": "Add a table test in cmd/release_test.go for the dry-run path."},
+    {"role": "assistant", "content": "Quota is nearly exhausted. State: flag done, table test not started. Next steps: skip the changelog write in dry-run mode, then the table test."}
+  ],
+  "expect": {
+    "goals": ["--dry-run flag", "table test"],
+    "files": ["cmd/release.go", "cmd/release_test.go"],
+    "open_tasks": ["skip the changelog write", "table test not started"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "tool-heavy",
+  "title": "Tool-heavy refactor with the plan stated in chat",
+  "source_agent": "claude-code",
+  "target_agent": "antigravity",
+  "repo_name": "parser-kit",
+  "touched_files": ["src/lexer.rs", "src/parser.rs", "src/ast.rs"],
+  "events": [
+    {"role": "user", "content": "Split src/parser.rs so the lexer lives in src/lexer.rs and the node types in src/ast.rs."},
+    {"role": "tool", "tool_name": "Read", "status": "success"},
+    {"role": "tool", "tool_name": "Write", "status": "success"},
+    {"role": "tool", "tool_name": "Write", "status": "success"},
+    {"role": "tool", "tool_name": "Edit", "status": "success"},
+    {"role": "tool", "tool_name": "Bash", "status": "error"},
+    {"role": "assistant", "content": "The split compiles except for a private helper that parser.rs shares with the lexer. Open: make that helper pub(crate), then rerun cargo test."},
+    {"role": "user", "content": "Keep the public API of the crate unchanged."}
+  ],
+  "expect": {
+    "goals": ["src/lexer.rs", "src/ast.rs", "public api of the crate unchanged"],
+    "files": ["src/parser.rs", "src/lexer.rs", "src/ast.rs"],
+    "open_tasks": ["pub(crate)", "rerun cargo test"]
+  }
+}

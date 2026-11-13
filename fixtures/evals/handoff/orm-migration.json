@@ -1,0 +1,20 @@
+{
+  "id": "orm-migration",
+  "title": "Migrate raw SQL queries to the query builder",
+  "source_agent": "codex",
+  "target_agent": "claude-code",
+  "repo_name": "ledger-api",
+  "touched_files": ["db/queries/invoices.py", "db/queries/customers.py"],
+  "events": [
+    {"role": "user", "content": "Migrate the raw SQL in db/queries/invoices.py to the query builder without changing the returned columns."},
+    {"role": "assistant", "content": "I converted list_invoices and get_invoice. The totals query still uses a window function that the builder cannot express."},
+    {"role": "tool", "tool_name": "apply_patch", "status": "success"},
+    {"role": "user", "content": "Do the same for db/queries/customers.py, and keep the pagination behaviour identical."},
+    {"role": "assistant", "content": "customers.py is converted. Open items: port the invoice totals window function, and run the pagination snapshot tests."}
+  ],
+  "expect": {
+    "goals": ["migrate the raw sql", "keep the pagination behaviour identical"],
+    "files": ["db/queries/invoices.py", "db/queries/customers.py"],
+    "open_tasks": ["invoice totals window function", "pagination snapshot tests"]
+  }
+}

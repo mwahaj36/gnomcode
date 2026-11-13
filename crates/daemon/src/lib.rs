@@ -12,6 +12,7 @@ mod automation;
 mod continue_here;
 pub mod doctor;
 pub mod features;
+pub mod handoff_eval;
 mod interrupt;
 pub mod model_catalog;
 pub mod pro;
@@ -424,7 +425,14 @@ pub(crate) async fn deliver_conversation_prompt_locked(
             .conversation_target(id)?
             .is_some_and(|(_, _, pending)| pending);
         let prompt = if needs_context {
-            let events = remote::conversation_chat(&guard, id, &native, &sessions, Some(50), None)?;
+            let events = remote::conversation_chat(
+                &guard,
+                id,
+                &native,
+                &sessions,
+                Some(HANDOFF_CONTEXT_EVENTS),
+                None,
+            )?;
             let events = gnomcode_adapters::codex::clean_stored_conversation(
                 gnomcode_adapters::antigravity::clean_stored_conversation(events),
             );
@@ -448,7 +456,10 @@ pub(crate) async fn deliver_conversation_prompt_locked(
     Ok(())
 }
 
-fn continuation_prompt(events: &[gnomcode_core::ChatEvent], text: &str) -> String {
+/// Newest conversation events carried into a handoff to another agent (also scored by the F3 evals).
+pub(crate) const HANDOFF_CONTEXT_EVENTS: usize = 50;
+
+pub(crate) fn continuation_prompt(events: &[gnomcode_core::ChatEvent], text: &str) -> String {
     let mut remaining = 16000;
     let mut history = Vec::new();
     for event in events.iter().rev().filter(|event| {

@@ -1,0 +1,20 @@
+{
+  "id": "pricing-table",
+  "title": "Add a model pricing table with cache discounts",
+  "source_agent": "gemini-cli",
+  "target_agent": "codex",
+  "repo_name": "meter-core",
+  "touched_files": ["src/pricing.ts", "src/pricing.test.ts"],
+  "events": [
+    {"role": "user", "content": "Add a pricing table in src/pricing.ts with per-million-token rates and a cache read discount."},
+    {"role": "assistant", "content": "Added the table and a cost function. Cache reads are billed at ten percent of the input rate."},
+    {"role": "tool", "tool_name": "write_file", "status": "success"},
+    {"role": "user", "content": "Cover it with tests in src/pricing.test.ts, including an unknown model that must return no cost instead of zero."},
+    {"role": "assistant", "content": "Tests written for known models. TODO: the unknown model case still returns zero, and rounding to four decimals is not applied yet."}
+  ],
+  "expect": {
+    "goals": ["pricing table", "cache read discount", "unknown model"],
+    "files": ["src/pricing.ts", "src/pricing.test.ts"],
+    "open_tasks": ["unknown model case still returns zero", "rounding to four decimals"]
+  }
+}
