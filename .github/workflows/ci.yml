@@ -257,7 +257,7 @@ jobs:
           chmod +x apps/desktop/staging/bin/gnomcode
           cp docs/legal/EULA.txt apps/desktop/staging/EULA.txt
           if ! cargo about --version >/dev/null 2>&1; then
-            cargo install cargo-about --locked
+            cargo install cargo-about --locked --features cli
           fi
           cargo about generate about.hbs -o apps/desktop/staging/THIRD_PARTY_NOTICES.html
       - name: Build and package desktop app
