@@ -450,3 +450,10 @@ Section 5/M3 and section 6 release acceptance: docs/sessions/2026-11-13-release-
 Section 3.14 / F3: handoff delivery independently reads the first retained, nonempty user request across the continuous conversation, even when older than the newest 50-event page or the store's normal pagination cap. The earliest available session title is read independently of the session-list page. No pin mechanism or decision/constraint heuristic is added. No separate goal copy is persisted; deletion and retention remain authoritative, and unavailable deleted requests cannot be recovered.
 
 Selection reserves the optional redacted title (up to 256 characters) and original request first, then fills the remaining 16,000 content-character budget with newest user/assistant events from the existing newest-50 page (up to 4,000 characters per recent event). An original request that exceeds the remaining budget is truncated to it. The original event is not duplicated. JSON escaping/framing remains unchanged; tool output is excluded. The legacy summary packet uses the same goal/title priority and 16,000-character bounded summary rule. All newly read content/title data goes through existing redaction/cleaning. SQLite preparation runs in spawn_blocking. Synthetic F3 thresholds and trust labels remain unchanged; all nine cases now pass, including long-session.
+
+
+## Release follow-up: Held approval alerts (2026-11-13)
+
+Successful phone/console holds now queue the existing structured ApprovalWaiting notification asynchronously for Claude Code, Codex and Antigravity. Hook hints and periodic observations share the same notification engine, dedupe and rate limits. Push payloads never include approval tool names or summaries; notification preferences remain authoritative. Failed or unavailable delivery cannot delay the hold response or block agent use.
+
+SPEC section 5 delivery: complete; verification is recorded in the session below.

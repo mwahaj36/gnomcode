@@ -839,7 +839,7 @@ impl DaemonOrchestrator {
                 tracing::error!("scheduled messages could not be recovered");
                 return;
             }
-            let mut states = automation::Observations::default();
+            let mut states = automation::shared_observations();
             let mut ticker = tokio::time::interval(Duration::from_secs(1));
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut awake = gnomcode_platform::keepawake::SleepInhibitor::default();
