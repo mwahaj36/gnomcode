@@ -6,7 +6,6 @@ import { renderActivity, renderConversationLimitCard, renderPeriodTiles, renderV
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const client = read('../app/console/Client.tsx');
 const css = read('../app/gnomcode-console.css');
-const html = read('../../crates/daemon/src/console.html');
 
 test('web console uses the shared presenters, not the retired panels', () => {
   for (const name of ['updateHomeSessions', 'updateTodayTiles', 'updateQuota']) assert.match(client, new RegExp(name));
@@ -43,11 +42,6 @@ test('remote limits sheet renders one collapsed card with Rust fields', () => {
   assert.doesNotMatch(out, /<details[^>]* open/);
   assert.match(out, /Session/);
   assert.match(renderConversationLimitCard([], 'codex'), /Limits unavailable/);
-});
-
-test('pricing and license markup carry no inline styles', () => {
-  const settings = html.slice(html.indexOf('Local profile and subscriptions'), html.indexOf('</details>', html.indexOf('license-feedback')));
-  assert.doesNotMatch(settings, /style="/);
 });
 
 test('subscription value renders labeled estimate tiles with a combined tile', () => {

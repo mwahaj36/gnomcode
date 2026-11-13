@@ -38,18 +38,9 @@ test('renderChangesView shows clean state, lossy banner, escaped diff, and stays
   assert.doesNotMatch(markup, /revert|discard|checkout/i);
 });
 
-test('changes view wires into local console and Remote without mutation controls', () => {
+test('changes view wires into Remote without mutation controls', () => {
   const remote = read('../components/RemoteCompanion.tsx');
-  const consoleHtml = read('../../crates/daemon/src/console.html');
-  const consoleJs = read('../../crates/daemon/src/console-app.js');
   const css = read('../app/gnomcode-console.css');
-
-  assert.match(consoleHtml, /id="chat-changes-btn"/);
-  assert.match(consoleHtml, /id="chat-changes-panel"/);
-  assert.match(consoleHtml, /id="chat-changes-body"/);
-  assert.match(consoleJs, /\/api\/v1\/sessions\/\$\{encodeURIComponent\(activeChatSession\)\}\/changes/);
-  assert.match(consoleJs, /'toggle-changes':\s*toggleChangesPanel/);
-  assert.match(consoleJs, /'refresh-changes':\s*loadSessionChanges/);
 
   assert.match(remote, /type:\s*'changes'/);
   assert.match(remote, /reply\.type\s*===\s*'changes'/);

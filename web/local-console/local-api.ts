@@ -63,15 +63,11 @@ export interface LocalFitAddonNamespace {
 
 declare global {
   interface Window {
-    __gnomcodeReactViews?: {
-      overview?: boolean;
-      sessions?: boolean;
-      usage?: boolean;
-      settings?: boolean;
-    };
     __gnomcodeLocalActions?: {
       setView?: (view: string) => void;
       openSession?: (sessionId: string) => void;
+      startOnboarding?: () => void;
+      workspaceReady?: () => void;
     };
     Terminal?: LocalTerminalConstructor;
     FitAddon?: LocalFitAddonNamespace;

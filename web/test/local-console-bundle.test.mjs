@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
+const views = path.join(root, 'web', 'local-console');
 
 test('daemon embeds and serves the web/ React console bundle without sourcemaps', () => {
   const api = readFileSync(path.join(root, 'crates', 'daemon', 'src', 'api.rs'), 'utf8');
@@ -20,14 +21,11 @@ test('daemon embeds and serves the web/ React console bundle without sourcemaps'
   assert.doesNotMatch(bundle, /\.js\.map\b/i, 'console-react.js must not reference .js.map files');
 });
 
-test('React Home view delegates formatting to console-presentation.js with zero business math', () => {
-  const homePath = path.join(root, 'web', 'local-console', 'HomeView.tsx');
-  assert.ok(existsSync(homePath), 'web/local-console/HomeView.tsx must exist');
-  const source = readFileSync(homePath, 'utf8');
-
-  assert.match(source, /updateProviderCards/);
-  assert.match(source, /updateHomeSessions/);
-  assert.match(source, /updateTodayTiles/);
-  assert.match(source, /updateHeatmap/);
-  assert.doesNotMatch(source, /perMillion|cache_savings_usd\s*\*|remaining_pct\s*\//);
+test('React views format and display; pricing, cache and quota math stays in Rust', () => {
+  const sources = readdirSync(views).filter((name) => /\.tsx?$/.test(name));
+  assert.ok(sources.length >= 5);
+  for (const name of sources) {
+    const source = readFileSync(path.join(views, name), 'utf8');
+    assert.doesNotMatch(source, /perMillion|cache_savings_usd\s*\*|remaining_pct\s*\//, `${name} must not compute reporting math`);
+  }
 });

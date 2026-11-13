@@ -61,17 +61,9 @@ test('renderArtifactPreview isolates HTML in sandbox="" iframe and escapes markd
   assert.match(badImgPreview, /unavailable/i);
 });
 
-test('artifacts view wires into console and Remote without raw hex CSS tokens', () => {
-  const html = readFileSync(join(root, 'crates/daemon/src/console.html'), 'utf8');
-  const js = readFileSync(join(root, 'crates/daemon/src/console-app.js'), 'utf8');
+test('artifacts view wires into Remote without raw hex CSS tokens', () => {
   const tsx = readFileSync(join(root, 'web/components/RemoteCompanion.tsx'), 'utf8');
   const css = readFileSync(join(root, 'web/app/gnomcode-console.css'), 'utf8');
-
-  assert.match(html, /id="chat-artifacts-btn"/);
-  assert.match(html, /id="chat-artifacts-panel"/);
-  assert.match(js, /\/api\/v1\/sessions\/.*\/artifacts/);
-  assert.match(js, /renderArtifactsList/);
-  assert.match(js, /renderArtifactPreview/);
 
   assert.match(tsx, /sp-artifacts-sheet/);
   assert.match(tsx, /type:\s*['"]artifacts['"]/);

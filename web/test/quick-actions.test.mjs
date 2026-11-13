@@ -67,17 +67,9 @@ test('renderQuickActionsStrip escapes content and respects disabled state', () =
   assert.match(markup, /disabled/);
 });
 
-test('quick actions wire into console and remote using plain prompt delivery only', () => {
+test('quick actions wire into remote using plain prompt delivery only', () => {
   const remote = read('../components/RemoteCompanion.tsx');
-  const consoleHtml = read('../../crates/daemon/src/console.html');
-  const consoleJs = read('../../crates/daemon/src/console-app.js');
   const css = read('../app/gnomcode-console.css');
-
-  assert.match(consoleHtml, /id="chat-quick-actions"/);
-  assert.match(consoleHtml, /id="quick-actions-dialog"/);
-  assert.match(consoleJs, /'quick-action':\s*sendQuickAction/);
-  assert.match(consoleJs, /'manage-quick-actions':\s*openQuickActionsDialog/);
-  assert.match(consoleJs, /sendPromptText\(/);
 
   assert.match(remote, /sp-quick-actions/);
   assert.match(remote, /submitQuickAction/);
