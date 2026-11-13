@@ -9,7 +9,7 @@ use axum::response::IntoResponse;
 use gnomcode_store::Database;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
