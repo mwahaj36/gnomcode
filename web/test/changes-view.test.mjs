@@ -47,7 +47,7 @@ test('changes view wires into local console and Remote without mutation controls
   assert.match(consoleHtml, /id="chat-changes-btn"/);
   assert.match(consoleHtml, /id="chat-changes-panel"/);
   assert.match(consoleHtml, /id="chat-changes-body"/);
-  assert.match(consoleJs, /\/api\/v1\/repos\/diff/);
+  assert.match(consoleJs, /\/api\/v1\/sessions\/\$\{encodeURIComponent\(activeChatSession\)\}\/changes/);
   assert.match(consoleJs, /'toggle-changes':\s*toggleChangesPanel/);
   assert.match(consoleJs, /'refresh-changes':\s*loadSessionChanges/);
 
