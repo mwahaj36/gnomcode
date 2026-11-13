@@ -279,6 +279,10 @@ pub fn build_router(state: AppState) -> Router {
                 .layer(axum::extract::DefaultBodyLimit::max(22 * 1024 * 1024)),
         )
         .route(
+            "/api/v1/sessions/{id}/continue-here",
+            post(crate::continue_here::post_handler),
+        )
+        .route(
             "/api/v1/routing/policy",
             get(routing_policy_get_handler).post(routing_policy_post_handler),
         )

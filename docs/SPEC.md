@@ -184,6 +184,8 @@ Desktop Resume conversation, local `POST /api/v1/sessions/{id}/continue` and enc
 
 The laptop must be awake, connected and running Gnomcode for mobile interaction. Remembered pairing resumes its encrypted channel under the existing trust policy; keep the conversation visible during device discovery and reconnection. Scheduled messages acknowledged by the laptop persist locally and run when it is awake with Gnomcode running; the phone may disconnect afterward. No cloud execution is implied while the laptop is offline. Native provider acceptance and macOS/Linux restart acceptance remain release checks.
 
+**F2 Continue here for imported sessions (ADR 0053).** Local `POST /api/v1/sessions/{id}/continue-here` and encrypted Remote `{"type":"continue_here","session_id":"<id>"}` reopen an imported Codex, Claude Code, Gemini CLI or Antigravity session through the agent's own resume command (`codex resume <id>`, `claude --resume <id>`, `gemini --resume <id>`, `agy --conversation <id> --mode plan`), in the working folder the session itself recorded (never the project's folder or the daemon's cwd), hosted in a Gnomcode terminal, and then manage it under the same conversation id so history stays continuous. Rust refuses with a plain-language message (HTTP 422 `{ok:false,message}`, Remote `error`) when the session has no recorded folder or the folder is gone, when the native id is missing or not shaped like the agent's ids, or when the agent has no native resume; an unknown id is 404. Success returns `{ok:true,session_id,new_session_id,host_session_id}` (Remote `continue_here_ack`; `new_session_id` equals `session_id`). A session that is already managed is resumed through the normal path. The command is exactly `resume <id>` or `--resume <id>`: no permission-skipping flag is ever added, no task is injected, and the agent's own login and permission prompts apply.
+
 ### 3.14.3 Laptop-owned scheduled messages and automatic failover
 
 Desktop and encrypted Remote may create, list and cancel scheduled conversation messages. Store UTC deadlines and redacted user text only in local SQLite, never metadata sync or the account directory. Show that redaction applies before scheduling. Retain pending messages until execution or cancellation; erase text immediately on cancellation, delivery or failure, and remove terminal records after 30 days. Deleting conversation history cancels its pending messages. Access uses existing loopback authentication or the authenticated encrypted Remote channel. A phone must wait for the laptop acknowledgment before claiming a schedule is saved.
@@ -350,6 +352,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0045](./adr/0045-codex-app-server-approvals.md) | Codex `app-server` JSON-RPC approval bridge reusing ADR 0032 | Accepted |
 | [0047](./adr/0047-agy-acp-approvals.md) | Antigravity `agy acp` JSON-RPC permission bridge reusing ADR 0032 | Accepted |
 | [0049](./adr/0049-freeze-unproven-features-behind-toggles.md) | Freeze Teams, extra adapters, scheduled messages, and account sync behind off-by-default `FeatureToggles` (E3) | Accepted |
+| [0053](./adr/0053-continue-here-imported-sessions.md) | Continue here: resume an imported session through its native resume id in its own recorded folder | Accepted |
 
 ## 10. Open decisions
 

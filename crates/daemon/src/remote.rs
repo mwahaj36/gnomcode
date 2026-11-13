@@ -830,6 +830,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                 }
             }
         }
+        Some("continue_here") => crate::continue_here::remote_command(db, &request).await,
         Some("resume_session") => {
             let Some(id) = request
                 .get("session_id")

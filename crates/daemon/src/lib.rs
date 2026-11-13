@@ -9,6 +9,7 @@ pub mod api;
 pub mod approvals;
 mod attachments;
 mod automation;
+mod continue_here;
 pub mod doctor;
 pub mod features;
 mod interrupt;
