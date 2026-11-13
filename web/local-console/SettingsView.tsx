@@ -5,8 +5,8 @@ import {
   updateProviderSources,
   type ProviderOverview,
 } from '../lib/console-presentation.js';
-import { fetchLocalJson, fetchLocalMutation } from './local-api';
-import { startOnboarding } from './shell-bus';
+import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl } from './local-api';
+import { navigateTo, startOnboarding } from './shell-bus';
 
 interface RemoteDeviceRow {
   id: string;
@@ -93,16 +93,9 @@ function formatAgeLabel(isoStr?: string): string {
   return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-function getBaseUrlFromHost(): string {
-  if (typeof document === 'undefined') return '';
-  const root = document.getElementById('local-settings-root');
-  const raw = root?.dataset.baseUrl || '';
-  return raw && raw !== '__GNOMCODE_BASE_URL__' ? raw : '';
-}
-
 export function SettingsView() {
   const providerListRef = useRef<HTMLDivElement | null>(null);
-  const baseUrl = getBaseUrlFromHost();
+  const baseUrl = getConsoleBaseUrl();
 
   const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>(() => {
     if (typeof document === 'undefined') return 'system';
@@ -684,7 +677,7 @@ export function SettingsView() {
           <button
             type="button"
             className="btn-control"
-            onClick={() => window.__gnomcodeLocalActions?.setView?.('sessions')}
+            onClick={() => navigateTo('sessions')}
           >
             Open conversations
           </button>
@@ -1337,7 +1330,7 @@ export function SettingsView() {
           <button
             className="btn-control"
             type="button"
-            onClick={() => window.__gnomcodeLocalActions?.setView?.('auth')}
+            onClick={() => navigateTo('auth')}
           >
             Manage account
           </button>
