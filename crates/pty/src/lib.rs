@@ -245,6 +245,51 @@ pub fn list_active_sessions() -> Vec<SessionRecord> {
     sessions
 }
 
+/// Lists live hosts like [`list_active_sessions`], but reports an error instead of a shorter
+/// list when the directory or any record cannot be read or parsed, and never deletes a record.
+/// Callers that end sessions from the result must treat an error as "unknown, end nothing".
+///
+/// # Errors
+/// Returns [`Error`] if the directory cannot be read or a record is unreadable or malformed.
+pub fn try_list_active_sessions() -> Result<Vec<SessionRecord>, Error> {
+    try_list_in(&sessions_dir())
+}
+
+fn try_list_in(dir: &Path) -> Result<Vec<SessionRecord>, Error> {
+    let mut sessions = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().is_some_and(|ext| ext == "json") {
+            let record: SessionRecord = serde_json::from_str(&fs::read_to_string(&path)?)?;
+            if is_pid_alive(record.host_pid) {
+                sessions.push(record);
+            }
+        }
+    }
+    Ok(sessions)
+}
+
+/// Fresh process check for one host: `Ok(true)` when its record is readable and the host
+/// process is alive, `Ok(false)` when there is no record or the process is gone.
+///
+/// # Errors
+/// Returns [`Error`] if a record exists but cannot be read or parsed, so liveness is unknown.
+pub fn host_is_running(session_id: &str) -> Result<bool, Error> {
+    host_running_in(&sessions_dir(), session_id)
+}
+
+fn host_running_in(dir: &Path, session_id: &str) -> Result<bool, Error> {
+    if !valid_session_id(session_id) {
+        return Ok(false);
+    }
+    let path = dir.join(format!("{session_id}.json"));
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let record: SessionRecord = serde_json::from_str(&fs::read_to_string(path)?)?;
+    Ok(is_pid_alive(record.host_pid))
+}
+
 /// Checks whether a process ID is currently alive.
 #[must_use]
 pub fn is_pid_alive(pid: u32) -> bool {
@@ -1756,6 +1801,67 @@ mod tests {
         };
         assert!(send_stop(&record).await.is_err());
         server.abort();
+    }
+
+    fn record(id: &str, host_pid: u32) -> SessionRecord {
+        SessionRecord {
+            session_id: id.into(),
+            agent: "codex".into(),
+            repo_path: String::new(),
+            model: None,
+            host_pid,
+            child_pid: 0,
+            port: 1,
+            token: "t".into(),
+            started_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn checked_listing_reports_unreadable_records_instead_of_a_short_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let write = |name: &str, body: String| std::fs::write(dir.path().join(name), body).unwrap();
+        write(
+            "alive.json",
+            serde_json::to_string(&record("alive", std::process::id())).unwrap(),
+        );
+        write(
+            "gone.json",
+            serde_json::to_string(&record("gone", u32::MAX)).unwrap(),
+        );
+        let listed = try_list_in(dir.path()).unwrap();
+        assert_eq!(listed.len(), 1, "dead hosts are skipped, not an error");
+        assert_eq!(listed[0].session_id, "alive");
+        assert!(
+            dir.path().join("gone.json").is_file(),
+            "the checked listing never deletes"
+        );
+        write("partial.json", "{\"session_id\":".into());
+        assert!(
+            try_list_in(dir.path()).is_err(),
+            "a torn record means liveness is unknown"
+        );
+        assert!(try_list_in(&dir.path().join("missing")).is_err());
+    }
+
+    #[test]
+    fn fresh_host_check_distinguishes_gone_from_unknown() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("alive.json"),
+            serde_json::to_string(&record("alive", std::process::id())).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("gone.json"),
+            serde_json::to_string(&record("gone", u32::MAX)).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("torn.json"), "{").unwrap();
+        assert!(host_running_in(dir.path(), "alive").unwrap());
+        assert!(!host_running_in(dir.path(), "gone").unwrap());
+        assert!(!host_running_in(dir.path(), "absent").unwrap());
+        assert!(host_running_in(dir.path(), "torn").is_err());
     }
 
     #[test]
