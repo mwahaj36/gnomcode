@@ -139,17 +139,115 @@ pub fn stop_owned_process(pid: u32) -> Result<(), Error> {
             Err(io::Error::other("process termination failed").into())
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let mut system = sysinfo::System::new();
-        system.refresh_processes(
-            sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
-            true,
-        );
-        let process = system
-            .process(sysinfo::Pid::from_u32(pid))
-            .ok_or_else(|| io::Error::other("process not found"))?;
-        if process.kill_with(sysinfo::Signal::Interrupt) == Some(true) {
+        unix_stop::stop_process_group(pid)
+    }
+}
+
+#[cfg(any(unix, test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnixStopSignal {
+    Interrupt,
+    Terminate,
+    Kill,
+}
+
+#[cfg(any(unix, test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnixStopTarget {
+    ProcessGroup(i32),
+    SingleProcess(i32),
+}
+
+#[cfg(any(unix, test))]
+const UNIX_STOP_ESCALATION: [UnixStopSignal; 3] = [
+    UnixStopSignal::Interrupt,
+    UnixStopSignal::Terminate,
+    UnixStopSignal::Kill,
+];
+
+#[cfg(any(unix, test))]
+fn select_unix_stop_target(pid: i32, target_pgid: i32, own_pgid: i32) -> UnixStopTarget {
+    if target_pgid > 0 && target_pgid != own_pgid {
+        UnixStopTarget::ProcessGroup(target_pgid)
+    } else {
+        UnixStopTarget::SingleProcess(pid)
+    }
+}
+
+#[cfg(unix)]
+mod unix_stop {
+    #![allow(unsafe_code)]
+
+    use super::{
+        UNIX_STOP_ESCALATION, UnixStopSignal, UnixStopTarget, process_is_alive,
+        select_unix_stop_target,
+    };
+    use crate::Error;
+    use std::io;
+    use std::time::{Duration, Instant};
+
+    const STAGE_WAIT: Duration = Duration::from_millis(250);
+    const POLL_INTERVAL: Duration = Duration::from_millis(25);
+
+    fn libc_signal(signal: UnixStopSignal) -> libc::c_int {
+        match signal {
+            UnixStopSignal::Interrupt => libc::SIGINT,
+            UnixStopSignal::Terminate => libc::SIGTERM,
+            UnixStopSignal::Kill => libc::SIGKILL,
+        }
+    }
+
+    fn send_signal(target: UnixStopTarget, signal: UnixStopSignal) -> Result<(), io::Error> {
+        let sig = libc_signal(signal);
+        let rc = match target {
+            // SAFETY: `pgid` is a positive process-group ID distinct from our own process group.
+            UnixStopTarget::ProcessGroup(pgid) => unsafe { libc::killpg(pgid, sig) },
+            // SAFETY: `raw_pid` is a positive process ID validated from `u32`.
+            UnixStopTarget::SingleProcess(raw_pid) => unsafe { libc::kill(raw_pid, sig) },
+        };
+        if rc == 0 {
+            return Ok(());
+        }
+        let err = io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::ESRCH) {
+            return Ok(());
+        }
+        Err(err)
+    }
+
+    fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
+        let deadline = Instant::now() + timeout;
+        while process_is_alive(pid) {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(POLL_INTERVAL);
+        }
+        true
+    }
+
+    pub(super) fn stop_process_group(pid: u32) -> Result<(), Error> {
+        let raw_pid = i32::try_from(pid).map_err(|_| io::Error::other("invalid process ID"))?;
+        if raw_pid <= 0 {
+            return Err(io::Error::other("invalid process ID").into());
+        }
+        if !process_is_alive(pid) {
+            return Err(io::Error::other("process not found").into());
+        }
+        // SAFETY: `getpgid` and `getpgrp` take a validated PID / no arguments and read kernel process-group IDs.
+        let (target_pgid, own_pgid) = unsafe { (libc::getpgid(raw_pid), libc::getpgrp()) };
+        let target = select_unix_stop_target(raw_pid, target_pgid, own_pgid);
+
+        for signal in UNIX_STOP_ESCALATION {
+            send_signal(target, signal)?;
+            if wait_for_exit(pid, STAGE_WAIT) {
+                return Ok(());
+            }
+        }
+
+        if !process_is_alive(pid) {
             Ok(())
         } else {
             Err(io::Error::other("process termination failed").into())
@@ -748,6 +846,46 @@ mod tests {
     #[test]
     fn stopping_invalid_process_is_rejected() {
         assert!(super::stop_owned_process(0).is_err());
+    }
+
+    #[test]
+    fn unix_stop_plan_escalates_and_guards_own_process_group() {
+        assert_eq!(
+            super::UNIX_STOP_ESCALATION,
+            [
+                super::UnixStopSignal::Interrupt,
+                super::UnixStopSignal::Terminate,
+                super::UnixStopSignal::Kill,
+            ]
+        );
+        assert_eq!(
+            super::select_unix_stop_target(42, 42, 10),
+            super::UnixStopTarget::ProcessGroup(42)
+        );
+        assert_eq!(
+            super::select_unix_stop_target(42, 10, 10),
+            super::UnixStopTarget::SingleProcess(42)
+        );
+        assert_eq!(
+            super::select_unix_stop_target(42, -1, 10),
+            super::UnixStopTarget::SingleProcess(42)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_stop_escalates_past_ignored_sigint() {
+        use std::os::unix::process::CommandExt as _;
+        let mut child = std::process::Command::new("sh")
+            .args(["-c", "trap '' INT; sleep 30"])
+            .process_group(0)
+            .spawn()
+            .expect("spawn sh");
+        let pid = child.id();
+        assert!(super::process_is_alive(pid));
+        super::stop_owned_process(pid).expect("stop owned process group");
+        let _ = child.wait();
+        assert!(!super::process_is_alive(pid));
     }
     #[test]
     fn handoff_files_include_modified_and_untracked_paths() {
