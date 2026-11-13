@@ -1764,3 +1764,8 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-diff-line--del { color: var(--sp-exhausted); background: var(--sp-exhausted-soft); }
 
 
+
+/* ---- Imported session banner wrapping (F2) ---- */
+.sp-imported-banner { flex-wrap: wrap; gap: var(--sp-3); }
+.sp-imported-info { flex: 1 1 220px; min-width: min(220px, 100%); }
+.sp-imported-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
