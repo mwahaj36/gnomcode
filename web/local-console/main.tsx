@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { AccountView } from './AccountView';
 import { ApprovalsCard } from './ApprovalsCard';
 import { HomeView } from './HomeView';
 import { SettingsView } from './SettingsView';
@@ -10,6 +11,7 @@ import { WorkspaceView } from './WorkspaceView';
 const VIEWS = [
   ['approvals-root', ApprovalsCard],
   ['shell-dialogs-root', ShellDialogs],
+  ['account-root', AccountView],
   ['local-home-root', HomeView],
   ['local-workspace-root', WorkspaceView],
   ['local-usage-root', UsageView],

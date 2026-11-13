@@ -69,11 +69,6 @@ declare global {
       workspaceAction?: (detail: { type: string; sessionId?: string; folder?: string; focus?: boolean }) => void;
       workspaceReady?: () => void;
     };
-    /** Transitional bridge for console-app.js until the account view is React too. */
-    __gnomcodeShell?: {
-      confirmAction: (message: string, label?: string) => Promise<boolean>;
-      showNotice: (message: string) => void;
-    };
     Terminal?: LocalTerminalConstructor;
     FitAddon?: LocalFitAddonNamespace;
     gnomcodeDesktop?: LocalDesktopBridge;
@@ -94,13 +89,23 @@ export function localAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** A response the daemon answered with a non-2xx status (as opposed to a network failure or timeout). */
+export class LocalApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 export async function fetchLocalJson<T>(url: string, timeoutMs = 15000): Promise<T> {
   const response = await fetch(url, {
     headers: localAuthHeaders(),
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`);
+    throw new LocalApiError(`Request failed (${response.status})`, response.status);
   }
   return (await response.json()) as T;
 }
@@ -125,7 +130,7 @@ export async function fetchLocalMutation<T>(
       err && typeof err === 'object' && 'message' in err && typeof err.message === 'string'
         ? err.message
         : `Request failed (${response.status})`;
-    throw new Error(message);
+    throw new LocalApiError(message, response.status);
   }
   const text = await response.text();
   if (!text) return {} as T;
