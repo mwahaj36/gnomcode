@@ -346,6 +346,18 @@ async fn remove_worktree(
 ) -> Result<(), WorktreeError> {
     let repo = Path::new(&record.repo);
     let path = Path::new(&record.path);
+    // Only ever delete inside the managed checkouts folder, even if a record file is edited.
+    let managed = root.join("checkouts");
+    if !path.starts_with(&managed)
+        || path
+            .components()
+            .any(|part| matches!(part, std::path::Component::ParentDir))
+        || record.branch == record.base_branch
+    {
+        return Err(WorktreeError::Io(
+            "this worktree record points outside the Gnomcode worktree folder".into(),
+        ));
+    }
     let _ = run(
         "git",
         repo,
@@ -581,6 +593,36 @@ mod tests {
         sh(dir.path(), &["add", "-A"]);
         sh(dir.path(), &["commit", "-q", "-m", "init"]);
         dir
+    }
+
+    #[tokio::test]
+    async fn discard_refuses_records_that_point_outside_the_managed_folder() {
+        let root = tempfile::tempdir().expect("root");
+        let victim = tempfile::tempdir().expect("victim");
+        std::fs::write(victim.path().join("keep.txt"), "keep").expect("file");
+        let record = WorktreeRecord {
+            session_id: "s1".into(),
+            repo: victim.path().to_string_lossy().into_owned(),
+            path: victim.path().to_string_lossy().into_owned(),
+            cwd: victim.path().to_string_lossy().into_owned(),
+            branch: "gnomcode/s1".into(),
+            base_branch: "main".into(),
+            base_commit: "0".repeat(40),
+            created_at: String::new(),
+        };
+        assert!(discard(root.path(), &record).await.is_err());
+        assert!(victim.path().join("keep.txt").exists());
+        let same_branch = WorktreeRecord {
+            path: root
+                .path()
+                .join("checkouts")
+                .join("s1")
+                .to_string_lossy()
+                .into_owned(),
+            branch: "main".into(),
+            ..record
+        };
+        assert!(discard(root.path(), &same_branch).await.is_err());
     }
 
     #[tokio::test]

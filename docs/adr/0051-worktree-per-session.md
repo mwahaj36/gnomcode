@@ -24,3 +24,7 @@ New `worktree_session.rs` (git and records) and `worktree_api.rs` (HTTP and Remo
 ## Consequences
 - A crash between creating the worktree and saving its record leaves an orphan folder under `worktrees/checkouts`; Discard cannot reach it. A janitor is future work.
 - An agent started by hand in a worktree terminal outside Gnomcode is not detected as "in use".
+
+## Review addendum
+
+Removal is restricted to paths inside `<GNOMCODE_HOME>/worktrees/checkouts` and never deletes the branch the worktree was cut from, even if a stored record is edited. `git push` and `gh pr create` run only on an explicit open-PR request; pushes are never forced.
