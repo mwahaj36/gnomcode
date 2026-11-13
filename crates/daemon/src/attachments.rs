@@ -1,6 +1,7 @@
 //! Bounded, allowlisted attachment uploads staged inside a session's workspace.
 
 use crate::api::{AppState, validate_auth};
+use crate::workspace_files::resolve_session_workspace;
 use axum::Json;
 use axum::extract::{Path as AxumPath, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -8,7 +9,7 @@ use axum::response::IntoResponse;
 use gnomcode_store::Database;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -60,46 +61,6 @@ impl UploadError {
             Self::TooLarge(msg) => msg,
             Self::Io => "Could not save attachment",
         }
-    }
-}
-
-fn resolve_session_workspace(db: &Database, session_id: &str) -> Result<PathBuf, &'static str> {
-    if session_id.trim().is_empty() || session_id.len() > 128 {
-        return Err("Invalid session");
-    }
-    let hosted = gnomcode_pty::list_active_sessions();
-    if let Some(record) = hosted.iter().find(|r| r.session_id == session_id) {
-        let path = PathBuf::from(&record.repo_path);
-        if path.is_dir() {
-            return Ok(path);
-        }
-    }
-    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
-    let native_id = crate::remote::conversation_session_id(session_id, &sessions, &hosted);
-    if let Some(record) = hosted.iter().find(|r| {
-        sessions
-            .iter()
-            .find(|s| s.id == native_id)
-            .is_some_and(|s| Some(r.child_pid) == s.pid || r.session_id == s.id)
-    }) {
-        let path = PathBuf::from(&record.repo_path);
-        if path.is_dir() {
-            return Ok(path);
-        }
-    }
-    let target = db
-        .get_session_focus_target(&native_id)
-        .map_err(|_| "Session workspace is unavailable")?
-        .ok_or("Session not found")?;
-    let folder = target
-        .repo_root
-        .filter(|path| !path.trim().is_empty())
-        .ok_or("Session has no workspace folder")?;
-    let path = PathBuf::from(folder);
-    if path.is_dir() {
-        Ok(path)
-    } else {
-        Err("Session workspace folder is unavailable")
     }
 }
 
@@ -248,7 +209,12 @@ fn stage_attachment(
 
     let stored_name = format!("{}-{clean_name}", random_prefix()?);
     let target = canonical_dir.join(&stored_name);
-    std::fs::write(&target, &bytes).map_err(|_| UploadError::Io)?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map_err(|_| UploadError::Io)?;
+    std::io::Write::write_all(&mut file, &bytes).map_err(|_| UploadError::Io)?;
     let rel_path = format!(".gnomcode/attachments/{stored_name}");
     Ok((clean_name, rel_path, actual_size))
 }
