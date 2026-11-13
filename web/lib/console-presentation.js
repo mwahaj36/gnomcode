@@ -813,7 +813,8 @@ export function renderQuickActionsStrip(actions = DEFAULT_QUICK_ACTIONS, { disab
   const list = mergeQuickActions(actions);
   const disabledAttr = disabled ? ' disabled' : '';
   const buttons = list.map(action => `<button type="button" class="sp-quick-action" data-action="quick-action" data-arg="${escape(action.id)}" title="${escape(action.prompt)}"${disabledAttr}>${escape(action.label)}</button>`).join('');
-  return `<div class="sp-quick-actions" role="toolbar" aria-label="Quick prompts">${buttons}<button type="button" class="sp-quick-action sp-quick-action--manage" data-action="manage-quick-actions" aria-label="Manage quick prompts">Customize</button></div>`;
+  return `<div class="sp-quick-actions" role="toolbar" aria-label="Quick prompts">${buttons}<button type="button" class="sp-quick-action sp-quick-action--manage" data-action="manage-quick-actions" aria-label="Manage quick prompts">Customize</button></div>`;}
+
 const STATUS_LABELS = { '??': 'Untracked', A: 'Added', M: 'Modified', D: 'Deleted', R: 'Renamed', C: 'Copied', U: 'Conflict' };
 
 export function parseGitStatusLines(statusText = '') {
