@@ -703,13 +703,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             };
             if !matches!(
                 agent,
-                "claude"
-                    | "claude-code"
-                    | "codex"
-                    | "gemini"
-                    | "gemini-cli"
-                    | "antigravity"
-                    | "agy"
+                "claude" | "claude-code" | "codex" | "antigravity" | "agy"
             ) {
                 return json!({"type":"error","message":"Remote launch supports agent CLIs only"});
             }
@@ -1178,7 +1172,7 @@ fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord])
     for record in hosted {
         if !matches!(
             record.agent.as_str(),
-            "claude" | "claude-code" | "codex" | "gemini" | "gemini-cli" | "antigravity" | "agy"
+            "claude" | "claude-code" | "codex" | "antigravity" | "agy"
         ) {
             continue;
         }
@@ -1268,16 +1262,14 @@ pub(crate) fn conversation_sessions(
         row["source"] = json!(if managed { "managed" } else { "imported" });
         let can_resume = managed
             && host.is_none()
-            && (matches!(
-                agent,
-                "codex" | "claude-code" | "claude" | "gemini-cli" | "gemini" | "antigravity"
-            ) || observed.is_none()
-                && launch.as_ref().is_some_and(|launch| {
-                    matches!(
-                        launch.agent.as_str(),
-                        "codex" | "claude-code" | "gemini-cli" | "antigravity"
-                    )
-                }));
+            && (matches!(agent, "codex" | "claude-code" | "claude" | "antigravity")
+                || observed.is_none()
+                    && launch.as_ref().is_some_and(|launch| {
+                        matches!(
+                            launch.agent.as_str(),
+                            "codex" | "claude-code" | "antigravity"
+                        )
+                    }));
         let can_prompt = host.is_some_and(|record| {
             observed.is_none_or(|session| {
                 session.state == gnomcode_core::SessionState::Idle
@@ -1305,8 +1297,7 @@ pub(crate) fn conversation_sessions(
         row["hosted"] = json!(host.is_some());
         row["can_prompt"] = json!(can_prompt);
         row["can_resume"] = json!(can_resume);
-        row["can_reset"] =
-            json!(managed && matches!(agent, "codex" | "claude-code" | "gemini-cli"));
+        row["can_reset"] = json!(managed && matches!(agent, "codex" | "claude-code"));
         row["limits"] = json!(limits);
         if host.is_some_and(|record| {
             observed.is_none_or(|session| {
@@ -1395,7 +1386,6 @@ pub(crate) fn session_bindings<'s, 'h>(
             }
             let agent = match record.agent.as_str() {
                 "claude" => "claude-code",
-                "gemini" => "gemini-cli",
                 "agy" => "antigravity",
                 other => other,
             };
@@ -1463,7 +1453,7 @@ mod tests {
 
     #[test]
     fn every_provider_separates_owned_imported_and_subagent_history() {
-        let agents = ["claude-code", "codex", "gemini-cli", "antigravity"];
+        let agents = ["claude-code", "codex", "antigravity"];
         let mut rows = Vec::new();
         for agent in agents {
             for source in ["managed", "imported"] {

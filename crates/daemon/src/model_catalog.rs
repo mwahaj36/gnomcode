@@ -195,39 +195,6 @@ async fn claude_models(cwd: &std::path::Path) -> Option<Vec<ModelChoice>> {
     None
 }
 
-fn gemini_account_configured(
-    settings: &Value,
-    accounts: &Value,
-    api_key: bool,
-    vertex: bool,
-) -> bool {
-    match settings
-        .pointer("/security/auth/selectedType")
-        .and_then(Value::as_str)
-    {
-        Some("oauth-personal") => accounts
-            .get("active")
-            .and_then(Value::as_str)
-            .is_some_and(|account| !account.trim().is_empty()),
-        Some("gemini-api-key") => api_key,
-        Some("vertex-ai") => vertex,
-        None => api_key || vertex,
-        _ => false,
-    }
-}
-
-fn read_metadata(path: &std::path::Path) -> Value {
-    use std::io::Read as _;
-    let Ok(file) = gnomcode_platform::open_shared_read(path) else {
-        return Value::Null;
-    };
-    let mut bytes = Vec::new();
-    if file.take(LIMIT + 1).read_to_end(&mut bytes).is_err() || bytes.len() > LIMIT as usize {
-        return Value::Null;
-    }
-    serde_json::from_slice(&bytes).unwrap_or(Value::Null)
-}
-
 async fn discover_provider(agent: &str, name: &str) -> ProviderCatalog {
     let mut result = ProviderCatalog::new(agent, name);
     let executable = if agent == "antigravity" { "agy" } else { agent };
@@ -278,46 +245,6 @@ async fn discover_provider(agent: &str, name: &str) -> ProviderCatalog {
                 result.status = "authenticated".into();
                 result.message="Signed in to Claude Code. Models and aliases come from its native model selector.".into();
             }
-            "gemini" => {
-                let home = std::env::var_os("GEMINI_HOME")
-                    .filter(|path| !path.is_empty())
-                    .map(std::path::PathBuf::from)
-                    .unwrap_or_else(|| {
-                        gnomcode_platform::user_home_dir().join(obfstr::obfstr!(".gemini"))
-                    });
-                let api_key = std::env::var_os("GEMINI_API_KEY").is_some();
-                let vertex = std::env::var_os("GOOGLE_CLOUD_PROJECT").is_some();
-                let configured = tokio::task::spawn_blocking(move || {
-                    gemini_account_configured(
-                        &read_metadata(&home.join(obfstr::obfstr!("settings.json"))),
-                        &read_metadata(&home.join(obfstr::obfstr!("google_accounts.json"))),
-                        api_key,
-                        vertex,
-                    )
-                })
-                .await
-                .ok()?;
-                if !configured {
-                    result.message = "Gemini sign-in could not be confirmed. Open Gemini CLI on your desktop to select a signed-in account, then refresh.".into();
-                    return Some(());
-                }
-                let (success, bytes) = command_output(
-                    "gemini",
-                    &["models", "list", "--output-format", "json"],
-                    cwd.path(),
-                )
-                .await?;
-                if !success {
-                    return None;
-                }
-                let listing = serde_json::from_slice::<Value>(&bytes).ok()?;
-                if !listing.is_array() {
-                    return None;
-                }
-                result.models = choices("gemini", "gemini_cli_models", &listing);
-                result.status = "configured".into();
-                result.message="Account configured in Gemini CLI. Its native model list is shown; current access is checked by Gemini when used.".into();
-            }
             _ => {
                 let (success, bytes) = command_output("agy", &["models"], cwd.path()).await?;
                 if !success {
@@ -352,13 +279,12 @@ async fn discover_provider(agent: &str, name: &str) -> ProviderCatalog {
 
 /// Discovers all supported CLI providers concurrently, without prompts or credential-file reads.
 pub async fn discover() -> Vec<ProviderCatalog> {
-    let (codex, claude, gemini, antigravity) = tokio::join!(
+    let (codex, claude, antigravity) = tokio::join!(
         discover_provider("codex", "OpenAI Codex"),
         discover_provider("claude", "Claude Code"),
-        discover_provider("gemini", "Gemini CLI"),
         discover_provider("antigravity", "Antigravity")
     );
-    vec![codex, claude, gemini, antigravity]
+    vec![codex, claude, antigravity]
 }
 
 #[cfg(test)]
@@ -388,27 +314,5 @@ mod tests {
                 .expect("serialize")
                 .contains("private")
         );
-    }
-    #[test]
-    fn gemini_old_accounts_and_installation_markers_are_not_login_evidence() {
-        let settings = json!({"security":{"auth":{"selectedType":"oauth-personal"}}});
-        assert!(!gemini_account_configured(
-            &settings,
-            &json!({"active":null,"old":["old@example.invalid"]}),
-            false,
-            false
-        ));
-        assert!(gemini_account_configured(
-            &settings,
-            &json!({"active":"test@example.invalid"}),
-            false,
-            false
-        ));
-        assert!(!gemini_account_configured(
-            &Value::Null,
-            &json!({"active":"test@example.invalid"}),
-            false,
-            false
-        ));
     }
 }

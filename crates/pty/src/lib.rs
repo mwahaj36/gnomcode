@@ -81,7 +81,6 @@ pub fn launch_command(
         "claude" | "claude-code" => "claude".to_owned(),
         "codex" => "codex".to_owned(),
         "antigravity" | "agy" => "agy".to_owned(),
-        "gemini" | "gemini-cli" => "gemini".to_owned(),
         "terminal" | "shell" => {
             return Ok({
                 let (executable, arguments) = gnomcode_platform::executables::terminal_shell();
@@ -123,7 +122,7 @@ pub fn resume_command(agent: &str, repo: &Path, native_id: &str) -> Result<Launc
     let mut command = launch_command(agent, repo, None)?;
     let verb = match agent {
         "codex" => "resume",
-        "claude" | "claude-code" | "gemini" | "gemini-cli" => "--resume",
+        "claude" | "claude-code" => "--resume",
         "antigravity" | "agy" => "--conversation",
         _ => return Err(Error::UnsupportedAgent(agent.to_owned())),
     };
@@ -735,7 +734,7 @@ fn last_composer(text: &str) -> Option<usize> {
 ///
 /// Matching is per agent on the recent rendered screen, and the latest marker wins. The
 /// strings for agy, Codex and Claude Code were seen live (Claude Code v2.1.322, see
-/// `fixtures/claude-code/`); the Gemini CLI strings come from its source and are unverified.
+/// `fixtures/claude-code/`).
 fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
     let (blockers, ready, require_ready): (&[&str], &[&str], bool) = match agent {
         "codex" => (&["hooks are new or changed"], &["? for shortcuts"], false),
@@ -753,18 +752,6 @@ fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
                 "esc to cancel",
             ],
             &["? for shortcuts"],
-            true,
-        ),
-        "gemini" | "gemini-cli" => (
-            &[
-                "do you trust the files in this folder",
-                "how would you like to authenticate",
-                "(use enter to select)",
-                "select theme",
-                "waiting for auth",
-                "logging in with google",
-            ],
-            &["type your message or @path/to/file"],
             true,
         ),
         _ => (
@@ -807,7 +794,7 @@ async fn host_input_handler(
     if !state.protocol
         && matches!(
             state.agent.as_str(),
-            "antigravity" | "agy" | "codex" | "claude" | "claude-code" | "gemini" | "gemini-cli"
+            "antigravity" | "agy" | "codex" | "claude" | "claude-code"
         )
         && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
         && state.scrollback.lock().map_or(true, |output| {
@@ -1229,7 +1216,6 @@ pub async fn switch_model(record: &SessionRecord, model: &str) -> Result<(), Err
     }
     let command = match record.agent.as_str() {
         "codex" | "claude" | "claude-code" => format!("/model {model}"),
-        "gemini" | "gemini-cli" => format!("/model set {model}"),
         _ => return Err(Error::UnsupportedAgent(record.agent.clone())),
     };
     send_input(record, command.as_bytes()).await?;
@@ -1377,8 +1363,6 @@ mod tests {
         include_bytes!("../../../fixtures/claude-code/v2.1.322/trust-dialog.pty");
     const CLAUDE_READY: &[u8] =
         include_bytes!("../../../fixtures/claude-code/v2.1.322/ready-composer.pty");
-    const GEMINI_TRUST: &[u8] = b"\x1b[2J\x1b[H\x1b[1mDo\x1b[1Cyou\x1b[1Ctrust\x1b[1Cthe\x1b[1Cfiles\x1b[1Cin\x1b[1Cthis\x1b[1Cfolder?\x1b[0m\r\n1.\x1b[1CTrust\x1b[1Cfolder\r\n2. Trust parent folder\r\n3. Don't trust";
-    const GEMINI_READY: &[u8] = b"\x1b[2J\x1b[H\x1b]0;Gemini CLI\x07\x1b[38;5;244m>\x1b[0m\x1b[1C\x1b[7m \x1b[0m\x1b[2mType\x1b[1Cyour\x1b[1Cmessage\x1b[1Cor\x1b[1C@path/to/file\x1b[0m";
 
     #[test]
     fn claude_trust_dialog_holds_chat_until_the_composer_returns() {
@@ -1424,24 +1408,6 @@ mod tests {
     fn a_wrapped_ring_without_markers_is_not_treated_as_startup() {
         let ring = vec![b'x'; SCROLLBACK_BYTES];
         assert!(!startup_needs_setup("claude", &ring));
-        assert!(!startup_needs_setup("gemini", &ring));
-    }
-
-    #[test]
-    fn gemini_trust_and_auth_screens_hold_chat_until_the_prompt_returns() {
-        assert!(startup_needs_setup("gemini-cli", GEMINI_TRUST));
-        assert!(startup_needs_setup(
-            "gemini",
-            b"Get started\r\nHow would you like to authenticate for this project?"
-        ));
-        assert!(startup_needs_setup("gemini", b""));
-        assert!(!startup_needs_setup("gemini", GEMINI_READY));
-        let mut accepted = GEMINI_TRUST.to_vec();
-        accepted.extend_from_slice(GEMINI_READY);
-        assert!(!startup_needs_setup("gemini", &accepted));
-        let mut again = GEMINI_READY.to_vec();
-        again.extend_from_slice(GEMINI_TRUST);
-        assert!(startup_needs_setup("gemini", &again));
     }
 
     #[test]
@@ -1454,8 +1420,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn chat_input_cannot_accept_claude_or_gemini_trust() {
-        for (agent, screen) in [("claude-code", CLAUDE_TRUST), ("gemini-cli", GEMINI_TRUST)] {
+    async fn chat_input_cannot_accept_claude_trust() {
+        for (agent, screen) in [("claude-code", CLAUDE_TRUST)] {
             let (input_tx, input_rx) = std::sync::mpsc::channel();
             let (output_tx, _) = broadcast::channel(8);
             let mut scrollback = Scrollback::new(SCROLLBACK_BYTES);
@@ -1537,12 +1503,6 @@ mod tests {
         assert_eq!(
             resume_command("claude-code", repo.path(), "saved-123")
                 .expect("claude")
-                .arguments,
-            ["--resume", "saved-123"]
-        );
-        assert_eq!(
-            resume_command("gemini-cli", repo.path(), "saved-123")
-                .expect("gemini")
                 .arguments,
             ["--resume", "saved-123"]
         );
@@ -1806,8 +1766,6 @@ mod tests {
             ("claude-code", "claude"),
             ("codex", "codex"),
             ("antigravity", "agy"),
-            ("gemini", "gemini"),
-            ("gemini-cli", "gemini"),
         ] {
             let command = launch_command(agent, repo.path(), Some("example-model")).unwrap();
             assert_eq!(command.executable, executable);
@@ -1819,6 +1777,8 @@ mod tests {
     fn rejects_unknown_agent_and_nonexistent_workspace() {
         let repo = tempfile::tempdir().unwrap();
         assert!(launch_command("unknown", repo.path(), None).is_err());
+        assert!(launch_command("gemini", repo.path(), None).is_err());
+        assert!(launch_command("gemini-cli", repo.path(), None).is_err());
         assert!(launch_command("claude", &repo.path().join("missing"), None).is_err());
     }
 

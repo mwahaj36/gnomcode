@@ -91,20 +91,16 @@ mod tests {
 
         let initial = handle_remote(&db, &json!({ "type": "features.get" })).await;
         assert_eq!(initial["type"], "features");
-        assert_eq!(initial["features"]["teams_enabled"], false);
-        assert_eq!(initial["features"]["extra_adapters_enabled"], false);
         assert_eq!(initial["features"]["scheduled_messages_enabled"], false);
         assert_eq!(initial["features"]["account_sync_enabled"], false);
 
         let updated = FeatureToggles {
-            teams_enabled: false,
-            extra_adapters_enabled: true,
-            scheduled_messages_enabled: false,
+            scheduled_messages_enabled: true,
             account_sync_enabled: true,
         };
         let remote_set =
             handle_remote(&db, &json!({ "type": "features.set", "features": updated })).await;
-        assert_eq!(remote_set["features"]["extra_adapters_enabled"], true);
+        assert_eq!(remote_set["features"]["scheduled_messages_enabled"], true);
         assert_eq!(remote_set["features"]["account_sync_enabled"], true);
 
         let app = build_router(AppState {

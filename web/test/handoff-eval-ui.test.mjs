@@ -39,7 +39,7 @@ test('F3 handoff eval UI renders Rust-computed scores, trust labels, empty fallb
         id: 'eval-2',
         title: 'Resume tool context',
         source_agent: 'codex',
-        target_agent: 'gemini',
+        target_agent: 'antigravity',
         outcome: 'failed',
         trust_level: 'unknown',
         summary: 'Dropped pending file ref',

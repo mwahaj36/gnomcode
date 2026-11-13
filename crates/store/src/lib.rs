@@ -4696,12 +4696,7 @@ mod tests {
         assert_eq!(sessions[0].context_window, Some(258_000));
 
         // Every provider must use the latest context snapshot, even when it decreases.
-        for agent in [
-            AgentId::ClaudeCode,
-            AgentId::Codex,
-            AgentId::Antigravity,
-            AgentId::GeminiCli,
-        ] {
+        for agent in [AgentId::ClaudeCode, AgentId::Codex, AgentId::Antigravity] {
             let mut provider_session = session.clone();
             provider_session.agent = agent;
             provider_session.id = format!("{}:compaction", agent.as_str());
@@ -4737,6 +4732,84 @@ mod tests {
                 agent.as_str()
             );
         }
+    }
+
+    #[test]
+    fn rows_from_removed_agents_stay_readable_and_never_crash_queries() {
+        let mut db = Database::open_in_memory().expect("in-memory db");
+        let project = Project::from_origin(None, "/workspace/legacy", None);
+        let session = Session {
+            id: "gemini-cli:legacy".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gemini-2.5-pro".to_owned()),
+            title: Some("Old chat".to_owned()),
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+        let usage = UsageRecord {
+            dedup_key: "legacy:1".to_owned(),
+            session_id: session.id.clone(),
+            timestamp: Utc::now(),
+            model: "gemini-2.5-pro".to_owned(),
+            input_tokens: 10,
+            output_tokens: 5,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 15,
+            context_window: None,
+            cost_usd: 0.01,
+            cache_savings_usd: 0.0,
+            cost_basis: TrustLevel::Estimated,
+            pricing_version: "test".to_owned(),
+        };
+        let checkpoint = SourceCheckpoint {
+            file_path: "/legacy/session.json".to_owned(),
+            last_read_offset: 1,
+            file_size: 1,
+            fingerprint: "legacy".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        db.commit_batch(
+            std::slice::from_ref(&project),
+            std::slice::from_ref(&session),
+            std::slice::from_ref(&usage),
+            &[],
+            &[],
+            &checkpoint,
+        )
+        .expect("store session");
+        // Simulate rows written by a removed agent before the 1.0 scope cut.
+        db.conn
+            .execute("UPDATE session SET agent = 'gemini-cli'", [])
+            .expect("relabel as removed agent");
+
+        assert!(AgentId::parse("gemini-cli").is_none());
+        assert!(db.list_active_sessions(10).expect("active").is_empty());
+        let (rows, count) = db
+            .list_sessions_paginated(None, None, 0, 10)
+            .expect("paginated");
+        assert_eq!((rows.len(), count), (1, 1));
+        db.generate_usage_report().expect("report");
+        assert_eq!(
+            gnomcode_core::pricing::format_agent_display("gemini-cli"),
+            "Unsupported agent"
+        );
+        let remaining: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM session WHERE agent = 'gemini-cli'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("count");
+        assert_eq!(remaining, 1, "no user data is deleted");
     }
 
     #[test]

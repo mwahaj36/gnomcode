@@ -21,7 +21,7 @@ fn models_command_reports_missing_catalog_without_inventing_models() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for provider in ["OpenAI Codex", "Claude Code", "Gemini CLI", "Antigravity"] {
+    for provider in ["OpenAI Codex", "Claude Code", "Antigravity"] {
         assert!(stdout.contains(&format!("{provider} [unavailable]")));
     }
     assert!(
