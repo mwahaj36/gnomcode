@@ -87,3 +87,8 @@ export function classifyArtifactKind(item: ArtifactItem | null | undefined): Art
 export function isSafeArtifactImageSrc(src: unknown): boolean;
 export function renderArtifactsList(items?: ArtifactItem[], selectedId?: string): string;
 export function renderArtifactPreview(artifact: ArtifactItem | null | undefined): string;
+export const MAX_ATTACHMENT_BYTES: number;
+export type AttachmentItem = { id: string; filename: string; size: number; mime_type: string; status: 'uploading' | 'saved' | 'error'; workspace_path?: string; error?: string };
+export function validateAttachmentCandidate(file: { name?: string; size?: number; type?: string } | null | undefined): { ok: true; filename: string; size: number; mime_type: string } | { ok: false; reason: string };
+export function renderAttachmentPills(items?: AttachmentItem[]): string;
+export function formatPromptWithAttachments(promptText: string, attachments?: AttachmentItem[]): string;

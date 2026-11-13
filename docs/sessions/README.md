@@ -28,6 +28,7 @@
 - [2026-11-13 - Read-only changes view UI on console and Remote](2026-11-13-changes-view-ui.md)
 - [2026-11-13 - Read-only workspace file viewer UI on console and Remote](2026-11-13-file-viewer-ui.md)
 - [2026-11-13 - Artifacts viewer alongside changes (sandboxed HTML, Markdown, images)](2026-11-13-artifacts-view-ui.md)
+- [2026-11-13 - Phone and console workspace attachments UI](2026-11-13-phone-attachments-ui.md)
 - [2026-11-13 - First-run tour refresh for four places and Workspace](2026-11-13-tour-refresh.md)
 - [2026-11-13 - In-app desktop auto-update from allowed manifest](2026-11-13-desktop-auto-update.md)
 - [2026-11-13 - Needs-you notifications and push redaction](2026-11-13-needs-you-notifications.md)
