@@ -10,6 +10,9 @@ export interface LocalSessionSummary {
   home_group?: string;
   can_resume?: boolean;
   can_reset?: boolean;
+  worktree?: boolean;
+  worktree_branch?: string;
+  worktree_path?: string;
   limits?: unknown[];
 }
 
