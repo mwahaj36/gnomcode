@@ -11,7 +11,7 @@ Interactive `agy` PTY sessions cannot safely answer tool permission dialogs from
 
 1. Implement `crates/pty/src/acp_approvals.rs` to parse ACP `session/request_permission` requests, redact tool call summaries with `gnomcode_core::redact::redact_summary`, and forward them to ADR 0032 (`POST /api/v1/approvals` + `GET /api/v1/approvals/{id}/wait`).
 2. Enforce fail-closed behavior: `NoDecision` (no listener, timeout, or cancellation) maps to `{ "outcome": { "outcome": "cancelled" } }` and NEVER selects an allow option.
-$L
+3. An approval from the phone or console selects only an `allow_once` option; `allow_always` is never chosen, so a one-time allow can never become a persistent grant. If no `allow_once` option exists the request resolves to `cancelled`.
 
 ## Consequences
 
