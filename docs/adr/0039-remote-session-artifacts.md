@@ -9,7 +9,7 @@ The phone companion and local console need to inspect created or edited files—
 ## Decision
 Add `crates/daemon/src/session_artifacts.rs` exposing `GET /api/v1/sessions/{id}/artifacts` and E2EE Remote `{ "type": "artifacts", "session_id": "..." }`:
 - Resolves `session_id` to its workspace directory on the daemon.
-- Uses read-only `git status --porcelain=v1 -z` (with `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, `core.quotepath=off`, `LC_ALL=C`) to collect created and modified files and `changes_count`.
+- Uses read-only `git status --porcelain=v1 -z` (with `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, `core.quotepath=off`, `core.fsmonitor=false`, `LC_ALL=C`) to collect created and modified files and `changes_count`.
 - Confines all reads via `canonicalize()` within the workspace root, prioritizes images/HTML/Markdown, caps at 30 items, 256 KiB per text/HTML/Markdown artifact, and 512 KiB per image (`data:<mime>;base64,...`).
 
 ## Consequences

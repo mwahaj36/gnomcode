@@ -1,6 +1,7 @@
 //! Read-only inspection of session artifacts (created/edited files, HTML, Markdown, images).
 
 use crate::api::{AppState, validate_auth};
+use crate::workspace_files::resolve_session_workspace;
 use axum::Json;
 use axum::extract::{Path as AxumPath, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -30,46 +31,6 @@ struct ArtifactItem {
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data_url: Option<String>,
-}
-
-fn resolve_session_workspace(db: &Database, session_id: &str) -> Result<PathBuf, &'static str> {
-    if session_id.trim().is_empty() || session_id.len() > 128 {
-        return Err("Invalid session");
-    }
-    let hosted = gnomcode_pty::list_active_sessions();
-    if let Some(record) = hosted.iter().find(|r| r.session_id == session_id) {
-        let path = PathBuf::from(&record.repo_path);
-        if path.is_dir() {
-            return Ok(path);
-        }
-    }
-    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
-    let native_id = crate::remote::conversation_session_id(session_id, &sessions, &hosted);
-    if let Some(record) = hosted.iter().find(|r| {
-        sessions
-            .iter()
-            .find(|s| s.id == native_id)
-            .is_some_and(|s| Some(r.child_pid) == s.pid || r.session_id == s.id)
-    }) {
-        let path = PathBuf::from(&record.repo_path);
-        if path.is_dir() {
-            return Ok(path);
-        }
-    }
-    let target = db
-        .get_session_focus_target(&native_id)
-        .map_err(|_| "Session workspace is unavailable")?
-        .ok_or("Session not found")?;
-    let folder = target
-        .repo_root
-        .filter(|path| !path.trim().is_empty())
-        .ok_or("Session has no workspace folder")?;
-    let path = PathBuf::from(folder);
-    if path.is_dir() {
-        Ok(path)
-    } else {
-        Err("Session workspace folder is unavailable")
-    }
 }
 
 fn encode_base64(bytes: &[u8]) -> String {
@@ -125,6 +86,8 @@ async fn git_porcelain_z(repo: &Path) -> Result<Vec<(String, &'static str)>, &'s
             "--no-pager",
             "-c",
             "core.quotepath=off",
+            "-c",
+            "core.fsmonitor=false",
             "status",
             "--porcelain=v1",
             "-z",
