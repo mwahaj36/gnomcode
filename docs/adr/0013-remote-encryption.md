@@ -1,6 +1,6 @@
 # 0013 — Remote encrypted relay direction
 
-- **Status:** Proposed; implementation requires separate owner confirmation, threat model and independent security review
+- **Status:** Proposed; implementation requires separate owner confirmation, threat model and independent security review. Superseded in part by [0058](./0058-1.0-scope-three-agents.md) (Teams is not in 1.0).
 - **Date:** 2026-10-28
 
 ## Decision

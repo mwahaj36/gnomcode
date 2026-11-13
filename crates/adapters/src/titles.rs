@@ -32,7 +32,7 @@ pub fn native_session_titles(agent: AgentId, bytes: &[u8]) -> BTreeMap<String, S
             };
             let id = match agent {
                 AgentId::Codex => entry.get("id"),
-                AgentId::ClaudeCode | AgentId::GeminiCli => entry.get("sessionId"),
+                AgentId::ClaudeCode => entry.get("sessionId"),
                 _ => None,
             }
             .and_then(Value::as_str)
@@ -46,7 +46,6 @@ pub fn native_session_titles(agent: AgentId, bytes: &[u8]) -> BTreeMap<String, S
                         (entry.get("summary"), 1)
                     }
                 }
-                AgentId::GeminiCli => (entry.get("title").or_else(|| entry.get("summary")), 1),
                 _ => (None, 0),
             };
             let Some((id, title)) = id.zip(title.and_then(Value::as_str)) else {

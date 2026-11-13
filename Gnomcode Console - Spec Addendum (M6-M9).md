@@ -1,5 +1,7 @@
 # Gnomcode Console - Spec Addendum (M6-M9)
 
+Historical draft. Superseded in part by ADR 0058 (2026-11-13): 1.0 supports exactly Claude Code, Codex and Antigravity; Gemini CLI, Teams and the extra adapters are removed. Read the Gemini CLI and Teams rows below as history.
+
 Draft for merging into SPEC.md. Owner: Wahaj. Written 2026-10-28. Items marked *(verify)* depend on third-party tools that change often; check them against current docs before building.
 
 ## 0. Decisions at a glance

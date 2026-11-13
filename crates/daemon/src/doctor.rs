@@ -66,7 +66,7 @@ pub struct DoctorReport {
 /// Detected binary and version for one supported agent CLI.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentCliStatus {
-    /// Agent CLI binary name (`claude`, `codex`, `gemini`, `agy`).
+    /// Agent CLI binary name (`claude`, `codex`, `agy`).
     pub agent: String,
     /// Whether the executable was found on PATH or standard install locations.
     pub detected: bool,
@@ -191,8 +191,7 @@ fn check_agent_clis(clis: &[AgentCliStatus]) -> DoctorCheck {
             status: CheckStatus::Warn,
             summary: "No supported agent CLIs detected".into(),
             fix: Some(
-                "Install an official CLI (claude, codex, gemini, or agy) and ensure it is on PATH."
-                    .into(),
+                "Install an official CLI (claude, codex, or agy) and ensure it is on PATH.".into(),
             ),
             details: Some(details),
         };
@@ -848,13 +847,12 @@ async fn probe_one_cli(agent: &'static str) -> AgentCliStatus {
 }
 
 async fn probe_agent_clis() -> Vec<AgentCliStatus> {
-    let (claude, codex, gemini, agy) = tokio::join!(
+    let (claude, codex, agy) = tokio::join!(
         probe_one_cli("claude"),
         probe_one_cli("codex"),
-        probe_one_cli("gemini"),
         probe_one_cli("agy"),
     );
-    vec![claude, codex, gemini, agy]
+    vec![claude, codex, agy]
 }
 
 fn keep_awake_enabled_env() -> bool {

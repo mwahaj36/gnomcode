@@ -76,7 +76,7 @@ pub(crate) fn plan(db: &Database, id: &str) -> Result<ResumePlan, ContinueHereEr
         .ok_or(ContinueHereError::NotFound)?;
     if !matches!(
         target.agent.as_str(),
-        "codex" | "claude-code" | "gemini-cli" | "antigravity"
+        "codex" | "claude-code" | "antigravity"
     ) {
         return Err(ContinueHereError::UnsupportedAgent(target.agent));
     }
@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn resume_command_never_carries_permission_skipping_flags() {
         let folder = tempfile::tempdir().expect("folder");
-        for agent in ["codex", "claude-code", "gemini-cli", "antigravity"] {
+        for agent in ["codex", "claude-code", "antigravity"] {
             let command = gnomcode_pty::resume_command(agent, folder.path(), "abc").expect("cmd");
             let all = command.arguments.join(" ");
             assert!(

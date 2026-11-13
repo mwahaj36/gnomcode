@@ -12,9 +12,9 @@ use std::time::{Duration, SystemTime};
 /// Information about the current active license.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicenseStatus {
-    /// Licensed tier (`free`, `pro`, `team`).
+    /// Licensed tier (`free`, `pro`; legacy `team` licenses report `team` and are treated as Pro).
     pub tier: String,
-    /// Whether a valid Pro or Team license is active.
+    /// Whether a valid Pro license is active.
     pub licensed: bool,
     /// License ID if signed license is present.
     pub license_id: Option<String>,
@@ -22,14 +22,6 @@ pub struct LicenseStatus {
     pub customer_name: Option<String>,
     /// RFC3339 expiration timestamp if time-limited.
     pub expires_at: Option<String>,
-}
-
-/// Returns whether Teams workflows are enabled (off by default per E3 / ADR 0049).
-#[must_use]
-pub fn is_teams_enabled(db: &Database) -> bool {
-    db.get_feature_toggles()
-        .map(|toggles| toggles.teams_enabled)
-        .unwrap_or(false)
 }
 
 /// Verifies the signed local license at a Pro feature entry point.
@@ -162,7 +154,7 @@ pub fn activate_license(raw_input: &str) -> Result<LicenseStatus, String> {
         .map_err(|e| format!("License verification failed: {e}"))?;
 
     if tier == Tier::Free {
-        return Err("License payload specifies Free tier; Pro or Team required.".to_owned());
+        return Err("License payload specifies Free tier; Pro required.".to_owned());
     }
 
     let key_path = gnomcode_home().join("license.key");
@@ -344,7 +336,7 @@ mod remote_entitlement_tests {
     #[test]
     fn native_compaction_clears_pending_relays_without_erasing_history() {
         let db = gnomcode_store::Database::open_in_memory().expect("db");
-        for agent in ["claude-code", "codex", "gemini-cli", "antigravity"] {
+        for agent in ["claude-code", "codex", "antigravity"] {
             db.record_context_relay(&gnomcode_store::ContextRelayEntry {
                 id: format!("relay-{agent}"),
                 session_id: format!("{agent}:test"),
@@ -361,7 +353,7 @@ mod remote_entitlement_tests {
         }
         super::run_context_relay(&db).expect("relay pass");
         let history = db.list_context_relays().expect("history");
-        assert_eq!(history.len(), 4);
+        assert_eq!(history.len(), 3);
         assert!(history.iter().all(|row| row.status != "pending"));
     }
 

@@ -910,7 +910,7 @@ function cycleTheme() {
       const hosted = hostedSessions.find(session => session.session_id === activeChatSession);
       const model = hosted?.model || session?.model || '';
       const agent = hosted?.agent || session?.agent || '';
-      const cliAgent = {'claude-code':'claude','gemini-cli':'gemini'}[agent] || agent;
+      const cliAgent = {'claude-code':'claude'}[agent] || agent;
       const observed = hosted ? hosted.model_observed : Boolean(session?.model);
       const status = document.getElementById('chat-model-status');
       const message = select.disabled ? 'Model selection unavailable' : observed ? '' : model ? 'Switching model...' : 'Agent default';

@@ -1,6 +1,6 @@
 # gnomcode
 
-Gnomcode is a local-first orchestrator for AI coding agents: launch Claude Code, Codex, Gemini CLI and other supported official CLIs, switch models with a compact handoff, and use encrypted remote access from a paired phone/browser. Designed for Windows, macOS and Linux, it brings conversations, model switching, usage and quota into one workspace.
+Gnomcode is a local-first orchestrator for AI coding agents: launch Claude Code, Codex and Antigravity through their official CLIs, switch models with a compact handoff, and use encrypted remote access from a paired phone/browser. Designed for Windows, macOS and Linux, it brings conversations, model switching, usage and quota into one workspace.
 
 ## Why Gnomcode?
 
@@ -11,7 +11,7 @@ Gnomcode is a local-first orchestrator for AI coding agents: launch Claude Code,
 
 ## Supported agents
 
-Observation adapters cover Claude Code, OpenAI Codex (including discovered desktop/IDE logs), Gemini CLI and Antigravity. Hosted control uses the same official CLIs. Real authenticated Antigravity/model-switch acceptance remains open.
+Observation adapters cover Claude Code, OpenAI Codex (including discovered desktop/IDE logs) and Antigravity. Hosted control uses the same official CLIs. Real authenticated Antigravity/model-switch acceptance remains open.
 
 ## Quick start
 
@@ -34,7 +34,7 @@ Install and authenticate the official CLI separately. Select a folder and agent 
 - **Cost tracking:** recorded tokens, estimated API-equivalent spend, cache savings and subscription comparisons.
 - **Quota monitoring:** observed windows, estimates or unknown values, plus free local routing, guardrails and resume controls. Native behavior needs provider/version acceptance.
 
-All local features are free. Remote and Teams are paid categories; commercial terms are not finalized. Optional account metadata sync is separate from E2EE Remote and needs a prelaunch minimization review.
+All local features are free. Remote is a paid category; commercial terms are not finalized. Optional account metadata sync is separate from E2EE Remote and needs a prelaunch minimization review.
 
 ## Product and status
 

@@ -192,7 +192,7 @@ test('multi-limit windows without a pool are grouped by limit_id', () => {
 });
 
 test('known providers get a monochrome svg mark, unknown ones a letter', () => {
-  for (const provider of ['claude-code', 'codex', 'gemini-cli', 'antigravity']) {
+  for (const provider of ['claude-code', 'codex', 'antigravity']) {
     const mark = renderProviderCard(card({ provider })).match(/<span class="sp-provider-mark[\s\S]*?<\/span>/)[0];
     assert.match(mark, /aria-hidden="true"/);
     assert.match(mark, /<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"/, provider);

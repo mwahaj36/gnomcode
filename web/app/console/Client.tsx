@@ -499,7 +499,6 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
               <option value="claude-code">Claude Code</option>
               <option value="codex">Codex</option>
               <option value="antigravity">Antigravity</option>
-              <option value="gemini-cli">Gemini CLI</option>
             </select>
             <select aria-label="Session status"
               value={statusFilter}

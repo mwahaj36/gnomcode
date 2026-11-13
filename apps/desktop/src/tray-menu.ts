@@ -222,7 +222,7 @@ function sessionLabel(session: TraySession, providers: TrayProvider[]): string {
 }
 
 const AGENT_NAMES: Record<string, string> = {
-  'claude-code': 'Claude Code', claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', gemini: 'Gemini CLI',
+  'claude-code': 'Claude Code', claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity',
 };
 
 function sessionSection(title: string, sessions: TraySession[], providers: TrayProvider[], oldestFirst: boolean): TrayItem[] {

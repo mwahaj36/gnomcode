@@ -56,7 +56,7 @@ pub fn agent_command(name: &str) -> (String, Vec<String>) {
         let installed = match name {
             "agy" => antigravity_cli(),
             "claude" => claude_cli(),
-            "codex" | "gemini" => standard_cli(name),
+            "codex" => standard_cli(name),
             _ => None,
         };
         if let Some(binary) = installed {
@@ -85,7 +85,6 @@ fn npm_package_name(name: &str) -> Option<&'static str> {
     match name {
         "claude" => Some("@anthropic-ai/claude-code"),
         "codex" => Some("@openai/codex"),
-        "gemini" => Some("@google/gemini-cli"),
         _ => None,
     }
 }
@@ -138,7 +137,7 @@ pub fn executable_available(name: &str) -> bool {
     on_path(name)
         || (name == "agy" && antigravity_cli().is_some())
         || (name == "claude" && claude_cli().is_some())
-        || (matches!(name, "codex" | "gemini") && standard_cli(name).is_some())
+        || (name == "codex" && standard_cli(name).is_some())
         || (name == "antigravity" && (antigravity_cli().is_some() || antigravity_ide_available()))
 }
 
@@ -597,59 +596,6 @@ mod tests {
             .args([
                 "--exact",
                 "executables::tests::codex_standard_install_works_without_path_entry",
-            ])
-            .env(CHILD, root.path())
-            .env("HOME", root.path())
-            .env("USERPROFILE", root.path())
-            .env("LOCALAPPDATA", root.path())
-            .env("APPDATA", root.path())
-            .env("PATH", empty_path.path())
-            .status()
-            .expect("isolated test");
-        assert!(status.success());
-    }
-
-    #[test]
-    fn gemini_standard_install_works_without_path_entry() {
-        const CHILD: &str = "GNOMCODE_TEST_GEMINI_INSTALL";
-        if let Some(root) = std::env::var_os(CHILD) {
-            let root = std::path::PathBuf::from(root);
-            let expected = root.join(".local").join("bin").join(if cfg!(windows) {
-                "gemini.exe"
-            } else {
-                "gemini"
-            });
-            assert!(executable_available("gemini"));
-            assert_eq!(
-                agent_command("gemini"),
-                (expected.to_string_lossy().into_owned(), vec![])
-            );
-            assert_eq!(
-                resolve_agent_executable("gemini"),
-                Some((expected.to_string_lossy().into_owned(), vec![]))
-            );
-            return;
-        }
-        let root = tempfile::tempdir().expect("install root");
-        let empty_path = tempfile::tempdir().expect("empty path");
-        let directory = root.path().join(".local").join("bin");
-        std::fs::create_dir_all(&directory).expect("bin directory");
-        let binary = directory.join(if cfg!(windows) {
-            "gemini.exe"
-        } else {
-            "gemini"
-        });
-        std::fs::write(&binary, "fixture").expect("binary");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))
-                .expect("executable");
-        }
-        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
-            .args([
-                "--exact",
-                "executables::tests::gemini_standard_install_works_without_path_entry",
             ])
             .env(CHILD, root.path())
             .env("HOME", root.path())

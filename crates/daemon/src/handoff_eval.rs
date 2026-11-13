@@ -26,7 +26,7 @@ const MAX_EVENTS_PER_CASE: usize = 2_000;
 
 const EMBEDDED: [&str; 9] = [
     include_str!("../../../fixtures/evals/handoff/dark-mode-css.json"),
-    include_str!("../../../fixtures/evals/handoff/gemini-to-claude.json"),
+    include_str!("../../../fixtures/evals/handoff/antigravity-to-claude.json"),
     include_str!("../../../fixtures/evals/handoff/login-redirect.json"),
     include_str!("../../../fixtures/evals/handoff/long-session.json"),
     include_str!("../../../fixtures/evals/handoff/orm-migration.json"),
@@ -287,10 +287,7 @@ mod tests {
             .iter()
             .map(|p| p.target_agent.as_str())
             .collect();
-        assert_eq!(
-            providers,
-            ["antigravity", "claude-code", "codex", "gemini-cli"]
-        );
+        assert_eq!(providers, ["antigravity", "claude-code", "codex"]);
         assert!(
             first
                 .cases

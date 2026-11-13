@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
+
 ## 0.9.4 — 2026-11-12
 
 - Read every Claude Code, Codex and Antigravity surface: Codex archived and compressed (`.jsonl.zst`) sessions, the legacy Antigravity IDE history folder, and Claude subagents as linked child sessions. Fix Codex double-counted turns, forked-session identity and inverted Antigravity subagent links.

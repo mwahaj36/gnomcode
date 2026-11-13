@@ -26,7 +26,7 @@ use std::sync::Arc;
 #[command(
     name = "gnomcode",
     version,
-    about = "Live mission control for AI coding agents (Claude Code, Codex, Antigravity, Gemini CLI)"
+    about = "Live mission control for AI coding agents (Claude Code, Codex, Antigravity)"
 )]
 struct Cli {
     /// Custom path to the SQLite database.
@@ -109,7 +109,7 @@ enum Commands {
         #[command(subcommand)]
         action: evals::EvalsCommands,
     },
-    /// Manage gnomcode offline Pro / Team license.
+    /// Manage gnomcode offline Pro license.
     License {
         #[command(subcommand)]
         action: LicenseCommands,
@@ -140,7 +140,7 @@ enum Commands {
     Statusline,
     /// Launch an agent in a workspace using an independently owned PTY session.
     Launch {
-        /// Agent to launch (claude, codex, gemini).
+        /// Agent to launch (claude, codex, agy).
         agent: String,
         /// Repository directory (defaults to current working directory).
         #[arg(short, long)]
@@ -305,7 +305,7 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
                         "Tier: {}",
                         match tier {
                             gnomcode_core::license::Tier::Pro => "Pro ($19 perpetual)",
-                            gnomcode_core::license::Tier::Team => "Team",
+                            gnomcode_core::license::Tier::Team => "Pro (legacy Team license)",
                             gnomcode_core::license::Tier::Free => "Free",
                         }
                     );
@@ -341,7 +341,7 @@ fn cmd_license(action: LicenseCommands) -> Result<()> {
                     tier,
                     gnomcode_core::license::Tier::Pro | gnomcode_core::license::Tier::Team
                 ),
-                "License is for Free tier; Pro or Team required."
+                "License is for Free tier; Pro required."
             );
             std::fs::create_dir_all(gnomcode_home())?;
             std::fs::write(
@@ -780,7 +780,7 @@ fn cmd_status(db_path: &std::path::Path, limit: usize) -> Result<()> {
     println!("=== GNOMCODE ACTIVE SESSIONS ===");
     if sessions.is_empty() {
         println!("No active or recent agent sessions found.");
-        println!("Run an agent (Claude Code, Codex, Antigravity, Gemini CLI) to populate.");
+        println!("Run an agent (Claude Code, Codex, Antigravity) to populate.");
         return Ok(());
     }
 

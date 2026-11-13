@@ -101,7 +101,6 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
         return match requested_agent {
             Some("codex") => Some("codex"),
             Some("claude" | "claude-code") => Some("claude-code"),
-            Some("gemini" | "gemini-cli") => Some("gemini-cli"),
             Some("antigravity" | "agy") => Some("antigravity"),
             _ => None,
         };
@@ -121,8 +120,6 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
     let lower = model.to_ascii_lowercase();
     let inferred = if lower.starts_with("claude-") {
         "claude-code"
-    } else if lower.starts_with("gemini-") {
-        "gemini-cli"
     } else if lower.starts_with("gpt-")
         || lower.starts_with("codex-")
         || lower.starts_with("o1")
@@ -134,14 +131,12 @@ pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'s
         return match requested_agent {
             Some("codex") => Some("codex"),
             Some("claude" | "claude-code") => Some("claude-code"),
-            Some("gemini" | "gemini-cli") => Some("gemini-cli"),
             _ => None,
         };
     };
     match requested_agent {
         None => Some(inferred),
         Some("claude" | "claude-code") if inferred == "claude-code" => Some(inferred),
-        Some("gemini" | "gemini-cli") if inferred == "gemini-cli" => Some(inferred),
         Some("codex") if inferred == "codex" => Some(inferred),
         _ => None,
     }
@@ -245,10 +240,8 @@ mod switch_tests {
             super::agent_for_model("claude-sonnet-4", None),
             Some("claude-code")
         );
-        assert_eq!(
-            super::agent_for_model("gemini-2.5-pro", None),
-            Some("gemini-cli")
-        );
+        assert_eq!(super::agent_for_model("gemini-2.5-pro", None), None);
+        assert_eq!(super::agent_for_model("gemini", Some("gemini-cli")), None);
         assert_eq!(super::agent_for_model("o3", Some("claude-code")), None);
         assert_eq!(super::agent_for_model("--yolo", None), None);
         assert_eq!(
@@ -299,7 +292,7 @@ pub(crate) async fn prepare_model_change(
         remote::sync_conversation_bindings(&guard, &sessions, &hosted)?;
         let native = remote::active_conversation_id(&guard, id, &sessions, &hosted)?;
         model != "@default"
-            && matches!(agent, "codex" | "claude-code" | "gemini-cli")
+            && matches!(agent, "codex" | "claude-code")
             && remote::conversation_host(&guard, id, &sessions, &hosted)?.is_none()
             && guard
                 .get_session_focus_target(&native)?
@@ -350,7 +343,7 @@ pub(crate) async fn ensure_conversation_running(
                 .ok_or(HandoffError::MissingSession)?;
             if !matches!(
                 target.agent.as_str(),
-                "codex" | "claude-code" | "gemini-cli" | "antigravity"
+                "codex" | "claude-code" | "antigravity"
             ) {
                 return Err(HandoffError::UnsupportedTarget);
             }
@@ -536,7 +529,7 @@ pub(crate) fn prepare_switch(
     let native = current
         .filter(|record| {
             agent_for_model("@default", Some(&record.agent)) == Some(agent)
-                && matches!(agent, "codex" | "claude-code" | "gemini-cli")
+                && matches!(agent, "codex" | "claude-code")
                 && target_model != "@default"
         })
         .cloned();
