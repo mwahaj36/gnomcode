@@ -234,3 +234,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 - Watcher test isolation](2026-11-13-watcher-test-isolation.md)
 - [2026-11-13 - Split daemon api.rs by domain](2026-11-13-split-daemon-api.md)
 - [2026-11-13 - Split store lib.rs by domain](2026-11-13-split-store-lib.md)
+- [2026-11-13 - Playwright browser tests for the local console](2026-11-13-console-playwright-e2e.md)
