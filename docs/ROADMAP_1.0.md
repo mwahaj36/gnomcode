@@ -41,7 +41,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 
 ## F. Differentiators (audit Phase 4)
 - [ ] Worktree per session with diff review and merge
-- [ ] "Continue here" for imported sessions
+- [x] "Continue here" for imported sessions (backend, ADR 0053; pairs with UI PR #209)
 - [ ] Handoff quality evals
 
 ## G. Release 1.0.0
