@@ -594,6 +594,7 @@ async fn run_connection(
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
+                if request_type.as_str()==Some("interrupt") {room.activity().await;}
                 if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
@@ -863,6 +864,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                 Err(_) => json!({"type":"error","message":"Model switch failed"}),
             }
         }
+        Some("interrupt") => crate::interrupt::command(db, request.clone()).await,
         _ => json!({"type":"error","message":"Unsupported remote command"}),
     }
 }
