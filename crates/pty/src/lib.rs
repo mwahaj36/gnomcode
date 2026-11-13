@@ -1,5 +1,6 @@
 //! Agent launch validation, independent session hosting, and terminal sessions.
 
+pub mod acp_approvals;
 pub mod codex_app_server;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
