@@ -187,6 +187,34 @@ mod tests {
 
     #[tokio::test]
     async fn ingest_watcher_wakes_on_file_write_and_skips_idle_rescan() {
+        const CHILD: &str = "GNOMCODE_WATCHER_TEST_CHILD";
+        const NAME: &str =
+            "watcher::tests::ingest_watcher_wakes_on_file_write_and_skips_idle_rescan";
+        if std::env::var_os(CHILD).is_none() {
+            // `ingest_all` discovers agent roots from the environment. Environment mutation
+            // is unsafe in-process, so rerun this test in a child with every root redirected
+            // to a temp dir; it must never read the real home directory.
+            let home = tempdir().expect("home");
+            let output = std::process::Command::new(std::env::current_exe().expect("exe"))
+                .args(["--exact", NAME, "--test-threads=1"])
+                .env(CHILD, "1")
+                .env("HOME", home.path())
+                .env("USERPROFILE", home.path())
+                .env("GNOMCODE_HOME", home.path().join("gnomcode"))
+                .env("SPAWNT_HOME", home.path().join("gnomcode"))
+                .env("CLAUDE_CONFIG_DIR", home.path().join("claude"))
+                .env("CODEX_HOME", home.path().join("codex"))
+                .env("GEMINI_HOME", home.path().join("gemini"))
+                .output()
+                .expect("spawn child test");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "child failed: {stdout}{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
         let dir = tempdir().expect("tempdir");
         let db_path = dir.path().join("ingest.db");
         let mut db = Database::open(&db_path).expect("db");
