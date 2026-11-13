@@ -148,6 +148,40 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  console-e2e:
+    name: console e2e (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build the daemon
+        run: cargo build -p gnomcode
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Drive the real console against a fixture daemon
+        working-directory: web
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: console-e2e-traces-${{ matrix.os }}
+          path: web/test-results
+          if-no-files-found: ignore
+
   desktop:
     name: desktop typecheck and tests
     runs-on: ubuntu-latest
