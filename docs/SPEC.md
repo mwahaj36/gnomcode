@@ -434,3 +434,9 @@ Section 5/M3 and section 6.2: the local 1.0.0 Windows x64 test candidate was bui
 ## Approved installer legal source - 2026-11-13
 
 Installer resources, desktop EULA.txt and archive LICENSE payloads use docs/legal/EULA.txt byte-for-byte. EULA_DRAFT.md is excluded. Installed acceptance is pending release smoke by Claude on Wahaj’s machine; the prior disposable-VM requirement is superseded by Wahaj’s decision.
+
+## Downloads and manifest preparation addendum - 2026-11-13
+
+Sections 5/M3, 6.2, 6.4 and 6.5: Windows release-candidate download names resolve from package metadata and redirects use the branding release repository. The allow-list includes the existing installer, CLI and versioned ZIP plus versioned SHA-256 checksums, SHA256SUMS and latest.json. macOS/Linux stay unavailable pending separately recorded artifact acceptance. The downloads metadata and llms.txt downloads description disclose Windows-only candidate/unsigned OS status.
+
+The local Windows packaging workflow prepares an unsigned latest.json only after installer payload checks, archives and versioned checksums. scripts/release/prepare-update-manifest.mjs requires a real MZ installer matching its versioned checksum entry, emits only win32-x64 with URL/sha256/file_name and package version, and refuses tampered input without replacing an existing output. It does not independently attest PE product version; packaging's existing native/installer version checks remain required. The generated manifest is ignored by Git and is not published by this workflow. Owner-key signing under ADR 0059 and approval precede publication; no placeholder hash/signature or unverified non-Windows URL is advertised.

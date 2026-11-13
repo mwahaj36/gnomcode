@@ -88,6 +88,10 @@ try {
 
 & python scripts/package-artifacts.py --windows-exe $NativeExe --windows-setup "$Out/Gnomcode-Setup.exe"
 if ($LASTEXITCODE -ne 0) { throw "Release archive and checksum generation failed" }
+& node scripts/release/prepare-update-manifest.mjs $Out (Join-Path $Out "latest.json")
+if ($LASTEXITCODE -ne 0) { throw "Local update manifest preparation failed" }
+# Owner-key signing and publication remain explicit release steps after this build.
+
 & npm run build --prefix web
 if ($LASTEXITCODE -ne 0) { throw "Web production build failed" }
 Write-Output "gnomcode v$Version release packaged with verified installer payload and SHA-256 manifests."

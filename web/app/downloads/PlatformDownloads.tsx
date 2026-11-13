@@ -9,13 +9,13 @@ type DownloadAction = { label: string; href: string; detail: string };
 
 const platforms = [
   {
-    id: "windows", name: "Windows", availability: "DEVELOPMENT BUILD", detail: "Windows · x64",
+    id: "windows", name: "Windows", availability: "RELEASE CANDIDATE", detail: "Windows · x64",
     body: "Launch Claude Code, Codex and Antigravity, continue conversations and keep a separate workspace terminal close at hand.",
     actions: [
       {label: "Download Windows installer", href: "/downloads/Gnomcode-Setup.exe", detail: "Windows x64"},
       {label: "Download ZIP", href: `/downloads/Gnomcode-v${version}-windows-x64.zip`, detail: "Portable archive"},
     ] as DownloadAction[], command: null,
-    note: "Unsigned development build. Check the SHA-256 manifest before installing.",
+    note: "Unsigned Windows installer. Review the release notes and SHA-256 checksums before installing.",
   },
   {
     id: "macos", name: "macOS", availability: "NOT AVAILABLE YET", detail: "No build yet",

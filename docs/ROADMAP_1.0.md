@@ -98,3 +98,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## codex-release Windows build preparation - 2026-11-13
 
 - [x] G local Windows 1.0.0 test installer built, payload verified and exact hashes recorded. Owner-key/OS signing, safe installed acceptance, final merged-source rebuild and publication remain open; section G's built-and-published gate stays unchecked.
+
+## codex-release downloads preparation - 2026-11-13
+
+- [x] G source preparation: version-derived Windows downloads, checksum/update routes and local real-artifact manifest generation. Vercel deployment and release publication remain unchecked in section G.
