@@ -59,3 +59,38 @@ Downloads source and local manifest generator passed dedicated web 127 tests/typ
 https://github.com/mwahaj36/spawnt/pull/250
 
 Version-derived Windows downloads/SEO/llms copy, branding redirects, checksum/latest.json allow-list, and local real-artifact Windows-only manifest generation wired after packaging checks. No invented hashes/signatures, macOS/Linux claims or publication. Generator red/green and tamper-preservation test pass. Dedicated web 127 tests/typecheck/build and Rust fmt/clippy/499 tests passed, repeated after rebase onto 3943dbb. 1.0.0 integration HTTP/browser and actual artifact manifest checks passed. Public v1.0.0 assets absent, as disclosed. Depends on #243/#245/#248 in review order. Downloads worktree/target/node_modules/.next removed immediately after PR; smoke gate using that target had finished first.
+
+## Item 5 delivered - PR #251
+
+https://github.com/mwahaj36/spawnt/pull/251
+
+Final packaged-app smoke procedure for Claude, including exact verified CLI/help/server options, private loopback update manifest, native/protocol approvals, notifications, Remote, doctor and uninstall. All acceptance boxes remain pending. Documentation/source gate: fmt/clippy/499 tests and diff/UTF-8/LF checks passed, repeated on 3943dbb. Smoke worktree removed immediately after PR; its shared target had already been removed with the downloads worktree after all checks finished.
+
+## Final verification
+
+Across all five item branches: no forbidden console/components/check-script/Playwright paths changed; shared SPEC/roadmap/session-index/CHANGELOG diffs are additive only; U+00C2 diff count 0. Retained artifact byte lengths and SHA-256 rechecked against build-record.json. All item worktrees, target directories, node_modules and .next outputs removed. Only this log worktree remains until the final push, then it is removed too. Free disk exceeded 53 GB after cleanup, above the 20 GB floor. No other worker's files removed.
+
+Version PR follow-ups extend release-note coverage through 175f821 from owner-approved 7cec4e6; missing source v0.9.4 tag is disclosed. Source version metadata implementation is unchanged by those documentation follow-ups. The retained build's exact older composition remains 17267e5 plus the recorded overlays; never relabel it as the final merged-source/signing build.
+
+## Status at stop
+
+All five requested preparation items are reviewable. No PR merged, installer uploaded, tag/release created, deployment setting changed, credentials entered or release key generated/read. Log PR: https://github.com/mwahaj36/spawnt/pull/241 - **never merge**.
+
+Review/merge order for Claude (the worker must not merge):
+
+1. https://github.com/mwahaj36/spawnt/pull/243 - lockstep versions, bumper regression, CHANGELOG/release notes.
+2. https://github.com/mwahaj36/spawnt/pull/245 - build-pinned verification and offline signer/key handling.
+3. https://github.com/mwahaj36/spawnt/pull/248 - local Windows package evidence and final retained hashes.
+4. https://github.com/mwahaj36/spawnt/pull/250 - downloads routes/copy and real-artifact manifest preparation.
+5. https://github.com/mwahaj36/spawnt/pull/251 - final packaged smoke procedure.
+
+Resume: fetch latest origin/main. After each approved merge, rebase the next branch onto origin/main and preserve every additive SPEC/roadmap/session-index/CHANGELOG block when resolving shared-doc append conflicts. Do not drop another worker's content. Rebuild from the final merged source with Wahaj's reviewed public key, select the approved EULA, sign only through the owner-controlled procedure, and run #251 in a disposable Windows account/VM. Retest/fix any failures with a new focused PR. Only Claude review and Wahaj sign-off can authorize upload/tag/release/deployment.
+
+Blocking questions/inputs for release:
+
+- Which approved EULA should the installer/desktop bundle: existing root LICENSE or docs/legal/EULA.txt (or another owner-approved input)?
+- How should the existing historical source v1.0.0 tag at 503aed81e55dd3474b440a2b262a7d8c3951d34f be handled? No retagging is authorized. Source v0.9.4 is also missing; notes use explicitly approved 7cec4e6.
+- Provide a disposable Windows account/VM for safe installed launch/upgrade/update/uninstall acceptance. A separate install directory is insufficient.
+- Owner supplies the actual public build key and private signing input at release time. Valid owner-key signing, installed update acceptance, OS signing, physical phones, real provider acceptance and macOS/Linux acceptance are not verified here.
+
+Retained artifacts: C:\Users\Wahaj\Documents\GitHub\fleethud-codex-release\artifacts\windows-1.0.0-candidate. Final installer SHA-256: a8727e0d17bc66bf887fc5875da83272d9652c3bf7426dbbae846605a6ec4d94 (180,371,968 exact bytes). build-record.json and BUILD-RECORD.md record all hashes and source composition. Existing npm audit findings remain 12 desktop / 6 web moderate; unstaged npm distribution binaries/notices/EULA were not published or certified.
