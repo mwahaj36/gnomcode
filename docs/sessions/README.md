@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Read-only workspace file list and read over Remote (ADR 0050)](2026-11-13-remote-workspace-files.md)
 - [2026-11-13 - Codex and Gemini native-install discovery (G13)](2026-11-13-codex-gemini-discovery.md)
 - [2026-11-13 - Unix process-group stop escalation (G12)](2026-11-13-unix-process-group-stop.md)
 - [2026-11-13 - Claude child environment scrub (G11)](2026-11-13-claude-env-scrub.md)

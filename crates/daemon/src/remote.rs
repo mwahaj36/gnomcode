@@ -595,7 +595,7 @@ async fn run_connection(
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
                 if request_type.as_str()==Some("interrupt") {room.activity().await;}
-                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval")) {room.activity().await;}
+                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
@@ -794,6 +794,9 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             | "resume_on_reset",
         ) => crate::automation::command(db, request.clone()).await,
         Some("approvals" | "approval") => crate::approvals::remote_command(&request),
+        Some("repo_files" | "repo_file") => {
+            crate::workspace_files::remote_command(db, &request).await
+        }
         Some("prompt") => {
             let Some(session_id) = request.get("session_id").and_then(Value::as_str) else {
                 return json!({"type":"error","message":"Missing session"});

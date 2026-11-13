@@ -17,6 +17,7 @@ mod remote_trust;
 pub mod sync;
 pub mod update;
 pub mod vendor_limits;
+pub(crate) mod workspace_files;
 
 use chrono::Utc;
 use gnomcode_ingest::ingest_all;
