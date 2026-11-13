@@ -2,12 +2,12 @@
 
 ## Goals
 
-Surface read-only git status (including untracked files) and unified diffs for the active session workspace on both the local console (`GET /api/v1/repos/diff`) and Remote phone companion (`{ type: 'changes', session_id }` E2EE contract).
+Surface read-only git status (including untracked files) and unified diffs for the active session workspace on both the local console (`GET /api/v1/sessions/{id}/changes`, ADR 0037) and Remote phone companion (`{ type: 'changes', session_id }` E2EE contract).
 
 ## Outcomes
 
 - Added pure status and diff formatters (`parseGitStatusLines`, `renderChangesView`) in `web/lib/console-presentation.js` and `web/lib/console-presentation.d.ts`, strictly escaping HTML, surfacing `lossy: true` notices, and omitting any mutation/revert controls.
-- Added `#chat-changes-btn` and `#chat-changes-panel` to `crates/daemon/src/console.html` and `crates/daemon/src/console-app.js` using `/api/v1/repos/diff?repo=...` (`413` 1 MiB limit, `504` timeout, `400` non-git error handling) and automatically hiding on session change.
+- Added `#chat-changes-btn` and `#chat-changes-panel` to `crates/daemon/src/console.html` and `crates/daemon/src/console-app.js` using `/api/v1/sessions/{id}/changes` (`413` 1 MiB limit, `504` timeout, `404` no workspace, `400` non-git error handling; merge review switched from `/api/v1/repos/diff?repo=` so the daemon resolves the session workspace) and automatically hiding on session change.
 - Added `.sp-remote-tools` (`Changes`) and `.sp-changes-sheet` bottom sheet to `web/components/RemoteCompanion.tsx`, with safe graceful fallback when a desktop returns `Unsupported remote command`.
 - Appended `--sp-*` token CSS rules in `web/app/gnomcode-console.css` for `.sp-changes-panel`, `.sp-changes-sheet`, `.sp-diff-code`, and 44px mobile touch targets (hiding `.sp-remote-tools` at `max-height: 450px` so short keyboard viewports stay intact).
 

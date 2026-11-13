@@ -1348,12 +1348,6 @@ function cycleTheme() {
       requestAnimationFrame(resize);
     }
 
-    function activeSessionRepoPath() {
-      const hosted = hostedSessions.find(row => row.session_id === activeChatSession);
-      const session = ideSessions.find(row => row.id === activeChatSession);
-      return hosted?.repo_path || session?.repo_path || session?.repo_root || document.getElementById('session-action-copy')?.dataset.path || '';
-    }
-
     function closeChangesPanel() {
       const panel = document.getElementById('chat-changes-panel');
       if (panel) panel.hidden = true;
@@ -1365,21 +1359,18 @@ function cycleTheme() {
       const btn = document.getElementById('chat-changes-btn');
       if (!panel || !body || !activeChatSession) return;
       const presentation = await import('/console-presentation.js');
-      const repo = activeSessionRepoPath();
-      if (!repo) {
-        body.innerHTML = presentation.renderChangesView({ error: 'Workspace repository path is unavailable for this session.' });
-        return;
-      }
       body.innerHTML = presentation.renderChangesView({ loading: true });
       if (btn) btn.disabled = true;
       try {
-        const res = await fetch(`/api/v1/repos/diff?repo=${encodeURIComponent(repo)}`, { headers });
+        const res = await fetch(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/changes`, { headers });
         if (!res.ok) {
           const message = res.status === 413
             ? 'Diff exceeded the 1 MiB read limit on this desktop.'
             : res.status === 504
               ? 'Git diff timed out after 10 seconds.'
-              : 'No active git repository found for this workspace.';
+              : res.status === 404
+                ? 'This conversation has no workspace on this desktop.'
+                : 'This workspace is not a git repository.';
           body.innerHTML = presentation.renderChangesView({ error: message });
           return;
         }

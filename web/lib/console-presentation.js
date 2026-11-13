@@ -851,7 +851,7 @@ export function renderChangesView(data) {
     data.repo ? `<span class="sp-changes-repo" title="${escape(data.repo)}">${escape(shortPath(data.repo))}</span>` : '',
   ].filter(Boolean).join('');
   if (!files.length && !diffText.trim()) {
-    return `<div class="sp-changes-meta">${badges}</div><p class="sp-provider-empty">Working tree clean — no modified or untracked files.</p>`;
+    return `<div class="sp-changes-meta">${badges}</div><p class="sp-provider-empty">Working tree clean: no modified or untracked files.</p>`;
   }
   const fileMarkup = files.length
     ? `<ul class="sp-changes-files" aria-label="Changed files">${files.map(file => `<li class="sp-changes-file"><span class="sp-chip sp-chip--neutral">${escape(file.label)}</span><code>${escape(file.path)}</code></li>`).join('')}</ul>`
