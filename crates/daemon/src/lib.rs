@@ -754,16 +754,15 @@ impl DaemonOrchestrator {
                 ticker.tick().await;
                 let Ok((db, result)) = tokio::task::spawn_blocking(move || {
                     let result = ingest_all(&mut ingest_db);
-                    if let Ok(sessions) = ingest_db.list_active_sessions(usize::MAX) {
-                        if remote::sync_conversation_bindings(
+                    if let Ok(sessions) = ingest_db.list_active_sessions(usize::MAX)
+                        && remote::sync_conversation_bindings(
                             &ingest_db,
                             &sessions,
                             &gnomcode_pty::list_active_sessions(),
                         )
                         .is_err()
-                        {
-                            tracing::warn!("conversation binding could not be saved");
-                        }
+                    {
+                        tracing::warn!("conversation binding could not be saved");
                     }
                     let _ = ingest_db.reconcile_antigravity_projects();
                     let _ = gnomcode_ingest::reproject_all(&mut ingest_db);

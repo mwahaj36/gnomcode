@@ -644,34 +644,34 @@ async fn answer_server_request<W: AsyncWrite + Unpin>(
             ))
             .await;
     }
-    if ctx.kind == Kind::Acp {
-        if let Some(request) = acp_approvals::parse_permission_request(message) {
-            term.emit(&format!(
-                "\r\n[WAIT] approval needed: {} {}\r\n",
-                request.tool, request.summary
-            ));
-            let outcome = match endpoint {
-                Some((port, token)) => {
-                    acp_approvals::request_daemon_approval(
-                        port,
-                        &token,
-                        ctx.agent,
-                        &ctx.session_id,
-                        &request,
-                    )
-                    .await
-                }
-                None => AcpApprovalOutcome::NoDecision,
-            };
-            term.emit(match outcome {
-                AcpApprovalOutcome::Allow => "[ALLOW] approved once\r\n",
-                AcpApprovalOutcome::Deny => "[DENY] denied\r\n",
-                AcpApprovalOutcome::NoDecision => "[CANCEL] no decision; request cancelled\r\n",
-            });
-            return wire
-                .send(&acp_approvals::build_permission_response(&request, outcome))
-                .await;
-        }
+    if ctx.kind == Kind::Acp
+        && let Some(request) = acp_approvals::parse_permission_request(message)
+    {
+        term.emit(&format!(
+            "\r\n[WAIT] approval needed: {} {}\r\n",
+            request.tool, request.summary
+        ));
+        let outcome = match endpoint {
+            Some((port, token)) => {
+                acp_approvals::request_daemon_approval(
+                    port,
+                    &token,
+                    ctx.agent,
+                    &ctx.session_id,
+                    &request,
+                )
+                .await
+            }
+            None => AcpApprovalOutcome::NoDecision,
+        };
+        term.emit(match outcome {
+            AcpApprovalOutcome::Allow => "[ALLOW] approved once\r\n",
+            AcpApprovalOutcome::Deny => "[DENY] denied\r\n",
+            AcpApprovalOutcome::NoDecision => "[CANCEL] no decision; request cancelled\r\n",
+        });
+        return wire
+            .send(&acp_approvals::build_permission_response(&request, outcome))
+            .await;
     }
     let id = message.get("id").cloned().unwrap_or(Value::Null);
     wire.send(&json!({

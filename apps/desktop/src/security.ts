@@ -75,6 +75,7 @@ export function desktopNotification(args: string[]): {title:string;body:string} 
   const index=args.indexOf('--gnomcode-notification');
   if(index < 0)return null;
   const body=args[index+1];
+  // eslint-disable-next-line no-control-regex -- intentionally rejects control characters in notification text
   if(!body || body.length>512 || /[\x00-\x1f]/.test(body))return null;
   return {title:'Gnomcode',body};
 }
