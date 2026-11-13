@@ -14,12 +14,13 @@ public static class CheckInstallerPayload {
         }
     }
     public static int Main(string[] args) {
-        if (args.Length != 4) throw new ArgumentException("Usage: checker setup.exe engine.exe notices.html version");
+        if (args.Length != 4 && args.Length != 5) throw new ArgumentException("Usage: checker setup.exe engine.exe notices.html version [approved-EULA.txt]");
         Assembly installer = Assembly.LoadFile(Path.GetFullPath(args[0]));
         if (installer.GetName().Version.ToString() != args[3]) throw new Exception("Installer assembly version mismatch");
         if (System.Diagnostics.FileVersionInfo.GetVersionInfo(args[0]).FileVersion != args[3]) throw new Exception("Installer file version mismatch");
         Verify(installer, "gnomcode.exe", args[1]);
         Verify(installer, "THIRD_PARTY_NOTICES.html", args[2]);
+        if (args.Length == 5) Verify(installer, "LICENSE", args[4]);
         foreach (string name in new [] { "LICENSE", "tray.ps1", "run-tray.vbs", "open-console.vbs", "open-dashboard.vbs", "open-folder.ps1", "gnomcode.ico", "gnomcode-tray.ico", "gnomcode-mark.png" }) {
             using (Stream resource = installer.GetManifestResourceStream(name)) {
                 if (resource == null || resource.Length == 0) throw new Exception("Missing installer resource: " + name);
