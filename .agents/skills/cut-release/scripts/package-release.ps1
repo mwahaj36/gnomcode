@@ -39,11 +39,11 @@ $FontNotices = Get-ChildItem "$RepoRoot/web/public/fonts/*-LICENSE.txt" | ForEac
 $NoticeLines = [IO.File]::ReadAllText("$Out/THIRD_PARTY_NOTICES.html") -split "`n" | ForEach-Object { $_.TrimEnd() }
 [IO.File]::WriteAllText("$Out/THIRD_PARTY_NOTICES.html", ($NoticeLines -join "`n"), (New-Object Text.UTF8Encoding($false)))
 Copy-Item $NativeExe "$Out/gnomcode.exe" -Force
-Copy-Item "LICENSE" "$Out/LICENSE" -Force
+Copy-Item "docs/legal/EULA.txt" "$Out/LICENSE" -Force
 $DesktopStaging = Join-Path $RepoRoot "apps/desktop/staging"
 New-Item -ItemType Directory -Path (Join-Path $DesktopStaging "bin") -Force | Out-Null
 Copy-Item $NativeExe (Join-Path $DesktopStaging "bin/gnomcode.exe") -Force
-Copy-Item "LICENSE" (Join-Path $DesktopStaging "EULA.txt") -Force
+Copy-Item "docs/legal/EULA.txt" (Join-Path $DesktopStaging "EULA.txt") -Force
 Copy-Item "$Out/THIRD_PARTY_NOTICES.html" (Join-Path $DesktopStaging "THIRD_PARTY_NOTICES.html") -Force
 & node apps/desktop/desktop-notices.cjs
 if ($LASTEXITCODE -ne 0) { throw "Desktop notices staging failed" }
@@ -60,7 +60,7 @@ $CompilerArgs = @(
     "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/gnomcode.ico,gnomcode.ico", "/resource:$RepoRoot/scripts/gnomcode-tray.ico,gnomcode-tray.ico",
     "/resource:$RepoRoot/web/public/icons/gnomcode-512.png,gnomcode-mark.png",
     "/resource:$RepoRoot/scripts/run-tray.vbs,run-tray.vbs", "/resource:$RepoRoot/scripts/open-console.vbs,open-console.vbs",
-    "/resource:$RepoRoot/scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:$RepoRoot/LICENSE,LICENSE",
+    "/resource:$RepoRoot/scripts/open-dashboard.vbs,open-dashboard.vbs", "/resource:$RepoRoot/docs/legal/EULA.txt,LICENSE",
     "/resource:$RepoRoot/scripts/open-folder.ps1,open-folder.ps1",
     "/resource:$RepoRoot/web/public/downloads/THIRD_PARTY_NOTICES.html,THIRD_PARTY_NOTICES.html",
     "/out:$Out/Gnomcode-Setup.exe", "$RepoRoot/scripts/Setup.cs"
@@ -73,7 +73,7 @@ $Checker = Join-Path ([IO.Path]::GetTempPath()) ("gnomcode-check-" + [Guid]::New
 try {
     & $Csc "/out:$Checker" (Resolve-Path "$RepoRoot/scripts/check-installer-payload.cs").Path
     if ($LASTEXITCODE -ne 0) { throw "Installer verification helper compilation failed" }
-    & $Checker "$Out/Gnomcode-Setup.exe" $NativeExe "$Out/THIRD_PARTY_NOTICES.html" "$Version.0"
+    & $Checker "$Out/Gnomcode-Setup.exe" $NativeExe "$Out/THIRD_PARTY_NOTICES.html" "$Version.0" "$RepoRoot/docs/legal/EULA.txt"
     if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
 } finally { Remove-Item $Checker -Force -ErrorAction SilentlyContinue }
 
