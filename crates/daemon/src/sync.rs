@@ -169,6 +169,18 @@ pub fn spawn_cloud_sync(
                     continue;
                 },
             }
+            if !db
+                .lock()
+                .await
+                .get_feature_toggles()
+                .map(|toggles| toggles.account_sync_enabled)
+                .unwrap_or(false)
+            {
+                let mut status = SYNC_STATUS.lock().await;
+                status.state = "frozen";
+                status.message = "Account sync is disabled by default (E3).";
+                continue;
+            }
             {
                 let mut status = SYNC_STATUS.lock().await;
                 status.state = "publishing";
