@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Antigravity ACP protocol approvals](2026-11-13-agy-acp-approvals.md)
 - [2026-11-13 - Codex app-server protocol approvals](2026-11-13-codex-app-server-approvals.md)
 - [2026-11-13 - PTY VT100 screen model and Enter recovery](2026-11-13-pty-screen-model.md)
 - [2026-11-13 - Claude usage-limit and API error parsing](2026-11-13-claude-usage-limit-errors.md)
