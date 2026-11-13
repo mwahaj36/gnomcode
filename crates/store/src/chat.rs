@@ -258,23 +258,29 @@ impl Database {
         target_model: &str,
         touched_files: Vec<String>,
     ) -> Result<Option<gnomcode_core::HandoffPacket>, Error> {
-        let source_model: Option<Option<String>> = self
+        let source: Option<(Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT model FROM session WHERE id = ?1",
+                obfstr::obfstr!("SELECT model,title FROM session WHERE id = ?1"),
                 params![session_id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        let Some(source_model) = source_model else {
+        let Some((source_model, title)) = source else {
             return Ok(None);
         };
-        let events = self.get_session_chat(session_id, Some(50))?;
+        let mut events = self.get_session_chat(session_id, Some(50))?;
+        if let Some(first) = self.conversation_first_user_event(session_id)?
+            && !events.iter().any(|event| event.event_id == first.event_id)
+        {
+            events.insert(0, first);
+        }
+        let title = self.conversation_title(session_id)?.or(title);
         Ok(Some(gnomcode_core::HandoffPacket {
             session_id: session_id.to_owned(),
             source_model: source_model.unwrap_or_else(|| "unknown".to_owned()),
             target_model: target_model.to_owned(),
-            prompt_summary: gnomcode_core::handoff_summary(&events),
+            prompt_summary: gnomcode_core::handoff_summary_with_title(&events, title.as_deref()),
             touched_files,
             turn_count: u32::try_from(events.len()).unwrap_or(u32::MAX),
             created_at: Utc::now(),
