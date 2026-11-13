@@ -203,13 +203,12 @@ pub(crate) async fn create_handler(
     ) else {
         return Ok(Json(json!({"hold": false, "reason": "busy"})));
     };
-    crate::automation::notice(
-        &state.db,
-        &format!("approval-request:{}", approval.id),
-        "",
-        "Approval needed. Open Gnomcode to approve or deny.",
-    )
-    .await;
+    // Notification I/O must not delay the hook's short hold response.
+    let db = state.db.clone();
+    let held = approval.clone();
+    tokio::spawn(async move {
+        crate::automation::notify_held_approval(&db, &held.agent, &held.session_id).await;
+    });
     Ok(Json(
         json!({"hold": true, "id": approval.id, "wait_secs": HOLD_SECS}),
     ))
@@ -435,6 +434,88 @@ mod tests {
             let _ = axum::serve(listener, router).await;
         });
         Endpoint { port, token }
+    }
+
+    #[tokio::test]
+    async fn held_approvals_queue_redacted_alerts_for_all_protocol_agents() {
+        if std::env::var_os("GNOMCODE_TEST_APPROVAL_ALERTS").is_none() {
+            let home = tempfile::tempdir().expect("isolated home");
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("test executable"),
+            )
+            .args([
+                "--exact",
+                "approvals::tests::held_approvals_queue_redacted_alerts_for_all_protocol_agents",
+            ])
+            .env("GNOMCODE_HOME", home.path())
+            .env("GNOMCODE_TEST_APPROVAL_ALERTS", "1")
+            .output()
+            .expect("isolated alerts test");
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let state = state();
+        let db = state.db.clone();
+        let router = crate::api::build_router(state);
+        global().touch_console();
+        for agent in ["claude-code", "codex", "antigravity"] {
+            let response = router.clone().oneshot(Request::builder().method("POST")
+                .uri("/api/v1/approvals").header("Host", "127.0.0.1")
+                .header("Authorization", "Bearer approval-test-token").header("Content-Type", "application/json")
+                .body(Body::from(json!({"agent":agent,"session_id":format!("alert-{agent}"),"tool":"Bash","summary":"PRIVATE_TOOL_SUMMARY_1234"}).to_string())).expect("request"))
+                .await.expect("response");
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let notices = db
+                    .lock()
+                    .await
+                    .pending_push_notices_with_meta()
+                    .expect("push notices");
+                let alerts: Vec<_> = notices
+                    .iter()
+                    .filter_map(|notice| notice.payload.as_ref())
+                    .collect();
+                if alerts.len() == 3 {
+                    for payload in alerts {
+                        assert_eq!(
+                            payload.event,
+                            gnomcode_core::notifications::NotificationEventKind::ApprovalWaiting
+                        );
+                        let serialized = serde_json::to_string(payload).expect("payload");
+                        assert!(!serialized.contains("PRIVATE_TOOL_SUMMARY_1234"));
+                        assert!(!serialized.contains("Bash"));
+                        assert_eq!(
+                            serde_json::to_value(payload)
+                                .expect("payload")
+                                .as_object()
+                                .expect("object")
+                                .len(),
+                            3
+                        );
+                    }
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("each held provider approval must queue a redacted push payload");
+        crate::automation::notify_held_approval(&db, "claude-code", "alert-claude-code").await;
+        assert_eq!(
+            db.lock()
+                .await
+                .pending_push_notices_with_meta()
+                .expect("push notices")
+                .len(),
+            3
+        );
     }
 
     #[tokio::test]

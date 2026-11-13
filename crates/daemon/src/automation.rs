@@ -245,16 +245,72 @@ fn provider(agent: &str) -> &str {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Observations {
-    engine: gnomcode_core::notifications::NotificationEngine,
+    engine: Arc<std::sync::Mutex<gnomcode_core::notifications::NotificationEngine>>,
+}
+
+impl Observations {
+    fn engine(
+        &self,
+    ) -> std::sync::MutexGuard<'_, gnomcode_core::notifications::NotificationEngine> {
+        self.engine
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+pub(crate) fn shared_observations() -> Observations {
+    static SHARED: std::sync::OnceLock<Observations> = std::sync::OnceLock::new();
+    SHARED.get_or_init(Observations::default).clone()
+}
+
+/// Records a held native/protocol approval without ever using tool names or summaries in push data.
+pub(crate) async fn notify_held_approval(db: &Arc<Mutex<Database>>, agent: &str, id: &str) {
+    let Some(agent) = gnomcode_core::AgentId::parse(agent) else {
+        return;
+    };
+    let id = id.to_owned();
+    let lookup = id.clone();
+    let session = store(db, move |db| {
+        let native = db
+            .conversation_target(&lookup)?
+            .and_then(|(_, native, _)| native);
+        let composite = gnomcode_core::Session::compose_id(agent, &lookup);
+        Ok(db.list_active_sessions(1000)?.into_iter().find(|session| {
+            session.id == lookup
+                || session.id == composite
+                || native.as_deref() == Some(session.id.as_str())
+        }))
+    })
+    .await
+    .ok()
+    .flatten();
+    let now = chrono::Utc::now();
+    let session = session.unwrap_or_else(|| gnomcode_core::Session {
+        id: if id.starts_with(&format!("{}:", agent.as_str())) {
+            id
+        } else {
+            gnomcode_core::Session::compose_id(agent, &id)
+        },
+        agent,
+        surface: gnomcode_core::Surface::Cli,
+        project_id: String::new(),
+        parent_session_id: None,
+        model: None,
+        title: None,
+        state: gnomcode_core::SessionState::AwaitingApproval,
+        pid: None,
+        started_at: now,
+        last_event_at: now,
+    });
+    notify_approval_waiting_hook(db, &mut shared_observations(), &session).await;
 }
 
 /// HOOK POINT (phone-approvals feature): External live approval hooks
 /// (e.g. `PermissionRequest` hook handlers) should call this helper so desktop
 /// and paired-phone notifications fire immediately, share burst grouping, and
 /// deduplicate against subsequent polling.
-#[allow(dead_code)]
 pub(crate) async fn notify_approval_waiting_hook(
     db: &Arc<Mutex<Database>>,
     observations: &mut Observations,
@@ -263,11 +319,11 @@ pub(crate) async fn notify_approval_waiting_hook(
     let settings = store(db, Database::get_notification_settings)
         .await
         .unwrap_or_default();
-    if let Some(batch) =
+    let batch =
         observations
-            .engine
-            .record_approval_waiting_hint(session, &settings, chrono::Utc::now())
-    {
+            .engine()
+            .record_approval_waiting_hint(session, &settings, chrono::Utc::now());
+    if let Some(batch) = batch {
         record_batch_notice(db, batch).await;
     }
 }
@@ -309,10 +365,10 @@ pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations)
     let quotas = store(db, Database::get_latest_quota_snapshots)
         .await
         .unwrap_or_default();
-    if let Some(batch) = previous
-        .engine
-        .evaluate(&sessions, &quotas, &settings, chrono::Utc::now())
-    {
+    let batch = previous
+        .engine()
+        .evaluate(&sessions, &quotas, &settings, chrono::Utc::now());
+    if let Some(batch) = batch {
         record_batch_notice(db, batch).await;
     }
     end_exited_hosts(db).await;
@@ -772,6 +828,72 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
 mod tests {
     use super::*;
     #[tokio::test]
+    async fn approval_hint_shares_poll_dedup_redaction_and_disabled_preference() {
+        use gnomcode_core::{AgentId, Session, SessionState, Surface};
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("db")));
+        let now = chrono::Utc::now();
+        let session = Session {
+            id: "codex:notification-fixture".into(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: "fixture".into(),
+            parent_session_id: None,
+            model: None,
+            title: Some("Release STAGING_API_KEY=sk-live-evalfixture0123456789".into()),
+            state: SessionState::AwaitingApproval,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let mut hook = Observations::default();
+        let poll = hook.clone();
+        notify_approval_waiting_hook(&db, &mut hook, &session).await;
+        notify_approval_waiting_hook(&db, &mut hook, &session).await;
+        let notices = db
+            .lock()
+            .await
+            .pending_push_notices_with_meta()
+            .expect("push notices");
+        assert_eq!(notices.len(), 1);
+        let payload = notices[0].payload.as_ref().expect("structured payload");
+        assert!(
+            !serde_json::to_string(payload)
+                .expect("payload")
+                .contains("sk-live-evalfixture0123456789")
+        );
+        assert!(
+            poll.engine()
+                .evaluate(
+                    std::slice::from_ref(&session),
+                    &[],
+                    &Default::default(),
+                    now
+                )
+                .is_none()
+        );
+        db.lock()
+            .await
+            .save_notification_settings(&gnomcode_core::notifications::NotificationSettings {
+                approval_waiting: false,
+                ..Default::default()
+            })
+            .expect("settings");
+        let disabled = Session {
+            id: "codex:disabled-notification".into(),
+            ..session
+        };
+        notify_approval_waiting_hook(&db, &mut hook, &disabled).await;
+        assert_eq!(
+            db.lock()
+                .await
+                .pending_push_notices_with_meta()
+                .expect("push notices")
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn automation_api_requires_loopback_authentication_and_rejects_cross_origin() {
         use axum::{body::Body, http::Request};
         use tower::ServiceExt;
@@ -887,7 +1009,14 @@ mod tests {
         };
         let mut database = Database::open_in_memory().expect("db");
         database
-            .commit_batch(&[project], &[session.clone()], &[], &[], &[], &checkpoint)
+            .commit_batch(
+                &[project],
+                std::slice::from_ref(&session),
+                &[],
+                &[],
+                &[],
+                &checkpoint,
+            )
             .expect("session");
         database
             .record_session_cwd(&session.id, &repo.path().to_string_lossy())
@@ -955,7 +1084,14 @@ mod tests {
         session.state = SessionState::Idle;
         db.lock()
             .await
-            .commit_batch(&[], &[session.clone()], &[], &[], &[], &checkpoint)
+            .commit_batch(
+                &[],
+                std::slice::from_ref(&session),
+                &[],
+                &[],
+                &[],
+                &checkpoint,
+            )
             .expect("idle");
         deliver_due(&db).await;
         let first = inputs.lock().await.concat();
@@ -969,7 +1105,14 @@ mod tests {
         session.last_event_at = chrono::Utc::now() + chrono::Duration::seconds(1);
         db.lock()
             .await
-            .commit_batch(&[], &[session.clone()], &[], &[], &[], &checkpoint)
+            .commit_batch(
+                &[],
+                std::slice::from_ref(&session),
+                &[],
+                &[],
+                &[],
+                &checkpoint,
+            )
             .expect("fresh idle");
         deliver_due(&db).await;
         assert_eq!(
@@ -1013,7 +1156,7 @@ mod tests {
             .await
             .commit_batch(
                 &[],
-                &[session.clone()],
+                std::slice::from_ref(&session),
                 &[],
                 &[],
                 &[quota.clone()],

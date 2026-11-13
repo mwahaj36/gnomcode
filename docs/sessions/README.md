@@ -1,3 +1,4 @@
+- [2026-11-13 Held approval alerts](2026-11-13-approval-alerts.md)
 # Engineering sessions
 
 - [2026-11-13 Handoff original-goal repair](2026-11-13-handoff-original-goal.md)
