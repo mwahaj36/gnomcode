@@ -26,3 +26,7 @@ Shared docs receive append-only completion records. Existing launch gates remain
 - npm/check-release.cjs: failed because release binaries/EULA/notices are not staged in the npm platform packages. This is artifact readiness, not version consistency; npm publication is not verified.
 - git diff --check passed; diff U+00C2 marker count is 0.
 - No installed-app mutation, package upload, key creation, tag, release or deployment occurred.
+
+## Follow-up review
+
+Reviewed 496d740..47a24a0 and extended release-note coverage for consistent console dialogs. Added the user-facing off-by-default scheduled-message/account-sync policy from the original range. No version implementation changed. Final integration at 1.0.0 additionally passed 127 current-main web tests, desktop 40 tests, 68 browser tests against the release binary, production web build and rendered-version consistency. No npm artifacts were published.
