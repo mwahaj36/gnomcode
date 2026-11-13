@@ -314,31 +314,25 @@ impl SourceAdapter for AntigravityAdapter {
                 || obj.get("error").is_some();
             if is_error_step && step_mentions_resource_exhausted(obj) {
                 sess.state = SessionState::Error;
-                let limit_id = self
+                // The model that hit the limit scopes the quota cross-check in the store, which
+                // alone knows the pools. No quota row is written here: this error does not say
+                // which pool or window is spent.
+                let model = self
                     .active_model
                     .as_deref()
-                    .filter(|m| !m.trim().is_empty() && !m.contains("MODEL_PLACEHOLDER"))
-                    .unwrap_or("antigravity");
+                    .map(str::trim)
+                    .filter(|m| !m.is_empty() && !m.contains("MODEL_PLACEHOLDER"))
+                    .map(|m| m.chars().take(64).collect::<String>());
                 batch.activity_events.push(ActivityEvent {
                     session_id: session_id.clone(),
                     timestamp: ts,
                     kind: ActivityKind::RateLimited,
-                    tool_name: None,
+                    tool_name: model,
                     summary_redacted: Some(redact_summary(
                         "rate_limit",
                         "Antigravity quota exhausted (RESOURCE_EXHAUSTED)",
                     )),
                     duration_ms: None,
-                });
-                batch.quota_snapshots.push(QuotaSnapshot {
-                    provider: AgentId::Antigravity.as_str().to_owned(),
-                    limit_id: limit_id.chars().take(64).collect(),
-                    window: QuotaWindow::FiveHour,
-                    used_pct: 100.0,
-                    resets_at: None,
-                    plan: None,
-                    basis: TrustLevel::Exact,
-                    observed_at: ts,
                 });
             }
         }
@@ -696,4 +690,39 @@ pub fn parse_quota_summary(value: &Value, observed_at: DateTime<Utc>) -> Vec<Quo
                 })
         })
         .collect()
+}
+
+/// Pool membership from `RetrieveUserQuotaSummary`: `(pool, member)` pairs, where a member is a
+/// model name the pool covers. Each group's description lists them
+/// (`Models within this group: Claude Opus, Claude Sonnet, GPT-OSS`); the pool's own display name
+/// is always a member so a group without a list (`Gemini 4 Argon`) still maps.
+#[must_use]
+pub fn parse_quota_pool_members(value: &Value) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for group in value
+        .pointer("/response/groups")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(pool) = group.get("displayName").and_then(Value::as_str) else {
+            continue;
+        };
+        let pool: String = pool.chars().take(64).collect();
+        let listed = group
+            .get("description")
+            .and_then(Value::as_str)
+            .and_then(|text| text.split_once("Models within this group:"))
+            .map_or("", |(_, list)| list);
+        let members = std::iter::once(pool.as_str())
+            .chain(listed.split(',').map(str::trim))
+            .filter(|member| !member.is_empty());
+        for member in members {
+            let pair = (pool.clone(), member.chars().take(64).collect::<String>());
+            if !out.contains(&pair) {
+                out.push(pair);
+            }
+        }
+    }
+    out
 }

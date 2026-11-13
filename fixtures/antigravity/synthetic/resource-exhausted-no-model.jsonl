@@ -1,0 +1,2 @@
+{"step_index":0,"type":"USER_INPUT","created_at":"2026-11-13T01:00:00Z","content":"hello"}
+{"step_index":1,"type":"PLANNER_RESPONSE","status":"ERROR","created_at":"2026-11-13T01:00:02Z","error":"429 RESOURCE_EXHAUSTED: quota depleted"}
