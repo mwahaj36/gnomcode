@@ -1,5 +1,14 @@
 # Worker A handoff
 
+## 2026-11-13: Failover end to end (Claude exhausted, continue in Codex)
+- PR: https://github.com/mwahaj36/spawnt/pull/219 (`feat/failover-e2e-demo`, commit `18e98bd`)
+- Changed: added `crates/daemon/tests/failover_e2e.rs`, ticked `docs/ROADMAP_1.0.md`, added `docs/sessions/2026-11-13-failover-e2e-demo.md` and `docs/sessions/README.md` entry.
+- Evidence & Tests: `claude_exhausted_selects_codex_and_continues_conversation_with_handoff` verifies `select_failover`, `prepare_handoff`, `bind_conversation_host`, and `continue_conversation` end to end in SQLite.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS; `cargo clippy --workspace --all-targets -- -D warnings` PASS; `cargo test --workspace` PASS.
+- Verified live: `cargo test -p gnomcode-daemon --test failover_e2e -- --nocapture` (1 passed) and `cargo run -p gnomcode -- doctor` in isolated `GNOMCODE_HOME` (detected `claude 2.1.322`, `codex-cli 0.166.0`, `agy 1.5.7`; exited 1 on expired Claude sign-in + stopped daemon). Not verified: live multi-turn failover with an exhausted Claude OAuth token.
+- Deviations/risks: None.
+- Dependencies: Depends on #189.
+
 ## 2026-11-13: Antigravity exhausted cross-check against RESOURCE_EXHAUSTED
 
 - PR https://github.com/mwahaj36/spawnt/pull/218; branch `feat/antigravity-resource-exhausted`, head `bbb73a7`, depends on baseline #189.
