@@ -9,20 +9,20 @@
 | Order | Area | Item | Status | PR | Depends on |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | Section C | Quick actions (canned prompts, never raw argv) | PR open | [#188](https://github.com/mwahaj36/spawnt/pull/188) | Optional Worker A backend persistence |
-| 2 | Section C | Changes view (read-only diff on console and phone) | PR open | [#190](https://github.com/mwahaj36/spawnt/pull/190) | Optional Worker A Remote `changes` handler |
-| 3 | Section C | File viewer on phone and console (read-only, workspace only) | PR open | [#191](https://github.com/mwahaj36/spawnt/pull/191) | Optional Worker A `C file listing and reading` |
-| 4 | Section C | Artifacts alongside changes | PR open | [#192](https://github.com/mwahaj36/spawnt/pull/192) | Optional Worker A `C last-turn artifacts` |
-| 5 | Section C | Phone attachments UI | PR open | [#194](https://github.com/mwahaj36/spawnt/pull/194) | Optional Worker A `C attachments` |
+| 2 | Section C | Changes view (read-only diff on console and phone) | PR open | [#190](https://github.com/mwahaj36/spawnt/pull/190) | Optional local; Worker A PR #207 (Remote/session changes) |
+| 3 | Section C | File viewer on phone and console (read-only, workspace only) | PR open | [#191](https://github.com/mwahaj36/spawnt/pull/191) | Worker A PR #205 (`repo_files` / `repo_file`) |
+| 4 | Section C | Artifacts alongside changes | PR open | [#192](https://github.com/mwahaj36/spawnt/pull/192) | Worker A PR #208 (`artifacts`) |
+| 5 | Section C | Phone attachments UI | PR open | [#194](https://github.com/mwahaj36/spawnt/pull/194) | Worker A PR #210 (`upload_attachment`) |
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | PR open | [#195](https://github.com/mwahaj36/spawnt/pull/195) | None |
 | 7 | B / G5 | G5 interrupt button on phone and console chat | PR open | [#196](https://github.com/mwahaj36/spawnt/pull/196) | Worker A PR #187 |
 | 8 | Section E1 | Local console built from web/ React (Home) | PR open | [#198](https://github.com/mwahaj36/spawnt/pull/198) | None |
 | 9 | Section E1 | Local console built from web/ React (Workspace) | PR open | [#199](https://github.com/mwahaj36/spawnt/pull/199) | PR #198 |
 | 10 | Section E1 | Local console built from web/ React (Usage) | PR open | [#201](https://github.com/mwahaj36/spawnt/pull/201) | PR #199 |
-| 11 | Section E1 | Local console built from web/ React (Settings + retire console-app.js) | not started | - | - |
-| 12 | Section F | F1 worktree per session UI | not started | - | Worker A / backend |
-| 13 | Section F | F2 "Continue here" for imported sessions UI | not started | - | Worker A / backend |
-| 14 | Section F | F3 handoff quality eval report page | not started | - | Worker A eval data |
-| 15 | Section G | Release 1.0.0 prep (cut-release, CHANGELOG, Windows installer) | not started | - | All Worker A PRs |
+| 11 | Section E1 | Local console built from web/ React (Settings + shell bridge) | PR open | [#204](https://github.com/mwahaj36/spawnt/pull/204) | PR #201, #199, #198 |
+| 12 | Section F | F1 worktree per session UI (ADR 0036) | PR open | [#206](https://github.com/mwahaj36/spawnt/pull/206) | PR #204 + Worker A worktree backend (unimplemented) |
+| 13 | Section F | F2 "Continue here" for imported sessions UI | PR open | [#209](https://github.com/mwahaj36/spawnt/pull/209) | PR #206 + Worker A `/continue-here` (unimplemented) |
+| 14 | Section F | F3 handoff quality eval report UI (ADR 0038) | PR open | [#211](https://github.com/mwahaj36/spawnt/pull/211) | PR #209 + Worker A eval backend (unimplemented) |
+| 15 | Section G | Release 1.0.0 prep (cut-release, CHANGELOG, Windows installer) | Blocked | - | All Worker A PRs open (gate not met) |
 
 ## Entries
 
@@ -204,3 +204,50 @@
 - **Deviations (marked assumption):** Targets `POST /api/v1/sessions/{id}/continue-here` + E2EE `continue_here` / `continue_here_ack` instead of changing Rust `/continue` rejection, with a client fallback opening the managed launcher prefilled when `/continue-here` is not yet implemented; top-level F2 roadmap checkbox left unticked pending Worker A backend.
 - **Open risks/questions:** Worker A needs to implement `POST /api/v1/sessions/{id}/continue-here` and E2EE `{ type: 'continue_here' }` / `continue_here_ack` returning `{ session_id }` (keeping agent-owned logs unmodified).
 - **Dependencies:** Depends on PR #206 (`feat/worktree-session-ui`) + future Worker A `/continue-here` backend PR.
+
+### 14. Section F3 — Handoff quality eval report UI
+- **PR:** https://github.com/mwahaj36/spawnt/pull/211 (`feat/handoff-eval-ui`, commit `17979a4`)
+- **What changed:**
+  - `docs/adr/0038-handoff-eval-ui-contract.md`: documents the read-only `GET /api/v1/evals/handoff` JSON contract returning pre-computed Rust eval summary metrics (`total_cases`, `passed_cases`, `pass_rate_pct`, `trust_level`) and per-case outcomes/scores.
+  - `web/lib/eval-presentation.mjs` (+ `.d.mts`): pure presenter (`renderHandoffEvalMarkup`) formatting `PASS`/`FAIL`/`UNKNOWN` outcomes, explicit trust chips (`EXACT`/`EST`/`API`/`UNKNOWN`), HTML-escaped titles/summaries, and a calm empty fallback when no eval runs exist (zero score math in JS).
+  - `web/local-console/UsageView.tsx`: mounts `<section className="sp-section sp-eval-report">` under `#usage` fetching `/api/v1/evals/handoff` gracefully on refresh/reload.
+  - `web/app/gnomcode-console.css`: appends token-only `.sp-eval-*` styles.
+  - `crates/daemon/src/console-react.js`, `web/test/handoff-eval-ui.test.mjs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-handoff-eval-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** `web/local-console/UsageView.tsx` had no eval report section and `crates/daemon/src/api.rs` had no `/api/v1/evals/handoff` route. Tests: `web/test/handoff-eval-ui.test.mjs` (`1/1`, RED first), `web/` `npm test` (`107/107`). Gate: `build-local-console.mjs --check`, `check-console.mjs`, `check-local-console.mjs`, `web/` (`test`/`typecheck`/`lint`/`build`), `CARGO_INCREMENTAL=0` (`fmt`/`clippy`/`test`) all pass.
+- **Verification:** Visually verified Chromium headless CDP at `390x844` and `1440x900` (dark & light) on `#usage` with mocked `/api/v1/evals/handoff` (`reactUsage=true`, `hasEvalSection=true`, `hasPassCount=true`, `hasTrust=true`, `overflowX=false`). Not verified live against a running daemon eval harness because Worker A eval backend does not exist yet.
+- **Deviations (marked assumption):** Rendered inside `#usage` (`UsageView.tsx`) against ADR `0038` stub contract instead of adding a fifth navigation tab (preserving ADR `0031`'s four places); top-level F3 roadmap checkbox left unticked pending Worker A eval harness.
+- **Open risks/questions:** Worker A needs to implement the Rust handoff quality eval runner and `GET /api/v1/evals/handoff` matching ADR `0038`.
+- **Dependencies:** Depends on PR #209 (`feat/continue-here-imported-ui`) + future Worker A eval backend PR.
+
+### 15. Section G — Release 1.0.0 prep (`cut-release`, CHANGELOG, smoke-test checklist, local Windows installer)
+- **PR:** Blocked (not started)
+- **Blocker:** The assignment explicitly requires: *"Do this only after all of Worker A's PRs are open."* As of `2026-11-13T01:40Z`, Worker A has open PRs `#187`, `#189`, `#193`, `#197`, `#200`, `#202`, `#203`, `#205`, `#207`, `#208`, `#210` and active worktree `wt-c-quick-actions` (`feat/remote-quick-actions`), while remaining Worker A items (quick actions backend, G8, G3, G14, Codex/Antigravity/Gemini approvals, D3 ingest back-off, Antigravity exhausted cross-check, failover demo, E3 feature toggles, E2 `api.rs`/`store/lib.rs` domain splits, and F1/F2/F3 backends) are not yet open PRs. Cutting a `1.0.0` release branch/installer now against unmerged `origin/main` (`fee3c8e`) before Worker A's remaining PRs are open (and before Claude reviews & Wahaj merges the Worker A/B PR stacks) would miss the 1.0.0 feature set.
+
+## Status at stop
+
+- **Last implementation commit & branch:** `17979a4` on `feat/handoff-eval-ui` (`PR #211`); reporting branch `docs/handoff-worker-B` (`PR #186`). No stale temporary Worker B worktrees remain; `C:\Users\Wahaj\Documents\GitHub\fleethud` stays clean on `main` (`fee3c8e`), with `39.56` GB free on `C:`.
+- **What is done vs half done:**
+  - All Worker B UI items in **Section C** (`#188`, `#190`, `#191`, `#192`, `#194`, `#195`), **G5** (`#196`), **Section E1** (`#198`, `#199`, `#201`, `#204`), **Section F1** (`#206`), **Section F2** (`#209`), and **Section F3** (`#211`) are complete, tested, visually verified in headless Chromium (`390x844` & `1440x900`, dark & light), and open as PRs.
+  - **Deferred / gated items:**
+    1. **Physical deletion of `crates/daemon/src/console-app.js` and `/console-app.js` wiring in `crates/daemon/src/api.rs`:** `api.rs:121,680-687,3636-3638` (`include_str!("console-app.js")`) is outside Worker B ownership; after merging E1 PRs (`#198`, `#199`, `#201`, `#204`), the owner/Worker A should delete `console-app.js` and its route/constant in `api.rs` and drop `#legacy-*` hidden markup.
+    2. **Section G (`cut-release` 1.0.0 prep):** Not started because Worker A still has open/unwritten PRs in flight (see Item 15 above). Resume once all of Worker A's PRs are open and `origin/main` has the reviewed merges: run `.agents/skills/cut-release/`, bump version `1.0.0` everywhere, write CHANGELOG/release notes since `v0.9.4`, write `docs/sessions/` smoke-test checklist, build the Windows installer locally and record path + SHA-256 checksum in the release PR without uploading/tagging/updating Vercel.
+- **Worker A alignment notes:** Worker A's backend PRs `#187` (interrupt), `#205` (`ADR 0035` files), `#207` (`ADR 0037` changes), `#208` (`ADR 0039` artifacts), and `#210` (`ADR 0041` attachments) match the endpoint paths and E2EE message shapes (`repo_files`/`repo_file`, `changes`, `artifacts`, `upload_attachment`/`attachment_ack`, `interrupt`/`interrupt_ack`) wired in Worker B's `#190`, `#191`, `#192`, `#194`, `#196`. Check `#188` once Worker A's `wt-c-quick-actions` opens its PR.
+- **Worker B PRs in recommended merge order:**
+  1. Independent Section C PRs (can merge in any order alongside their Worker A pairs):
+     - https://github.com/mwahaj36/spawnt/pull/188 (`feat/quick-actions-ui`)
+     - https://github.com/mwahaj36/spawnt/pull/190 (`feat/changes-view-ui` — pairs with Worker A `#207`)
+     - https://github.com/mwahaj36/spawnt/pull/191 (`feat/file-viewer-ui` — pairs with Worker A `#205`)
+     - https://github.com/mwahaj36/spawnt/pull/192 (`feat/artifacts-view-ui` — pairs with Worker A `#208`)
+     - https://github.com/mwahaj36/spawnt/pull/194 (`feat/phone-attachments-ui` — pairs with Worker A `#210`)
+     - https://github.com/mwahaj36/spawnt/pull/195 (`feat/pwa-app-lock`, ADR `0034`)
+     - https://github.com/mwahaj36/spawnt/pull/196 (`feat/interrupt-ui` — depends on Worker A `#187`)
+  2. Stacked E1 + F1–F3 Console stack (merge strictly in order from `1` to `7`):
+     1. https://github.com/mwahaj36/spawnt/pull/198 (`feat/local-console-home`)
+     2. https://github.com/mwahaj36/spawnt/pull/199 (`feat/local-console-workspace` — based on `#198`)
+     3. https://github.com/mwahaj36/spawnt/pull/201 (`feat/local-console-usage` — based on `#199`)
+     4. https://github.com/mwahaj36/spawnt/pull/204 (`feat/local-console-settings` — based on `#201`)
+     5. https://github.com/mwahaj36/spawnt/pull/206 (`feat/worktree-session-ui`, ADR `0036` — based on `#204`)
+     6. https://github.com/mwahaj36/spawnt/pull/209 (`feat/continue-here-imported-ui` — based on `#206`)
+     7. https://github.com/mwahaj36/spawnt/pull/211 (`feat/handoff-eval-ui`, ADR `0038` — based on `#209`)
+  3. Worker B running log PR (do not merge until review wrap-up):
+     - https://github.com/mwahaj36/spawnt/pull/186 (`docs/handoff-worker-B`)
