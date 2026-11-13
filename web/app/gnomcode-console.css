@@ -1732,3 +1732,13 @@ body.sp-native-console .sp-workspace-empty { max-width: 420px; margin: var(--sp-
 .sp-usage-view > * + * { margin-top: var(--sp-6); }
 .sp-native-console .sp-usage-daily > .sp-activity { border-top: 0; }
 body.sp-native-console .sp-usage-providers { align-items: start; }
+
+/* ---- React Settings view classes ---- */
+.sp-native-console #view-settings .sp-settings-root > section,
+.sp-native-console #view-settings .sp-settings-root > .profile-disclosure { padding: 24px 0; margin: 0; border-bottom: 1px solid var(--sp-border); }
+.sp-native-console #view-settings .sp-settings-root > section:last-child { border-bottom: 0; }
+.sp-native-console #view-settings .sp-settings-root h2 { font: 600 20px/1.4 var(--sp-font-sans); margin: 0 0 10px; }
+.sp-native-console #view-settings .sp-settings-root p { font: 14px/1.6 var(--sp-font-sans); color: var(--sp-text-2); max-width: 65ch; margin: 0 0 16px; }
+.sp-native-console #view-settings .sp-settings-root input:is([type="checkbox"], [type="radio"]) { width: 16px; height: 16px; min-height: 0; padding: 0; vertical-align: middle; }
+.sp-native-console #view-settings .sp-settings-section .table-container { margin-top: var(--sp-3); }
+
