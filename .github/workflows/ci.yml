@@ -256,11 +256,15 @@ jobs:
           cp target/release/gnomcode apps/desktop/staging/bin/gnomcode
           chmod +x apps/desktop/staging/bin/gnomcode
           cp docs/legal/EULA.txt apps/desktop/staging/EULA.txt
+          if ! cargo about --version >/dev/null 2>&1; then
+            cargo install cargo-about --locked
+          fi
           cargo about generate about.hbs -o apps/desktop/staging/THIRD_PARTY_NOTICES.html
       - name: Build and package desktop app
         working-directory: apps/desktop
         run: |
           npm ci
+          node -e "require('electron')"
           node desktop-notices.cjs
           npm run lint
           npm run typecheck
