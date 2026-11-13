@@ -1086,26 +1086,73 @@ mod tests {
     }
 
     #[test]
-    fn antigravity_resource_exhausted_marks_error_and_exhausted_quota() {
+    fn antigravity_resource_exhausted_records_the_model_and_no_quota_row() {
         use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
-        let bytes = concat!(
-            "{\"step_index\":0,\"type\":\"USER_INPUT\",\"created_at\":\"2026-11-13T01:00:00Z\",\"content\":\"<USER_SETTINGS_CHANGE>claude-opus-5-5</USER_SETTINGS_CHANGE>\"}\n",
-            "{\"step_index\":1,\"type\":\"PLANNER_RESPONSE\",\"status\":\"ERROR\",\"created_at\":\"2026-11-13T01:00:02Z\",\"error\":\"429 RESOURCE_EXHAUSTED: quota depleted\"}\n",
+        let bytes = include_bytes!(
+            "../../../fixtures/antigravity/synthetic/resource-exhausted-model.jsonl"
         );
-        let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes.as_bytes());
+        let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes);
         assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Error);
-        assert!(
-            batch
-                .activity_events
-                .iter()
-                .any(|e| e.kind == gnomcode_core::ActivityKind::RateLimited)
-        );
-        let snap = batch
-            .quota_snapshots
+        let event = batch
+            .activity_events
             .iter()
-            .find(|q| q.provider == "antigravity")
-            .expect("exhausted quota snapshot");
-        assert_eq!(snap.used_pct, 100.0);
-        assert_eq!(snap.basis, TrustLevel::Exact);
+            .find(|e| e.kind == gnomcode_core::ActivityKind::RateLimited)
+            .expect("rate limited event");
+        assert_eq!(event.tool_name.as_deref(), Some("Claude Opus 5.5 (High)"));
+        assert!(
+            batch.quota_snapshots.is_empty(),
+            "the error does not say which pool is spent"
+        );
+    }
+
+    #[test]
+    fn antigravity_resource_exhausted_without_a_known_model_records_none() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let bytes = include_bytes!(
+            "../../../fixtures/antigravity/synthetic/resource-exhausted-no-model.jsonl"
+        );
+        let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Error);
+        let event = batch
+            .activity_events
+            .iter()
+            .find(|e| e.kind == gnomcode_core::ActivityKind::RateLimited)
+            .expect("rate limited event");
+        assert_eq!(event.tool_name, None);
+        assert!(batch.quota_snapshots.is_empty());
+    }
+
+    #[test]
+    fn antigravity_quota_summary_lists_the_models_each_pool_covers() {
+        let body: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../fixtures/antigravity/cli-1.5.8/quota-summary.json"
+        ))
+        .expect("fixture json");
+        let members = super::antigravity::parse_quota_pool_members(&body);
+        let of = |pool: &str| -> Vec<&str> {
+            members
+                .iter()
+                .filter(|m| m.0 == pool)
+                .map(|m| m.1.as_str())
+                .collect()
+        };
+        assert_eq!(
+            of("Claude and GPT models"),
+            [
+                "Claude and GPT models",
+                "Claude Opus",
+                "Claude Sonnet",
+                "GPT-OSS"
+            ]
+        );
+        assert_eq!(
+            of("Gemini Models"),
+            ["Gemini Models", "Gemini Flash", "Gemini Pro"]
+        );
+        assert_eq!(
+            of("Gemini 4 Argon"),
+            ["Gemini 4 Argon"],
+            "a group with no model list keeps only its own name"
+        );
     }
 }

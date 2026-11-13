@@ -155,10 +155,46 @@ pub fn is_stale(s: &QuotaSnapshot, now: DateTime<Utc>) -> bool {
     now - s.observed_at > STALE_AFTER
 }
 
+/// Whether `model` (`Claude Opus 5.5 (High)`, `claude-opus-5-5`) belongs to the pool member `name`
+/// (`Claude Opus`, `Gemini Pro`): every word of `name` appears in `model` in the same order, so
+/// version numbers and effort suffixes between them are ignored. Pure and case-insensitive.
+#[must_use]
+pub fn model_matches_pool_name(model: &str, name: &str) -> bool {
+    fn words(text: &str) -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    }
+    let wanted = words(name);
+    if wanted.is_empty() {
+        return false;
+    }
+    let mut have = words(model).into_iter();
+    wanted.iter().all(|want| have.any(|word| word == *want))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn pool_names_match_models_by_ordered_words() {
+        assert!(model_matches_pool_name(
+            "Claude Opus 5.5 (High)",
+            "Claude Opus"
+        ));
+        assert!(model_matches_pool_name("claude-opus-5-5", "Claude Opus"));
+        assert!(model_matches_pool_name(
+            "Gemini 3.1 Pro (High)",
+            "Gemini Pro"
+        ));
+        assert!(model_matches_pool_name("GPT-OSS 120B (Medium)", "GPT-OSS"));
+        assert!(!model_matches_pool_name("Claude Sonnet 5", "Claude Opus"));
+        assert!(!model_matches_pool_name("Pro Gemini", "Gemini Pro"));
+        assert!(!model_matches_pool_name("anything", " "));
+    }
 
     fn now() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 11, 12, 12, 0, 0)

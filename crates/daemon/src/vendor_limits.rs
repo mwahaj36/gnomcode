@@ -173,6 +173,10 @@ pub(crate) fn claude_config_dir() -> PathBuf {
 static ISSUES: std::sync::Mutex<std::collections::BTreeMap<String, String>> =
     std::sync::Mutex::new(std::collections::BTreeMap::new());
 
+/// `(pool, model)` pairs from the latest Antigravity pooled-summary reply, held until the poll's
+/// rows are stored so exhausted-error cross-checks can map a model to its pool.
+static POOL_MEMBERS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
 /// Quota rows name Claude `claude-code`; the opt-in name is `claude`.
 fn issue_key(provider: &str) -> &str {
     if provider == "claude-code" {
@@ -225,6 +229,19 @@ async fn record_outcome(
         .lock()
         .await
         .commit_batch(&[], &[], &[], &[], &quota, &checkpoint);
+    if provider == "antigravity" {
+        let members = POOL_MEMBERS
+            .lock()
+            .map(|mut members| std::mem::take(&mut *members))
+            .unwrap_or_default();
+        if let Err(error) = db
+            .lock()
+            .await
+            .replace_quota_pool_members(provider, &members)
+        {
+            tracing::warn!("{provider} pool membership could not be stored: {error}");
+        }
+    }
     if stored.is_err() {
         tracing::warn!("{provider} limits could not be stored");
         record_issue(provider, Some("Limits could not be stored".to_owned()));
@@ -356,6 +373,11 @@ async fn fetch_antigravity() -> Result<Vec<QuotaSnapshot>, String> {
                 gnomcode_adapters::antigravity::parse_quota_summary(&body, now)
             };
             if !quota.is_empty() {
+                if method != "GetUserStatus" {
+                    if let Ok(mut members) = POOL_MEMBERS.lock() {
+                        *members = gnomcode_adapters::antigravity::parse_quota_pool_members(&body);
+                    }
+                }
                 return Ok(quota);
             }
         }
