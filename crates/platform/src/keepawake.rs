@@ -128,7 +128,7 @@ mod os {
     #[derive(Default)]
     pub(super) struct Os(Option<Child>);
 
-    fn helper() -> Command {
+    pub(super) fn helper() -> Command {
         let pid = std::process::id().to_string();
         #[cfg(target_os = "macos")]
         {
