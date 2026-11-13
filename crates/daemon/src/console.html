@@ -25,12 +25,13 @@
   <section id="approvals" class="sp-approvals" aria-label="Waiting for your approval" hidden></section>
   <!-- ==================== VIEW 1: CONSOLE ==================== -->
     <!-- Timeline Filter Bar -->
-    <div class="timeline-bar" data-local-view="usage"><div class="timeline-label" id="timeline-label">All time</div><div class="sp-period-actions"><select id="timeline-select" aria-label="Reporting period" data-change="timeline"><option value="today">Today</option><option value="month">This month</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all" selected>All time</option></select><details class="sp-export-menu"><summary>Export</summary><div><button type="button" class="btn-control" data-action="export:csv">CSV</button><button type="button" class="btn-control" data-action="export:json">JSON</button></div></details></div></div>
+    <div class="timeline-bar" data-local-view="usage" data-legacy-usage="true"><div class="timeline-label" id="timeline-label">All time</div><div class="sp-period-actions"><select id="timeline-select" aria-label="Reporting period" data-change="timeline"><option value="today">Today</option><option value="month">This month</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="all" selected>All time</option></select><details class="sp-export-menu"><summary>Export</summary><div><button type="button" class="btn-control" data-action="export:csv">CSV</button><button type="button" class="btn-control" data-action="export:json">JSON</button></div></details></div></div>
 
   <main id="view-console" class="view-content active" role="tabpanel" tabindex="0">
-    <div id="quota-table" data-local-view="usage"><p>Loading provider limits...</p></div>
-    <div id="usage-heatmap" data-local-view="usage"></div>
-    <div id="daily-activity" data-local-view="usage"><p>Loading daily activity...</p></div>
+    <div id="local-usage-root" data-local-view="usage"></div>
+    <div id="quota-table" data-local-view="usage" data-legacy-usage="true"><p>Loading provider limits...</p></div>
+    <div id="usage-heatmap" data-local-view="usage" data-legacy-usage="true"></div>
+    <div id="daily-activity" data-local-view="usage" data-legacy-usage="true"><p>Loading daily activity...</p></div>
     <div data-local-view="overview" class="sp-home" id="local-home-root">
       <section class="sp-section" id="home-limits"></section>
       <section class="sp-section" id="home-sessions"></section>
@@ -38,13 +39,13 @@
       <div id="home-activity"></div>
     </div>
     <!-- Spend by Agent (Click to View Models) -->
-    <div data-local-view="usage" id="providers-container">
+    <div data-local-view="usage" data-legacy-usage="true" id="providers-container">
       <!-- Injected dynamically -->
     </div>
 
-    <section class="sp-section" data-local-view="usage" id="usage-value"></section>
+    <section class="sp-section" data-local-view="usage" data-legacy-usage="true" id="usage-value"></section>
 
-    <section class="sp-section" data-local-view="usage" id="usage-projects"><header class="sp-section-head"><h2>Projects</h2></header><div id="project-rollups">Loading project usage...</div></section>
+    <section class="sp-section" data-local-view="usage" data-legacy-usage="true" id="usage-projects"><header class="sp-section-head"><h2>Projects</h2></header><div id="project-rollups">Loading project usage...</div></section>
     <div id="sessions-ongoing" hidden></div>
     <div id="local-workspace-root" data-local-view="sessions"></div>
     <section class="ide-layout" id="legacy-ide-layout" data-local-view="sessions" aria-label="Agent workspace">

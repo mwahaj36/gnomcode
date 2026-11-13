@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HomeView } from './HomeView';
+import { UsageView } from './UsageView';
 import { WorkspaceView } from './WorkspaceView';
 
 function mountLocalConsoleViews(): void {
@@ -32,6 +33,22 @@ function mountLocalConsoleViews(): void {
     createRoot(workspaceContainer).render(
       <StrictMode>
         <WorkspaceView />
+      </StrictMode>,
+    );
+  }
+
+  const usageContainer = document.getElementById('local-usage-root');
+  if (usageContainer) {
+    window.__gnomcodeReactViews = {
+      ...(window.__gnomcodeReactViews || {}),
+      usage: true,
+    };
+    document.querySelectorAll<HTMLElement>('[data-legacy-usage="true"]').forEach((node) => {
+      node.hidden = true;
+    });
+    createRoot(usageContainer).render(
+      <StrictMode>
+        <UsageView />
       </StrictMode>,
     );
   }

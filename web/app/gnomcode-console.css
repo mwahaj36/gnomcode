@@ -1728,3 +1728,7 @@ body.sp-native-console .sp-workspace-empty { max-width: 420px; margin: var(--sp-
 }
 .sp-session-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0; }
 @media (max-width: 760px) { .sp-session-tools .btn-control { min-height: 44px; } }
+/* ---- React Usage view classes ---- */
+.sp-usage-view > * + * { margin-top: var(--sp-6); }
+.sp-native-console .sp-usage-daily > .sp-activity { border-top: 0; }
+body.sp-native-console .sp-usage-providers { align-items: start; }
