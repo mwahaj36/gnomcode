@@ -171,6 +171,13 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
     if kind != "schedule" {
         return Err("Unsupported automation request".into());
     }
+    if !store(db, |db| {
+        Ok(db.get_feature_toggles()?.scheduled_messages_enabled)
+    })
+    .await?
+    {
+        return Err("Scheduled messages are frozen behind an off-by-default setting (E3).".into());
+    }
     let text = request["text"]
         .as_str()
         .ok_or("Missing message")?
@@ -360,6 +367,15 @@ pub(crate) async fn sync_keep_awake(
 }
 
 async fn deliver_due(db: &Arc<Mutex<Database>>) {
+    if !matches!(
+        store(db, |db| Ok(db
+            .get_feature_toggles()?
+            .scheduled_messages_enabled))
+        .await,
+        Ok(true)
+    ) {
+        return;
+    }
     let Ok(messages) = store(db, move |db| {
         db.due_messages(chrono::Utc::now().timestamp())
     })
@@ -882,6 +898,12 @@ mod tests {
             .expect("changed selection invalidates the pending automatic switch")
         );
         database
+            .set_feature_toggles(&gnomcode_core::FeatureToggles {
+                scheduled_messages_enabled: true,
+                ..Default::default()
+            })
+            .expect("enable scheduled messages for test");
+        database
             .schedule_message("one", &session.id, "first", now.timestamp())
             .expect("save");
         database
@@ -1030,6 +1052,13 @@ mod tests {
             .expect("bind");
         db.lock()
             .await
+            .set_feature_toggles(&gnomcode_core::FeatureToggles {
+                scheduled_messages_enabled: true,
+                ..Default::default()
+            })
+            .expect("enable scheduled messages for test");
+        db.lock()
+            .await
             .save_conversation_launch("host", "codex", "fixture", None)
             .expect("launch");
         let request = json!({"type":"schedule","session_id":"conversation","id":"one","text":"hello","due_at":chrono::Utc::now().timestamp()+60});
@@ -1053,6 +1082,27 @@ mod tests {
                 .due_messages(i64::MAX)
                 .expect("list")
                 .is_empty()
+        );
+    }
+    #[tokio::test]
+    async fn scheduled_messages_are_frozen_by_default() {
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("db")));
+        db.lock()
+            .await
+            .reattach_conversation("conversation", "host", None)
+            .expect("bind");
+        db.lock()
+            .await
+            .save_conversation_launch("host", "codex", "fixture", None)
+            .expect("launch");
+        let request = json!({"type":"schedule","session_id":"conversation","id":"one","text":"hello","due_at":chrono::Utc::now().timestamp()+60});
+        let result = command(&db, request).await;
+        assert_eq!(result["type"], "error");
+        assert!(
+            result["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("frozen")
         );
     }
 }
