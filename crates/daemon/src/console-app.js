@@ -1118,10 +1118,9 @@ function cycleTheme() {
     async function saveRouting() {try{await automationRequest({type:'routing',policy:document.getElementById('routing-policy').value});delete document.getElementById('routing-policy').dataset.dirty;showNotice('Routing policy saved on this laptop.');}catch(error){showNotice(error.message);}}
     async function reconnectReset(enabled) {try{await automationRequest({type:'resume_on_reset',session_id:activeChatSession,enabled});showNotice(enabled?'Reconnection armed. It waits for fresh quota confirmation after reset.':'Reset reconnection cancelled.');}catch(error){showNotice(error.message);}}
 
-    async function sendPrompt(event) {
-      if (event) event.preventDefault();
+    async function sendPromptText(rawText, { fromComposer = false } = {}) {
       const input = document.getElementById('chat-prompt-text');
-      const text = input?.value.trim();
+      const text = typeof rawText === 'string' ? rawText.trim() : '';
       if (!text || !activeChatSession || document.getElementById('chat-send-btn').disabled) return;
       const status = document.getElementById('chat-delivery-status');
       const sessionId = activeChatSession;
@@ -1131,6 +1130,7 @@ function cycleTheme() {
       void renderCurrentChat();
       pendingPrompts.add(sessionId);
       const button = document.getElementById('chat-send-btn'); button.disabled = true;
+      void renderChatQuickActions();
       if (status) status.textContent = '';
       try {
         const res = await fetch(`/api/v1/sessions/${encodeURIComponent(activeChatSession)}/prompt`, {
@@ -1145,11 +1145,13 @@ function cycleTheme() {
         if ((chatDeletionGenerations.get(sessionId) || 0) !== deletionGeneration) return;
         optimistic.delivered = true;
         if (sessionId === activeChatSession) void renderCurrentChat();
-        if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
-        if (sessionId === activeChatSession) {
-          if (input.value.trim() === text) { input.value = ''; resizePrompt(); }
-          if (status) status.textContent = '';
-          input.focus();
+        if (fromComposer) {
+          if (chatDrafts.get(sessionId)?.trim() === text) chatDrafts.delete(sessionId);
+          if (sessionId === activeChatSession) {
+            if (input.value.trim() === text) { input.value = ''; resizePrompt(); }
+            if (status) status.textContent = '';
+            input.focus();
+          }
         }
         if (sessionId === activeChatSession) setTimeout(() => loadChat(sessionId, false, true), 1000);
       } catch (err) {
@@ -1159,7 +1161,109 @@ function cycleTheme() {
       } finally {
         pendingPrompts.delete(sessionId);
         button.disabled = pendingPrompts.has(activeChatSession);
+        void renderChatQuickActions();
       }
+    }
+
+    async function sendPrompt(event) {
+      if (event) event.preventDefault();
+      await sendPromptText(document.getElementById('chat-prompt-text')?.value, { fromComposer: true });
+    }
+
+    let quickActionsCache = null;
+    async function getQuickActions() {
+      const presentation = await import('/console-presentation.js');
+      if (!quickActionsCache) {
+        quickActionsCache = presentation.loadStoredQuickActions();
+        try {
+          const remote = await apiJson('/api/v1/quick-actions');
+          if (Array.isArray(remote?.actions)) quickActionsCache = presentation.saveStoredQuickActions(remote.actions);
+        } catch { /* daemon list unavailable: keep the local cache */ }
+      }
+      return { presentation, items: quickActionsCache };
+    }
+
+    async function persistQuickActions(items) {
+      const presentation = await import('/console-presentation.js');
+      const err = document.getElementById('quick-actions-error');
+      try {
+        const saved = await apiJson('/api/v1/quick-actions', { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ actions: presentation.toWireQuickActions(items) }) });
+        quickActionsCache = presentation.saveStoredQuickActions(Array.isArray(saved?.actions) ? saved.actions : items);
+        if (err) { err.hidden = true; err.textContent = ''; }
+      } catch (error) {
+        if (err) { err.textContent = `Could not save quick prompts: ${error.message}`; err.hidden = false; }
+        return;
+      }
+      void renderChatQuickActions();
+      renderQuickActionsDialogList(quickActionsCache);
+    }
+
+    async function renderChatQuickActions() {
+      const host = document.getElementById('chat-quick-actions');
+      if (!host) return;
+      const session = ideSessions.find(row => row.id === activeChatSession);
+      const imported = session?.source === 'imported';
+      host.hidden = imported || !activeChatSession;
+      if (host.hidden) return;
+      const { presentation, items } = await getQuickActions();
+      const disabled = pendingPrompts.has(activeChatSession);
+      host.innerHTML = presentation.renderQuickActionsStrip(items, { disabled });
+    }
+
+    function renderQuickActionsDialogList(items) {
+      const list = document.getElementById('quick-actions-list');
+      if (!list) return;
+      list.innerHTML = items.map(item => `<div class="sp-quick-action-row"><div><strong>${escapeHtml(item.label)}</strong><p>${escapeHtml(item.prompt)}</p></div><button type="button" class="btn-control" data-action="remove-quick-action" data-arg="${escapeHtml(item.id)}" ${items.length <= 1 ? 'disabled' : ''}>Remove</button></div>`).join('');
+    }
+
+    async function sendQuickAction(actionId) {
+      const { items } = await getQuickActions();
+      const match = items.find(item => item.id === actionId);
+      if (match) await sendPromptText(match.prompt, { fromComposer: false });
+    }
+
+    async function openQuickActionsDialog() {
+      const dialog = document.getElementById('quick-actions-dialog');
+      if (!dialog) return;
+      const { items } = await getQuickActions();
+      renderQuickActionsDialogList(items);
+      const err = document.getElementById('quick-actions-error');
+      if (err) { err.hidden = true; err.textContent = ''; }
+      if (!dialog.open) dialog.showModal();
+    }
+
+    async function addQuickActionFromDialog(event) {
+      event.preventDefault();
+      const labelEl = document.getElementById('quick-action-label');
+      const promptEl = document.getElementById('quick-action-prompt');
+      const err = document.getElementById('quick-actions-error');
+      const presentation = await import('/console-presentation.js');
+      const clean = presentation.normalizeQuickAction({ id: `custom-${crypto.randomUUID().slice(0, 8)}`, label: labelEl?.value, prompt: promptEl?.value, builtin: false });
+      if (!clean) {
+        if (err) { err.textContent = 'Enter a label and a plain prompt (up to 4000 characters, never starting with /).'; err.hidden = false; }
+        return;
+      }
+      if (err) { err.hidden = true; err.textContent = ''; }
+      const { items } = await getQuickActions();
+      if (items.length >= presentation.MAX_QUICK_ACTIONS) {
+        if (err) { err.textContent = `Up to ${presentation.MAX_QUICK_ACTIONS} quick prompts. Remove one first.`; err.hidden = false; }
+        return;
+      }
+      await persistQuickActions([...items, clean]);
+      if (labelEl) labelEl.value = '';
+      if (promptEl) promptEl.value = '';
+    }
+
+    async function removeQuickAction(actionId) {
+      const { items } = await getQuickActions();
+      const next = items.filter(item => item.id !== actionId);
+      if (!next.length) return;
+      await persistQuickActions(next);
+    }
+
+    async function resetQuickActions() {
+      const presentation = await import('/console-presentation.js');
+      await persistQuickActions(presentation.DEFAULT_QUICK_ACTIONS);
     }
 
     document.getElementById('chat-prompt-text').addEventListener('keydown', event => {
@@ -1268,8 +1372,10 @@ function cycleTheme() {
       document.getElementById('reset-capability').hidden = imported || Boolean(session?.can_reset);
 
       document.getElementById('chat-prompt-form').hidden = imported;
+      document.getElementById('chat-quick-actions').hidden = imported;
       document.getElementById('chat-automation').hidden = imported;
       document.getElementById('chat-toggle-stream').hidden = imported;
+      if (!silent) void renderChatQuickActions();
       const banner = document.getElementById('imported-session-banner');
       if (banner) {
         banner.hidden = !imported;
@@ -1950,6 +2056,9 @@ function cycleTheme() {
         unpair: unpairSession, 'activate-license': activateLicenseKey, 'remove-license': removeLicenseKey,
         disarm: disarmResume, 'delete-rule': deleteRule, 'execute-relay': executeRelay,
         'dismiss-relay': dismissRelay, 'delete-pricing': deleteCustomPricing,
+        'quick-action': sendQuickAction, 'manage-quick-actions': openQuickActionsDialog,
+        'remove-quick-action': removeQuickAction, 'reset-quick-actions': resetQuickActions,
+        'close-quick-actions': () => document.getElementById('quick-actions-dialog')?.close(),
  };
       if (action === 'toggle-pair-token') { const input = document.getElementById('auth-token-input'); const visible = input.type === 'password'; input.type = visible ? 'text' : 'password'; target.setAttribute('aria-pressed', String(visible)); target.textContent = visible ? 'Hide token' : 'Show token'; return; }
       if (action === 'replace-license') { document.getElementById('license-entry').hidden = false; target.hidden = true; return; }
@@ -1980,6 +2089,7 @@ function cycleTheme() {
       else if (submit === 'pair') { event.preventDefault(); pairTokenDirectly(); }
       else if (submit === 'launch-agent') { event.preventDefault(); launchNewAgent(event); }
       else if (submit === 'send-prompt') { event.preventDefault(); sendPrompt(event); }
+      else if (submit === 'add-quick-action') { void addQuickActionFromDialog(event); }
     });
 
     normalizeHash();

@@ -370,3 +370,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 - Retention configuration/scheduling and deletion/backups contract.
 
 Changes and verification are recorded per session under [docs/sessions](sessions/README.md), rather than appended to this specification.
+
+## 11. Section C UI additions
+
+- **Quick prompts UI (Section C):** Local console Workspace and Remote companion render a single-row quick-prompts strip directly above the composer for prompt-capable sessions (`!imported` locally; `!readOnly && active.can_prompt` on Remote). Actions are canned natural-language prompts persisted by the daemon (`GET`/`PUT /api/v1/quick-actions` locally; Remote `quick_actions` get/set; ADR 0043) with the wire shape `{ id, label, prompt }` only, and a browser local-storage copy (`QUICK_ACTIONS_STORAGE_KEY`) used as an offline fallback, strip any command/argv properties (`argv`, `command`, `shell`, `args`), reject empty values, slash-prefixed strings, disallowed control characters, and prompts over 4000 characters, and send through the normal prompt endpoint (`POST /api/v1/sessions/{id}/prompt` locally; `{ type: 'prompt', session_id, text }` over Remote E2EE) without altering unsent composer drafts. Customizing or resetting quick prompts stays in an inline `<dialog>` sheet. Short keyboard viewports (`max-height: 450px`) hide the strip to keep `Send` inside the visual viewport.
