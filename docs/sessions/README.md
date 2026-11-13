@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - Workspace attachment upload API and Remote RPC (ADR 0041)](2026-11-13-remote-attachments.md)
 - [2026-11-13 - Read-only session artifacts API and Remote RPC (ADR 0039)](2026-11-13-remote-session-artifacts.md)
 - [2026-11-13 - Read-only per-session changes and diff over Remote (ADR 0037)](2026-11-13-remote-session-changes.md)
 - [2026-11-13 - Read-only workspace file list and read over Remote (ADR 0050)](2026-11-13-remote-workspace-files.md)
