@@ -18,7 +18,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## B. Research gaps (docs/research/2026-11-13-dialpad-cao-comparison.md)
 - [x] Batch: G5 phone interrupt, G6 agy native resume, G7 agy limits via `/usage`, G11 env scrub, G12 Unix process-group stop, G13 Codex/Gemini native-install discovery
 - [x] G8 Claude usage-limit and API error parsing
-- [ ] G3 terminal screen model, then G14 swallowed-Enter recovery
+- [x] G3 terminal screen model, then G14 swallowed-Enter recovery
 - [ ] Protocol-mode approvals for Codex (`codex app-server`), Antigravity (`agy acp`) and Gemini CLI (ACP): Gnomcode-launched sessions driven through the agent's structured protocol so phone and console approvals work for every provider (ADR; verify each protocol live first; never auto-approve)
 
 ## C. Phone and Remote features (one ADR each, all providers where the agent exposes the data)
