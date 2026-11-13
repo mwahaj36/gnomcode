@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-13 - PTY VT100 screen model and Enter recovery](2026-11-13-pty-screen-model.md)
 - [2026-11-13 - Claude usage-limit and API error parsing](2026-11-13-claude-usage-limit-errors.md)
 - [2026-11-13 - Remote quick-actions storage](2026-11-13-remote-quick-actions.md)
 - [2026-11-13 - Workspace attachment upload API and Remote RPC (ADR 0041)](2026-11-13-remote-attachments.md)

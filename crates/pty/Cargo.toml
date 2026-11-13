@@ -21,6 +21,7 @@ tower = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
 getrandom = { workspace = true }
+vt100 = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 conpty-oxide = { workspace = true }

@@ -249,25 +249,36 @@ pub fn is_pid_alive(pid: u32) -> bool {
     gnomcode_platform::process_is_alive(pid)
 }
 
-/// Bounded in-memory terminal output buffer.
-#[derive(Debug, Clone)]
+/// Bounded in-memory terminal output buffer plus rendered VT100 screen.
 pub struct Scrollback {
     capacity: usize,
     bytes: VecDeque<u8>,
+    parser: vt100::Parser,
+}
+
+impl std::fmt::Debug for Scrollback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Scrollback")
+            .field("capacity", &self.capacity)
+            .field("len", &self.bytes.len())
+            .finish()
+    }
 }
 
 impl Scrollback {
-    /// Creates a scrollback buffer with a given byte limit.
+    /// Creates a scrollback buffer with a given byte limit and default 24x160 screen.
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
             bytes: VecDeque::new(),
+            parser: vt100::Parser::new(24, 160, 0),
         }
     }
 
-    /// Appends output to the buffer, dropping older bytes when full.
+    /// Appends output to the buffer and advances the rendered VT100 screen.
     pub fn append(&mut self, data: &[u8]) {
+        self.parser.process(data);
         let keep = data.len().min(self.capacity);
         let remove = self
             .bytes
@@ -276,6 +287,11 @@ impl Scrollback {
             .saturating_sub(self.capacity);
         self.bytes.drain(..remove);
         self.bytes.extend(&data[data.len() - keep..]);
+    }
+
+    /// Resizes the tracked VT100 screen.
+    pub fn resize(&mut self, rows: u16, cols: u16) {
+        self.parser.set_size(rows, cols);
     }
 
     /// Returns a copy of the buffered bytes in sequence.
@@ -544,6 +560,7 @@ pub async fn run_pty_host_resuming(
         .route("/health", get(host_health_handler))
         .route("/stream", get(host_stream_handler))
         .route("/input", post(host_input_handler))
+        .route("/retry-enter", post(host_retry_enter_handler))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .route("/stop", post(host_stop_handler))
         .with_state(state);
@@ -614,53 +631,17 @@ const SCROLLBACK_BYTES: usize = 256 * 1024;
 /// Recent characters of rendered text that readiness matching may look at.
 const SCREEN_TAIL_CHARS: usize = 8192;
 
-/// Lower-cased, whitespace-collapsed text of what the terminal shows now.
-///
-/// shortcut: not a terminal emulator; cursor-forward becomes a space and any other cursor
-/// move a newline, and text before the last screen clear is dropped (`cut`). Upgrade to a
-/// real screen model if a TUI redraws in place without clearing.
-fn screen_text(bytes: &[u8], cut: bool) -> String {
-    let raw = String::from_utf8_lossy(bytes);
-    let start = if cut {
-        ["\x1b[2J", "\x1b[3J", "\x1b[?1049h", "\x1bc"]
-            .iter()
-            .filter_map(|mark| raw.rfind(mark).map(|at| at + mark.len()))
-            .max()
-            .unwrap_or(0)
-    } else {
-        0
-    };
-    let mut characters = raw[start..].chars();
-    let mut text = String::new();
-    while let Some(character) = characters.next() {
-        if character != '\x1b' {
-            text.push(character);
-            continue;
-        }
-        match characters.next() {
-            Some('[') => {
-                for control in characters.by_ref() {
-                    if ('@'..='~').contains(&control) {
-                        match control {
-                            'C' => text.push(' '),
-                            'A' | 'B' | 'E' | 'F' | 'H' | 'd' | 'f' => text.push('\n'),
-                            _ => {}
-                        }
-                        break;
-                    }
-                }
-            }
-            Some(']') => {
-                while let Some(control) = characters.next() {
-                    if control == '\x07' || (control == '\x1b' && characters.next().is_some()) {
-                        break;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let text = text
+/// Renders terminal bytes through a VT100 screen model and returns each row.
+fn render_screen_rows(bytes: &[u8]) -> Vec<String> {
+    let mut parser = vt100::Parser::new(24, 160, 0);
+    parser.process(bytes);
+    parser.screen().rows(0, 160).collect()
+}
+
+/// Lower-cased, whitespace-collapsed text of what the rendered VT100 screen shows now.
+fn screen_text(bytes: &[u8], _cut: bool) -> String {
+    let text = render_screen_rows(bytes)
+        .join(" ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -809,8 +790,108 @@ fn codex_prompt_ready(bytes: &[u8]) -> bool {
     if let Some(idle) = idle {
         return working.is_none_or(|working| idle > working);
     }
-    let screen = screen_text(bytes, true);
-    screen.contains("? for shortcuts") && !screen.ends_with("loading")
+    let rows = render_screen_rows(bytes);
+    let tail = rows
+        .into_iter()
+        .filter(|row| !row.trim().is_empty())
+        .rev()
+        .take(8)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    tail.contains("? for shortcuts") && !tail.ends_with("loading")
+}
+
+/// True only when the rendered VT100 screen proves the composer still holds `prompt`
+/// and no startup/confirmation dialog is blocking input.
+#[must_use]
+pub fn composer_has_unsubmitted_prompt(agent: &str, bytes: &[u8], prompt: &str) -> bool {
+    if startup_needs_setup(agent, bytes) {
+        return false;
+    }
+    let normalized_prompt = prompt
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    if normalized_prompt.chars().count() < 3 {
+        return false;
+    }
+    let needle: String = normalized_prompt.chars().take(48).collect();
+    let rows = render_screen_rows(bytes);
+    let bottom = rows
+        .into_iter()
+        .filter(|row| !row.trim().is_empty())
+        .rev()
+        .take(10)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    let marker_pos = ['>', '❯', '›']
+        .iter()
+        .filter_map(|mark| bottom.rfind(*mark))
+        .max();
+    let Some(pos) = marker_pos else {
+        return false;
+    };
+    bottom[pos..].contains(&needle)
+}
+
+#[derive(Debug, Deserialize)]
+struct RetryEnterRequest {
+    prompt: String,
+}
+
+async fn host_retry_enter_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+    Json(payload): Json<RetryEnterRequest>,
+) -> StatusCode {
+    if !valid_loopback_headers(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
+    let authenticated = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.strip_prefix("Bearer ") == Some(state.token.as_str()));
+    if !authenticated {
+        return StatusCode::UNAUTHORIZED;
+    }
+    let confirmed = state.scrollback.lock().is_ok_and(|output| {
+        let bytes = output.bytes();
+        composer_has_unsubmitted_prompt(&state.agent, &bytes, &payload.prompt)
+    });
+    if !confirmed {
+        return StatusCode::CONFLICT;
+    }
+    let (written, acknowledged) = tokio::sync::oneshot::channel();
+    if state
+        .input_tx
+        .send(PtyInput {
+            bytes: b"\r".to_vec(),
+            written: Some(written),
+        })
+        .is_err()
+    {
+        return StatusCode::GONE;
+    }
+    match tokio::time::timeout(Duration::from_secs(2), acknowledged).await {
+        Ok(Ok(true)) => StatusCode::OK,
+        Ok(_) => StatusCode::GONE,
+        Err(_) => StatusCode::GATEWAY_TIMEOUT,
+    }
 }
 
 async fn host_stop_handler(
@@ -887,7 +968,12 @@ async fn host_stream_handler(
                         Some(Ok(Message::Text(t))) => {
                             if let Ok(value) = serde_json::from_str::<serde_json::Value>(&t) {
                                 if let Some(size) = value.get("resize") {
-                                    if let Some((cols,rows)) = terminal_dimensions(size) {resize(cols,rows);}
+                                    if let Some((cols, rows)) = terminal_dimensions(size) {
+                                        if let Ok(mut scrollback) = state.scrollback.lock() {
+                                            scrollback.resize(rows, cols);
+                                        }
+                                        resize(cols, rows);
+                                    }
                                     continue;
                                 }
                             }
@@ -1041,6 +1127,32 @@ pub async fn send_prompt(record: &SessionRecord, text: &str) -> Result<(), Error
         send_input(record, b"\x1b[F").await?;
     }
     send_input(record, b"\r").await
+}
+
+/// Sends a bare Enter key only if the PTY's rendered screen proves `prompt` is still
+/// sitting unsubmitted in the composer and no dialog is open (`Ok(false)` otherwise).
+///
+/// # Errors
+/// Returns [`Error`] if the host cannot be reached or rejects authentication.
+pub async fn retry_enter(record: &SessionRecord, prompt: &str) -> Result<bool, Error> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|e| Error::Process(e.to_string()))?;
+    let url = format!("http://127.0.0.1:{}/retry-enter", record.port);
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", record.token))
+        .json(&serde_json::json!({ "prompt": prompt }))
+        .send()
+        .await
+        .map_err(|e| Error::Process(e.to_string()))?;
+    match response.status() {
+        StatusCode::OK => Ok(true),
+        StatusCode::CONFLICT => Ok(false),
+        other => Err(Error::Process(format!("retry-enter status {other}"))),
+    }
 }
 
 /// Changes the model through the official CLI without starting a new session.
@@ -1728,5 +1840,101 @@ mod tests {
 
         // Verify session record is cleaned up
         assert!(load_session_record(&session_id).is_err());
+    }
+
+    #[test]
+    fn vt100_screen_overwrites_stale_footer_in_place_without_clear() {
+        let mut frame = b"\x1b[1;1H> \r\n\x1b[2;1H? for shortcuts".to_vec();
+        assert!(codex_prompt_ready(&frame));
+        // Overwrite row 2 in place without \x1b[2J
+        frame.extend_from_slice(b"\x1b[2;1H\x1b[2Kloading");
+        assert!(!codex_prompt_ready(&frame));
+    }
+
+    #[test]
+    fn composer_has_unsubmitted_prompt_requires_prompt_in_composer_without_dialog() {
+        let mut ready_with_prompt = CLAUDE_READY.to_vec();
+        ready_with_prompt.extend_from_slice(b" fix the build");
+        assert!(composer_has_unsubmitted_prompt(
+            "claude-code",
+            &ready_with_prompt,
+            "fix the build"
+        ));
+        assert!(!composer_has_unsubmitted_prompt(
+            "claude-code",
+            CLAUDE_READY,
+            "fix the build"
+        ));
+        let mut dialog_with_prompt = CLAUDE_TRUST.to_vec();
+        dialog_with_prompt.extend_from_slice(b"\r\n> fix the build");
+        assert!(!composer_has_unsubmitted_prompt(
+            "claude-code",
+            &dialog_with_prompt,
+            "fix the build"
+        ));
+    }
+
+    #[tokio::test]
+    async fn retry_enter_handler_rejects_unless_composer_holds_prompt() {
+        let (input_tx, input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let mut scrollback = Scrollback::new(SCROLLBACK_BYTES);
+        scrollback.append(CLAUDE_READY);
+        let state = Arc::new(HostState {
+            agent: "claude-code".into(),
+            token: "retry-test".into(),
+            session_id: "retry-test".into(),
+            child_pid: 0,
+            scrollback: Arc::new(Mutex::new(scrollback)),
+            output_tx,
+            input_tx,
+            stopping: Arc::new(AtomicBool::new(false)),
+            resize: Arc::new(|_, _| {}),
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+        headers.insert("authorization", "Bearer retry-test".parse().expect("token"));
+
+        assert_eq!(
+            host_retry_enter_handler(
+                headers.clone(),
+                State(Arc::clone(&state)),
+                Json(RetryEnterRequest {
+                    prompt: "fix the build".into()
+                })
+            )
+            .await,
+            StatusCode::CONFLICT
+        );
+        assert!(input_rx.try_recv().is_err());
+
+        state
+            .scrollback
+            .lock()
+            .expect("lock")
+            .append(b" fix the build");
+        let call = tokio::spawn({
+            let state = Arc::clone(&state);
+            let headers = headers.clone();
+            async move {
+                host_retry_enter_handler(
+                    headers,
+                    State(state),
+                    Json(RetryEnterRequest {
+                        prompt: "fix the build".into(),
+                    }),
+                )
+                .await
+            }
+        });
+        let sent = tokio::task::spawn_blocking(move || input_rx.recv())
+            .await
+            .expect("join")
+            .expect("recv");
+        assert_eq!(sent.bytes, b"\r");
+        if let Some(ack) = sent.written {
+            let _ = ack.send(true);
+        }
+        assert_eq!(call.await.expect("handler"), StatusCode::OK);
     }
 }
