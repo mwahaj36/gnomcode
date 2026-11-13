@@ -66,8 +66,13 @@ declare global {
     __gnomcodeLocalActions?: {
       setView?: (view: string) => void;
       openSession?: (sessionId: string) => void;
-      startOnboarding?: () => void;
+      workspaceAction?: (detail: { type: string; sessionId?: string; folder?: string; focus?: boolean }) => void;
       workspaceReady?: () => void;
+    };
+    /** Transitional bridge for console-app.js until the account view is React too. */
+    __gnomcodeShell?: {
+      confirmAction: (message: string, label?: string) => Promise<boolean>;
+      showNotice: (message: string) => void;
     };
     Terminal?: LocalTerminalConstructor;
     FitAddon?: LocalFitAddonNamespace;

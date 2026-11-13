@@ -237,3 +237,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 - Playwright browser tests for the local console](2026-11-13-console-playwright-e2e.md)
 - [2026-11-13 - Remove the dead legacy console code](2026-11-13-console-shell-dead-code.md)
 - [2026-11-13 - Tool approvals card in React](2026-11-13-console-approvals-react.md)
+- [2026-11-13 - Notice, tour and confirmation dialogs in React](2026-11-13-console-dialogs-react.md)

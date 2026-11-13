@@ -6,6 +6,7 @@ import {
   type ProviderOverview,
 } from '../lib/console-presentation.js';
 import { fetchLocalJson, fetchLocalMutation } from './local-api';
+import { startOnboarding } from './shell-bus';
 
 interface RemoteDeviceRow {
   id: string;
@@ -1377,7 +1378,7 @@ export function SettingsView() {
           <button
             type="button"
             className="btn-control"
-            onClick={() => window.__gnomcodeLocalActions?.startOnboarding?.()}
+            onClick={startOnboarding}
           >
             Getting started
           </button>

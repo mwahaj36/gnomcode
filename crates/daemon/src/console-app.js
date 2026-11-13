@@ -1,6 +1,6 @@
 // Console shell. Home, Workspace, Usage and Settings are React views in /console-react.js;
-// this file owns view routing, connection status, the first-run tour, account sign-in and
-// pairing and the delegated clicks for presenter markup.
+// this file owns view routing, connection status, account sign-in and pairing and the
+// delegated clicks for presenter markup.
     const token = new URLSearchParams(window.location.search).get('token') || '';
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -18,91 +18,8 @@
       return response.json();
     }
 
-    function showNotice(message) {
-      document.getElementById('app-notice-message').textContent = String(message);
-      document.getElementById('app-notice').hidden = false;
-    }
-    function confirmAction(message, actionLabel = 'Continue') {
-      const dialog = document.getElementById('confirm-dialog');
-      if (dialog.open) return Promise.resolve(false);
-      document.getElementById('confirm-heading').textContent = actionLabel;
-      document.getElementById('confirm-message').textContent = message;
-      document.getElementById('confirm-accept').textContent = actionLabel;
-      dialog.returnValue = 'cancel';
-      return new Promise(resolve => {
-        dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), {once:true});
-        dialog.showModal();
-      });
-    }
-
-// First-run guide
-    let onboardingStep = 0;
-    let onboardingReturnFocus = null;
-    function renderOnboarding() {
-      const pages = [...document.querySelectorAll('[data-onboarding-step]')];
-      pages.forEach((page, index) => { page.hidden = index !== onboardingStep; });
-      document.getElementById('onboarding-progress').textContent = `Step ${onboardingStep + 1} of ${pages.length}`;
-      document.getElementById('onboarding-back').disabled = onboardingStep === 0;
-      document.getElementById('onboarding-next').textContent = onboardingStep === pages.length - 1 ? 'Open session launcher' : 'Continue';
-      pages[onboardingStep].querySelector?.('h2')?.focus();
-    }
-    function startOnboarding() {
-      const dialog = document.getElementById('onboarding-dialog');
-      const tip = document.getElementById('tour-tip');
-      if (tip) tip.hidden = true;
-      if (dialog.open) return;
-      onboardingReturnFocus = document.activeElement;
-      onboardingStep = 0;
-      dialog.showModal();
-      renderOnboarding();
-    }
-    function dismissTourTip() {
-      storeFlag('gnomcode-onboarding-v1', 'dismissed');
-      const tip = document.getElementById('tour-tip');
-      if (tip) tip.hidden = true;
-    }
-    function finishOnboarding(launch) {
-      storeFlag('gnomcode-onboarding-v1', 'dismissed');
-      const tip = document.getElementById('tour-tip');
-      if (tip) tip.hidden = true;
-      document.getElementById('onboarding-dialog').close();
-      if (launch) {
-        setView('sessions');
-        workspaceAction({ type: 'new-session', focus: true });
-      } else onboardingReturnFocus?.focus();
-    }
-    function moveOnboarding(direction) {
-      const count = document.querySelectorAll('[data-onboarding-step]').length;
-      if (onboardingStep + direction >= count) { finishOnboarding(true); return; }
-      onboardingStep = Math.max(0, onboardingStep + direction);
-      renderOnboarding();
-    }
-    document.getElementById('onboarding-dialog').addEventListener('cancel', event => {
-      event.preventDefault();
-      finishOnboarding(false);
-    });
-    function offerOnboarding(sessionCount) {
-      if (storedFlag('gnomcode-onboarding-v1')) return;
-      if (sessionCount === 0) {
-        startOnboarding();
-      } else if (typeof sessionCount === 'number' && sessionCount > 0) {
-        const tip = document.getElementById('tour-tip');
-        if (tip) tip.hidden = false;
-      }
-    }
-    async function checkOnboardingOffer() {
-      if (storedFlag('gnomcode-onboarding-v1')) return;
-      try {
-        const res = await apiJson('/api/v1/sessions?page=1&limit=1');
-        const count = typeof res?.total_count === 'number'
-          ? res.total_count
-          : Array.isArray(res?.sessions)
-            ? res.sessions.length
-            : null;
-        if (typeof count === 'number') offerOnboarding(count);
-      } catch {}
-    }
-// End first-run guide
+    const showNotice = message => window.__gnomcodeShell.showNotice(message);
+    const confirmAction = (message, label) => window.__gnomcodeShell.confirmAction(message, label);
 
 // Views and navigation
     let activeView = 'overview';
@@ -395,12 +312,6 @@
     });
 
     const actions = {
-      'onboarding-start': startOnboarding,
-      'onboarding-skip': () => finishOnboarding(false),
-      'onboarding-back': () => moveOnboarding(-1),
-      'onboarding-next': () => moveOnboarding(1),
-      'dismiss-tour-tip': dismissTourTip,
-      'dismiss-notice': () => { document.getElementById('app-notice').hidden = true; },
       'toggle-navigation': toggleNavigation,
       'toggle-chat-list': toggleChatList,
       'home-new-session': () => { navigateView('sessions'); workspaceAction({ type: 'new-session' }); },
@@ -442,7 +353,7 @@
         navigateView('sessions');
         workspaceAction({ type: 'open-session', sessionId: id });
       },
-      startOnboarding: () => { startOnboarding(); },
+      workspaceAction,
       workspaceReady: () => { workspaceReady = true; queuedWorkspaceActions.splice(0).forEach(detail => fire('gnomcode:workspace-action', detail)); },
     };
 
@@ -455,7 +366,6 @@
     if (VIEWS.includes(initialView)) setView(initialView, Boolean(hashView));
     else setView('overview', false);
     openExplorerWorkspace();
-    void checkOnboardingOffer();
     void checkAuthSession();
     pollLocalData();
     setInterval(pollLocalData, 2000);

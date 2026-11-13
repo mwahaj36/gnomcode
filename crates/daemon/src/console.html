@@ -51,20 +51,7 @@
   </main>
 
   </div></div>
-  <div id="app-notice" class="app-notice" role="status" hidden><p id="app-notice-message"></p><button type="button" class="btn-control" data-action="dismiss-notice">Dismiss</button></div>
-  <div id="tour-tip" class="app-notice" role="region" aria-label="Workspace tour tip" hidden><p>See Home, Workspace, Usage, and Settings in four quick steps.</p><div class="dialog-actions"><button type="button" class="btn-primary" data-action="onboarding-start">Open guide</button><button type="button" class="btn-control" data-action="dismiss-tour-tip">Dismiss</button></div></div>
-  <dialog id="onboarding-dialog" aria-labelledby="onboarding-title" aria-describedby="onboarding-progress">
-    <div class="onboarding-header"><strong id="onboarding-title">Gnomcode tour</strong><button type="button" class="btn-control" data-action="onboarding-skip">Skip guide</button></div>
-    <p id="onboarding-progress" role="status" aria-live="polite"></p>
-    <div class="onboarding-body">
-      <section data-onboarding-step><h2 tabindex="-1">Four places, one local console</h2><p>Switch views from the left rail anytime.</p><dl><dt>Home</dt><dd>Check live limits, active sessions, and today's totals.</dd><dt>Workspace</dt><dd>Browse conversations in the list and chat beside terminals.</dd><dt>Usage</dt><dd>Inspect activity heatmaps, project spend, and CSV exports.</dd><dt>Settings</dt><dd>Configure provider limits, Remote pairing, alerts, and preferences.</dd></dl><p class="onboarding-note">Local monitoring needs no account or telemetry.</p></section>
-      <section data-onboarding-step hidden><h2 tabindex="-1">Start work in Workspace</h2><p>Workspace opens list-first with your recent conversation.</p><dl><dt>Open the launcher</dt><dd>Select New in Conversations to pick an agent and folder.</dd><dt>Keep history handy</dt><dd>Search or filter sessions, or collapse the sidebar anytime.</dd><dt>Stay in control</dt><dd>Open the inline terminal whenever a CLI asks for trust.</dd></dl><p class="onboarding-note">Gnomcode never skips native agent permission prompts.</p></section>
-      <section data-onboarding-step hidden><h2 tabindex="-1">Track live provider limits</h2><p>Provider cards on Home and Usage show remaining quota.</p><dl><dt>Enable Claude and Antigravity limits</dt><dd>Open Settings, choose Providers, and turn on live polling.</dd><dt>Check pace and resets</dt><dd>Each card lists reset times and exact or estimated tags.</dd><dt>Watch spend and exports</dt><dd>Open Usage for daily heatmaps and per-project totals.</dd></dl><p class="onboarding-note">Estimated spend is a local estimate, not your provider bill.</p></section>
-      <section data-onboarding-step hidden><h2 tabindex="-1">Desktop tray and Remote access</h2><p>Stay informed away from the main window.</p><dl><dt>Right-click the tray icon</dt><dd>View tightest limits, waiting sessions, and quick restart actions.</dd><dt>Pair your phone in Settings</dt><dd>Open Devices and Remote to link encrypted mobile access.</dd><dt>Replay this guide anytime</dt><dd>Select Getting started under Settings whenever you need it.</dd></dl><p class="onboarding-note">Nothing leaves this machine until you connect an account.</p></section>
-    </div>
-    <div class="onboarding-footer"><button id="onboarding-back" type="button" class="btn-control" data-action="onboarding-back">Back</button><button id="onboarding-next" type="button" class="btn-primary" data-action="onboarding-next">Continue</button></div>
-  </dialog>
-  <dialog id="confirm-dialog" aria-labelledby="confirm-heading" aria-describedby="confirm-message"><form method="dialog"><h2 id="confirm-heading">Confirm action</h2><p id="confirm-message"></p><div class="dialog-actions"><button class="btn-control" value="cancel" autofocus>Cancel</button><button class="btn-primary" id="confirm-accept" value="confirm">Continue</button></div></form></dialog>
+  <div id="shell-dialogs-root"></div>
   <script src="/vendor/xterm.js"></script>
   <script src="/vendor/xterm-addon-fit.js"></script>
   <script src="/console-app.js"></script>
