@@ -1,26 +1,46 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HomeView } from './HomeView';
+import { WorkspaceView } from './WorkspaceView';
 
-function mountLocalHome(): void {
+function mountLocalConsoleViews(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const container = document.getElementById('local-home-root');
-  if (!container) return;
-  window.__gnomcodeReactViews = {
-    ...(window.__gnomcodeReactViews || {}),
-    overview: true,
-  };
-  createRoot(container).render(
-    <StrictMode>
-      <HomeView />
-    </StrictMode>,
-  );
+
+  const homeContainer = document.getElementById('local-home-root');
+  if (homeContainer) {
+    window.__gnomcodeReactViews = {
+      ...(window.__gnomcodeReactViews || {}),
+      overview: true,
+    };
+    createRoot(homeContainer).render(
+      <StrictMode>
+        <HomeView />
+      </StrictMode>,
+    );
+  }
+
+  const workspaceContainer = document.getElementById('local-workspace-root');
+  if (workspaceContainer) {
+    window.__gnomcodeReactViews = {
+      ...(window.__gnomcodeReactViews || {}),
+      sessions: true,
+    };
+    const legacyWorkspace = document.getElementById('legacy-ide-layout');
+    if (legacyWorkspace) {
+      legacyWorkspace.hidden = true;
+    }
+    createRoot(workspaceContainer).render(
+      <StrictMode>
+        <WorkspaceView />
+      </StrictMode>,
+    );
+  }
 }
 
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mountLocalHome, { once: true });
+    document.addEventListener('DOMContentLoaded', mountLocalConsoleViews, { once: true });
   } else {
-    mountLocalHome();
+    mountLocalConsoleViews();
   }
 }

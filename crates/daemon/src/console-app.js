@@ -151,8 +151,16 @@ function cycleTheme() {
         button.setAttribute('aria-selected', String(selected));
         button.tabIndex = selected || (view === 'auth' && button.dataset.view === 'settings') ? 0 : -1;
       });
-      document.querySelectorAll('[data-local-view]').forEach(section => { section.hidden = !section.dataset.localView.split(',').includes(view); });
-      document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
+      document.querySelectorAll('[data-local-view]').forEach(section => {
+        if (section.id === 'legacy-ide-layout' && typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions) {
+          section.hidden = true;
+          return;
+        }
+        section.hidden = !section.dataset.localView.split(',').includes(view);
+      });
+      if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions)) {
+        document.getElementById('session-chat-panel').hidden = view !== 'sessions' || !activeChatSession;
+      }
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && CONSOLE_VIEWS.includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
       if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); void loadProjects(); }
@@ -163,6 +171,9 @@ function cycleTheme() {
         } else {
           void loadHeatmap(); void loadToday(true);
         }
+      }
+      if (view === 'sessions' && typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('gnomcode:view-change', { detail: { view } }));
       }
     }
 
@@ -854,6 +865,10 @@ function cycleTheme() {
       url.hash = 'sessions';
       history.replaceState(null, '', url.toString());
       setView('sessions', false);
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('gnomcode:workspace-action', { detail: { type: 'new-session', folder } }));
+        return;
+      }
       showLauncher();
       document.getElementById('launch-repo-input').value = folder;
     }
@@ -1859,6 +1874,17 @@ function cycleTheme() {
         if (project !== document.getElementById('project-filter').value || requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
 
         const jsonStr = JSON.stringify(res);
+        if (jsonStr === lastSessionsJson) {
+          if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions)) {
+            await renderIdeSessions();
+          }
+          return true;
+        }
+        const presentation = await import('/console-presentation.js');
+        presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
+        lastSessionsJson = jsonStr;
+        if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions) return true;
+        if (project !== document.getElementById('project-filter').value || requestedPage !== currentPage || agent !== document.getElementById('agent-filter').value || status !== document.getElementById('status-filter').value) return true;
         try { hostedSessions = (await apiJson('/api/v1/sessions/hosted', { headers })).sessions || []; } catch { hostedSessions = []; }
         const conversations = await apiJson(`/api/v1/conversations?page=${requestedPage}&limit=${pageLimit}&agent=${agent}&status=${status}&project=${encodeURIComponent(project)}&search=${encodeURIComponent(document.getElementById('ide-session-search').value)}&source=${encodeURIComponent(document.getElementById('conversation-source').value)}&include_subagents=${document.getElementById('include-subagents').checked}`, {headers});
         if(request !== conversationRequest)return true;
@@ -1875,10 +1901,6 @@ function cycleTheme() {
         document.getElementById('prev-btn').disabled = currentPage <= 1;
         document.getElementById('next-btn').disabled = currentPage >= totalPages;
         void showChatLimits();
-        if (jsonStr === lastSessionsJson) { await renderIdeSessions(); return true; }
-
-        const presentation = await import('/console-presentation.js');
-        presentation.updateSessions(document.getElementById('sessions-table'), res.sessions || [], { focus: true });
         await renderIdeSessions();
         lastSessionsJson = jsonStr;
         return true;
@@ -2410,13 +2432,19 @@ function cycleTheme() {
       }
     }
 
+    const reactWorkspaceActive = () => Boolean(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions);
+    const dispatchWorkspaceAction = detail => {
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('gnomcode:workspace-action', { detail }));
+      }
+    };
     const actions = { 'approval-decide': decideApproval, 'onboarding-start': startOnboarding, 'onboarding-skip': () => finishOnboarding(false), 'onboarding-back': () => moveOnboarding(-1), 'onboarding-next': () => moveOnboarding(1), 'dismiss-tour-tip': dismissTourTip, 'dismiss-connection': () => {document.getElementById('remote-connection-state').hidden = true;}, 'dismiss-notice': () => {document.getElementById('app-notice').hidden = true;}, 'toggle-navigation': toggleNavigation, 'toggle-chat-list': toggleChatList, theme: cycleTheme, reload: refreshCurrentView, resync: resyncLocal,
-      'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
+      'automation-chat': () => navigateView('sessions'), 'delete-chat': deleteChat, 'load-chat': id => { if (reactWorkspaceActive()) return; void loadChat(id); if (matchMedia('(max-width: 760px)').matches) applyChatList(true); },
       'toggle-artifacts': () => toggleArtifacts(), 'refresh-artifacts': () => { void loadArtifacts(); }, 'close-artifacts': () => toggleArtifacts(false),
       'pick-attachment': () => { document.getElementById('chat-attach-input')?.click(); },
       'earlier-chat': () => loadChat(activeChatSession, true),
       'workspace-terminal': openWorkspaceTerminal, 'hide-workspace-terminal': () => {document.getElementById('workspace-terminal-pane').hidden = true;}, 'toggle-stream': toggleStream,
-      'close-chat': () => showLauncher(false), 'new-session': () => showLauncher(), 'home-new-session': () => { navigateView('sessions'); showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); void loadChat(id); },
+      'close-chat': () => showLauncher(false), 'new-session': () => { if (reactWorkspaceActive()) { dispatchWorkspaceAction({ type: 'new-session' }); return; } showLauncher(); }, 'home-new-session': () => { navigateView('sessions'); if (reactWorkspaceActive()) { dispatchWorkspaceAction({ type: 'new-session' }); return; } showLauncher(); }, 'open-home-session': id => { navigateView('sessions'); if (reactWorkspaceActive()) { dispatchWorkspaceAction({ type: 'open-session', sessionId: id }); return; } void loadChat(id); },
       'schedule-message': scheduleDraft, 'cancel-schedule': cancelSchedule, 'save-routing': saveRouting, 'reconnect-reset': () => reconnectReset(true), 'cancel-reset': () => reconnectReset(false),
       'switch-model': switchChatModel, 'focus-chat': focusChat, 'resume-chat': resumeChat, 'interrupt-chat': interruptChat,
       'choose-workspace': chooseWorkspace,
@@ -2490,13 +2518,15 @@ function cycleTheme() {
       pollLocalData();
       void loadApprovals();
       loadRemoteStatus();
-      void refreshAutomation();
-      if (activeView === 'sessions' && !installedAgents.length) loadInstalledAgents();
-      const chatPanel = document.getElementById('session-chat-panel');
-      if (chatPanel && !chatPanel.hidden && activeChatSession) {
-        const terminal = document.getElementById('chat-terminal-view');
-        if (terminal && terminal.hidden) {
-          loadChat(activeChatSession, false, true);
+      if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions)) {
+        void refreshAutomation();
+        if (activeView === 'sessions' && !installedAgents.length) loadInstalledAgents();
+        const chatPanel = document.getElementById('session-chat-panel');
+        if (chatPanel && !chatPanel.hidden && activeChatSession) {
+          const terminal = document.getElementById('chat-terminal-view');
+          if (terminal && terminal.hidden) {
+            loadChat(activeChatSession, false, true);
+          }
         }
       }
     }, 2000);

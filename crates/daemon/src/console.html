@@ -46,7 +46,8 @@
 
     <section class="sp-section" data-local-view="usage" id="usage-projects"><header class="sp-section-head"><h2>Projects</h2></header><div id="project-rollups">Loading project usage...</div></section>
     <div id="sessions-ongoing" hidden></div>
-    <section class="ide-layout" data-local-view="sessions" aria-label="Agent workspace">
+    <div id="local-workspace-root" data-local-view="sessions"></div>
+    <section class="ide-layout" id="legacy-ide-layout" data-local-view="sessions" aria-label="Agent workspace">
       <aside class="ide-sidebar" id="ide-session-sidebar" aria-label="Session history">
         <div class="ide-sidebar-title"><h2>Conversations</h2><button type="button" class="btn-control" data-action="toggle-chat-list" aria-label="Collapse conversations" title="Collapse conversations"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2"/></svg></button></div>
         <button class="btn-control" type="button" data-action="new-session">New</button>
