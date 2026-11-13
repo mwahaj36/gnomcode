@@ -813,5 +813,55 @@ export function renderQuickActionsStrip(actions = DEFAULT_QUICK_ACTIONS, { disab
   const list = mergeQuickActions(actions);
   const disabledAttr = disabled ? ' disabled' : '';
   const buttons = list.map(action => `<button type="button" class="sp-quick-action" data-action="quick-action" data-arg="${escape(action.id)}" title="${escape(action.prompt)}"${disabledAttr}>${escape(action.label)}</button>`).join('');
-  return `<div class="sp-quick-actions" role="toolbar" aria-label="Quick prompts">${buttons}<button type="button" class="sp-quick-action sp-quick-action--manage" data-action="manage-quick-actions" aria-label="Manage quick prompts">Customize</button></div>`;
+  return `<div class="sp-quick-actions" role="toolbar" aria-label="Quick prompts">${buttons}<button type="button" class="sp-quick-action sp-quick-action--manage" data-action="manage-quick-actions" aria-label="Manage quick prompts">Customize</button></div>`;}
+
+const STATUS_LABELS = { '??': 'Untracked', A: 'Added', M: 'Modified', D: 'Deleted', R: 'Renamed', C: 'Copied', U: 'Conflict' };
+
+export function parseGitStatusLines(statusText = '') {
+  if (typeof statusText !== 'string' || !statusText) return [];
+  const rows = [];
+  for (const rawLine of statusText.split(/\r?\n/)) {
+    if (!rawLine || rawLine.length < 3) continue;
+    const xy = rawLine.slice(0, 2);
+    const trimmed = xy.trim() || 'M';
+    const key = xy === '??' ? '??' : trimmed[0];
+    const path = rawLine.slice(3).trim();
+    if (!path) continue;
+    rows.push({ code: key, label: STATUS_LABELS[key] || 'Changed', path });
+  }
+  return rows;
+}
+
+function classifyDiffLine(line) {
+  if (line.startsWith('diff --git ') || line.startsWith('index ') || line.startsWith('+++ ') || line.startsWith('--- ')) return 'sp-diff-line sp-diff-line--meta';
+  if (line.startsWith('@@')) return 'sp-diff-line sp-diff-line--hunk';
+  if (line.startsWith('+')) return 'sp-diff-line sp-diff-line--add';
+  if (line.startsWith('-')) return 'sp-diff-line sp-diff-line--del';
+  return 'sp-diff-line';
+}
+
+export function renderChangesView(data) {
+  if (!data) return '<p class="sp-provider-empty">Select a conversation workspace to inspect uncommitted changes.</p>';
+  if (data.loading) return '<p class="sp-provider-empty" role="status">Loading workspace changes...</p>';
+  if (data.error) return `<p class="sp-field-note sp-tone-red" role="alert">${escape(data.error)}</p>`;
+  const files = parseGitStatusLines(data.status || '');
+  const diffText = typeof data.diff === 'string' ? data.diff : '';
+  const badges = [
+    '<span class="sp-chip sp-chip--neutral">Read-only</span>',
+    data.lossy ? '<span class="sp-chip sp-chip--low" title="Non-UTF-8 bytes were replaced with U+FFFD by Rust">Lossy UTF-8 decoding</span>' : '',
+    data.repo ? `<span class="sp-changes-repo" title="${escape(data.repo)}">${escape(shortPath(data.repo))}</span>` : '',
+  ].filter(Boolean).join('');
+  if (!files.length && !diffText.trim()) {
+    return `<div class="sp-changes-meta">${badges}</div><p class="sp-provider-empty">Working tree clean: no modified or untracked files.</p>`;
+  }
+  const fileMarkup = files.length
+    ? `<ul class="sp-changes-files" aria-label="Changed files">${files.map(file => `<li class="sp-changes-file"><span class="sp-chip sp-chip--neutral">${escape(file.label)}</span><code>${escape(file.path)}</code></li>`).join('')}</ul>`
+    : '';
+  const diffLines = diffText.trim()
+    ? diffText.split(/\r?\n/).map(line => `<span class="${classifyDiffLine(line)}">${escape(line) || ' '}</span>`).join('')
+    : '';
+  const diffMarkup = diffLines
+    ? `<pre class="sp-diff-code" tabindex="0" aria-label="Unified git diff">${diffLines}</pre>`
+    : '<p class="sp-provider-empty">No modified tracked diff hunks (untracked files listed above).</p>';
+  return `<div class="sp-changes-meta">${badges}</div>${fileMarkup}${diffMarkup}`;
 }
