@@ -181,11 +181,7 @@ pub(super) fn provider_overviews(
             Some(ProviderOverview {
                 headline_window: headline_window(&windows),
                 plan: windows.iter().find_map(|w| w.snapshot.plan.clone()),
-                state: windows
-                    .iter()
-                    .map(|w| w.state)
-                    .max_by_key(|state| state.severity())
-                    .unwrap_or(gnomcode_core::quota::QuotaState::Unknown),
+                state: provider_state(&windows),
                 updated_at: windows.iter().map(|w| w.snapshot.observed_at).max(),
                 cost: costs.remove(&slug),
                 source_issue: crate::vendor_limits::issue(&slug),
@@ -200,12 +196,56 @@ pub(super) fn provider_overviews(
         .collect()
 }
 
-/// Index of the window with the highest severity, ties broken by the lowest remaining
-/// percentage (windows without a remaining value rank last); the earliest window wins a full tie.
+fn is_multi_pool(windows: &[QuotaPoolView]) -> bool {
+    let mut distinct = std::collections::HashSet::new();
+    for w in windows {
+        distinct.insert(w.pool.as_deref().unwrap_or(&w.snapshot.limit_id));
+        if distinct.len() > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Provider card state: for multi-pool providers, `Exhausted` only when all pools are exhausted
+/// and `Low` when at least one pool is exhausted while another still has capacity; otherwise
+/// highest window severity.
+pub(super) fn provider_state(windows: &[QuotaPoolView]) -> gnomcode_core::quota::QuotaState {
+    use gnomcode_core::quota::QuotaState;
+    if windows.is_empty() {
+        return QuotaState::Unknown;
+    }
+    if is_multi_pool(windows) {
+        if windows.iter().all(|w| w.state == QuotaState::Exhausted) {
+            return QuotaState::Exhausted;
+        }
+        let some_exhausted = windows.iter().any(|w| w.state == QuotaState::Exhausted);
+        let some_available = windows
+            .iter()
+            .any(|w| matches!(w.state, QuotaState::Ok | QuotaState::Low));
+        if some_exhausted && some_available {
+            return QuotaState::Low;
+        }
+    }
+    windows
+        .iter()
+        .map(|w| w.state)
+        .max_by_key(|state| state.severity())
+        .unwrap_or(QuotaState::Unknown)
+}
+
+/// Index of the window with the highest severity, preferring non-exhausted windows on multi-pool
+/// providers when capacity remains; ties broken by the lowest remaining percentage.
 pub(super) fn headline_window(windows: &[QuotaPoolView]) -> Option<usize> {
+    use gnomcode_core::quota::QuotaState;
+    let skip_exhausted = is_multi_pool(windows)
+        && windows
+            .iter()
+            .any(|w| matches!(w.state, QuotaState::Ok | QuotaState::Low));
     windows
         .iter()
         .enumerate()
+        .filter(|(_, w)| !skip_exhausted || w.state != QuotaState::Exhausted)
         .min_by(|(_, a), (_, b)| {
             b.state.severity().cmp(&a.state.severity()).then_with(|| {
                 let left = |w: &QuotaPoolView| w.remaining_pct.unwrap_or(f64::INFINITY);
@@ -640,5 +680,54 @@ mod tests {
             .expect("request");
         let response = app.oneshot(request).await.expect("response");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn multi_pool_provider_is_low_when_capacity_remains_and_exhausted_only_when_all_out() {
+        use gnomcode_core::{QuotaSnapshot, QuotaWindow, TrustLevel};
+        let now = chrono::Utc::now();
+        let make_pool = |pool: &str, used_pct: f64| {
+            super::super::quota::quota_views_at(
+                vec![QuotaSnapshot {
+                    provider: "antigravity".into(),
+                    limit_id: format!("antigravity:{pool}"),
+                    window: QuotaWindow::FiveHour,
+                    used_pct,
+                    resets_at: Some(now + chrono::Duration::hours(2)),
+                    observed_at: now,
+                    basis: TrustLevel::Exact,
+                    plan: None,
+                }],
+                now,
+            )
+            .into_iter()
+            .next()
+            .expect("view")
+        };
+
+        let mixed = vec![
+            make_pool("Claude Models", 100.0),
+            make_pool("Gemini Models", 87.0),
+        ];
+        let mixed_cards =
+            super::provider_overviews(mixed, std::collections::HashMap::new(), false, true);
+        let ag_mixed = mixed_cards
+            .iter()
+            .find(|c| c.provider == "antigravity")
+            .expect("antigravity");
+        assert_eq!(ag_mixed.state, gnomcode_core::quota::QuotaState::Low);
+        assert_eq!(ag_mixed.headline_window, Some(1));
+
+        let all_out = vec![
+            make_pool("Claude Models", 100.0),
+            make_pool("Gemini Models", 100.0),
+        ];
+        let all_out_cards =
+            super::provider_overviews(all_out, std::collections::HashMap::new(), false, true);
+        let ag_out = all_out_cards
+            .iter()
+            .find(|c| c.provider == "antigravity")
+            .expect("antigravity");
+        assert_eq!(ag_out.state, gnomcode_core::quota::QuotaState::Exhausted);
     }
 }
