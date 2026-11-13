@@ -7,6 +7,7 @@ mod agy_resume_tests;
 mod agy_usage;
 pub mod api;
 pub mod approvals;
+mod attachments;
 mod automation;
 pub mod doctor;
 mod interrupt;
