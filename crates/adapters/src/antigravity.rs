@@ -25,6 +25,7 @@ pub struct AntigravityAdapter {
     active_model: Option<String>,
     parent_session_id: Option<String>,
     subagent_title: Option<String>,
+    usage_from_trajectory: bool,
 }
 
 impl AntigravityAdapter {
@@ -33,6 +34,45 @@ impl AntigravityAdapter {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Leaves token usage to the conversation's trajectory database ([`generation_usage`]).
+    ///
+    /// IDE 1.x transcripts carry no token fields, and the trajectory holds one record per model
+    /// call, so it is the single usage source for any conversation that has one.
+    #[must_use]
+    pub fn with_usage_from_trajectory(mut self, enabled: bool) -> Self {
+        self.usage_from_trajectory = enabled;
+        self
+    }
+}
+
+/// Where an Antigravity data directory (`~/.gemini/<dir>`) belongs.
+///
+/// `antigravity-cli` is the `agy` CLI, `antigravity-ide` the IDE 1.x (editor and Agent Manager),
+/// and `antigravity` the standalone Antigravity 2.0 app (it also holds copies of conversations the
+/// IDE migrated, so a conversation id found in more than one directory has one owner, see
+/// [`owner_surface`]).
+#[must_use]
+pub fn surface_of_path(path: &str) -> Surface {
+    let normalized = path.replace('\\', "/");
+    let mut parts = normalized.split('/');
+    if parts.clone().any(|part| part == "antigravity-cli") {
+        Surface::Cli
+    } else if parts.any(|part| part == "antigravity-ide") {
+        Surface::Ide
+    } else {
+        Surface::DesktopApp
+    }
+}
+
+/// The surface that owns a conversation seen in the given surfaces' data directories: CLI first,
+/// then IDE, then the 2.0 app.
+#[must_use]
+pub fn owner_surface(seen: impl IntoIterator<Item = Surface>) -> Option<Surface> {
+    let seen: Vec<Surface> = seen.into_iter().collect();
+    [Surface::Cli, Surface::Ide, Surface::DesktopApp]
+        .into_iter()
+        .find(|surface| seen.contains(surface))
 }
 
 impl SourceAdapter for AntigravityAdapter {
@@ -51,6 +91,8 @@ impl SourceAdapter for AntigravityAdapter {
         let session_id = Session::compose_id(AgentId::Antigravity, conv_id);
         let cwd = ctx.fallback_cwd.as_deref().unwrap_or("/unknown");
         let project = Project::from_origin(None, cwd, None);
+        // A workspace the application recorded wins over folders a tool call happened to touch.
+        let mut workspace_known = !project.is_unassigned();
         batch.projects.push(project.clone());
 
         if self.active_model.is_none() {
@@ -142,16 +184,7 @@ impl SourceAdapter for AntigravityAdapter {
             let sess = current_session.get_or_insert_with(|| Session {
                 id: session_id.clone(),
                 agent: AgentId::Antigravity,
-                surface: if ctx
-                    .source_path
-                    .replace('\\', "/")
-                    .split('/')
-                    .any(|part| part == "antigravity-cli")
-                {
-                    Surface::Cli
-                } else {
-                    Surface::Ide
-                },
+                surface: surface_of_path(&ctx.source_path),
                 project_id: project.id.clone(),
                 parent_session_id: self.parent_session_id.clone(),
                 model: self.active_model.clone(),
@@ -181,6 +214,7 @@ impl SourceAdapter for AntigravityAdapter {
                     }
                     if let Some(ws) = extract_workspace_from_text(content) {
                         let proj = Project::from_origin(None, &ws, None);
+                        workspace_known |= !proj.is_unassigned();
                         sess.project_id = proj.id.clone();
                         if !batch.projects.iter().any(|p| p.id == proj.id) {
                             batch.projects.push(proj);
@@ -244,7 +278,9 @@ impl SourceAdapter for AntigravityAdapter {
                             duration_ms: None,
                         });
 
-                        if let Some(args) = call.get("args").and_then(Value::as_object) {
+                        if !workspace_known
+                            && let Some(args) = call.get("args").and_then(Value::as_object)
+                        {
                             for k in ["Path", "path", "file_path"] {
                                 if let Some(p_str) = args.get(k).and_then(Value::as_str)
                                     && let Some(root) = find_repo_root_from_path(p_str)
@@ -262,7 +298,7 @@ impl SourceAdapter for AntigravityAdapter {
                 }
 
                 let dedup_key = format!("{conv_id}:{step_idx}");
-                if self.seen_dedup_keys.insert(dedup_key.clone()) {
+                if !self.usage_from_trajectory && self.seen_dedup_keys.insert(dedup_key.clone()) {
                     let input_tokens = obj.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
                     let cache_read = obj
                         .get("cache_read_tokens")
@@ -374,6 +410,183 @@ impl SourceAdapter for AntigravityAdapter {
     }
 }
 
+/// One model call read from a trajectory database's `gen_metadata` table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Generation {
+    /// Row index, stable for the life of the conversation.
+    pub idx: i64,
+    /// Uncached input tokens.
+    pub input_tokens: u64,
+    /// Output tokens.
+    pub output_tokens: u64,
+    /// Prompt-cache read tokens.
+    pub cache_read_tokens: u64,
+    /// Model name: the display label when recorded, else the internal id.
+    pub model: Option<String>,
+    /// Provider response id; steps of the same response carry it too.
+    pub response_id: Option<String>,
+}
+
+/// Protobuf wire value of one field; only the two kinds Antigravity's metadata needs.
+enum Wire<'a> {
+    Varint(u64),
+    Bytes(&'a [u8]),
+}
+
+/// Walks one protobuf message; a truncated or foreign encoding ends the walk early.
+fn wire_fields(mut buf: &[u8]) -> impl Iterator<Item = (u64, Wire<'_>)> {
+    fn varint(buf: &mut &[u8]) -> Option<u64> {
+        let mut value = 0u64;
+        for shift in (0..70).step_by(7) {
+            let (&byte, rest) = buf.split_first()?;
+            *buf = rest;
+            value |= u64::from(byte & 0x7f).checked_shl(shift)?;
+            if byte & 0x80 == 0 {
+                return Some(value);
+            }
+        }
+        None
+    }
+    std::iter::from_fn(move || {
+        let key = varint(&mut buf)?;
+        let wire = match key & 7 {
+            0 => Wire::Varint(varint(&mut buf)?),
+            2 => {
+                let len = usize::try_from(varint(&mut buf)?).ok()?;
+                let (head, rest) = buf.split_at_checked(len)?;
+                buf = rest;
+                Wire::Bytes(head)
+            }
+            1 => {
+                buf = buf.get(8..)?;
+                Wire::Varint(0)
+            }
+            5 => {
+                buf = buf.get(4..)?;
+                Wire::Varint(0)
+            }
+            _ => return None,
+        };
+        Some((key >> 3, wire))
+    })
+}
+
+fn wire_bytes(message: &[u8], field: u64) -> Option<&[u8]> {
+    wire_fields(message).find_map(|(f, wire)| match wire {
+        Wire::Bytes(bytes) if f == field => Some(bytes),
+        _ => None,
+    })
+}
+
+fn wire_varint(message: &[u8], field: u64) -> u64 {
+    wire_fields(message)
+        .find_map(|(f, wire)| match wire {
+            Wire::Varint(value) if f == field => Some(value),
+            _ => None,
+        })
+        .unwrap_or(0)
+}
+
+fn wire_text(message: &[u8], field: u64) -> Option<String> {
+    let text = std::str::from_utf8(wire_bytes(message, field)?)
+        .ok()?
+        .trim();
+    (!text.is_empty()).then(|| text.chars().take(96).collect())
+}
+
+/// Reads one `gen_metadata` blob: `1.4` holds the call's token counts (`2` input, `3` output,
+/// `5` cache read, `7` response id), `1.19` the model id and `1.21` its display label.
+///
+/// Returns `None` for blobs without token counts or with all counts zero.
+#[must_use]
+pub fn parse_generation(idx: i64, blob: &[u8]) -> Option<Generation> {
+    let call = wire_bytes(blob, 1)?;
+    let usage = wire_bytes(call, 4)?;
+    let (input_tokens, output_tokens, cache_read_tokens) = (
+        wire_varint(usage, 2),
+        wire_varint(usage, 3),
+        wire_varint(usage, 5),
+    );
+    if input_tokens == 0 && output_tokens == 0 && cache_read_tokens == 0 {
+        return None;
+    }
+    Some(Generation {
+        idx,
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        model: wire_text(call, 21).or_else(|| wire_text(call, 19)),
+        response_id: wire_text(usage, 7),
+    })
+}
+
+/// Reads one `steps.metadata` blob into `(response id, unix seconds)`: `1.1` is the step time and
+/// `9.7` the response id of the model call the step belongs to.
+#[must_use]
+pub fn parse_step_response_time(metadata: &[u8]) -> Option<(String, i64)> {
+    let seconds = i64::try_from(wire_varint(wire_bytes(metadata, 1)?, 1)).ok()?;
+    let response = wire_text(wire_bytes(metadata, 9)?, 7)?;
+    Some((response, seconds))
+}
+
+/// Dedup key of a model call's usage record; transcripts use `<id>:<step>` for the same data.
+#[must_use]
+pub fn generation_dedup_key(conversation: &str, idx: i64) -> String {
+    format!("agy-gen:{conversation}:{idx}")
+}
+
+/// Prefix of every [`generation_dedup_key`], used to tell trajectory usage from transcript usage.
+pub const GENERATION_KEY_PREFIX: &str = "agy-gen:";
+
+/// Turns trajectory model calls into usage records; `at` supplies each response's start time.
+#[must_use]
+pub fn generation_usage(
+    conversation: &str,
+    generations: &[Generation],
+    at: impl Fn(&Generation) -> DateTime<Utc>,
+) -> Vec<UsageRecord> {
+    let session_id = Session::compose_id(AgentId::Antigravity, conversation);
+    generations
+        .iter()
+        .map(|generation| {
+            let model = generation
+                .model
+                .as_deref()
+                .filter(|model| !model.contains("MODEL_PLACEHOLDER"))
+                .unwrap_or("unknown");
+            let breakdown = TokenBreakdown {
+                input_tokens: generation.input_tokens,
+                output_tokens: generation.output_tokens,
+                reasoning_tokens: 0,
+                cache_read_tokens: generation.cache_read_tokens,
+                cache_write_5m_tokens: 0,
+                cache_write_1h_tokens: 0,
+            };
+            let eval = calculate_cost(model, &breakdown);
+            UsageRecord {
+                dedup_key: generation_dedup_key(conversation, generation.idx),
+                session_id: session_id.clone(),
+                timestamp: at(generation),
+                model: model.to_owned(),
+                input_tokens: generation.input_tokens,
+                output_tokens: generation.output_tokens,
+                reasoning_tokens: 0,
+                cache_read_tokens: generation.cache_read_tokens,
+                cache_write_5m_tokens: 0,
+                cache_write_1h_tokens: 0,
+                context_tokens: generation
+                    .input_tokens
+                    .saturating_add(generation.cache_read_tokens),
+                context_window: eval.context_window,
+                cost_usd: eval.cost_usd,
+                cache_savings_usd: eval.cache_savings_usd,
+                cost_basis: eval.cost_basis,
+                pricing_version: eval.pricing_version.to_owned(),
+            }
+        })
+        .collect()
+}
+
 fn step_mentions_resource_exhausted(obj: &serde_json::Map<String, Value>) -> bool {
     for key in [
         "content",
@@ -463,7 +676,9 @@ pub fn extract_workspace_from_text(content: &str) -> Option<String> {
     None
 }
 
-/// Recursively detects the repository or workspace root for a given file path.
+/// Detects the repository or workspace root above a file path: the nearest folder holding `.git`,
+/// `Cargo.toml` or `package.json`. A path outside any such folder has no root; the drive root and
+/// system folders are never a project.
 #[must_use]
 pub fn find_repo_root_from_path(file_path: &str) -> Option<String> {
     let clean = file_path.trim_matches('"').trim_matches('\'');
@@ -475,22 +690,14 @@ pub fn find_repo_root_from_path(file_path: &str) -> Option<String> {
     };
 
     loop {
+        let parent = check.parent()?;
         if check.join(".git").exists()
             || check.join("Cargo.toml").exists()
             || check.join("package.json").exists()
         {
             return Some(check.to_string_lossy().into_owned());
         }
-        match check.parent() {
-            Some(p) if p != check => check = p,
-            _ => break,
-        }
-    }
-
-    if check.exists() && check.is_dir() {
-        Some(check.to_string_lossy().into_owned())
-    } else {
-        None
+        check = parent;
     }
 }
 

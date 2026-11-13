@@ -688,7 +688,9 @@ fn desktop_agent_name(agent: &str, surface: &str) -> Option<&'static str> {
             "Codex"
         }),
         ("claude-code" | "claude", "desktop_app") => Some("Claude"),
-        ("antigravity", "ide") => Some("Antigravity"),
+        // The IDE (1.x) and the 2.0 app are separate programs with separate process names.
+        ("antigravity", "ide") => Some("Antigravity IDE"),
+        ("antigravity", "desktop_app") => Some("Antigravity"),
         _ => None,
     }
 }
@@ -706,6 +708,15 @@ mod focus_target_tests {
             })
         );
         assert_eq!(super::desktop_agent_name("codex", "cli"), None);
+        assert_eq!(
+            super::desktop_agent_name("antigravity", "ide"),
+            Some("Antigravity IDE")
+        );
+        assert_eq!(
+            super::desktop_agent_name("antigravity", "desktop_app"),
+            Some("Antigravity")
+        );
+        assert_eq!(super::desktop_agent_name("antigravity", "cli"), None);
         assert_eq!(
             super::desktop_agent_name("unknown;command", "desktop_app"),
             None
