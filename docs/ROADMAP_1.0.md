@@ -73,3 +73,5 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] PWA app lock (ADR 0034): WebAuthn passkey or PBKDF2-SHA-256 PIN lock with 10-attempt cooldown, decoupled from E2EE; recovery erases remembered desktops so pairing is required again.
 - [x] G5 interrupt button UI on console and phone, consuming the merged interrupt contract (ADR 0035).
 - [ ] E1 React local console: Home view (`web/local-console/HomeView.tsx` + `/console-react.js` route, desktop release sourcemap/devtools check) - PR open, awaiting Workspace/Usage/Settings PRs to retire `console-app.js`
+- [ ] E1 React local console: Home view (`web/local-console/HomeView.tsx` + `/console-react.js` route, desktop release sourcemap/devtools check) - PR open, awaiting Workspace/Usage/Settings PRs to retire `console-app.js`
+- [ ] E1 React local console: Workspace view (`web/local-console/WorkspaceView.tsx` + `#local-workspace-root`, mobile heading wrap fix, zero-sourcemap bundle rebuild) - PR open, depends on Home PR #198; awaiting Usage and Settings PRs to retire `console-app.js`
