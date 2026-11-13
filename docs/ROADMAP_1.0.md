@@ -19,7 +19,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] Batch: G5 phone interrupt, G6 agy native resume, G7 agy limits via `/usage`, G11 env scrub, G12 Unix process-group stop, G13 Codex/Gemini native-install discovery
 - [x] G8 Claude usage-limit and API error parsing
 - [x] G3 terminal screen model, then G14 swallowed-Enter recovery
-- [ ] Protocol-mode approvals for Codex (`codex app-server`), Antigravity (`agy acp`) and Gemini CLI (ACP): Gnomcode-launched sessions driven through the agent's structured protocol so phone and console approvals work for every provider (ADR; verify each protocol live first; never auto-approve)
+- [ ] (Gemini part dropped by E4 scope cut) Protocol-mode approvals for Codex (`codex app-server`), Antigravity (`agy acp`) and Gemini CLI (ACP): Gnomcode-launched sessions driven through the agent's structured protocol so phone and console approvals work for every provider (ADR; verify each protocol live first; never auto-approve)
 
 ## C. Phone and Remote features (one ADR each, all providers where the agent exposes the data)
 - [ ] Quick actions (canned prompts, never raw argv)
@@ -43,6 +43,12 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] "Continue here" for imported sessions (backend, ADR 0053; pairs with UI PR #209)
 - [x] Handoff quality evals (backend, ADR 0055; pairs with UI PR #211)
 - [x] Worktree per session with diff review and merge (backend, ADR 0051; pairs with UI PR #206)
+
+## E4. Scope cut for 1.0 (decided by Wahaj 2026-11-13)
+1.0 supports exactly Claude Code, Codex and Antigravity. Delete (code, settings, docs, fixtures, tests, UI) rather than freeze: Teams, Cursor/Aider/Cline adapters, Gemini CLI adapter and Gemini ACP item. Keep account metadata sync (web console and PWA depend on it). Migrations must leave existing user data readable and never crash on old rows from removed agents. They can return after 1.0 through SPEC + ADR.
+- [ ] Remove Teams, Cursor/Aider/Cline and Gemini CLI from Rust, web, desktop, scripts, SPEC, PRODUCT.md, AGENTS.md
+- [ ] Marketing audit: landing, pricing, FAQ, docs, comparison tables, SEO metadata, downloads; claims match 1.0 exactly (three agents, no Teams); no unverified numbers
+- [ ] Fold scripts/check-*.mjs into real tests (browser tests for console, shared presenter fixtures) after E2
 
 ## G. Release 1.0.0
 - [ ] Version 1.0.0 everywhere (cut-release skill), CHANGELOG, release notes
