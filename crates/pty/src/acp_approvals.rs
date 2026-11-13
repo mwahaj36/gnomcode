@@ -62,7 +62,6 @@ pub fn parse_permission_request(msg: &Value) -> Option<AcpPermissionRequest> {
         .unwrap_or("Approve tool call");
 
     let mut allow_once = None;
-    let mut allow_any = None;
     let mut reject_once = None;
     let mut reject_any = None;
 
@@ -74,13 +73,12 @@ pub fn parse_permission_request(msg: &Value) -> Option<AcpPermissionRequest> {
             let kind = opt.get("kind").and_then(Value::as_str).unwrap_or("");
             match kind {
                 "allow_once" if allow_once.is_none() => allow_once = Some(option_id.to_owned()),
-                "allow_always" if allow_any.is_none() => allow_any = Some(option_id.to_owned()),
+                // A one-time phone "allow" must never become a persistent grant.
+                "allow_always" => {}
                 "reject_once" if reject_once.is_none() => reject_once = Some(option_id.to_owned()),
                 "reject_always" if reject_any.is_none() => reject_any = Some(option_id.to_owned()),
                 _ => {
-                    if option_id.eq_ignore_ascii_case("allow") && allow_any.is_none() {
-                        allow_any = Some(option_id.to_owned());
-                    } else if option_id.eq_ignore_ascii_case("deny") && reject_any.is_none() {
+                    if option_id.eq_ignore_ascii_case("deny") && reject_any.is_none() {
                         reject_any = Some(option_id.to_owned());
                     }
                 }
@@ -92,7 +90,7 @@ pub fn parse_permission_request(msg: &Value) -> Option<AcpPermissionRequest> {
         rpc_id,
         tool: tool.clone(),
         summary: redact_summary(&tool, title),
-        allow_option_id: allow_once.or(allow_any),
+        allow_option_id: allow_once,
         deny_option_id: reject_once.or(reject_any),
     })
 }
@@ -281,6 +279,21 @@ mod tests {
         let resp = build_permission_response(&req, AcpApprovalOutcome::NoDecision);
         assert_eq!(resp["result"]["outcome"]["outcome"], json!("cancelled"));
         assert!(resp["result"]["outcome"].get("optionId").is_none());
+    }
+
+    #[test]
+    fn allow_never_selects_an_always_option() {
+        let raw = json!({
+            "jsonrpc": "2.0", "id": 7, "method": "session/request_permission",
+            "params": { "toolCall": { "kind": "execute", "title": "Run tests" },
+                "options": [
+                    { "optionId": "always", "kind": "allow_always" },
+                    { "optionId": "no", "kind": "reject_once" }
+                ] }
+        });
+        let req = parse_permission_request(&raw).expect("acp request");
+        let resp = build_permission_response(&req, AcpApprovalOutcome::Allow);
+        assert_eq!(resp["result"]["outcome"]["outcome"], json!("cancelled"));
     }
 
     #[tokio::test]
