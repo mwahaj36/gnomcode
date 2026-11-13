@@ -969,21 +969,11 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
     fn claude_usage_limit_fixture_marks_error_rate_limited_and_quota() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let bytes = include_bytes!("../../../fixtures/claude-code/2026-11-13/usage-limit.jsonl");
         let batch = ClaudeAdapter::new().parse(&FileCtx::default(), bytes);
         assert_eq!(batch.sessions.len(), 1);
-=======
-    fn antigravity_resource_exhausted_marks_error_and_exhausted_quota() {
-        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
-        let bytes = concat!(
-            "{\"step_index\":0,\"type\":\"USER_INPUT\",\"created_at\":\"2026-11-13T01:00:00Z\",\"content\":\"<USER_SETTINGS_CHANGE>claude-opus-5-5</USER_SETTINGS_CHANGE>\"}\n",
-            "{\"step_index\":1,\"type\":\"PLANNER_RESPONSE\",\"status\":\"ERROR\",\"created_at\":\"2026-11-13T01:00:02Z\",\"error\":\"429 RESOURCE_EXHAUSTED: quota depleted\"}\n",
-        );
-        let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes.as_bytes());
->>>>>>> bbb73a7 (fix(adapters,store): cross-check Antigravity quota against RESOURCE_EXHAUSTED)
         assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Error);
         assert!(
             batch
@@ -994,7 +984,6 @@ mod tests {
         let snap = batch
             .quota_snapshots
             .iter()
-<<<<<<< HEAD
             .find(|q| q.provider == "claude-code")
             .expect("rejected quota snapshot");
         assert_eq!(snap.used_pct, 100.0);
@@ -1039,11 +1028,29 @@ mod tests {
                 .iter()
                 .any(|e| e.kind == gnomcode_core::ActivityKind::Error)
         );
-=======
+    }
+
+    #[test]
+    fn antigravity_resource_exhausted_marks_error_and_exhausted_quota() {
+        use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
+        let bytes = concat!(
+            "{\"step_index\":0,\"type\":\"USER_INPUT\",\"created_at\":\"2026-11-13T01:00:00Z\",\"content\":\"<USER_SETTINGS_CHANGE>claude-opus-5-5</USER_SETTINGS_CHANGE>\"}\n",
+            "{\"step_index\":1,\"type\":\"PLANNER_RESPONSE\",\"status\":\"ERROR\",\"created_at\":\"2026-11-13T01:00:02Z\",\"error\":\"429 RESOURCE_EXHAUSTED: quota depleted\"}\n",
+        );
+        let batch = AntigravityAdapter::new().parse(&FileCtx::default(), bytes.as_bytes());
+        assert_eq!(batch.sessions[0].state, gnomcode_core::SessionState::Error);
+        assert!(
+            batch
+                .activity_events
+                .iter()
+                .any(|e| e.kind == gnomcode_core::ActivityKind::RateLimited)
+        );
+        let snap = batch
+            .quota_snapshots
+            .iter()
             .find(|q| q.provider == "antigravity")
             .expect("exhausted quota snapshot");
         assert_eq!(snap.used_pct, 100.0);
         assert_eq!(snap.basis, TrustLevel::Exact);
->>>>>>> bbb73a7 (fix(adapters,store): cross-check Antigravity quota against RESOURCE_EXHAUSTED)
     }
 }
