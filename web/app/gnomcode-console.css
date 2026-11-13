@@ -1695,3 +1695,36 @@ html{touch-action:manipulation}
   }
 }
 
+/* ---- React Workspace view classes (mirrors legacy ID layout without duplicate IDs) ---- */
+.sp-workspace-list { max-height: 560px; overflow: auto; }
+@media (max-width: 600px) { .sp-workspace-list { max-height: 220px; } }
+.sp-workspace-pagination-controls { display: flex; align-items: center; gap: 4px; }
+.sp-workspace-pagination-controls .btn-control { padding: 8px; min-height: 44px; min-width: 44px; font-size: var(--sp-fs-meta); background: transparent; }
+body.sp-native-console .sp-workspace-empty { max-width: 420px; margin: var(--sp-7) auto; justify-items: center; text-align: center; }
+.sp-workspace-chat-panel { margin-top: 0; height: 100%; display: flex; flex-direction: column; max-width: 1000px; margin: auto; }
+.sp-chat-stream-box { flex: 1; min-height: 180px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 0 8px; margin-top: 12px; }
+.sp-chat-terminal-box { flex: 1; min-height: 180px; overflow: auto; padding: 16px; background: var(--sp-surface); color: var(--sp-text); font: var(--sp-fs-body)/1.6 var(--sp-font-mono); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 12px; }
+.sp-native-console .sp-chat-composer { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-top: 20px; padding: 10px 12px; border: 1px solid var(--sp-border-strong, var(--sp-border)); border-radius: 12px; background: var(--sp-surface); }
+.sp-native-console .sp-chat-composer textarea.sp-chat-composer-input { width: 100%; height: 36px; min-height: 36px; max-height: 160px; overflow-y: auto; resize: none; padding: 6px 8px; border: 0; border-radius: 0; background: transparent; color: var(--sp-text); font: inherit; }
+.sp-native-console .sp-chat-composer select { border: 0; background: transparent; max-width: 240px; font: 12px/1.5 var(--sp-font-sans); padding: 4px; min-height: 36px; }
+@media (max-width: 600px) { .sp-native-console .sp-chat-composer select { min-height: 44px; } }
+.sp-chat-composer-help { padding-left: 8px; color: var(--sp-text-2); font: var(--sp-fs-meta)/1.5 var(--sp-font-sans); }
+.sp-native-console .sp-chat-automation { flex: none; padding: 8px 0; max-height: 35vh; overflow: auto; font-size: var(--sp-fs-body); }
+.sp-chat-automation label { display: block; margin-top: 12px; }
+.sp-chat-automation input, .sp-chat-automation select, .sp-chat-automation button { min-height: 44px; max-width: 100%; }
+.sp-workspace-terminal { flex: none; height: 240px; min-height: 160px; border-top: 1px solid var(--sp-border); margin-top: 12px; overflow: hidden; }
+.sp-workspace-terminal-screen { height: 190px; overflow: auto; background: var(--sp-surface); padding: 8px; }
+.sp-workspace-terminal-screen > div { min-width: 0; width: 100%; height: 100%; }
+.workspace-field input { padding-right: 52px; }
+.sp-launcher-browse { position: absolute; right: 3px; top: 3px; width: 44px; min-width: 44px; min-height: 44px; padding: 8px; background: transparent; display: flex; align-items: center; justify-content: center; }
+.sp-workspace-browse-dialog { margin: auto; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; color: var(--sp-text); background: var(--sp-surface); border: 1px solid var(--sp-border); border-radius: 8px; padding: 20px; }
+.sp-workspace-browse-dialog::backdrop { background: rgb(0 0 0 / .65); }
+.sp-workspace-browse-roots { display: flex; gap: 4px; flex-wrap: wrap; }
+.sp-workspace-browse-list { display: grid; gap: 4px; max-height: 45vh; overflow: auto; margin: 12px 0; }
+.sp-workspace-browse-list button { text-align: left; }
+.sp-confirm-inline { padding: var(--sp-3); margin: var(--sp-2) 0; border: 1px solid var(--sp-border-strong); border-radius: 8px; background: var(--sp-surface); }
+@media (max-width: 700px) {
+  .sp-workspace-chat-panel .conversation-heading > div:first-child { flex: 1 1 100%; min-width: 0; }
+}
+.sp-session-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0; }
+@media (max-width: 760px) { .sp-session-tools .btn-control { min-height: 44px; } }
