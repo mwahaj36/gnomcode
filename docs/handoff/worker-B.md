@@ -81,3 +81,17 @@
 - **Deviations:** Requests `artifacts` on demand only and intercepts `Unsupported remote command` in-sheet; no Rust edits.
 - **Open risks/questions:** Waiting on Worker A `C last-turn artifacts` PR + ADR for daemon-side artifact tracking and Remote E2EE parity.
 - **Dependencies:** Full turn-scoped artifact tracking and Remote E2EE depend on Worker A `C last-turn artifacts` PR.
+
+### 5. Section C — Phone and console attachments UI
+- **PR:** https://github.com/mwahaj36/spawnt/pull/194 (`feat/phone-attachments-ui`, commit `3b7d09d`)
+- **What changed:**
+  - `web/lib/console-presentation.js`, `web/lib/console-presentation.d.ts`: exported `MAX_ATTACHMENT_BYTES`, `validateAttachmentCandidate`, `renderAttachmentPills`, `formatPromptWithAttachments`.
+  - `web/components/RemoteCompanion.tsx`: added hidden file input + `.sp-attach-trigger`, staged `.sp-attachments-bar` above composer textarea, E2EE `upload_attachment` / `attachment_ack`, prompt ref attachment, and calm `Unsupported remote command` handling.
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: added `#chat-attach-input`, `#chat-attach-btn`, `#chat-attachments-bar`, `#chat-attach-status` calling `POST /api/v1/sessions/{id}/attachments`.
+  - `web/app/gnomcode-console.css`: appended `var(--sp-*)` token styles with 44px mobile touch targets.
+  - `web/test/attachments-ui.test.mjs`, `docs/SPEC.md` (append §11), `docs/ROADMAP_1.0.md` (append status), `docs/sessions/2026-11-13-phone-attachments-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `remote.rs:625-920`, `console.html:96-99`, and `RemoteCompanion.tsx:586-591`. Tests: `web/test/attachments-ui.test.mjs` (3/3 pass), `web/` `npm test` (102/102 pass). Gate: `CARGO_INCREMENTAL=0` `fmt`/`clippy`/`test` pass, `check-local-console.mjs` pass, `web/` `npm ci` + `npm test` + `npm run typecheck` + `npm run build` pass, encoding/LF/mojibake pass.
+- **Verification:** Visually verified live in `chrome-headless-shell.exe` against mocked endpoints at `390x844` and `1440x900` (dark & light): `overflowX=false`, `attachBtnVisible=true`, `attachBtnMinHeight=44` (mobile) / `40` (desktop), `pillCount=2`. Not verified live over Remote E2EE relay (`upload_attachment` unimplemented in daemon).
+- **Deviations:** Requests `upload_attachment` on user file pick only and handles `Unsupported remote command` in-composer; no Rust edits.
+- **Open risks/questions:** Waiting on Worker A `C attachments` PR + ADR for authoritative backend validation and E2EE dispatch.
+- **Dependencies:** Backend persistence and Remote E2EE dispatch depend on Worker A `C attachments` PR.
