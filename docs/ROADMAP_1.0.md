@@ -114,3 +114,6 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 - [x] Release follow-up: Held approval alerts; see `docs/sessions/2026-11-13-approval-alerts.md`.
 
 - [x] Release follow-up: Remote action activity timer; see `docs/sessions/2026-11-13-remote-activity.md`.
+
+- [ ] Follow-up (from handoff fold): wire `IngestWatcher` into `DaemonOrchestrator::spawn_reconciler` so the D3 idle CPU budget holds at runtime; see `docs/sessions/2026-11-14-handoff-worker-a.md`.
+- [ ] Follow-up (from handoff fold): roadmap housekeeping, tick merged section C items and drop stale duplicate F1/F2 lines.
