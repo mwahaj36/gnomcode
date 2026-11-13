@@ -1,5 +1,14 @@
 # Worker A handoff
 
+## 2026-11-13: G6 finalized with restrictive Plan resume
+
+- #193 is now ready for review: https://github.com/mwahaj36/spawnt/pull/193. Head `39b6788d9adc245990b5105d8c845480189b1c70`, branch `feat/agy-native-resume`, depends on #189; independent of #187 and Worker B UI.
+- Owner chose `agy --conversation <native-id> --mode plan` after the observed bare-command Plan-to-Auto change. Product native resumes for both aliases always use explicit Plan mode; a person performs any later mode change in the native CLI. No inferred/restored broader permissions, no fallback to Auto, no prompt injected. Fresh launches unchanged.
+- Updated full-argv test renamed to `resume_uses_the_exact_native_session_without_permission_bypass`: freshly failed because --mode plan was absent, then passed after adding only those restrictive arguments. Fresh final Rust full gate PASS with CARGO_INCREMENTAL=0 and isolated test homes: fmt, workspace clippy -D warnings, workspace tests, cargo-deny, core purity. Earlier web ci/test/typecheck/build PASS covers the unchanged capability update; final native-argv-only change did not require another web build. Desktop untouched. Encoding/LF/whitespace/no-mojibake checks passed.
+- SPEC, roadmap and session record now state the approved policy; G6 backend ticked. No new endpoint/JSON field/setting/dependency/ADR. Existing can_resume includes saved managed Antigravity; imported sessions remain read-only. Minimal existing allowlist/capability edits are explicitly owner-authorized.
+- Verified live: Windows agy 1.5.7 restores turns with explicit Plan mode; bare-command Auto behavior also observed. Not verified: packaged Gnomcode end-to-end resume, other CLI versions, macOS/Linux. No raw native logs/IDs/account identifiers committed and no history deleted.
+- Previous mode-policy/stop sections are historical; no question remains pending. Worktree/target removed after the verified update. Next G7: verify native /usage, prove no model request, then implement opt-in fallback with already-authorized minimal vendor_limits.rs wiring and ADR 0029 amendment.
+
 ## 2026-11-13: G6 mode decision answered; implementation continues
 
 The owner selected explicit plan-mode resume. G6 will build `agy --conversation <native-id> --mode plan`, with any later mode change performed by the person in the native CLI. The earlier pending-mode/stop sections are historical. The updated full-argv regression is being run red before the production change, then the Rust gate will be rerun; #193 stays draft until that verification completes. No approval remains pending.
