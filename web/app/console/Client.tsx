@@ -6,6 +6,7 @@ import RemoteCompanion from "../../components/RemoteCompanion";
 import DesktopDevices from "../../components/DesktopDevices";
 import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
+import AppLockGate from "../../components/AppLockGate";
 import { supabase } from "../../lib/supabase";
 import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue, mountProjectList, projectsFromSessions } from "../../lib/console-presentation.js";
 
@@ -416,6 +417,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
   }
 
   return (
+    <AppLockGate>
     <main className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
       <header className="web-context"><h1 aria-live="polite">{VIEW_TITLES[activeView] || "Home"}</h1>{activeView === "sessions" && <button type="button" className="sp-link" onClick={() => changeConsoleView("overview")}>Back to Home</button>}</header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
@@ -537,5 +539,6 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       </div>}
       </div></div>
     </main>
+    </AppLockGate>
   );
 }
