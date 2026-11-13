@@ -1,6 +1,7 @@
 //! File watching, reconciliation, incremental tailing, and checkpointing
 //! of agent logs into the SQLite store (`SPEC §3.5`, `§4.4`).
 
+mod antigravity;
 pub mod watcher;
 
 use chrono::Utc;
@@ -11,7 +12,7 @@ use gnomcode_adapters::{
     codex::{CodexAdapter, codex_session_id_from_path},
     gemini::GeminiAdapter,
 };
-use gnomcode_core::{AgentId, Project, Session};
+use gnomcode_core::{AgentId, Project, Session, Surface};
 use gnomcode_platform::{
     AgentRoot, detect_local_subscriptions, discover_agent_roots, read_antigravity_fallback_model,
     read_from_offset,
@@ -326,6 +327,7 @@ fn ingest_files(
     let mut repair_complete = true;
 
     let agy_fallback_model = read_antigravity_fallback_model();
+    let agy = antigravity::Catalog::scan(roots);
 
     for file in discovered {
         let path_str = file.path.to_string_lossy().into_owned();
@@ -388,8 +390,12 @@ fn ingest_files(
             AgentId::Antigravity => {
                 let sid =
                     Session::compose_id(AgentId::Antigravity, extract_conversation_id(&path_str));
-                db.get_session_model(&sid)
-                    .or_else(|| agy_fallback_model.clone())
+                // The last model chosen in the 2.0 app says nothing about CLI or IDE sessions.
+                db.get_session_model(&sid).or_else(|| {
+                    (agy.owner(extract_conversation_id(&path_str)) == Some(Surface::DesktopApp))
+                        .then(|| agy_fallback_model.clone())
+                        .flatten()
+                })
             }
             _ => None,
         };
@@ -421,7 +427,9 @@ fn ingest_files(
         let mut adapter: Box<dyn SourceAdapter> = match file.agent {
             AgentId::ClaudeCode => Box::new(ClaudeAdapter::new()),
             AgentId::Codex => Box::new(CodexAdapter::new()),
-            AgentId::Antigravity => Box::new(AntigravityAdapter::new()),
+            AgentId::Antigravity => Box::new(AntigravityAdapter::new().with_usage_from_trajectory(
+                agy.usage_from_trajectory(db, extract_conversation_id(&path_str)),
+            )),
             AgentId::GeminiCli => Box::new(GeminiAdapter::new()),
         };
 
@@ -434,6 +442,13 @@ fn ingest_files(
             continue;
         }
         let mut batch = adapter.parse(&ctx, &read_result.bytes[..parsed_len]);
+        if file.agent == AgentId::Antigravity
+            && let Some(owner) = agy.owner(extract_conversation_id(&path_str))
+        {
+            for session in &mut batch.sessions {
+                session.surface = owner;
+            }
+        }
         let cwds = resolve_batch_projects(&mut batch);
         if repair_chat_format {
             db.repair_chat_contents(&batch.chat_events)?;
@@ -483,6 +498,8 @@ fn ingest_files(
         return ingest_files(db, roots, discovered, false);
     }
     refresh_native_titles(db, roots)?;
+    agy.repair_surfaces(db)?;
+    total_records_ingested += antigravity::ingest_trajectories(db, &agy)?;
 
     let detected_subs = detect_local_subscriptions();
     let _ = db.auto_populate_subscriptions(
@@ -529,6 +546,8 @@ fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error
     Ok(())
 }
 
+#[cfg(test)]
+mod antigravity_tests;
 #[cfg(test)]
 mod project_tests;
 

@@ -13,8 +13,10 @@ use thiserror::Error;
 
 mod automation;
 mod conversation;
+mod trajectory;
 pub use automation::{AutomationNotice, PendingPushNotice, ScheduledMessage};
 pub use conversation::ConversationLaunch;
+pub use trajectory::{TrajectoryRows, read_trajectory, trajectory_max_generation};
 
 /// Storage layer error type.
 #[derive(Debug, Error)]
@@ -158,6 +160,9 @@ pub struct SessionListItem {
     pub agent: String,
     /// Surface.
     pub surface: String,
+    /// Product name when the surface is a separate product (`Antigravity IDE`).
+    #[serde(default)]
+    pub surface_label: Option<String>,
     /// Project name.
     pub project_name: String,
     /// Model name.
@@ -3076,6 +3081,8 @@ impl Database {
                         .map(|window| {
                             (context_tokens.max(0) as f64 / window as f64 * 100.0).clamp(0.0, 100.0)
                         }),
+                    surface_label: gnomcode_core::surface_label(&agent, &surface)
+                        .map(str::to_owned),
                     id,
                     agent,
                     surface: surface.clone(),
