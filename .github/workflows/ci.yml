@@ -219,3 +219,56 @@ jobs:
           node-version: '22'
       - run: npm test --prefix npm/gnomcode
       - run: node scripts/sync-branding.mjs --check
+
+  package-desktop:
+    if: inputs.package
+    name: desktop package (${{ matrix.os }} / ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x64
+            targets: "@electron-forge/maker-deb,@electron-forge/maker-zip"
+          - os: macos-15-intel
+            arch: x64
+            targets: "@electron-forge/maker-zip"
+          - os: macos-15
+            arch: arm64
+            targets: "@electron-forge/maker-zip"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-about
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Build daemon binary
+        run: cargo build --locked --release -p gnomcode
+      - name: Stage desktop release inputs
+        shell: bash
+        run: |
+          mkdir -p apps/desktop/staging/bin
+          cp target/release/gnomcode apps/desktop/staging/bin/gnomcode
+          chmod +x apps/desktop/staging/bin/gnomcode
+          cp docs/legal/EULA.txt apps/desktop/staging/EULA.txt
+          if ! cargo about --version >/dev/null 2>&1; then
+            cargo install cargo-about --locked --features cli
+          fi
+          cargo about generate about.hbs -o apps/desktop/staging/THIRD_PARTY_NOTICES.html
+      - name: Build and package desktop app
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          node -e "require('electron')"
+          node desktop-notices.cjs
+          npm run lint
+          npm run typecheck
+          npm run build
+          node check-inputs.cjs
+          npx electron-forge make --arch ${{ matrix.arch }} --targets ${{ matrix.targets }}
+          find out/make -maxdepth 4 -type f
