@@ -477,6 +477,20 @@ impl Default for UserSettings {
     }
 }
 
+/// Off-by-default feature toggles for unproven 1.0 subsystems (E3, ADR 0049).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeatureToggles {
+    /// Enable Teams tier and team-rollup workflows (default `false`).
+    pub teams_enabled: bool,
+    /// Enable extra/experimental adapters beyond Claude Code, Codex, and Antigravity (default `false`).
+    pub extra_adapters_enabled: bool,
+    /// Enable scheduled prompt delivery and creation (default `false`).
+    pub scheduled_messages_enabled: bool,
+    /// Enable cloud account usage synchronization (default `false`).
+    pub account_sync_enabled: bool,
+}
+
 /// Role of a message in a conversation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

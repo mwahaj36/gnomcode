@@ -24,6 +24,14 @@ pub struct LicenseStatus {
     pub expires_at: Option<String>,
 }
 
+/// Returns whether Teams workflows are enabled (off by default per E3 / ADR 0049).
+#[must_use]
+pub fn is_teams_enabled(db: &Database) -> bool {
+    db.get_feature_toggles()
+        .map(|toggles| toggles.teams_enabled)
+        .unwrap_or(false)
+}
+
 /// Verifies the signed local license at a Pro feature entry point.
 #[must_use]
 #[inline(always)]
