@@ -1796,3 +1796,29 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 
 /* Home: the activity grid gets the same section gap as the other Home sections. */
 #home-activity{margin-top:var(--sp-5)}
+
+/* ---- PR 1: Themed scrollbars, non-wrapping pills, and motion guard ---- */
+:is(.sp-native-console, .sp-console-app, .sp-remote),
+:is(.sp-native-console, .sp-console-app, .sp-remote) * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sp-border-strong) transparent;
+}
+:is(.sp-native-console, .sp-console-app, .sp-remote) *::-webkit-scrollbar { width: 6px; height: 6px; }
+:is(.sp-native-console, .sp-console-app, .sp-remote) *::-webkit-scrollbar-track { background: transparent; }
+:is(.sp-native-console, .sp-console-app, .sp-remote) *::-webkit-scrollbar-thumb { background: var(--sp-border-strong); border-radius: var(--sp-r-pill); }
+:is(.sp-native-console, .sp-console-app, .sp-remote) *::-webkit-scrollbar-thumb:hover { background: var(--sp-text-3); }
+
+/* Never split status chips or subagent pills mid-label across lines */
+:is(.sp-native-console, .sp-console-app, .sp-remote) :is(.sp-badge, .sp-chip, .sp-state-pill, .sp-subagent-pill) {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.sp-native-console, .sp-console-app, .sp-remote) * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
