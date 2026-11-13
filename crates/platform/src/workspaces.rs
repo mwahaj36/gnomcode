@@ -77,10 +77,10 @@ pub fn browse(path: Option<&str>) -> io::Result<FolderListing> {
 pub fn display_path(path: &Path) -> String {
     let value = path.to_string_lossy();
     #[cfg(windows)]
-    if let Some(plain) = value.strip_prefix(r"\\?\") {
-        if plain.as_bytes().get(1) == Some(&b':') {
-            return plain.to_owned();
-        }
+    if let Some(plain) = value.strip_prefix(r"\\?\")
+        && plain.as_bytes().get(1) == Some(&b':')
+    {
+        return plain.to_owned();
     }
     value.into_owned()
 }

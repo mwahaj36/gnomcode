@@ -601,20 +601,20 @@ async fn relay_config_post_handler(
     let mut config = db
         .get_context_relay_config()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if let Some(p) = payload.policy {
-        if matches!(p.as_str(), "ask_first" | "auto" | "disabled") {
-            config.policy = p;
-        }
+    if let Some(p) = payload.policy
+        && matches!(p.as_str(), "ask_first" | "auto" | "disabled")
+    {
+        config.policy = p;
     }
-    if let Some(s) = payload.strategy {
-        if matches!(s.as_str(), "same_agent" | "failover") {
-            config.strategy = s;
-        }
+    if let Some(s) = payload.strategy
+        && matches!(s.as_str(), "same_agent" | "failover")
+    {
+        config.strategy = s;
     }
-    if let Some(t) = payload.threshold_pct {
-        if (50..=100).contains(&t) {
-            config.threshold_pct = t;
-        }
+    if let Some(t) = payload.threshold_pct
+        && (50..=100).contains(&t)
+    {
+        config.threshold_pct = t;
     }
     db.save_context_relay_config(&config)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -904,10 +904,10 @@ async fn launch_session_handler(
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let mut body =
                 serde_json::to_value(&record).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            if let (Some(isolated), Some(fields)) = (&isolated, body.as_object_mut()) {
-                if let Value::Object(extra) = crate::worktree_api::fields(isolated) {
-                    fields.extend(extra);
-                }
+            if let (Some(isolated), Some(fields)) = (&isolated, body.as_object_mut())
+                && let Value::Object(extra) = crate::worktree_api::fields(isolated)
+            {
+                fields.extend(extra);
             }
             Ok(Json(body).into_response())
         }
@@ -3122,17 +3122,16 @@ async fn auth_session_delete_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let path = session_file_path();
-    if let Ok(bytes) = tokio::fs::read(&path).await {
-        if let Ok(session) = serde_json::from_slice::<Value>(&bytes) {
-            if let Some(owner) = session.pointer("/user/id").and_then(Value::as_str) {
-                state
-                    .remote
-                    .devices
-                    .disconnect_owner(owner)
-                    .await
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            }
-        }
+    if let Ok(bytes) = tokio::fs::read(&path).await
+        && let Ok(session) = serde_json::from_slice::<Value>(&bytes)
+        && let Some(owner) = session.pointer("/user/id").and_then(Value::as_str)
+    {
+        state
+            .remote
+            .devices
+            .disconnect_owner(owner)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     state
         .remote

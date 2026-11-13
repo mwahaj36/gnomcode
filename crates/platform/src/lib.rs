@@ -262,15 +262,15 @@ mod unix_stop {
 /// Resolves the user's home directory across Windows, macOS, and Linux.
 #[must_use]
 pub fn user_home_dir() -> PathBuf {
-    if let Ok(home) = env::var("HOME") {
-        if !home.trim().is_empty() {
-            return PathBuf::from(home);
-        }
+    if let Ok(home) = env::var("HOME")
+        && !home.trim().is_empty()
+    {
+        return PathBuf::from(home);
     }
-    if let Ok(profile) = env::var("USERPROFILE") {
-        if !profile.trim().is_empty() {
-            return PathBuf::from(profile);
-        }
+    if let Ok(profile) = env::var("USERPROFILE")
+        && !profile.trim().is_empty()
+    {
+        return PathBuf::from(profile);
     }
     PathBuf::from(".")
 }
@@ -358,10 +358,10 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
 /// Resolves user application configuration / roaming directory across operating systems.
 #[must_use]
 pub fn app_config_dir() -> PathBuf {
-    if let Ok(appdata) = env::var("APPDATA") {
-        if !appdata.trim().is_empty() {
-            return PathBuf::from(appdata);
-        }
+    if let Ok(appdata) = env::var("APPDATA")
+        && !appdata.trim().is_empty()
+    {
+        return PathBuf::from(appdata);
     }
     let home = user_home_dir();
     #[cfg(target_os = "macos")]
@@ -392,38 +392,36 @@ pub fn resolve_git_repo_and_remote(path: &Path) -> (Option<PathBuf>, Option<Stri
                 Some(dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf())),
                 remote,
             );
-        } else if dot_git.is_file() {
-            if let Ok(content) = fs::read_to_string(&dot_git) {
-                if let Some(gitdir_line) = content
-                    .lines()
-                    .find(|l| l.trim_start().starts_with("gitdir:"))
-                {
-                    let gitdir_str = gitdir_line.trim_start()["gitdir:".len()..].trim();
-                    let gitdir = if Path::new(gitdir_str).is_absolute() {
-                        PathBuf::from(gitdir_str)
-                    } else {
-                        dir.join(gitdir_str)
-                    };
-                    let commondir_file = gitdir.join("commondir");
-                    let main_git_dir = if let Ok(common) = fs::read_to_string(&commondir_file) {
-                        let common_trimmed = common.trim();
-                        if Path::new(common_trimmed).is_absolute() {
-                            PathBuf::from(common_trimmed)
-                        } else {
-                            gitdir.join(common_trimmed)
-                        }
-                    } else {
-                        gitdir.clone()
-                    };
-                    let canonical_git_dir = main_git_dir.canonicalize().unwrap_or(main_git_dir);
-                    let remote = read_git_remote_url(&canonical_git_dir.join("config"));
-                    let main_repo_root = canonical_git_dir
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| dir.to_path_buf());
-                    return (Some(main_repo_root), remote);
+        } else if dot_git.is_file()
+            && let Ok(content) = fs::read_to_string(&dot_git)
+            && let Some(gitdir_line) = content
+                .lines()
+                .find(|l| l.trim_start().starts_with("gitdir:"))
+        {
+            let gitdir_str = gitdir_line.trim_start()["gitdir:".len()..].trim();
+            let gitdir = if Path::new(gitdir_str).is_absolute() {
+                PathBuf::from(gitdir_str)
+            } else {
+                dir.join(gitdir_str)
+            };
+            let commondir_file = gitdir.join("commondir");
+            let main_git_dir = if let Ok(common) = fs::read_to_string(&commondir_file) {
+                let common_trimmed = common.trim();
+                if Path::new(common_trimmed).is_absolute() {
+                    PathBuf::from(common_trimmed)
+                } else {
+                    gitdir.join(common_trimmed)
                 }
-            }
+            } else {
+                gitdir.clone()
+            };
+            let canonical_git_dir = main_git_dir.canonicalize().unwrap_or(main_git_dir);
+            let remote = read_git_remote_url(&canonical_git_dir.join("config"));
+            let main_repo_root = canonical_git_dir
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| dir.to_path_buf());
+            return (Some(main_repo_root), remote);
         }
         curr = dir.parent();
     }
@@ -437,12 +435,13 @@ fn read_git_remote_url(config_path: &Path) -> Option<String> {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
             in_remote_origin = trimmed.eq_ignore_ascii_case("[remote \"origin\"]");
-        } else if in_remote_origin && trimmed.starts_with("url") {
-            if let Some((_, val)) = trimmed.split_once('=') {
-                let clean = val.trim();
-                if !clean.is_empty() {
-                    return Some(clean.to_owned());
-                }
+        } else if in_remote_origin
+            && trimmed.starts_with("url")
+            && let Some((_, val)) = trimmed.split_once('=')
+        {
+            let clean = val.trim();
+            if !clean.is_empty() {
+                return Some(clean.to_owned());
             }
         }
     }
@@ -757,8 +756,8 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
             })
         };
 
-        if shell_running {
-            if let Some(shell) = std::env::current_exe().ok().and_then(|exe| {
+        if shell_running
+            && let Some(shell) = std::env::current_exe().ok().and_then(|exe| {
                 exe.ancestors()
                     .skip(1)
                     .take(4)
@@ -769,14 +768,14 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
                         ]
                     })
                     .find(|path| path.is_file())
-            }) {
-                use std::os::windows::process::CommandExt as _;
-                return std::process::Command::new(shell)
-                    .creation_flags(0x0800_0000)
-                    .args(["--gnomcode-notification", body])
-                    .spawn()
-                    .is_ok();
-            }
+            })
+        {
+            use std::os::windows::process::CommandExt as _;
+            return std::process::Command::new(shell)
+                .creation_flags(0x0800_0000)
+                .args(["--gnomcode-notification", body])
+                .spawn()
+                .is_ok();
         }
         let _ = (title, body);
         false

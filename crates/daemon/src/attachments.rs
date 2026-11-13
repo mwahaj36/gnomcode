@@ -182,10 +182,10 @@ fn stage_attachment(
     let clean_name = sanitize_filename(filename)?;
     let bytes = decode_base64(data_base64)?;
     let actual_size = bytes.len() as u64;
-    if let Some(expected) = declared_size {
-        if expected != actual_size {
-            return Err(UploadError::BadRequest("Attachment size mismatch"));
-        }
+    if let Some(expected) = declared_size
+        && expected != actual_size
+    {
+        return Err(UploadError::BadRequest("Attachment size mismatch"));
     }
 
     let canonical_root = workspace

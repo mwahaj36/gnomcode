@@ -181,43 +181,42 @@ impl SourceAdapter for GeminiAdapter {
                         .map_or_else(|| idx.to_string(), str::to_owned);
                     let dedup_key = format!("{raw_sid}:{msg_id}");
 
-                    if self.seen_dedup_keys.insert(dedup_key.clone()) {
-                        if let Some(tokens) = msg.get("tokens").and_then(Value::as_object) {
-                            let total_in = tokens.get("input").and_then(Value::as_u64).unwrap_or(0);
-                            let cached = tokens.get("cached").and_then(Value::as_u64).unwrap_or(0);
-                            let output = tokens.get("output").and_then(Value::as_u64).unwrap_or(0);
-                            let thoughts =
-                                tokens.get("thoughts").and_then(Value::as_u64).unwrap_or(0);
-                            let uncached_in = total_in.saturating_sub(cached);
+                    if self.seen_dedup_keys.insert(dedup_key.clone())
+                        && let Some(tokens) = msg.get("tokens").and_then(Value::as_object)
+                    {
+                        let total_in = tokens.get("input").and_then(Value::as_u64).unwrap_or(0);
+                        let cached = tokens.get("cached").and_then(Value::as_u64).unwrap_or(0);
+                        let output = tokens.get("output").and_then(Value::as_u64).unwrap_or(0);
+                        let thoughts = tokens.get("thoughts").and_then(Value::as_u64).unwrap_or(0);
+                        let uncached_in = total_in.saturating_sub(cached);
 
-                            let breakdown = TokenBreakdown {
-                                input_tokens: uncached_in,
-                                output_tokens: output,
-                                reasoning_tokens: thoughts,
-                                cache_read_tokens: cached,
-                                cache_write_5m_tokens: 0,
-                                cache_write_1h_tokens: 0,
-                            };
-                            let eval = calculate_cost(model, &breakdown);
-                            batch.usage_records.push(UsageRecord {
-                                dedup_key,
-                                session_id: session_id.clone(),
-                                timestamp: ts,
-                                model: model.to_owned(),
-                                input_tokens: total_in,
-                                output_tokens: output,
-                                reasoning_tokens: thoughts,
-                                cache_read_tokens: cached,
-                                cache_write_5m_tokens: 0,
-                                cache_write_1h_tokens: 0,
-                                context_tokens: total_in,
-                                context_window: eval.context_window,
-                                cost_usd: eval.cost_usd,
-                                cache_savings_usd: eval.cache_savings_usd,
-                                cost_basis: eval.cost_basis,
-                                pricing_version: eval.pricing_version.to_owned(),
-                            });
-                        }
+                        let breakdown = TokenBreakdown {
+                            input_tokens: uncached_in,
+                            output_tokens: output,
+                            reasoning_tokens: thoughts,
+                            cache_read_tokens: cached,
+                            cache_write_5m_tokens: 0,
+                            cache_write_1h_tokens: 0,
+                        };
+                        let eval = calculate_cost(model, &breakdown);
+                        batch.usage_records.push(UsageRecord {
+                            dedup_key,
+                            session_id: session_id.clone(),
+                            timestamp: ts,
+                            model: model.to_owned(),
+                            input_tokens: total_in,
+                            output_tokens: output,
+                            reasoning_tokens: thoughts,
+                            cache_read_tokens: cached,
+                            cache_write_5m_tokens: 0,
+                            cache_write_1h_tokens: 0,
+                            context_tokens: total_in,
+                            context_window: eval.context_window,
+                            cost_usd: eval.cost_usd,
+                            cache_savings_usd: eval.cache_savings_usd,
+                            cost_basis: eval.cost_basis,
+                            pricing_version: eval.pricing_version.to_owned(),
+                        });
                     }
                 }
             }

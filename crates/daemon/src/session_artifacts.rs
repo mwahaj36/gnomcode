@@ -212,19 +212,19 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
                     data_url: Some(format!("data:{mime_type};base64,{encoded}")),
                 });
             }
-        } else if metadata.len() <= MAX_TEXT_ARTIFACT_BYTES {
-            if let Ok(content) = std::fs::read_to_string(&canonical_file) {
-                artifacts.push(ArtifactItem {
-                    id: rel_path.clone(),
-                    title,
-                    path: rel_path,
-                    kind,
-                    mime_type,
-                    status: status_label,
-                    content: Some(content),
-                    data_url: None,
-                });
-            }
+        } else if metadata.len() <= MAX_TEXT_ARTIFACT_BYTES
+            && let Ok(content) = std::fs::read_to_string(&canonical_file)
+        {
+            artifacts.push(ArtifactItem {
+                id: rel_path.clone(),
+                title,
+                path: rel_path,
+                kind,
+                mime_type,
+                status: status_label,
+                content: Some(content),
+                data_url: None,
+            });
         }
     }
     Ok((artifacts, changes_count))

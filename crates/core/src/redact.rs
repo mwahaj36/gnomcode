@@ -96,11 +96,11 @@ pub fn redact_summary(tool_name: &str, raw_detail: &str) -> String {
             continue;
         }
 
-        if let Some((k, v)) = trimmed.split_once('=') {
-            if is_sensitive_env_key(k) || looks_like_secret_token(v) {
-                tokens_out.push(format!("{k}=<REDACTED>"));
-                continue;
-            }
+        if let Some((k, v)) = trimmed.split_once('=')
+            && (is_sensitive_env_key(k) || looks_like_secret_token(v))
+        {
+            tokens_out.push(format!("{k}=<REDACTED>"));
+            continue;
         }
 
         if looks_like_secret_token(trimmed) {

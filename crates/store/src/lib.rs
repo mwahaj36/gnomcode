@@ -2613,35 +2613,34 @@ impl Database {
 
         for (sid, current_project) in sessions {
             let conv_id = sid.strip_prefix("antigravity:").unwrap_or(&sid);
-            if let Ok(mut rows) = agy_stmt.query(params![conv_id]) {
-                if let Ok(Some(row)) = rows.next() {
-                    let title: Option<String> =
-                        row.get(0).ok().filter(|s: &String| !s.trim().is_empty());
-                    let uris_json: Option<String> = row.get(1).ok();
-                    let mut detected_ws = None;
-                    if let Some(raw_uris) = uris_json {
-                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw_uris) {
-                            if let Some(arr) = val.as_array() {
-                                if let Some(first) = arr.first().and_then(|v| v.as_str()) {
-                                    let unquoted = first.replace("%3A", ":").replace("%3a", ":");
-                                    let clean = unquoted
-                                        .strip_prefix("file:///")
-                                        .or_else(|| unquoted.strip_prefix("file://"))
-                                        .unwrap_or(&unquoted);
-                                    detected_ws = Some(clean.to_owned());
-                                }
-                            }
-                        }
-                    }
+            if let Ok(mut rows) = agy_stmt.query(params![conv_id])
+                && let Ok(Some(row)) = rows.next()
+            {
+                let title: Option<String> =
+                    row.get(0).ok().filter(|s: &String| !s.trim().is_empty());
+                let uris_json: Option<String> = row.get(1).ok();
+                let mut detected_ws = None;
+                if let Some(raw_uris) = uris_json
+                    && let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw_uris)
+                    && let Some(arr) = val.as_array()
+                    && let Some(first) = arr.first().and_then(|v| v.as_str())
+                {
+                    let unquoted = first.replace("%3A", ":").replace("%3a", ":");
+                    let clean = unquoted
+                        .strip_prefix("file:///")
+                        .or_else(|| unquoted.strip_prefix("file://"))
+                        .unwrap_or(&unquoted);
+                    detected_ws = Some(clean.to_owned());
+                }
 
-                    // A session that already has a project keeps it; ingest resolves it to the repo root.
-                    let unassigned = current_project
-                        .as_deref()
-                        .is_none_or(|name| name == "unknown");
-                    if let Some(ws) = detected_ws.filter(|_| unassigned) {
-                        let project = gnomcode_core::Project::from_origin(None, &ws, None);
-                        let _ = self.conn.execute(
-                            r#"
+                // A session that already has a project keeps it; ingest resolves it to the repo root.
+                let unassigned = current_project
+                    .as_deref()
+                    .is_none_or(|name| name == "unknown");
+                if let Some(ws) = detected_ws.filter(|_| unassigned) {
+                    let project = gnomcode_core::Project::from_origin(None, &ws, None);
+                    let _ = self.conn.execute(
+                        r#"
                             INSERT INTO project (id, canonical_key, repo_root, name, git_branch)
                             VALUES (?1, ?2, ?3, ?4, ?5)
                             ON CONFLICT(canonical_key) DO UPDATE SET
@@ -2649,36 +2648,35 @@ impl Database {
                                 repo_root = excluded.repo_root,
                                 git_branch = coalesce(excluded.git_branch, project.git_branch)
                             "#,
-                            params![
-                                project.id,
-                                project.canonical_key,
-                                project.repo_root,
-                                project.name,
-                                project.git_branch
-                            ],
-                        );
+                        params![
+                            project.id,
+                            project.canonical_key,
+                            project.repo_root,
+                            project.name,
+                            project.git_branch
+                        ],
+                    );
 
-                        let proj_id: String = self
-                            .conn
-                            .query_row(
-                                "SELECT id FROM project WHERE canonical_key = ?1",
-                                params![project.canonical_key],
-                                |r| r.get(0),
-                            )
-                            .unwrap_or(project.id);
+                    let proj_id: String = self
+                        .conn
+                        .query_row(
+                            "SELECT id FROM project WHERE canonical_key = ?1",
+                            params![project.canonical_key],
+                            |r| r.get(0),
+                        )
+                        .unwrap_or(project.id);
 
-                        let _ = self.conn.execute(
+                    let _ = self.conn.execute(
                             "UPDATE session SET project_id = ?1, title = COALESCE(title, ?2) WHERE id = ?3",
                             params![proj_id, title, sid],
                         );
-                        updated += 1;
-                    } else if title.is_some() {
-                        let _ = self.conn.execute(
-                            "UPDATE session SET title = COALESCE(title, ?1) WHERE id = ?2",
-                            params![title, sid],
-                        );
-                        updated += 1;
-                    }
+                    updated += 1;
+                } else if title.is_some() {
+                    let _ = self.conn.execute(
+                        "UPDATE session SET title = COALESCE(title, ?1) WHERE id = ?2",
+                        params![title, sid],
+                    );
+                    updated += 1;
                 }
             }
         }
@@ -2870,28 +2868,27 @@ impl Database {
                 "plus" => Some(20.0),
                 _ => None,
             };
-            if let Some(price) = detected_openai {
-                if (profile.openai_plan_usd - 0.0).abs() < f64::EPSILON
-                    || ((profile.openai_plan_usd - 20.0).abs() < f64::EPSILON && price > 20.0)
-                {
-                    profile.openai_plan_usd = price;
-                    changed = true;
-                }
-            }
-        }
-
-        if let Some(price) = anthropic_usd {
-            if (profile.claude_plan_usd - 0.0).abs() < f64::EPSILON {
-                profile.claude_plan_usd = price;
+            if let Some(price) = detected_openai
+                && ((profile.openai_plan_usd - 0.0).abs() < f64::EPSILON
+                    || ((profile.openai_plan_usd - 20.0).abs() < f64::EPSILON && price > 20.0))
+            {
+                profile.openai_plan_usd = price;
                 changed = true;
             }
         }
 
-        if let Some(price) = google_usd {
-            if (profile.google_plan_usd - 0.0).abs() < f64::EPSILON {
-                profile.google_plan_usd = price;
-                changed = true;
-            }
+        if let Some(price) = anthropic_usd
+            && (profile.claude_plan_usd - 0.0).abs() < f64::EPSILON
+        {
+            profile.claude_plan_usd = price;
+            changed = true;
+        }
+
+        if let Some(price) = google_usd
+            && (profile.google_plan_usd - 0.0).abs() < f64::EPSILON
+        {
+            profile.google_plan_usd = price;
+            changed = true;
         }
 
         if changed {
@@ -3563,15 +3560,15 @@ impl Database {
             total_out += item.out_tok;
             total_turns += item.turns;
 
-            if let Some(e_str) = e {
-                if global_earliest.as_ref().is_none_or(|cur| &e_str < cur) {
-                    global_earliest = Some(e_str);
-                }
+            if let Some(e_str) = e
+                && global_earliest.as_ref().is_none_or(|cur| &e_str < cur)
+            {
+                global_earliest = Some(e_str);
             }
-            if let Some(l_str) = l {
-                if global_latest.as_ref().is_none_or(|cur| &l_str > cur) {
-                    global_latest = Some(l_str);
-                }
+            if let Some(l_str) = l
+                && global_latest.as_ref().is_none_or(|cur| &l_str > cur)
+            {
+                global_latest = Some(l_str);
             }
 
             raw_items.push(item);

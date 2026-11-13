@@ -88,19 +88,18 @@ impl SourceAdapter for AntigravityAdapter {
                 if self.parent_session_id.is_none()
                     && step_idx == 0
                     && (source == "SYSTEM" || step_type == "SYSTEM_MESSAGE")
+                    && let Some(pos) = raw_content.find("sender=")
                 {
-                    if let Some(pos) = raw_content.find("sender=") {
-                        let after = &raw_content[pos + 7..];
-                        let sender: String = after
-                            .chars()
-                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
-                            .collect();
-                        if sender.len() >= 32 && sender != conv_id {
-                            self.parent_session_id =
-                                Some(Session::compose_id(AgentId::Antigravity, &sender));
-                            if self.subagent_title.is_none() {
-                                self.subagent_title = Some("Subagent".to_owned());
-                            }
+                    let after = &raw_content[pos + 7..];
+                    let sender: String = after
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                        .collect();
+                    if sender.len() >= 32 && sender != conv_id {
+                        self.parent_session_id =
+                            Some(Session::compose_id(AgentId::Antigravity, &sender));
+                        if self.subagent_title.is_none() {
+                            self.subagent_title = Some("Subagent".to_owned());
                         }
                     }
                 }
@@ -187,13 +186,14 @@ impl SourceAdapter for AntigravityAdapter {
                             batch.projects.push(proj);
                         }
                     }
-                    if sess.title.is_none() && self.parent_session_id.is_none() {
-                        if let Some(prompt) = extract_antigravity_user_prompt(content) {
-                            let first_line = prompt.lines().next().unwrap_or("").trim();
-                            if !first_line.is_empty() {
-                                let truncated: String = first_line.chars().take(80).collect();
-                                sess.title = Some(truncated);
-                            }
+                    if sess.title.is_none()
+                        && self.parent_session_id.is_none()
+                        && let Some(prompt) = extract_antigravity_user_prompt(content)
+                    {
+                        let first_line = prompt.lines().next().unwrap_or("").trim();
+                        if !first_line.is_empty() {
+                            let truncated: String = first_line.chars().take(80).collect();
+                            sess.title = Some(truncated);
                         }
                     }
                 }
@@ -246,15 +246,15 @@ impl SourceAdapter for AntigravityAdapter {
 
                         if let Some(args) = call.get("args").and_then(Value::as_object) {
                             for k in ["Path", "path", "file_path"] {
-                                if let Some(p_str) = args.get(k).and_then(Value::as_str) {
-                                    if let Some(root) = find_repo_root_from_path(p_str) {
-                                        let proj = Project::from_origin(None, &root, None);
-                                        sess.project_id = proj.id.clone();
-                                        if !batch.projects.iter().any(|p| p.id == proj.id) {
-                                            batch.projects.push(proj);
-                                        }
-                                        break;
+                                if let Some(p_str) = args.get(k).and_then(Value::as_str)
+                                    && let Some(root) = find_repo_root_from_path(p_str)
+                                {
+                                    let proj = Project::from_origin(None, &root, None);
+                                    sess.project_id = proj.id.clone();
+                                    if !batch.projects.iter().any(|p| p.id == proj.id) {
+                                        batch.projects.push(proj);
                                     }
+                                    break;
                                 }
                             }
                         }
@@ -352,10 +352,10 @@ fn step_mentions_resource_exhausted(obj: &serde_json::Map<String, Value>) -> boo
         "message",
         "status_message",
     ] {
-        if let Some(text) = obj.get(key).and_then(Value::as_str) {
-            if text.contains("RESOURCE_EXHAUSTED") {
-                return true;
-            }
+        if let Some(text) = obj.get(key).and_then(Value::as_str)
+            && text.contains("RESOURCE_EXHAUSTED")
+        {
+            return true;
         }
     }
     false
@@ -394,12 +394,11 @@ pub fn parse_model_selection_change(content: &str) -> Option<String> {
 pub fn extract_conversation_id(path: &str) -> &str {
     let parts: Vec<&str> = path.split(['/', '\\']).collect();
     for (i, part) in parts.iter().enumerate() {
-        if *part == "brain" {
-            if let Some(id) = parts.get(i + 1) {
-                if !id.is_empty() {
-                    return id;
-                }
-            }
+        if *part == "brain"
+            && let Some(id) = parts.get(i + 1)
+            && !id.is_empty()
+        {
+            return id;
         }
     }
     "unknown-conversation"

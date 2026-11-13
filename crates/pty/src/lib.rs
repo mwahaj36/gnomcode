@@ -232,15 +232,14 @@ pub fn list_active_sessions() -> Vec<SessionRecord> {
     let mut sessions = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "json") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(record) = serde_json::from_str::<SessionRecord>(&content) {
-                    if is_pid_alive(record.host_pid) {
-                        sessions.push(record);
-                    } else {
-                        let _ = fs::remove_file(&path);
-                    }
-                }
+        if path.extension().is_some_and(|ext| ext == "json")
+            && let Ok(content) = fs::read_to_string(&path)
+            && let Ok(record) = serde_json::from_str::<SessionRecord>(&content)
+        {
+            if is_pid_alive(record.host_pid) {
+                sessions.push(record);
+            } else {
+                let _ = fs::remove_file(&path);
             }
         }
     }
@@ -1025,8 +1024,8 @@ async fn host_stream_handler(
                             let _ = input_tx.send(PtyInput {bytes: b.to_vec(), written: None});
                         }
                         Some(Ok(Message::Text(t))) => {
-                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&t) {
-                                if let Some(size) = value.get("resize") {
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&t)
+                                && let Some(size) = value.get("resize") {
                                     if let Some((cols, rows)) = terminal_dimensions(size) {
                                         if let Ok(mut scrollback) = state.scrollback.lock() {
                                             scrollback.resize(rows, cols);
@@ -1035,7 +1034,6 @@ async fn host_stream_handler(
                                     }
                                     continue;
                                 }
-                            }
                             let _ = input_tx.send(PtyInput {bytes: t.as_bytes().to_vec(), written: None});
                         }
                         Some(Ok(Message::Close(_))) | None => break,
