@@ -1,6 +1,6 @@
-- [2026-11-13 Release 1.0.0 versions](2026-11-13-release-1-0-versions.md)
 # Engineering sessions
 
+- [2026-11-13 Release 1.0.0 versions](2026-11-13-release-1-0-versions.md)
 - [2026-11-13 - Platform support matrix for 1.0](2026-11-13-platforms-support-doc.md)
 - [2026-11-13 - Automated packaged-build smoke script](2026-11-13-packaged-smoke-script.md)
 - [2026-11-13 - macOS and Linux platform correctness](2026-11-13-macos-linux-correctness.md)
