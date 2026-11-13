@@ -31,6 +31,7 @@
 - [2026-11-13 - Phone and console workspace attachments UI](2026-11-13-phone-attachments-ui.md)
 - [2026-11-13 - PWA app lock with passkey and device PIN (ADR 0034)](2026-11-13-pwa-app-lock.md)
 - [2026-11-13 - G5 interrupt button UI on console and phone](2026-11-13-interrupt-ui.md)
+- [2026-11-13 - F3 Handoff quality eval report UI](2026-11-13-handoff-eval-ui.md)
 - [2026-11-13 - F2 Continue here UI for imported sessions](2026-11-13-continue-here-imported-ui.md)
 - [2026-11-13 - F1 Worktree per session UI (launch, diff review, merge/discard/Open PR)](2026-11-13-worktree-session-ui.md)
 - [2026-11-13 - E1 Local console React Settings view and shell bridge](2026-11-13-local-console-settings.md)

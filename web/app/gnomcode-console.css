@@ -1769,3 +1769,22 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-imported-banner { flex-wrap: wrap; gap: var(--sp-3); }
 .sp-imported-info { flex: 1 1 220px; min-width: min(220px, 100%); }
 .sp-imported-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+
+/* ---- Handoff quality eval report (F3) ---- */
+.sp-eval-report { display: grid; gap: var(--sp-3); }
+.sp-eval-summary-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); background: var(--sp-surface); }
+.sp-eval-summary-metrics { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font: 600 13px/1.4 var(--sp-font-mono); }
+.sp-eval-updated { color: var(--sp-text-2); font: 12px/1.4 var(--sp-font-mono); }
+.sp-eval-list { display: grid; gap: var(--sp-2); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.sp-eval-case { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); background: var(--sp-surface); min-width: 0; }
+.sp-eval-case-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--sp-2); }
+.sp-eval-case-title { font: 600 13px/1.4 var(--sp-font-sans); color: var(--sp-text); overflow-wrap: anywhere; }
+.sp-eval-case-badges { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.sp-eval-outcome--passed { color: var(--sp-ok); background: var(--sp-ok-soft); }
+.sp-eval-outcome--failed { color: var(--sp-exhausted); background: var(--sp-exhausted-soft); }
+.sp-eval-outcome--unknown { color: var(--sp-text-2); background: var(--sp-surface-2); }
+.sp-eval-case-meta { display: flex; flex-wrap: wrap; gap: var(--sp-2); color: var(--sp-text-2); font: 12px/1.4 var(--sp-font-mono); overflow-wrap: anywhere; }
+.sp-eval-case-summary { margin: 0; color: var(--sp-text-2); font: 12px/1.5 var(--sp-font-sans); overflow-wrap: anywhere; }
+.sp-eval-providers { list-style: none; margin: var(--sp-3) 0; padding: 0; display: grid; gap: var(--sp-1); }
+.sp-eval-provider { display: flex; justify-content: space-between; gap: var(--sp-3); font: 400 var(--sp-fs-meta)/1.4 var(--sp-font-sans); color: var(--sp-text-2); }
+.sp-eval-provider strong { color: var(--sp-text); font-weight: 500; }
