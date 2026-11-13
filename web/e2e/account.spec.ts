@@ -112,3 +112,26 @@ test('the web console link uses the configured base address and opens safely', a
   await expect(link).toHaveAttribute('rel', /noopener/);
   expect(await link.getAttribute('href')).toMatch(/\/console$/);
 });
+
+test('a failed disconnect raises a dismissible notice and Escape cancels the confirmation', async ({ page, openConsole }) => {
+  await page.route('**/api/v1/auth/session', async (route) => {
+    const method = route.request().method();
+    if (method === 'DELETE') return route.fulfill({ status: 500, json: { message: 'no' } });
+    return route.fulfill({ json: { paired: true, email: 'person@example.test' } });
+  });
+  await openConsole('#auth');
+  const dialog = page.locator('#confirm-dialog');
+  await page.getByRole('button', { name: 'Disconnect desktop' }).click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator('#app-notice')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Disconnect desktop' }).click();
+  await page.locator('#confirm-accept').click();
+  const notice = page.locator('#app-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Could not disconnect. Reload the account status and retry.');
+  await notice.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(notice).toBeHidden();
+});
