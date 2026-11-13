@@ -53,7 +53,7 @@ portable-pty = "0.9"
 conpty-oxide = "0.1.2"
 tempfile = "3.13"
 insta = { version = "1.40", features = ["json", "yaml"] }
-ruzstd = "0.8"
+ruzstd = "0.9.1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

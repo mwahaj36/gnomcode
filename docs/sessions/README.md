@@ -1,5 +1,7 @@
 # Engineering sessions
 
+- [2026-11-13 - Restore green baseline](2026-11-13-restore-green-baseline.md)
+
 - [2026-11-13 - First-run tour refresh for four places and Workspace](2026-11-13-tour-refresh.md)
 - [2026-11-13 - In-app desktop auto-update from allowed manifest](2026-11-13-desktop-auto-update.md)
 - [2026-11-13 - Needs-you notifications and push redaction](2026-11-13-needs-you-notifications.md)

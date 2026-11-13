@@ -1760,6 +1760,9 @@ async fn remote_device_action_handler(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
+    if payload["type"] == "enable_account_access" && payload["remote_access_confirmed"] != true {
+        return Err(StatusCode::PRECONDITION_REQUIRED);
+    }
     let client = reqwest::Client::builder()
         .https_only(true)
         .timeout(std::time::Duration::from_secs(10))
@@ -1772,9 +1775,6 @@ async fn remote_device_action_handler(
 
     match payload["type"].as_str() {
         Some("enable_account_access") => {
-            if payload["remote_access_confirmed"] != true {
-                return Err(StatusCode::PRECONDITION_REQUIRED);
-            }
             state
                 .remote
                 .devices
