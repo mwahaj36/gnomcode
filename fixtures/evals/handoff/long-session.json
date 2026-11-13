@@ -1,0 +1,20 @@
+{
+  "id": "long-session",
+  "title": "Long session: the original goal is far behind the recent turns",
+  "source_agent": "antigravity",
+  "target_agent": "claude-code",
+  "repo_name": "planner-android",
+  "touched_files": ["src/calendar.kt", "src/export.kt"],
+  "events": [
+    {"role": "user", "content": "Port the date handling in src/calendar.kt from the legacy Date API to java.time. Keep behaviour for leap days identical."},
+    {"role": "assistant", "content": "Starting with the parsing helpers in src/calendar.kt."},
+    {"role": "assistant", "repeat": 120, "content": "The build log shows no new warnings and the formatter output is unchanged for this module. Nothing else needs attention in this pass, so I am moving on to the next module in the list."},
+    {"role": "user", "content": "Now update the README usage section."},
+    {"role": "assistant", "content": "README updated. Open: migrate the remaining java.util.Date call in src/export.kt."}
+  ],
+  "expect": {
+    "goals": ["java.time", "leap days identical"],
+    "files": ["src/calendar.kt", "src/export.kt"],
+    "open_tasks": ["java.util.date call in src/export.kt"]
+  }
+}
