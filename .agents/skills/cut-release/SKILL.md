@@ -43,6 +43,8 @@ node .agents/skills/cut-release/scripts/bump-version.mjs major
 
 To compile release binaries, build the standalone installer with uninstaller, package the release zip, and verify the web build:
 
+The script refuses to build unless `GNOMCODE_UPDATE_PUBLIC_KEY` is set to the 64-hex release public key (see `docs/release-signing.md`).
+
 Requires Python 3 for the existing cross-platform archive/checksum packager. `CARGO_TARGET_DIR` is honored when locating and embedding the Rust executable.
 
 ```powershell
