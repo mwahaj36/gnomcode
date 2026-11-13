@@ -3,7 +3,7 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", "Download Gnomcode — Windows, macOS, Linux", "Download the Windows development build of Gnomcode to launch and switch AI coding agents. Local features are free and require no account.");
+export const metadata = pageMetadata("/downloads", "Download Gnomcode for Windows", "Download the Windows development build of Gnomcode. macOS and Linux builds are not available yet. Local features are free and need no account.");
 
 export default function DownloadsPage() {
   return (
@@ -22,7 +22,7 @@ export default function DownloadsPage() {
       <section className="sp-download-help" aria-label="Release verification">
         <div>
           <h2>Verify the release</h2>
-          <p>Release archives include a SHA-256 manifest. The Windows updater and Linux install script verify downloads before replacing an existing install.</p>
+          <p>Release archives include a SHA-256 manifest. The Windows updater verifies downloads before replacing an existing install.</p>
         </div>
         <Link href="/docs/getting-started">Read installation guide <span aria-hidden="true">→</span></Link>
       </section>

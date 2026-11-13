@@ -1,6 +1,6 @@
 # Gnomcode Technical Specification & Model Reference
 
-Gnomcode is a local-first runtime and orchestrator for AI coding agents on Windows, macOS, and Linux.
+Gnomcode is a local-first runtime and orchestrator for Claude Code, Codex and Antigravity. The current build is a Windows development build.
 
 ## Architectural Principles & Invariants
 1. Local-First & Privacy: Redacted conversation history is stored strictly on the local machine in SQLite. Unencrypted chat content is never sent to cloud sync. Unrelated file contents and tool outputs are filtered prior to persistence.
@@ -12,7 +12,7 @@ Gnomcode is a local-first runtime and orchestrator for AI coding agents on Windo
 7. Non-Escalation: Auto-resume and orchestration never supply dangerous permission bypass flags (`--dangerously-skip-permissions` or `--yolo`).
 
 ## Model Handoff Architecture
-When switching models mid-task (e.g. from Claude Code to Codex, or Codex to Gemini):
+When switching models mid-task (e.g. from Claude Code to Codex, or Codex to Antigravity):
 1. Gnomcode inspects git diffs and untracked files in the active workspace.
 2. It extracts recent prompt objectives and conversation milestones from the local redaction store.
 3. It packages this state into a compact briefing prompt.
@@ -22,13 +22,13 @@ When switching models mid-task (e.g. from Claude Code to Codex, or Codex to Gemi
 ## Remote Companion Protocol
 - Key Derivation: Uses X25519 elliptic-curve Diffie-Hellman key exchange.
 - Communication: End-to-end encrypted channel between desktop daemon and mobile browser/PWA.
-- Authentication: Paired device cryptographic verification with local desktop confirmation.
-- Mobile PWA: Fully installable Progressive Web App with Web Notification and Service Worker push alerts when agents finish turns or request permissions.
+- Authentication: Account-linked devices with cryptographic proof; account access can be disabled from Devices.
+- Mobile PWA: Installable Progressive Web App with opt-in push notifications for finished turns and approval requests.
 
 ## URL Routes
 - Marketing & Docs:
   - https://gnomcode.vercel.app/ (Landing page)
-  - https://gnomcode.vercel.app/pricing (Plan comparison)
+  - https://gnomcode.vercel.app/pricing (Plans)
   - https://gnomcode.vercel.app/downloads (Binaries and packages)
   - https://gnomcode.vercel.app/docs (Documentation root)
   - https://gnomcode.vercel.app/privacy (Privacy policy)

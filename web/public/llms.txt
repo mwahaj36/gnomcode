@@ -1,25 +1,26 @@
 # Gnomcode — The Runtime for AI Coding Agents
 
-> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents on Windows, macOS, and Linux.
+> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. The current build is a Windows development build; macOS and Linux builds are not available yet.
 
 ## Core Capabilities
-- **Model Switching**: Switch mid-conversation between Claude Code, OpenAI Codex, and Gemini CLI. Compiles objectives, changed files, and recent turns into a local handoff.
-- **Mobile Remote Companion**: Pair your phone with your desktop daemon to read conversations, respond to approval prompts, and send follow-up instructions over an end-to-end encrypted channel.
-- **Fleet HUD & Usage Tracking**: Unified tracking of tokens, spend, and quota pools across all agents with declared trust levels (exact, estimated, api, unknown).
+- **Model Switching**: Switch mid-conversation between Claude Code, OpenAI Codex and Antigravity. Compiles objectives, changed files, and recent turns into a local handoff.
+- **Mobile Remote Companion**: Link your phone to your desktop to read conversations, send follow-up instructions and approve Claude Code permission prompts (Codex and Antigravity in opt-in protocol mode) over an end-to-end encrypted channel. Remote is a prototype.
+- **Usage and limits**: Unified tracking of tokens, estimated API-equivalent spend, and quota pools across the three supported agents with declared trust levels (exact, estimated, api, unknown).
 - **Fail-Open & Local-First**: The daemon runs on loopback (127.0.0.1). Redacted history remains local on your machine. Zero telemetry or phone-home.
 
 ## Supported Agents
 - Anthropic Claude Code (`claude`)
 - OpenAI Codex (`codex`)
 - Google Antigravity (`agy`)
-- Google Gemini CLI (`gemini`)
+
+Gnomcode 1.0 supports exactly these three agents.
 
 ## Official Documentation & Guides
-- [Getting Started](https://gnomcode.vercel.app/docs/getting-started): Installation, system requirements, and initial setup.
+- [Getting Started](https://gnomcode.vercel.app/docs/getting-started): Installation and initial setup.
 - [Supported Agents](https://gnomcode.vercel.app/docs/supported-agents): Full agent capability and observation matrix.
 - [Model Switching](https://gnomcode.vercel.app/docs/model-switching): How handoffs compile conversation context and file changes.
-- [Prompt from Phone](https://gnomcode.vercel.app/docs/prompt-from-phone): Pairing mobile devices with Gnomcode Remote over encrypted WebRTC/relay.
-- [Model Pricing & Quota](https://gnomcode.vercel.app/docs/model-pricing): Cost calculations, rate limit resets, and trust levels.
+- [Prompt from Phone](https://gnomcode.vercel.app/docs/prompt-from-phone): Linking mobile devices with Gnomcode Remote over an end-to-end encrypted relay.
+- [Model Pricing](https://gnomcode.vercel.app/docs/model-pricing): Cost calculations, rate limit resets, and trust levels.
 - [FAQ](https://gnomcode.vercel.app/docs/faq): Frequently asked questions on security, subscriptions, and integrations.
 
 ## Progressive Web App & Remote

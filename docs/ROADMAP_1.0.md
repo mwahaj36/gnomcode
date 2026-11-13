@@ -48,7 +48,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## E4. Scope cut for 1.0 (decided by Wahaj 2026-11-13)
 1.0 supports exactly Claude Code, Codex and Antigravity (Gemini CLI removed, final decision by Wahaj 2026-11-13). Delete (code, settings, docs, fixtures, tests, UI) rather than freeze: Teams, Cursor/Aider/Cline adapters, Gemini CLI adapter and Gemini ACP item. Keep account metadata sync (web console and PWA depend on it). Migrations must leave existing user data readable and never crash on old rows from removed agents. They can return after 1.0 through SPEC + ADR.
 - [x] Remove Teams, Cursor/Aider/Cline and Gemini CLI from Rust, web, desktop, scripts, SPEC, PRODUCT.md, AGENTS.md (ADR 0058; marketing pages follow in the audit item)
-- [ ] Marketing audit: landing, pricing, FAQ, docs, comparison tables, SEO metadata, downloads; claims match 1.0 exactly (three agents, no Teams); no unverified numbers
+- [x] Marketing audit: landing, pricing, FAQ, docs, comparison tables, SEO metadata, downloads; claims match 1.0 exactly (three agents, no Teams); no unverified numbers (see docs/sessions/2026-11-13-marketing-audit-1-0.md)
 - [ ] Fold scripts/check-*.mjs into real tests (browser tests for console, shared presenter fixtures) after E2
 
 ## G. Release 1.0.0

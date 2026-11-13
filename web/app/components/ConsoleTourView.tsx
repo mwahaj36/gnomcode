@@ -7,7 +7,7 @@ import { renderQuota, renderSessions, updateActivity } from "../../lib/console-p
 const sessions = [
   { id: "sample-codex", project_name: "web", agent: "Codex", model: "GPT-6.1", surface: "desktop_app", state: "thinking", total_tokens: 18400, input_tokens: 16000, output_tokens: 2400, cache_read_tokens: 9000, context_tokens: 12000, context_window: 258400, context_fill_pct: 4.6, total_cost_usd: .42, cost_basis: "estimated", usage_available: true },
   { id: "sample-claude", project_name: "api", agent: "Claude Code", model: "Sonnet", surface: "cli", state: "awaiting_approval", total_tokens: 12800, input_tokens: 2000, output_tokens: 2800, cache_read_tokens: 8000, context_tokens: 10000, context_window: 200000, context_fill_pct: 5, total_cost_usd: .31, cost_basis: "estimated", usage_available: true },
-  { id: "sample-gemini", project_name: "docs", agent: "Gemini CLI", model: "Flash", surface: "cli", state: "idle", total_tokens: 8100, input_tokens: 3100, output_tokens: 1000, cache_read_tokens: 4000, context_tokens: 7100, context_window: 1000000, context_fill_pct: .7, total_cost_usd: .13, cost_basis: "estimated", usage_available: true },
+  { id: "sample-antigravity", project_name: "docs", agent: "Antigravity", model: "Flash", surface: "cli", state: "idle", total_tokens: 8100, input_tokens: 3100, output_tokens: 1000, cache_read_tokens: 4000, context_tokens: 7100, context_window: 1000000, context_fill_pct: .7, total_cost_usd: .13, cost_basis: "estimated", usage_available: true },
 ].map(session => ({ ...session, started_at: "2026-10-26T09:00:00Z", last_event_at: "2026-10-26T12:00:00Z" }));
 const report = {
   total_tokens: 296000,
@@ -24,7 +24,7 @@ const report = {
 const pools = [
   { provider: "Codex", limit_id: "standard", window: "five_hour", used_pct: 38, remaining_pct: 62, basis: "api", reset_label: "in 2h 14m" },
   { provider: "Claude", limit_id: "weekly", window: "weekly", used_pct: 72, remaining_pct: 28, basis: "estimated", reset_label: "in 3d 6h" },
-  { provider: "Gemini", limit_id: "daily", window: "daily", used_pct: 56, remaining_pct: 44, basis: "api", reset_label: "in 8h 20m" },
+  { provider: "Antigravity", limit_id: "daily", window: "daily", used_pct: 56, remaining_pct: 44, basis: "api", reset_label: "in 8h 20m" },
 ];
 
 export function ConsoleTourView({ kind, visible = true, compact = false }: { kind: string; visible?: boolean; compact?: boolean }) {
@@ -44,7 +44,7 @@ export function ConsoleTourView({ kind, visible = true, compact = false }: { kin
     </>}
     {!compact && kind === "usage" && <div ref={activity} />}
     {kind === "sessions" && <div className="sp-tour-real-table" role="region" aria-label="Illustrative sessions; expand for details" tabIndex={0} dangerouslySetInnerHTML={{ __html: renderSessions(sessions, { illustrative: true }) }} />}
-    {kind === "usage" && <div className="sp-tour-provider-breakdown">{[["Codex", "124.0k", "$1.84"], ["Claude", "98.0k", "$1.42"], ["Gemini", "74.0k", "$0.52"]].map(([provider, tokens, cost]) => <div key={provider}><strong>{provider}</strong><span>{tokens} tokens · EXACT</span><span>{cost} · EST</span></div>)}</div>}
+    {kind === "usage" && <div className="sp-tour-provider-breakdown">{[["Codex", "124.0k", "$1.84"], ["Claude", "98.0k", "$1.42"], ["Antigravity", "74.0k", "$0.52"]].map(([provider, tokens, cost]) => <div key={provider}><strong>{provider}</strong><span>{tokens} tokens · EXACT</span><span>{cost} · EST</span></div>)}</div>}
     {kind === "limits" && <div dangerouslySetInnerHTML={{ __html: renderQuota(pools, null, { illustrative: true }) }} />}
   </div>;
 }
