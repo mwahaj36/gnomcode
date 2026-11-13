@@ -8,16 +8,17 @@ import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoic
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
 import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState } from '../lib/console-presentation';
+import { formatWorktreeBadge, renderWorktreeDiffMarkup, type WorktreeDiffData } from '../lib/worktree-presentation.mjs';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
-type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean };
+type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean; worktree?:boolean; worktree_branch?:string; worktree_path?:string };
 type ChatEvent = { event_id: string; turn_index: number; created_at: string; role: string; content: string; status?: string | null };
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -80,6 +81,12 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [launchAgent, setLaunchAgent] = useState('claude');
   const [launchRepo, setLaunchRepo] = useState('');
   const [launchModel, setLaunchModel] = useState('');
+  const [launchWorktree, setLaunchWorktree] = useState(false);
+  const [launchWorktreeBranch, setLaunchWorktreeBranch] = useState('');
+  const [worktreePanelOpen, setWorktreePanelOpen] = useState(false);
+  const [worktreeDiffData, setWorktreeDiffData] = useState<WorktreeDiffData | null>(null);
+  const [worktreeConfirm, setWorktreeConfirm] = useState<'worktree_merge' | 'worktree_discard' | 'worktree_open_pr' | null>(null);
+  const [worktreeActionBusy, setWorktreeActionBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -627,6 +634,35 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
       setError(reply.message || 'Remote request failed. Reconnect and try again.');
     }
+    else if (reply.type === 'session_changes') {
+      if (!reply.session_id || reply.session_id === selectedRef.current) {
+        setWorktreeDiffData({
+          repo: reply.repo,
+          branch: reply.branch,
+          status: reply.status,
+          diff: reply.diff,
+          lossy: Boolean(reply.lossy),
+        });
+      }
+    }
+    else if (reply.type === 'worktree_action_ack') {
+      setWorktreeActionBusy(false);
+      setWorktreeConfirm(null);
+      setNotice(reply.url ? `${reply.message || 'Pull request ready:'} ${reply.url}` : reply.message || 'Worktree action completed.');
+      await requestSessions();
+    }
+    else if (reply.type === 'error') {
+      if(reply.request_type && reply.request_type.startsWith('worktree_')){setWorktreeActionBusy(false);setWorktreeConfirm(null);}
+      if(reply.request_type==='session_changes'){setWorktreeDiffData({error: reply.message || 'Could not load worktree diff.'});return;}
+      if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
+      if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
+      if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
+      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
+      if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
+      if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
+      if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
+      setError(reply.message || 'Remote request failed. Reconnect and try again.');
+    }
   }
 
   async function connect(force=false) {
@@ -744,6 +780,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     selectedRef.current = id; setSchedules([]); setResetArmed(false); setArtifactsPanel(false); setArtifacts([]); setSelectedArtifactId(''); setArtifactsError(''); setArtifactsChangesCount(null); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     selectedRef.current = id; setSchedules([]); setResetArmed(false); pendingUploadIds.current.clear(); setAttachments([]); setAttachError(''); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     selectedRef.current = id; setSchedules([]); setResetArmed(false); interruptAttempt.current = null; interruptInFlight.current = false; setInterrupting(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
+    setWorktreePanelOpen(false); setWorktreeDiffData(null); setWorktreeConfirm(null); setWorktreeActionBusy(false);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}
   }
@@ -823,7 +860,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     {workspace && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>
       <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button ref={sidebarClose} type="button" aria-label="Close conversations" onClick={()=>{setShowSessions(false);sidebarToggle.current?.focus();}}>Close</button></div>
       <details open={newSession} onToggle={event=>setNewSession(event.currentTarget.open)}><summary>New conversation</summary>
-      <form onSubmit={event => { event.preventDefault(); if(!connected || launchPending.current)return; launchPending.current=true;launchDeadline.current=Date.now()+15000;setLaunching(true);setNotice('Starting agent on your desktop...'); void send({ type:'launch', agent:launchAgent, repo_path:launchRepo.trim(), model:launchModel.trim() || undefined }).catch(() => {launchPending.current=false;setLaunching(false);setError('Agent could not be launched. Check the desktop connection.');}); }}>
+      <form onSubmit={event => { event.preventDefault(); if(!connected || launchPending.current)return; launchPending.current=true;launchDeadline.current=Date.now()+15000;setLaunching(true);setNotice('Starting agent on your desktop...'); void send({ type:'launch', agent:launchAgent, repo_path:launchRepo.trim(), model:launchModel.trim() || undefined, worktree: launchWorktree || undefined, worktree_branch: launchWorktree && launchWorktreeBranch.trim() ? launchWorktreeBranch.trim() : undefined }).catch(() => {launchPending.current=false;setLaunching(false);setError('Agent could not be launched. Check the desktop connection.');}); }}>
         <label htmlFor="remote-launch-agent">Agent</label><select id="remote-launch-agent" value={launchAgent} onChange={event => setLaunchAgent(event.target.value)}><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option></select>
         <label htmlFor="remote-launch-repo">Workspace directory on desktop</label><input id="remote-launch-repo" value={launchRepo} onChange={event => setLaunchRepo(event.target.value)} required />
         <button type="button" disabled={foldersLoading} onClick={() => void browseFolders()}>Browse desktop folders</button>
@@ -840,6 +877,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <footer><button type="button" onClick={()=>folderDialog.current?.close()}>Cancel</button><button type="button" className="sp-primary-action" disabled={foldersLoading} onClick={()=>{setLaunchRepo(folderBrowser.path);folderDialog.current?.close();}}>Use this folder</button></footer>
         </dialog>}
         <label htmlFor="remote-launch-model">Model (optional)</label><input id="remote-launch-model" value={launchModel} onChange={event => setLaunchModel(event.target.value)} maxLength={128} />
+        <label className="sp-worktree-toggle"><input type="checkbox" checked={launchWorktree} onChange={event => setLaunchWorktree(event.target.checked)} /> Isolate in git worktree</label>
+        {launchWorktree && <><label htmlFor="remote-launch-wt-branch">Worktree branch (optional)</label><input id="remote-launch-wt-branch" value={launchWorktreeBranch} onChange={event => setLaunchWorktreeBranch(event.target.value)} placeholder="gnomcode/session-branch" maxLength={120} /></>}
         <button type="submit" disabled={!connected || launching || !launchRepo.trim()}>{launching?'Launching...':'Launch Agent'}</button>
       </form></details>
         <label className="remote-history-search" htmlFor="remote-history-search">Search titles and agents<input id="remote-history-search" type="search" value={conversationSearch} onChange={event=>{setConversationSearch(event.target.value);historyQuery.current={...historyQuery.current,page:1,search:event.target.value};void requestSessions();}} placeholder="Search conversation metadata" /></label>
@@ -854,6 +893,21 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         </article>)}</section>}
         {selected ? <>
         <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void browseRepoFiles('')}>Files</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={()=>setArtifactsPanel(true)}>Artifacts</button></div>
+        {(active?.worktree || active?.worktree_branch || active?.worktree_path) && <div className="sp-worktree-bar" role="region" aria-label="Session git worktree">
+          <span className="sp-chip sp-chip--neutral">{formatWorktreeBadge(active)}</span>
+          <div className="sp-worktree-actions">
+            <button type="button" className="sp-remote-tool-btn" disabled={!connected || worktreeActionBusy} onClick={() => {
+              if (worktreePanelOpen) { setWorktreePanelOpen(false); return; }
+              setWorktreePanelOpen(true); setWorktreeDiffData({ loading: true });
+              void send({ type: 'session_changes', session_id: selected }).catch(() => setWorktreeDiffData({ error: 'Worktree diff unavailable.' }));
+            }}>{worktreePanelOpen ? 'Hide diff' : 'Review diff'}</button>
+            <button type="button" className="sp-remote-tool-btn" disabled={!connected || worktreeActionBusy} onClick={() => setWorktreeConfirm('worktree_merge')}>Merge</button>
+            <button type="button" className="sp-remote-tool-btn" disabled={!connected || worktreeActionBusy} onClick={() => setWorktreeConfirm('worktree_open_pr')}>Open PR</button>
+            <button type="button" className="sp-remote-tool-btn sp-tone-red" disabled={!connected || worktreeActionBusy} onClick={() => setWorktreeConfirm('worktree_discard')}>Discard</button>
+          </div>
+          {worktreeConfirm && <div className="sp-confirm-inline"><p>Confirm {worktreeConfirm.replace('worktree_', '').replace('_', ' ')}?</p><button type="button" onClick={() => setWorktreeConfirm(null)}>Cancel</button><button type="button" disabled={!connected || worktreeActionBusy} onClick={() => { setWorktreeActionBusy(true); void send({ type: worktreeConfirm, session_id: selected }).catch(() => { setWorktreeActionBusy(false); setError('Worktree action requires desktop support.'); }); }}>Confirm</button></div>}
+          {worktreePanelOpen && <div className="sp-worktree-diff-panel" dangerouslySetInnerHTML={{ __html: renderWorktreeDiffMarkup(worktreeDiffData) }} />}
+        </div>}
         {historyLoading && <p role="status">Loading messages...</p>}
         {hasEarlier && <button type="button" disabled={!connected || historyLoading} onClick={() => {
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};

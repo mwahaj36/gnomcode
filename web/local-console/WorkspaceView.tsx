@@ -21,6 +21,11 @@ import {
   type ProjectActivity,
 } from '../lib/console-presentation.js';
 import {
+  formatWorktreeBadge,
+  renderWorktreeDiffMarkup,
+  type WorktreeDiffData,
+} from '../lib/worktree-presentation.mjs';
+import {
   fetchLocalJson,
   fetchLocalMutation,
   getLocalBearerToken,
@@ -38,6 +43,9 @@ interface HostedSession {
   model_observed?: boolean;
   repo_path?: string;
   started_at?: string;
+  worktree?: boolean;
+  worktree_branch?: string;
+  worktree_path?: string;
 }
 
 interface InstalledAgent {
@@ -158,9 +166,20 @@ export function WorkspaceView() {
   const [launchAgent, setLaunchAgent] = useState('claude');
   const [launchRepo, setLaunchRepo] = useState('');
   const [launchModel, setLaunchModel] = useState('');
+  const [launchWorktree, setLaunchWorktree] = useState(false);
+  const [launchWorktreeBranch, setLaunchWorktreeBranch] = useState('');
   const [launchStatus, setLaunchStatus] = useState('');
   const [launchBusy, setLaunchBusy] = useState(false);
   const [agentHintError, setAgentHintError] = useState('');
+
+  // Worktree review state
+  const [worktreeDiffOpen, setWorktreeDiffOpen] = useState(false);
+  const [worktreeDiff, setWorktreeDiff] = useState<WorktreeDiffData | null>(null);
+  const [worktreeConfirmAction, setWorktreeConfirmAction] = useState<
+    'merge' | 'discard' | 'open-pr' | null
+  >(null);
+  const [worktreeBusy, setWorktreeBusy] = useState(false);
+  const [worktreeStatus, setWorktreeStatus] = useState('');
 
   // Workspace folder browser dialog state
   const [browserOpen, setBrowserOpen] = useState(false);
@@ -373,6 +392,12 @@ export function WorkspaceView() {
 
       const request = ++chatRequestRef.current;
       if (!silent) {
+        if (!earlier) {
+          setWorktreeDiffOpen(false);
+          setWorktreeConfirmAction(null);
+          setWorktreeStatus('');
+          setWorktreeDiff(null);
+        }
         void loadChatModels();
         void refreshAutomation(sessionId);
         if (!earlier) setChatStatus('Loading conversation...');
@@ -787,6 +812,53 @@ export function WorkspaceView() {
     }
   };
 
+  const handleToggleWorktreeDiff = async () => {
+    if (!activeSessionId) return;
+    if (worktreeDiffOpen) {
+      setWorktreeDiffOpen(false);
+      return;
+    }
+    setWorktreeDiffOpen(true);
+    setWorktreeDiff({ loading: true });
+    try {
+      const result = await fetchLocalJson<WorktreeDiffData>(
+        `/api/v1/sessions/${encodeURIComponent(activeSessionId)}/changes`,
+      );
+      setWorktreeDiff(result);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unable to load changes';
+      setWorktreeDiff({ error: msg });
+    }
+  };
+
+  const handleWorktreeLifecycle = async (action: 'merge' | 'discard' | 'open-pr') => {
+    if (!activeSessionId || worktreeBusy) return;
+    setWorktreeBusy(true);
+    setWorktreeConfirmAction(null);
+    const label =
+      action === 'merge' ? 'Merging worktree' : action === 'discard' ? 'Discarding worktree' : 'Opening pull request';
+    setWorktreeStatus(`${label}...`);
+    try {
+      const result = await fetchLocalMutation<{ ok?: boolean; message?: string; url?: string }>(
+        `/api/v1/sessions/${encodeURIComponent(activeSessionId)}/worktree/${action}`,
+        { method: 'POST', body: {} },
+      );
+      setWorktreeStatus(
+        result?.url
+          ? `${result.message || 'Pull request ready:'} ${result.url}`
+          : result?.message || `${label} completed.`,
+      );
+      await loadConversations();
+      if (action === 'discard') setWorktreeDiffOpen(false);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Request failed';
+      // The daemon explains refusals itself (agent still inside, dirty base, conflicts, gh missing).
+      setWorktreeStatus(`Worktree action failed. ${msg}`);
+    } finally {
+      setWorktreeBusy(false);
+    }
+  };
+
   const handleLaunchSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const repoPath = launchRepo.trim();
@@ -803,6 +875,9 @@ export function WorkspaceView() {
           agent: launchAgent,
           repo_path: repoPath,
           model: launchAgent === 'terminal' ? undefined : launchModel.trim() || undefined,
+          worktree: launchWorktree || undefined,
+          worktree_branch:
+            launchWorktree && launchWorktreeBranch.trim() ? launchWorktreeBranch.trim() : undefined,
         },
       });
       setLaunchStatus(`Session ${record.session_id} launched! Opening conversation...`);
@@ -1479,6 +1554,28 @@ export function WorkspaceView() {
                   />
                 </label>
               </div>
+              <div className="sp-worktree-launch">
+                <label className="sp-worktree-toggle">
+                  <input
+                    type="checkbox"
+                    checked={launchWorktree}
+                    onChange={(event) => setLaunchWorktree(event.target.checked)}
+                  />
+                  <span>Isolate in git worktree</span>
+                </label>
+                {launchWorktree ? (
+                  <label>
+                    Worktree branch (optional)
+                    <input
+                      type="text"
+                      placeholder="gnomcode/session-branch"
+                      maxLength={120}
+                      value={launchWorktreeBranch}
+                      onChange={(event) => setLaunchWorktreeBranch(event.target.value)}
+                    />
+                  </label>
+                ) : null}
+              </div>
               <p role="status">
                 {agentHintError
                   ? agentHintError
@@ -1644,6 +1741,94 @@ export function WorkspaceView() {
                 isSessionRunningState(activeSession?.state || '')
               }
             />
+            {activeSession?.worktree ||
+            activeSession?.worktree_branch ||
+            activeSession?.worktree_path ||
+            activeHosted?.worktree ||
+            activeHosted?.worktree_branch ? (
+              <div className="sp-worktree-bar" role="region" aria-label="Session git worktree">
+                <div className="sp-worktree-summary">
+                  <span className="sp-chip sp-chip--neutral">
+                    {formatWorktreeBadge(activeSession || activeHosted)}
+                  </span>
+                  {activeSession?.worktree_path || activeHosted?.worktree_path ? (
+                    <code className="sp-worktree-path">
+                      {activeSession?.worktree_path || activeHosted?.worktree_path}
+                    </code>
+                  ) : null}
+                </div>
+                <div className="sp-worktree-actions">
+                  <button
+                    type="button"
+                    className="btn-control"
+                    disabled={worktreeBusy}
+                    onClick={() => void handleToggleWorktreeDiff()}
+                  >
+                    {worktreeDiffOpen ? 'Hide diff' : 'Review diff'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-control"
+                    disabled={worktreeBusy}
+                    onClick={() => setWorktreeConfirmAction('merge')}
+                  >
+                    Merge
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-control"
+                    disabled={worktreeBusy}
+                    onClick={() => setWorktreeConfirmAction('open-pr')}
+                  >
+                    Open PR
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-control sp-tone-red"
+                    disabled={worktreeBusy}
+                    onClick={() => setWorktreeConfirmAction('discard')}
+                  >
+                    Discard
+                  </button>
+                </div>
+                {worktreeConfirmAction ? (
+                  <div className="sp-confirm-inline" role="region" aria-label="Confirm worktree action">
+                    <p>
+                      {worktreeConfirmAction === 'merge'
+                        ? 'Merge changes from this session worktree into the base branch?'
+                        : worktreeConfirmAction === 'discard'
+                          ? 'Discard this session worktree and delete uncommitted worktree changes?'
+                          : 'Push this worktree branch and open a pull request?'}
+                    </p>
+                    <div className="dialog-actions">
+                      <button
+                        type="button"
+                        className="btn-control"
+                        onClick={() => setWorktreeConfirmAction(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={worktreeBusy}
+                        onClick={() => void handleWorktreeLifecycle(worktreeConfirmAction)}
+                      >
+                        Confirm{' '}
+                        {worktreeConfirmAction === 'open-pr' ? 'Open PR' : worktreeConfirmAction}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {worktreeStatus ? <p role="status">{worktreeStatus}</p> : null}
+                {worktreeDiffOpen ? (
+                  <div
+                    className="sp-worktree-diff-panel"
+                    dangerouslySetInnerHTML={{ __html: renderWorktreeDiffMarkup(worktreeDiff) }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
 
             {confirmDeleteOpen ? (
               <div className="sp-confirm-inline" role="region" aria-label="Confirm deletion">
