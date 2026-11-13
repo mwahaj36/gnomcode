@@ -1,3 +1,4 @@
+- [2026-11-13 Release handoff ledger](2026-11-13-release-handoff.md)
 # Engineering sessions
 
 - [2026-11-13 - Platform support matrix for 1.0](2026-11-13-platforms-support-doc.md)
