@@ -359,6 +359,61 @@ mod tests {
     }
 
     #[test]
+    fn claude_desktop_main_transcript_is_an_unlinked_desktop_session() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let bytes = include_bytes!("../../../fixtures/claude-code/v2.1.321/desktop-main.jsonl");
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.sessions.len(), 1);
+        let session = &batch.sessions[0];
+        assert_eq!(session.id, "claude-code:id_0001");
+        assert_eq!(session.surface, gnomcode_core::Surface::DesktopApp);
+        assert_eq!(session.parent_session_id, None);
+    }
+
+    #[test]
+    fn claude_subagent_bookkeeping_lines_never_reach_the_parent_session() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let bytes = include_bytes!("../../../fixtures/claude-code/v2.1.321/desktop-subagent.jsonl");
+        let child = "claude-code:agent-id_0001";
+        let parent = "claude-code:id_0003";
+        let lines: Vec<&[u8]> = bytes.split_inclusive(|byte| *byte == b'\n').collect();
+        // Whole file, then every tail that starts on a marker-less line (what a live tail reads).
+        for start in 0..lines.len() {
+            let chunk = lines[start..].concat();
+            let batch = ClaudeAdapter::new().parse(&FileCtx::default(), &chunk);
+            let session = &batch.sessions[0];
+            assert_eq!(session.id, child, "tail starting at line {start}");
+            assert_eq!(session.parent_session_id.as_deref(), Some(parent));
+        }
+        // The file name alone identifies the child even when no line carries agentId.
+        let ctx = FileCtx {
+            source_path: r"C:\claude\projects\p\id_0003\subagents\agent-id_0001.jsonl".to_owned(),
+            ..FileCtx::default()
+        };
+        let bare =
+            br#"{"type":"api-request","sessionId":"id_0003","timestamp":"2026-11-12T13:14:40.121Z"}
+"#;
+        let batch = ClaudeAdapter::new().parse(&ctx, bare);
+        assert_eq!(batch.sessions[0].id, child);
+        assert_eq!(batch.sessions[0].parent_session_id.as_deref(), Some(parent));
+    }
+
+    #[test]
+    fn claude_session_is_never_its_own_parent() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let log = br#"{"type":"api-request","sessionId":"s1","timestamp":"2026-11-12T13:14:40Z"}
+{"type":"user","isSidechain":true,"agentId":"a1","sessionId":"s1","timestamp":"2026-11-12T13:14:41Z","cwd":"/w","message":{"role":"user","content":"x"}}
+"#;
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), log);
+        assert!(
+            batch
+                .sessions
+                .iter()
+                .all(|s| s.parent_session_id.as_deref() != Some(&s.id))
+        );
+    }
+
+    #[test]
     fn antigravity_reply_from_created_subagent_does_not_make_parent_a_child() {
         use super::{FileCtx, SourceAdapter, antigravity::AntigravityAdapter};
         let parent_ctx = FileCtx {
