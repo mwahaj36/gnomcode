@@ -1,7 +1,13 @@
 target/
 apps/
 npm/
-crates/
+# Keep the generated console bundle: web prebuild checks it is fresh.
+crates/*
+!crates/daemon/
+crates/daemon/*
+!crates/daemon/src/
+crates/daemon/src/*
+!crates/daemon/src/console-react.js
 fixtures/
 workers/
 /docs/
