@@ -1,6 +1,6 @@
 {
   "name": "@gnomcode/cli-linux-x64-musl",
-  "version": "0.9.4",
+  "version": "1.0.0",
   "license": "SEE LICENSE IN EULA.txt",
   "os": [
     "linux"
