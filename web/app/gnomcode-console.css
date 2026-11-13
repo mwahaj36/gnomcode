@@ -1742,3 +1742,25 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-native-console #view-settings .sp-settings-root input:is([type="checkbox"], [type="radio"]) { width: 16px; height: 16px; min-height: 0; padding: 0; vertical-align: middle; }
 .sp-native-console #view-settings .sp-settings-section .table-container { margin-top: var(--sp-3); }
 
+/* ---- Worktree session bar & diff viewer (F1) ---- */
+.sp-worktree-launch { display: flex; flex-direction: column; gap: var(--sp-2); }
+.sp-worktree-toggle { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 44px; cursor: pointer; font-size: 13px; color: var(--sp-text); }
+.sp-worktree-toggle input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+.sp-worktree-bar { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); background: var(--sp-surface); margin-bottom: var(--sp-3); }
+.sp-worktree-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.sp-worktree-path { font: 12px/1.4 var(--sp-font-mono); color: var(--sp-text-2); word-break: break-all; }
+.sp-worktree-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.sp-worktree-actions .btn-control,
+.sp-worktree-actions .sp-remote-tool-btn { min-height: 44px; }
+.sp-worktree-diff-panel { border-top: 1px solid var(--sp-border); padding-top: var(--sp-2); }
+.sp-changes-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.sp-changes-files { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: grid; gap: var(--sp-1); }
+.sp-changes-file { display: flex; align-items: center; gap: var(--sp-2); font: 12px/1.4 var(--sp-font-mono); overflow-wrap: anywhere; }
+.sp-diff-code { margin: 0; padding: var(--sp-2); border: 1px solid var(--sp-border); border-radius: var(--sp-control-radius); background: var(--sp-bg); font: 12px/1.5 var(--sp-font-mono); max-height: 360px; overflow: auto; }
+.sp-diff-line { display: block; white-space: pre-wrap; word-break: break-word; }
+.sp-diff-line--meta { color: var(--sp-text-2); }
+.sp-diff-line--hunk { color: var(--sp-accent); }
+.sp-diff-line--add { color: var(--sp-ok); background: var(--sp-ok-soft); }
+.sp-diff-line--del { color: var(--sp-exhausted); background: var(--sp-exhausted-soft); }
+
+
