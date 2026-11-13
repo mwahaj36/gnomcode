@@ -273,11 +273,45 @@ const HOME_RECENT_MAX = 6;
 const CHEVRON_RIGHT = '<svg class="sp-session-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 const shortAge = value => { const date = new Date(value); if (!Number.isFinite(date.getTime())) return ''; const age = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)); return age < 60 ? 'now' : age < 3600 ? Math.floor(age / 60) + 'm' : age < 86400 ? Math.floor(age / 3600) + 'h' : Math.floor(age / 86400) + 'd'; };
 
+const SUBAGENT_ROWS_MAX = 10;
+const subagentOpen = new Set();
+let subagentToggleBound = false;
+// Re-rendered lists replace their markup, so remember which subagent groups the user expanded.
+function bindSubagentToggle() {
+  if (subagentToggleBound || typeof document === 'undefined') return;
+  subagentToggleBound = true;
+  document.addEventListener('toggle', event => {
+    const element = event.target;
+    if (!element?.classList?.contains('sp-subagents')) return;
+    if (element.open) subagentOpen.add(element.dataset.key); else subagentOpen.delete(element.dataset.key);
+  }, true);
+}
+
+export function renderSubagents(session, action = 'load-chat') {
+  const list = Array.isArray(session?.subagents) ? session.subagents : [];
+  const count = Number.isFinite(session?.subagent_count) ? session.subagent_count : list.length;
+  if (!count) return '';
+  bindSubagentToggle();
+  const isLive = child => Boolean(child.is_ongoing ?? child.ongoing);
+  const live = Number.isFinite(session.subagents_ongoing) ? session.subagents_ongoing : list.filter(isLive).length;
+  const key = `sub:${session.id}`;
+  const shown = list.slice(0, SUBAGENT_ROWS_MAX);
+  const rows = shown.map(child => {
+    const group = child.home_group || (isLive(child) ? 'running' : 'recent');
+    const state = child.presence === 'recently_idle' ? 'Idle' : child.state === 'unknown' ? 'No recent activity' : sessionStateLabel(child.state);
+    const meta = [state, child.model && child.model !== 'Unspecified' ? child.model : ''].filter(Boolean).join(' · ');
+    return `<li><button type="button" class="sp-subagent-row" data-action="${action}" data-arg="${escape(child.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(child.title && child.title.toLowerCase() !== 'unknown' ? child.title : 'Subagent')}</strong><span>${escape(meta)}</span></span><time class="sp-session-time" datetime="${escape(child.last_event_at || '')}">${escape(shortAge(child.last_event_at))}</time></button></li>`;
+  }).join('');
+  const more = count > shown.length ? `<li class="sp-subagent-more">${count - shown.length} older not shown</li>` : '';
+  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${count} subagent${count === 1 ? '' : 's'}${live ? ` · ${live} active` : ''}</summary><ul>${rows}${more}</ul></details>`;
+}
+
 function homeRow(session, group) {
   const project = session.project_name && session.project_name.toLowerCase() !== 'unknown' ? session.project_name : 'Private project';
   const title = session.title && session.title.toLowerCase() !== 'unknown' ? session.title : project === 'Private project' ? 'Private session' : project;
   const fill = Number.isFinite(session.context_fill_pct) ? Math.round(session.context_fill_pct) : null;
-  const meta = [project, titleCase(session.agent), session.model && session.model !== 'Unspecified' ? session.model : ''].filter(Boolean).join(' · ');
+  const subagentBadge = session.subagent_count > 0 ? `${session.subagent_count} subagent${session.subagent_count === 1 ? '' : 's'}` : '';
+  const meta = [project, titleCase(session.agent), session.model && session.model !== 'Unspecified' ? session.model : '', subagentBadge].filter(Boolean).join(' · ');
   const context = fill === null ? '<span class="sp-session-context" aria-hidden="true"></span>' : `<span class="sp-session-context" title="Context ${fill}% full"><i style="--fill:${fill}%"></i></span>`;
   return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${escape(meta)}</span></span>${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
 }
@@ -289,7 +323,7 @@ export function renderHomeSessions(sessions) {
   const groups = HOME_GROUPS.map(([key, label]) => {
     const all = sessions.filter(session => (HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent') === key);
     const rows = key === 'recent' ? all.slice(0, HOME_RECENT_MAX) : all;
-    return rows.length ? `<h3 class="sp-group-label">${label}${key === 'recent' ? '' : ` <span>(${all.length})</span>`}</h3><div class="sp-session-list">${rows.map(session => homeRow(session, key)).join('')}</div>` : '';
+    return rows.length ? `<h3 class="sp-group-label">${label}${key === 'recent' ? '' : ` <span>(${all.length})</span>`}</h3><div class="sp-session-list">${rows.map(session => homeRow(session, key) + renderSubagents(session, 'open-home-session')).join('')}</div>` : '';
   }).join('');
   return `<section class="sp-section" aria-label="Sessions">${head}${groups}</section>`;
 }
@@ -604,7 +638,7 @@ export function renderSessionList(sessions, selected = '', query = '') {
     const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
     const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
     lastGroup = group;
-    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>`;
+    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 

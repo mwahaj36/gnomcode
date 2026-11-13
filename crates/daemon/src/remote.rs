@@ -1035,6 +1035,48 @@ fn legacy_tool_session(id: &str) -> bool {
     })
 }
 
+/// Maximum nested subagents listed per conversation; `subagent_count` still counts them all.
+const NESTED_SUBAGENT_LIMIT: usize = 50;
+
+/// Nests each subagent row under its parent as `subagents`, `subagent_count` and
+/// `subagents_ongoing`. A subagent is ongoing while its displayed state is a running one.
+pub(crate) fn nest_subagents(rows: &mut [Value]) {
+    let mut children: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
+    for row in rows.iter() {
+        let Some(parent) = row["parent_session_id"].as_str() else {
+            continue;
+        };
+        let ongoing = matches!(
+            row["state"].as_str(),
+            Some("thinking" | "tool" | "awaiting_approval")
+        );
+        children.entry(parent.to_owned()).or_default().push(json!({
+            "id": row["id"], "title": row["title"], "model": row["model"], "state": row["state"],
+            "ongoing": ongoing, "last_event_at": row["last_event_at"],
+        }));
+    }
+    for row in rows.iter_mut() {
+        let Some(mut nested) = row["id"].as_str().and_then(|id| children.remove(id)) else {
+            continue;
+        };
+        nested.sort_by(|a, b| {
+            b["last_event_at"]
+                .as_str()
+                .cmp(&a["last_event_at"].as_str())
+        });
+        row["subagent_count"] = json!(nested.len());
+        row["subagents_ongoing"] = json!(
+            nested
+                .iter()
+                .filter(|child| child["ongoing"] == true)
+                .count()
+        );
+        nested.truncate(NESTED_SUBAGENT_LIMIT);
+        row["subagents"] = json!(nested);
+    }
+}
+
 pub(crate) fn conversation_page(mut rows: Vec<Value>, query: &Value) -> Value {
     let search = query["search"].as_str().unwrap_or("").trim().to_lowercase();
     let include_subagents = query["include_subagents"].as_bool().unwrap_or(false);
@@ -1056,12 +1098,16 @@ pub(crate) fn conversation_page(mut rows: Vec<Value>, query: &Value) -> Value {
                 .as_str()
                 .filter(|value| !value.is_empty() && *value != "all")
                 .is_none_or(|status| match status {
-                    "active" => matches!(
-                        row["state"].as_str(),
-                        Some("thinking" | "tool" | "awaiting_approval")
-                    ),
+                    "active" => {
+                        row["subagents_ongoing"].as_u64().unwrap_or(0) > 0
+                            || matches!(
+                                row["state"].as_str(),
+                                Some("thinking" | "tool" | "awaiting_approval")
+                            )
+                    }
                     "ongoing" => {
                         row["hosted"] == true
+                            || row["subagents_ongoing"].as_u64().unwrap_or(0) > 0
                             || matches!(
                                 row["state"].as_str(),
                                 Some("thinking" | "tool" | "awaiting_approval")
@@ -2175,5 +2221,28 @@ mod tests {
             response["message"],
             "Could not prepare model switch. Check the selected agent and workspace on your desktop."
         );
+    }
+
+    #[test]
+    fn subagents_nest_under_their_parent_and_keep_it_in_the_ongoing_filter() {
+        let mut rows = vec![
+            json!({"id":"p","state":"idle","parent_session_id":null,"last_event_at":"2026-11-13T05:00:00Z"}),
+            json!({"id":"a","state":"tool","parent_session_id":"p","last_event_at":"2026-11-13T05:10:00Z"}),
+            json!({"id":"b","state":"idle","parent_session_id":"p","last_event_at":"2026-11-13T05:05:00Z"}),
+            json!({"id":"q","state":"idle","parent_session_id":null,"last_event_at":"2026-11-13T04:00:00Z"}),
+        ];
+        nest_subagents(&mut rows);
+        assert_eq!(rows[0]["subagent_count"], 2);
+        assert_eq!(rows[0]["subagents_ongoing"], 1);
+        assert_eq!(rows[0]["subagents"][0]["id"], "a", "newest first");
+        assert!(rows[3]["subagents"].is_null());
+        let page = conversation_page(rows, &json!({"status":"ongoing"}));
+        let ids: Vec<_> = page["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .map(|row| row["id"].as_str().expect("id"))
+            .collect();
+        assert_eq!(ids, ["p"]);
     }
 }
