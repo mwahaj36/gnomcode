@@ -15,6 +15,9 @@ $Out = Join-Path $RepoRoot "web/public/downloads"
 & powershell -NoProfile -File scripts/check-tray.ps1
 if ($LASTEXITCODE -ne 0) { throw "Native tray icon regression failed" }
 
+# Fail closed: a release binary must embed the reviewed update public key (ADR 0059).
+if ($env:GNOMCODE_UPDATE_PUBLIC_KEY -notmatch '^[0-9a-fA-F]{64}$') { throw "GNOMCODE_UPDATE_PUBLIC_KEY must be set to the 64-hex release public key before a release build (docs/release-signing.md)" }
+
 & $Cargo build --locked -p gnomcode --release
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $RepoRoot "target" }
