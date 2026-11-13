@@ -46,6 +46,21 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  embedded-key:
+    name: embedded update key (RFC 8032 test key)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Public test vector only (docs/release-signing.md); never a release key.
+      - name: Embedded key rejects runtime override
+        run: |
+          set -euo pipefail
+          exe=$(GNOMCODE_UPDATE_PUBLIC_KEY=d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a             cargo test -p gnomcode-daemon --lib --no-run --message-format=json             | python3 -c 'import json,sys; print([m["executable"] for m in map(json.loads, filter(lambda l: l.startswith("{"), sys.stdin)) if m.get("executable") and m["target"]["name"] == "gnomcode_daemon"][-1])')
+          env -u GNOMCODE_UPDATE_PUBLIC_KEY "$exe" embedded_key_requires_signature_despite_runtime_override --ignored --nocapture
+          GNOMCODE_UPDATE_PUBLIC_KEY=0000000000000000000000000000000000000000000000000000000000000000             "$exe" embedded_key_requires_signature_despite_runtime_override --ignored --nocapture
+
   msrv:
     name: MSRV check
     runs-on: ubuntu-latest

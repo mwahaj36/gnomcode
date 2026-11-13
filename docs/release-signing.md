@@ -4,6 +4,8 @@ The Rust daemon owns update trust. Set `GNOMCODE_UPDATE_PUBLIC_KEY` to the relea
 
 An embedded key always wins over the runtime environment. Unsetting, replacing or blanking the runtime variable cannot disable the embedded requirement. An empty or malformed embedded value refuses every installer; the application and existing agents remain usable. With no embedded key, the existing optional runtime-key behavior remains for development compatibility. A release build must embed the reviewed public key. No production key is supplied by this change.
 
+`.agents/skills/cut-release/scripts/package-release.ps1` fails closed: it throws before compiling unless `GNOMCODE_UPDATE_PUBLIC_KEY` is exactly 64 hexadecimal characters. Development builds do not use this script and are unaffected. The CI job `embedded-key` compiles the daemon tests with the RFC 8032 test public key and runs the ignored embedded-key regression with the variable unset and then set to a different value.
+
 ## Key custody
 
 Wahaj supplies an existing Ed25519 signing key through an approved secret manager or encrypted offline vault. Keep the private key outside the source tree, worktrees, artifact directories, cloud-synced folders and chat. Restrict filesystem access to the release account. Keep a separately encrypted recovery backup with an owner-approved recovery procedure. Never commit, upload, print or paste the private key into a command, PR, session log or chat. This runbook does not generate a real key.
