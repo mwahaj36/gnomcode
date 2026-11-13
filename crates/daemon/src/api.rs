@@ -19,6 +19,8 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+mod console_react;
+
 /// Server application state shared across HTTP handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -119,6 +121,7 @@ pub fn build_router(state: AppState) -> Router {
             }),
         )
         .route("/console-app.js", get(console_app_handler))
+        .route("/console-react.js", get(console_react::handler))
         .route("/markdown-it.mjs", get(markdown_handler))
         .route("/gnomcode-tokens.css", get(tokens_handler))
         .route("/gnomcode-console.css", get(console_styles_handler))

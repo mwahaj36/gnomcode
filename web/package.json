@@ -3,7 +3,7 @@
   "version": "0.9.4",
   "private": true,
   "scripts": {
-    "prebuild": "node ../scripts/build-chat-markdown.mjs --check",
+    "prebuild": "node ../scripts/build-chat-markdown.mjs --check && node ../scripts/build-local-console.mjs --check",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
