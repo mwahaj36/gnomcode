@@ -88,7 +88,7 @@ Rust owns parsing, pricing, quotas, rules and routing. `core` is pure synchronou
 
 ### 3.3 Processes and terminal lifecycle
 
-Official CLIs run in independent PTY owners, outside Electron. Windows uses ConPTY; Unix uses portable PTY support. Host prompt delivery uses bounded authenticated loopback input acknowledgements, bracketed paste and separately acknowledged Enter. Window resize is bounded. A local same-workspace xterm shell is distinct from the agent and unavailable over Remote. Cross-platform crash survival and reattachment require acceptance evidence.
+Official CLIs run in independent PTY owners, outside Electron. Windows uses ConPTY; Unix uses portable PTY support. Host prompt delivery uses bounded authenticated loopback input acknowledgements, bracketed paste and separately acknowledged Enter. Window resize is bounded. A local same-workspace xterm shell is distinct from the agent and unavailable over Remote. Cross-platform crash survival and reattachment require acceptance evidence. Claude Code launches and background metadata commands remove `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID` and `CLAUDE_CODE_CHILD_SESSION` from the child process environment while preserving provider selection and organizational restriction variables.
 
 ### 3.4 Repository layout
 
