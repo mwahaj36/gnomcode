@@ -228,5 +228,6 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 CI green on main](2026-11-13-ci-green-main.md)
 - [2026-11-13 - Stale Running presence](2026-11-13-stale-running-presence.md)
 - [2026-11-13 - Antigravity surfaces (IDE, CLI, 2.0 app)](2026-11-13-antigravity-surfaces.md)
+- [2026-11-13 - Marketing audit for 1.0](2026-11-13-marketing-audit-1-0.md)
 - [2026-11-13 - Host sweep fails open](2026-11-13-host-sweep-fail-open.md)
 - [2026-11-13 - Scope 1.0 to three agents](2026-11-13-scope-1-0-three-agents.md)

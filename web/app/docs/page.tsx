@@ -17,7 +17,7 @@ const docsJsonLd = {
     name: "gnomcode",
     url: branding.baseUrl,
   },
-  dependencies: "Windows 10/11, Linux x86_64 and ARM64, WSL2",
+  dependencies: "Windows (development build)",
   articleSection: "Developer Tools",
 };
 
@@ -89,7 +89,7 @@ export default function DocsPage() {
               Supported agents & adapters
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-6">
-              gnomcode reads local activity files from supported AI coding tools. It requires no configuration in the target agent.
+              gnomcode 1.0 supports exactly Claude Code, OpenAI Codex and Google Antigravity. It reads their local activity files and needs no configuration in the agent for observation.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
@@ -101,7 +101,7 @@ export default function DocsPage() {
                   </span>
                 </div>
                 <p className="text-muted text-[11px] mb-3 leading-relaxed">
-                  Extracts token usage, cached input reads, and thinking tokens from <code className="text-foreground">~/.claude/projects/</code>. Set your Claude subscription plan manually in Settings; gnomcode does not read Claude credentials.
+                  Extracts token usage, cached input reads, and thinking tokens from <code className="text-foreground">~/.claude/projects/</code>. Set your Claude subscription plan manually in Settings. By default gnomcode does not read Claude credentials; the optional usage-limit source reads Claude Code&apos;s own sign-in only after you enable it.
                 </p>
                 <div className="text-[10px] text-muted">
                   Log Path: <code className="text-foreground">~/.claude/projects/*/*.jsonl</code>
@@ -116,7 +116,7 @@ export default function DocsPage() {
                   </span>
                 </div>
                 <p className="text-muted text-[11px] mb-3 leading-relaxed">
-                  Parses <code className="text-foreground">~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code> with session UUID attribution. Detects 5-hour and 7-day exact rate limit headers, turn token usage, and mid-session model shifts.
+                  Parses <code className="text-foreground">~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code> with session UUID attribution. Reads recorded 5-hour and weekly rate-limit windows, turn token usage, and mid-session model changes.
                 </p>
                 <div className="text-[10px] text-muted">
                   Log Path: <code className="text-foreground">~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code>
@@ -127,29 +127,14 @@ export default function DocsPage() {
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-bold text-foreground text-sm">Google Antigravity</div>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 font-semibold">
-                    REAL-TIME
+                    TRANSCRIPTS
                   </span>
                 </div>
                 <p className="text-muted text-[11px] mb-3 leading-relaxed">
-                  Monitors active conversation transcripts in <code className="text-foreground">~/.gemini/antigravity/brain/</code>. Tracks step indexes, tool call execution states (Running/Waiting), model transitions, and prompt tokens.
+                  Monitors active conversation transcripts in <code className="text-foreground">~/.gemini/antigravity/brain/</code>. Tracks step indexes, tool call execution states (Running/Waiting), model transitions, and token fields where recorded. Antigravity uses Google&apos;s Gemini models.
                 </p>
                 <div className="text-[10px] text-muted">
                   Log Path: <code className="text-foreground">~/.gemini/antigravity/brain/*/transcript.jsonl</code>
-                </div>
-              </div>
-
-              <div className="bg-card border border-border rounded-lg p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-bold text-foreground text-sm">Google Gemini CLI</div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-muted/20 text-muted border border-border font-semibold">
-                    SUPPORTED
-                  </span>
-                </div>
-                <p className="text-muted text-[11px] mb-3 leading-relaxed">
-                  Tracks CLI commands, execution turns, and token counts from local Gemini configuration and history logs in <code className="text-foreground">~/.gemini/</code>.
-                </p>
-                <div className="text-[10px] text-muted">
-                  Log Path: <code className="text-foreground">~/.gemini/tmp/</code>
                 </div>
               </div>
             </div>
@@ -229,7 +214,7 @@ export default function DocsPage() {
               <div className="bg-card border border-border rounded-lg p-4">
                 <CopyCommand command="gnomcode install" />
                 <div className="text-muted text-[11px] mb-2">
-                  Configures autostart, system tray, shortcuts, and background execution on Windows, macOS, or Linux.
+                  Configures autostart, the system tray and shortcuts for the current platform. The Windows development build is the verified one.
                 </div>
               </div>
             </div>
@@ -251,7 +236,7 @@ export default function DocsPage() {
                   <span className="text-foreground font-semibold">/api/v1/live</span>
                 </div>
                 <div className="text-muted text-[11px]">
-                  Real-time 2-second snapshot containing active agents, KPI totals, quota pools, and recent sessions.
+                  Live snapshot containing active agents, KPI totals, quota pools, and recent sessions.
                 </div>
               </div>
 
@@ -337,7 +322,7 @@ export default function DocsPage() {
                   Q: Why did an agent turn status switch from &quot;Thinking&quot; to &quot;Idle&quot;?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  gnomcode marks an agent session idle if no new turn events or tool calls are detected within 15 minutes. New activity changes the session state again.
+                  gnomcode stops showing a session as Running when its agent has recorded no recent activity or an open tool step has gone stale. New activity changes the session state again.
                 </div>
               </div>
 
@@ -357,7 +342,7 @@ export default function DocsPage() {
                   Q: Can I use gnomcode completely offline?
                 </div>
                 <div className="text-muted text-[11px] leading-relaxed">
-                  Yes. The local CLI, daemon, SQLite store, and tray app operate 100% locally with zero internet access required. Account sync is optional for viewing desktop activity across devices.
+                  Yes. The local CLI, daemon, SQLite store, and tray app work without a Gnomcode account or internet access. Agent CLIs still need their own provider network. Account sync is optional for viewing desktop activity across devices.
                 </div>
               </div>
             </div>
