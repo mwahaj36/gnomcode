@@ -14,7 +14,7 @@
 | 4 | Section C | Artifacts alongside changes | PR open | [#192](https://github.com/mwahaj36/spawnt/pull/192) | Optional Worker A `C last-turn artifacts` |
 | 5 | Section C | Phone attachments UI | PR open | [#194](https://github.com/mwahaj36/spawnt/pull/194) | Optional Worker A `C attachments` |
 | 6 | Section C | PWA app lock (WebAuthn/passkey or device PIN; ADR 0034) | PR open | [#195](https://github.com/mwahaj36/spawnt/pull/195) | None |
-| 7 | B / G5 | G5 interrupt button on phone and console chat | in progress | - | Worker A PR #187 |
+| 7 | B / G5 | G5 interrupt button on phone and console chat | PR open | [#196](https://github.com/mwahaj36/spawnt/pull/196) | Worker A PR #187 |
 | 8 | Section E1 | Local console built from web/ React (Home) | not started | - | - |
 | 9 | Section E1 | Local console built from web/ React (Workspace) | not started | - | - |
 | 10 | Section E1 | Local console built from web/ React (Usage) | not started | - | - |
@@ -109,3 +109,17 @@
 - **Deviations:** None.
 - **Open risks/questions:** None.
 - **Dependencies:** Independent (pure frontend / ADR 0034).
+
+### 7. Section G5 — Interrupt button on phone and console chat
+- **PR:** https://github.com/mwahaj36/spawnt/pull/196 (`feat/interrupt-ui`, commit `15b568d`)
+- **What changed:**
+  - `web/lib/console-presentation.js`, `web/lib/console-presentation.d.ts`: exported `isSessionRunningState`, `createInterruptRequestId`, `formatInterruptAckMessage`.
+  - `crates/daemon/src/console.html`, `crates/daemon/src/console-app.js`: added `#chat-interrupt-btn` (`data-action="interrupt-chat"`) in `.conversation-heading` and `updateInterruptButton()` / `interruptChat()` calling `POST /api/v1/sessions/{id}/interrupt` with `{ request_id }`.
+  - `web/components/RemoteCompanion.tsx`: added `.sp-interrupt-btn` in `.remote-composer-toolbar` gated by `isSessionRunningState(active.state)`, sending `{ type: "interrupt", session_id, request_id }` and handling `interrupt_ack` / `Unsupported remote command`.
+  - `web/app/gnomcode-console.css`: appended `:is(.sp-native-console, .sp-remote, .sp-console-app) .sp-interrupt-btn` design-token styling (`44px` minimum height on `<=760px`, `36px` on desktop).
+  - `web/test/interrupt-ui.test.mjs`, `docs/SPEC.md` (append §11), `docs/ROADMAP_1.0.md` (append line), `docs/sessions/2026-11-13-interrupt-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** Gap in `crates/daemon/src/console.html`, `console-app.js`, and `web/components/RemoteCompanion.tsx`. Tests: `web/test/interrupt-ui.test.mjs` (`2/2` pass), `web/` `npm test` (`101/101` pass). Gate: `check-local-console.mjs`, `check-console-presentation.mjs`, `web/` `npm ci`/`npm test`/`typecheck`/`build`, `CARGO_INCREMENTAL=0` `fmt`/`clippy`/`test`, encoding/LF/mojibake all pass.
+- **Verification:** Visually verified `#chat-interrupt-btn` in `chrome-headless-shell.exe` against mocked running session at `390x844` and `1440x900` (dark & light): `overflowX=false`, `interruptBtnVisible=true`, `interruptBtnMinHeight=44` (mobile) / `36` (desktop). Live interrupt execution against a running PR #187 daemon not verified until PR #187 merges.
+- **Deviations:** None.
+- **Open risks/questions:** Waiting on Worker A PR #187 merge for live end-to-end interrupt cancellation.
+- **Dependencies:** Depends on Worker A PR #187 (`feat/remote-interrupt`).
