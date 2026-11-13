@@ -209,30 +209,58 @@ impl Database {
         "#))?;
         let rows = stmt.query_map(
             params![root, limit.unwrap_or(1000).min(5000) as i64, before],
-            |row| {
-                let role: String = row.get(3)?;
-                let created: String = row.get(7)?;
-                Ok(ChatEvent {
-                    event_id: row.get(0)?,
-                    session_id: row.get(1)?,
-                    turn_index: row.get(2)?,
-                    role: ChatRole::parse_role(&role).unwrap_or(ChatRole::System),
-                    content: if role == "tool" {
-                        String::new()
-                    } else {
-                        gnomcode_core::redact::redact_chat_content(&row.get::<_, String>(4)?)
-                    },
-                    tool_name: row.get(5)?,
-                    status: row.get(6)?,
-                    created_at: DateTime::parse_from_rfc3339(&created)
-                        .map(|time| time.with_timezone(&Utc))
-                        .unwrap_or_default(),
-                })
-            },
+            handoff_chat_row,
         )?;
         let mut events = rows.collect::<Result<Vec<_>, _>>()?;
         events.reverse();
         Ok(events)
+    }
+
+    /// Reads the earliest available conversation title, independently of session-list pagination.
+    ///
+    /// # Errors
+    /// Returns an error if conversation metadata cannot be read.
+    pub fn conversation_title(&self, id: &str) -> Result<Option<String>, Error> {
+        let root = self.conversation_id(id)?;
+        let title: Option<String> = self.conn.query_row(obfstr::obfstr!(r#"
+            WITH members AS (
+                SELECT native_id,host_id,position FROM conversation_member WHERE conversation_id=?1
+                UNION ALL SELECT ?1,?1,0 WHERE NOT EXISTS (SELECT 1 FROM conversation_member WHERE conversation_id=?1)
+            )
+            SELECT s.title FROM session s JOIN members m ON s.id=m.native_id OR s.id=m.host_id
+            WHERE s.title IS NOT NULL AND trim(s.title)<>''
+            ORDER BY m.position,s.started_at,s.id LIMIT 1
+        "#), [root], |row| row.get(0)).optional()?;
+        Ok(title.map(|title| gnomcode_core::redact::redact_chat_content(&title)))
+    }
+
+    /// Reads the first retained user request across a continuous conversation, without a page cap.
+    /// Deleted/expired history is never recovered or copied into separate storage.
+    ///
+    /// # Errors
+    /// Returns an error if the conversation history cannot be read.
+    pub fn conversation_first_user_event(&self, id: &str) -> Result<Option<ChatEvent>, Error> {
+        let root = self.conversation_id(id)?;
+        let mut stmt = self.conn.prepare(obfstr::obfstr!(r#"
+            WITH members AS (
+                SELECT native_id, host_id, position FROM conversation_member WHERE conversation_id=?1
+                UNION ALL SELECT ?1, ?1, 0 WHERE NOT EXISTS (SELECT 1 FROM conversation_member WHERE conversation_id=?1)
+            ), events AS (
+                SELECT e.*, m.position AS segment FROM chat_event e JOIN members m ON e.session_id=m.native_id OR e.session_id=m.host_id
+            )
+            SELECT event_id,session_id,segment*1000000000+turn_index,role,content,tool_name,status,created_at
+            FROM events WHERE role='user'
+            ORDER BY segment ASC,turn_index ASC,created_at ASC,event_id ASC
+        "#))?;
+        let rows = stmt.query_map([root], handoff_chat_row)?;
+        for row in rows {
+            let mut event = row?;
+            event.content = gnomcode_core::redact::clean_user_message(&event.content);
+            if !event.content.trim().is_empty() {
+                return Ok(Some(event));
+            }
+        }
+        Ok(None)
     }
 
     /// Deletes all Gnomcode-owned chat in a conversation, retaining routing metadata.
@@ -256,6 +284,27 @@ impl Database {
     }
 }
 
+fn handoff_chat_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatEvent> {
+    let role: String = row.get(3)?;
+    let created: String = row.get(7)?;
+    Ok(ChatEvent {
+        event_id: row.get(0)?,
+        session_id: row.get(1)?,
+        turn_index: row.get(2)?,
+        role: ChatRole::parse_role(&role).unwrap_or(ChatRole::System),
+        content: if role == "tool" {
+            String::new()
+        } else {
+            gnomcode_core::redact::redact_chat_content(&row.get::<_, String>(4)?)
+        },
+        tool_name: row.get(5)?,
+        status: row.get(6)?,
+        created_at: DateTime::parse_from_rfc3339(&created)
+            .map(|time| time.with_timezone(&Utc))
+            .unwrap_or_default(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,6 +323,67 @@ mod tests {
             status: None,
         })
         .expect("message");
+    }
+
+    #[test]
+    fn original_request_survives_more_than_a_page_and_switches_but_not_deletion() {
+        let db = Database::open_in_memory().expect("db");
+        insert_message(&db, "codex:first", "original-goal", 1);
+        db.conn
+            .execute(
+                "UPDATE chat_event SET content=?1 WHERE event_id='original-goal'",
+                ["Preserve leap days. STAGING_API_KEY=sk-live-evalfixture0123456789"],
+            )
+            .expect("content");
+        for turn in 2..=5002 {
+            insert_message(&db, "codex:first", &format!("later-{turn}"), turn);
+        }
+        db.bind_conversation_host("first-host", "codex:first")
+            .expect("source");
+        insert_message(&db, "claude-code:second", "latest-request", 1);
+        db.continue_conversation("first-host", "second-host")
+            .expect("switch");
+        db.bind_conversation_host("second-host", "claude-code:second")
+            .expect("target");
+        db.conn
+            .execute(
+                "UPDATE session SET title='Original calendar task' WHERE id='codex:first'",
+                [],
+            )
+            .expect("title");
+        assert_eq!(
+            db.conversation_title("second-host")
+                .expect("title")
+                .as_deref(),
+            Some("Original calendar task")
+        );
+        let recent = db
+            .conversation_chat("second-host", Some(50), None)
+            .expect("recent");
+        assert!(!recent.iter().any(|event| event.event_id == "original-goal"));
+        let first = db
+            .conversation_first_user_event("second-host")
+            .expect("query")
+            .expect("first");
+        assert_eq!(first.event_id, "original-goal");
+        assert!(first.content.contains("Preserve leap days"));
+        assert!(!first.content.contains("sk-live-evalfixture0123456789"));
+        let packet = db
+            .prepare_handoff("codex:first", "target", vec![])
+            .expect("packet")
+            .expect("session");
+        assert!(packet.prompt_summary.contains("Preserve leap days"));
+        assert!(
+            !packet
+                .prompt_summary
+                .contains("sk-live-evalfixture0123456789")
+        );
+        db.delete_conversation_chat("second-host").expect("delete");
+        assert!(
+            db.conversation_first_user_event("second-host")
+                .expect("query")
+                .is_none()
+        );
     }
 
     #[test]

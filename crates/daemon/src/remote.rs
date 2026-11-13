@@ -1049,6 +1049,41 @@ pub(crate) fn conversation_chat(
     Ok(events)
 }
 
+/// Bounded recent history plus the first retained request, fetched independently of pagination.
+pub(crate) fn conversation_handoff_chat(
+    db: &Database,
+    requested: &str,
+    native: &str,
+    sessions: &[Session],
+) -> Result<(Vec<gnomcode_core::ChatEvent>, Option<String>), gnomcode_store::Error> {
+    let mut events = conversation_chat(
+        db,
+        requested,
+        native,
+        sessions,
+        Some(crate::HANDOFF_CONTEXT_EVENTS),
+        None,
+    )?;
+    let id = if db.conversation_target(requested)?.is_some() {
+        requested
+    } else {
+        native
+    };
+    if let Some(mut first) = db.conversation_first_user_event(id)?
+        && !events.iter().any(|event| event.event_id == first.event_id)
+    {
+        if let Some((_, message)) = first
+            .content
+            .strip_prefix("<spawnt_context>")
+            .and_then(|text| text.split_once("</spawnt_context>"))
+        {
+            first.content = message.trim_start().to_owned();
+        }
+        events.insert(0, first);
+    }
+    Ok((events, db.conversation_title(id)?))
+}
+
 fn legacy_tool_session(id: &str) -> bool {
     id.strip_prefix("codex:").is_some_and(|id| {
         ["ctc_", "ctco_", "fc_", "call_"]

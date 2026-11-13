@@ -641,6 +641,13 @@ pub struct HandoffPacket {
 /// Compiles user objectives and tool states without including tool output.
 #[must_use]
 pub fn handoff_summary(events: &[ChatEvent]) -> String {
+    handoff_summary_with_title(events, None)
+}
+
+/// Compiles the original retained goal, optional redacted title, then newest summary lines
+/// within 16,000 characters. Tool output is never included.
+#[must_use]
+pub fn handoff_summary_with_title(events: &[ChatEvent], title: Option<&str>) -> String {
     let mut lines = Vec::new();
     for event in events {
         match event.role {
@@ -663,7 +670,44 @@ pub fn handoff_summary(events: &[ChatEvent]) -> String {
             _ => {}
         }
     }
-    lines.join("\n")
+    let mut remaining = 16000;
+    let title = title.filter(|title| !title.trim().is_empty()).map(|title| {
+        let line = format!(
+            "Session title: {}",
+            redact::redact_chat_content(title)
+                .chars()
+                .take(256)
+                .collect::<String>()
+        );
+        remaining -= line.chars().count() + 1;
+        line
+    });
+    let original = lines.iter().position(|line| line.starts_with("Goal: "));
+    let goal = original.map(|index| {
+        let line: String = lines[index].chars().take(remaining).collect();
+        remaining = remaining.saturating_sub(line.chars().count() + 1);
+        line
+    });
+    let mut recent = Vec::new();
+    for (index, line) in lines.into_iter().enumerate().rev() {
+        if remaining == 0 {
+            break;
+        }
+        if Some(index) == original {
+            continue;
+        }
+        let line: String = line.chars().take(remaining).collect();
+        remaining = remaining.saturating_sub(line.chars().count() + 1);
+        recent.push(line);
+    }
+    recent.reverse();
+    if let Some(goal) = goal {
+        recent.insert(0, goal);
+    }
+    if let Some(title) = title {
+        recent.insert(0, title);
+    }
+    recent.join("\n")
 }
 
 /// A remote pairing session state for mobile connection.
