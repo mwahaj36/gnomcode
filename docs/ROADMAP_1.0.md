@@ -106,3 +106,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## codex-release smoke preparation - 2026-11-13
 
 - [x] G packaged-app smoke procedure prepared for Claude in docs/sessions/2026-11-13-release-1-0-smoke.md. Execution/acceptance remains unchecked in section G.
+
+## codex-release handoff repair - 2026-11-13
+
+- [x] A / F3 long-session original request and title preserved before recent context under budget; all 9 eval cases pass without threshold changes. No pins or decision heuristics.

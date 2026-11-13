@@ -133,9 +133,18 @@ fn chat_events(case: &FixtureCase) -> Result<Vec<ChatEvent>, EvalError> {
 fn run_case(case: &FixtureCase) -> Result<EvalCaseResult, EvalError> {
     let started = std::time::Instant::now();
     let mut events = chat_events(case)?;
-    // Production reads only the newest events, then applies the read-time cleaners.
+    // Production fetches the first retained request independently of the newest page.
+    let original = events
+        .iter()
+        .find(|event| event.role == ChatRole::User)
+        .cloned();
     if events.len() > crate::HANDOFF_CONTEXT_EVENTS {
         events.drain(..events.len() - crate::HANDOFF_CONTEXT_EVENTS);
+    }
+    if let Some(first) = original
+        && !events.iter().any(|event| event.event_id == first.event_id)
+    {
+        events.insert(0, first);
     }
     let events = gnomcode_adapters::codex::clean_stored_conversation(
         gnomcode_adapters::antigravity::clean_stored_conversation(events),
@@ -320,15 +329,16 @@ mod tests {
     }
 
     #[test]
-    fn a_goal_buried_under_a_long_session_is_reported_as_lost() {
+    fn a_goal_buried_under_a_long_session_is_preserved() {
         let report = run_embedded().expect("run");
         let case = report
             .cases
             .iter()
             .find(|c| c.id == "long-session")
             .expect("case");
-        assert_eq!(case.outcome, "failed");
-        assert!(case.details.goals.missing.iter().any(|g| g == "java.time"));
+        assert_eq!(case.outcome, "passed", "{}", case.summary);
+        assert!(case.details.goals.missing.is_empty());
+        assert_eq!(report.summary.passed_cases, 9);
     }
 
     #[test]

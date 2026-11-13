@@ -106,8 +106,8 @@ mod tests {
     fn report_lists_each_case_provider_and_total() {
         let report = gnomcode_daemon::handoff_eval::run_embedded().expect("run");
         let text = super::render(&report);
-        assert!(text.contains("[PASS]") && text.contains("[FAIL]"));
+        assert!(text.contains("[PASS]") && !text.contains("[FAIL]"));
         assert!(text.contains("By receiving provider") && text.contains("[EST]"));
-        assert!(text.contains("long-session") && text.contains("missing goals"));
+        assert!(text.contains("long-session") && text.contains("Total: 9/9 passed"));
     }
 }
