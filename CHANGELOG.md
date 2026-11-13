@@ -136,3 +136,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 - Workspace engineering skills (`.agents/skills/`): `ponytail`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `rust-best-practices`, `tauri-v2`, `supabase-postgres-best-practices`, `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`.
 - Binary and UI anti-reverse-engineering hardening (`Cargo.toml` release profile, `.cargo/config.toml` path remapping).
 - GitHub Actions CI pipeline across Linux, Windows, and macOS (`.github/workflows/ci.yml`).
+
+## 1.0.0 release candidate - 2026-11-13
+
+- Support exactly Claude Code, Codex and Antigravity, preserving removed-agent history as unsupported.
+- Add the four-place console, provider limits and usage views, isolated session worktrees, Continue here and handoff quality reports.
+- Add bounded workspace files, diffs, artifacts, attachments, quick prompts and state-gated interruption in the console and encrypted Remote.
+- Add native Claude approvals and opt-in Codex/Antigravity protocol approval bridges, phone app lock, redacted notifications, desktop update staging and doctor diagnostics.
+- Improve quota exhaustion handling, Antigravity ingestion/resume, Claude desktop/subagent visibility, idle watcher efficiency and process recovery.
+- Synchronize CLI, desktop, installers, web and npm package versions to 1.0.0. Publication and packaged acceptance remain pending. See [full release notes](docs/release-notes/1.0.0.md).

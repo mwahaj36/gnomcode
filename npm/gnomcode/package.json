@@ -1,6 +1,6 @@
 {
   "name": "gnomcode",
-  "version": "0.9.4",
+  "version": "1.0.0",
   "description": "Local agent console and standalone CLI",
   "license": "SEE LICENSE IN EULA.txt",
   "bin": {
@@ -15,13 +15,13 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@gnomcode/cli-win32-x64": "0.9.4",
-    "@gnomcode/cli-win32-arm64": "0.9.4",
-    "@gnomcode/cli-darwin-x64": "0.9.4",
-    "@gnomcode/cli-darwin-arm64": "0.9.4",
-    "@gnomcode/cli-linux-x64": "0.9.4",
-    "@gnomcode/cli-linux-arm64": "0.9.4",
-    "@gnomcode/cli-linux-x64-musl": "0.9.4"
+    "@gnomcode/cli-win32-x64": "1.0.0",
+    "@gnomcode/cli-win32-arm64": "1.0.0",
+    "@gnomcode/cli-darwin-x64": "1.0.0",
+    "@gnomcode/cli-darwin-arm64": "1.0.0",
+    "@gnomcode/cli-linux-x64": "1.0.0",
+    "@gnomcode/cli-linux-arm64": "1.0.0",
+    "@gnomcode/cli-linux-x64-musl": "1.0.0"
   },
   "scripts": {
     "prepack": "node ../check-release.cjs",

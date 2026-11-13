@@ -2,7 +2,7 @@
 # Gnomcode Unix installer. Download and verify before replacing an existing install.
 set -euo pipefail
 
-VERSION="0.9.4"
+VERSION="1.0.0"
 BASE_URL="https://gnomcode.vercel.app/downloads"
 INSTALL_DIR="${GNOMCODE_INSTALL_DIR:-${HOME}/.local/bin}"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
