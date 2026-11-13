@@ -177,3 +177,17 @@
 - **Deviations (marked assumption):** Physical deletion of `crates/daemon/src/console-app.js` and `#legacy-*` HTML markup is deferred because non-owned `crates/daemon/src/api.rs:121,680-687,3636-3638` embeds `include_str!("console-app.js")` and `api.rs` permits append-only edits from Worker B.
 - **Open risks/questions:** Owner needs to delete `console-app.js` / `CONSOLE_APP_JS` / `/console-app.js` route in `crates/daemon/src/api.rs` and remove `#legacy-*` hidden markup after merging #198/#199/#201/#204.
 - **Dependencies:** Depends on PR #201 (`feat/local-console-usage`), PR #199 (`feat/local-console-workspace`), and PR #198 (`feat/local-console-home`).
+
+### 12. Section F1 — Worktree per session UI (launch, diff review, merge/discard/Open PR)
+- **PR:** https://github.com/mwahaj36/spawnt/pull/206 (`feat/worktree-session-ui`, commit `1c8dc08`)
+- **What changed:**
+  - `docs/adr/0036-worktree-session-ui-protocol.md`: documents the HTTP & Remote E2EE worktree protocol (`worktree`, `worktree_branch`, `/api/v1/sessions/{id}/changes`, `/api/v1/sessions/{id}/worktree/{merge,discard,open-pr}`).
+  - `web/lib/worktree-presentation.mjs` (+ `.d.mts`): pure presentation helper (`formatWorktreeBadge`, `renderWorktreeDiffMarkup`) with HTML escaping and diff hunk/add/del highlighting.
+  - `web/local-console/local-api.ts`, `web/local-console/WorkspaceView.tsx`, `web/components/RemoteCompanion.tsx`: adds `"Isolate in git worktree"` launch toggle + optional branch field, `.sp-worktree-bar` (`Review diff`, inline-confirmed `Merge`, `Open PR`, `Discard`), and E2EE WS handlers (`session_changes`, `worktree_action_ack`).
+  - `web/app/gnomcode-console.css`: appends token-only `.sp-worktree-*`, `.sp-changes-*`, `.sp-diff-*` styles using `--sp-ok-soft` and `--sp-exhausted-soft`.
+  - `crates/daemon/src/console-react.js`, `web/test/worktree-session-ui.test.mjs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-worktree-session-ui.md`, `docs/sessions/README.md`.
+- **Evidence:** `crates/daemon/src/api.rs` and Worker A PRs have no worktree endpoints yet. Tests: `web/test/worktree-session-ui.test.mjs` (`1/1`, RED first), `web/` `npm test` (`105/105`). Gate: `build-local-console.mjs --check`, `check-console.mjs`, `check-local-console.mjs`, `web/` (`test`/`typecheck`/`lint`/`build`), `CARGO_INCREMENTAL=0` (`fmt`/`clippy`/`test`) all pass.
+- **Verification:** Visually verified Chromium headless CDP at `390x844` and `1440x900` (dark & light) with worktree bar & expanded diff panel (`hasWorktreeBar=true`, `hasDiffPanel=true`, `overflowX=false`). Not verified live against a running daemon because Worker A backend does not exist yet.
+- **Deviations (marked assumption):** Built UI against ADR `0036` stub contract; top-level F1 roadmap checkbox left unticked pending Worker A backend.
+- **Open risks/questions:** Worker A must implement `/api/v1/sessions/launch` worktree isolation and `/api/v1/sessions/{id}/worktree/{merge,discard,open-pr}` + E2EE dispatch matching ADR `0036`.
+- **Dependencies:** Depends on Worker B PR #204 (`feat/local-console-settings`) + future Worker A worktree backend PR.
