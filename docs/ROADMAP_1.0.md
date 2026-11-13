@@ -90,3 +90,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## codex-release preparation - 2026-11-13
 
 - [x] G1 preparation: lockstep 1.0.0 versions, CHANGELOG and release notes from approved 7cec4e6 baseline. Candidate only; publication and release acceptance stay unchecked in section G.
+
+## codex-release signing preparation - 2026-11-13
+
+- [x] G release preparation: build-pinned update public key and offline artifact-signing script (ADR 0059). Actual owner key provisioning, signing and installed-update acceptance remain open.

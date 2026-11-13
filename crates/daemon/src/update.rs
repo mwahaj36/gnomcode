@@ -287,9 +287,15 @@ fn verify_downloaded_bytes(bytes: &[u8], sha256: &str, signature: Option<&str>) 
     if !verify_sha256_hex(bytes, sha256) {
         return false;
     }
-    let pub_key = std::env::var("GNOMCODE_UPDATE_PUBLIC_KEY")
-        .ok()
-        .filter(|k| !k.trim().is_empty());
+    // An embedded key cannot be removed or replaced by the runtime environment.
+    // Preserve malformed embedded values so verification fails closed for installation.
+    let pub_key = option_env!("GNOMCODE_UPDATE_PUBLIC_KEY")
+        .map(str::to_owned)
+        .or_else(|| {
+            std::env::var("GNOMCODE_UPDATE_PUBLIC_KEY")
+                .ok()
+                .filter(|k| !k.trim().is_empty())
+        });
     if let Some(key_hex) = pub_key {
         let Some(sig_hex) = signature else {
             return false;
@@ -362,6 +368,23 @@ mod tests {
     use axum::{Router, routing::get};
     use serde_json::json;
     use sha2::{Digest, Sha256};
+
+    // RFC 8032 test vector 1: public key and signature only, no private key.
+    #[test]
+    #[ignore = "requires GNOMCODE_UPDATE_PUBLIC_KEY at build time; see docs/release-signing.md"]
+    fn embedded_key_requires_signature_despite_runtime_override() {
+        let public_key = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+        assert_eq!(option_env!("GNOMCODE_UPDATE_PUBLIC_KEY"), Some(public_key));
+        let sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let signature = concat!(
+            "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155",
+            "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
+        );
+        assert!(!verify_downloaded_bytes(b"", sha, None));
+        assert!(verify_downloaded_bytes(b"", sha, Some(signature)));
+        assert!(!verify_downloaded_bytes(b"", sha, Some(&"0".repeat(128))));
+        assert!(!verify_downloaded_bytes(b"tampered", sha, Some(signature)));
+    }
 
     #[test]
     fn manifest_override_accepts_only_loopback_hosts() {
