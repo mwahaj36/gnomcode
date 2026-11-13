@@ -135,3 +135,54 @@ test('a failed disconnect raises a dismissible notice and Escape cancels the con
   await notice.getByRole('button', { name: 'Dismiss' }).click();
   await expect(notice).toBeHidden();
 });
+
+for (const [name, pasted, expected] of [
+  ['a bare token', 'abc.def.ghi', { access_token: 'abc.def.ghi', token_type: 'bearer' }],
+  ['base64 JSON', Buffer.from('{"access_token":"b64","refresh_token":"r"}').toString('base64'), { access_token: 'b64', refresh_token: 'r' }],
+] as const) {
+  test(`pairing accepts ${name} and sends the consent flag`, async ({ page, openConsole }) => {
+    let posted: Record<string, unknown> = {};
+    await page.route('**/api/v1/auth/session', async (route) => {
+      if (route.request().method() === 'POST') {
+        posted = route.request().postDataJSON();
+        return route.fulfill({ json: { ok: true } });
+      }
+      return route.fulfill({ json: { paired: false } });
+    });
+    await openConsole('#auth');
+    await page.locator('summary', { hasText: 'Connect an existing browser account' }).click();
+    await page.locator('#auth-token-input').fill(pasted);
+    await page.getByRole('button', { name: 'Connect desktop' }).click();
+    await page.locator('#confirm-accept').click();
+    await expect(page.locator('#auth-pair-status')).toContainText('Desktop connected.');
+    expect(posted).toEqual({ ...expected, remote_access_confirmed: true });
+    await expect(page.locator('#auth-token-input')).toHaveValue('');
+  });
+}
+
+test('a refused pairing says so in red and keeps the token for another try', async ({ page, openConsole }) => {
+  await page.route('**/api/v1/auth/session', async (route) => {
+    if (route.request().method() === 'POST') return route.fulfill({ status: 400, json: { message: 'bad token' } });
+    return route.fulfill({ json: { paired: false } });
+  });
+  await openConsole('#auth');
+  await page.locator('summary', { hasText: 'Connect an existing browser account' }).click();
+  await page.locator('#auth-token-input').fill('nope');
+  await page.getByRole('button', { name: 'Connect desktop' }).click();
+  await page.locator('#confirm-accept').click();
+  const status = page.locator('#auth-pair-status');
+  await expect(status).toContainText('Failed to save session. Check token and try again.');
+  await expect(status).toHaveClass(/sp-tone-red/);
+  await expect(page.locator('#auth-token-input')).toHaveValue('nope');
+  await expect(page.getByRole('button', { name: 'Connect desktop' })).toBeEnabled();
+});
+
+test('sign-in fields fill their column and the button sits under them', async ({ page, openConsole }) => {
+  await openConsole('#auth');
+  const email = await page.getByLabel('Email').boundingBox();
+  const password = await page.getByLabel('Password').boundingBox();
+  const button = await page.getByRole('button', { name: 'Sign in', exact: true }).boundingBox();
+  expect(email?.width ?? 0).toBeGreaterThanOrEqual(300);
+  expect(password?.width ?? 0).toBeGreaterThanOrEqual(300);
+  expect((button?.y ?? 0) >= (password?.y ?? 0) + (password?.height ?? 0)).toBe(true);
+});
