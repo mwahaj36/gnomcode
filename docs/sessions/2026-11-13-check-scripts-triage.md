@@ -18,7 +18,7 @@
 These drive a deployed site, a relay or a release binary, not the local console, and are run by hand against those targets: `check-account-ux`, `check-mobile-console`, `check-downloads-and-404`, `check-interface-screens`, `check-landing-hero`, `check-marketing-seo` (hosted web console and marketing pages), `check-remote-companion`, `check-live-relay` (Remote relay), `check-hosted-terminal` (release binary PTY smoke), `check-release-versions` (release packaging), and the installer and tray checks. None reads `console-app.js` or `console.html`.
 
 ## Tests
-- 6 new browser tests (85 in total, counting the dispatch run); the shared conversation helpers moved to `web/e2e/workspace-helpers.ts`.
+- 6 new browser tests (85 in total); the shared conversation helpers moved to `web/e2e/workspace-helpers.ts`.
 
 ## Verification
 - web `npm ci`, `npm test`, typecheck, build, `npm run test:e2e`; no Rust change in this PR.
