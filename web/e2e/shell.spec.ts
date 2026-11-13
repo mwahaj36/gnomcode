@@ -72,16 +72,17 @@ test('the brand link returns to Home and the rail only expands on request', asyn
   await expect(page.locator('#console-title')).toHaveText('Home');
   expect(new URL(page.url()).hash).toBe('');
   const toggle = page.locator('#navigation-toggle');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await page.getByRole('tab', { name: 'Usage' }).hover();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('body')).toHaveAttribute('data-rail', 'expanded');
-  await page.reload();
+  await page.getByRole('tab', { name: 'Usage' }).hover();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('body')).toHaveAttribute('data-rail', 'collapsed');
+  await page.reload();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('the last view is restored for a bare address', async ({ page, daemon, openConsole }) => {
