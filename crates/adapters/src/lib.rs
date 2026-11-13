@@ -72,6 +72,61 @@ pub trait SourceAdapter {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn antigravity_cli_usage_has_api_pools_and_remaining_percentages() {
+        let path = workspace_root()
+            .join("fixtures")
+            .join("antigravity")
+            .join("cli-1.5.7")
+            .join("usage.tsv");
+        let text = std::fs::read_to_string(path).expect("anonymized fixture");
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-13T00:00:00Z")
+            .expect("time")
+            .with_timezone(&chrono::Utc);
+        let rows = super::antigravity::parse_cli_usage(&text, now);
+        assert_eq!(rows.len(), 5);
+        assert_eq!(
+            rows.iter().map(|row| row.used_pct).collect::<Vec<_>>(),
+            [63.0, 35.0, 0.0, 0.0, 100.0]
+        );
+        assert!(
+            rows.iter()
+                .all(|row| row.basis == gnomcode_core::TrustLevel::Api)
+        );
+        assert_eq!(
+            super::antigravity::parse_cli_usage(&text.replace('\n', "\r\n"), now),
+            rows
+        );
+        assert_eq!(
+            super::antigravity::parse_cli_usage(&format!("{text}{text}"), now),
+            rows
+        );
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_json_snapshot!("antigravity_cli_usage", rows);});
+    }
+
+    #[test]
+    fn antigravity_cli_usage_skips_bad_or_unknown_rows() {
+        let now = chrono::Utc::now();
+        for percent in ["NaN%", "inf%", "-1%", "101%", "20", "n/a"] {
+            assert!(
+                super::antigravity::parse_cli_usage(
+                    &format!(
+                        "Gemini Models\tWeekly Limit Remaining\t{percent}\t2026-11-20T00:00:00Z\n"
+                    ),
+                    now
+                )
+                .is_empty()
+            );
+        }
+        for line in [
+            "truncated\tWeekly Limit Remaining\t50%",
+            "pool\tUnknown\t50%\t2026-11-20T00:00:00Z",
+            "pool\tWeekly Limit Remaining\t50%\tnot a date",
+            "\tWeekly Limit Remaining\t50%\t2026-11-20T00:00:00Z",
+        ] {
+            assert!(super::antigravity::parse_cli_usage(line, now).is_empty());
+        }
+    }
+    #[test]
     fn gemini_tool_execution_ends_when_the_native_final_reply_arrives() {
         use super::{FileCtx, SourceAdapter, gemini::GeminiAdapter};
         let batch = GeminiAdapter::new().parse(

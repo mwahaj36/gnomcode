@@ -59,3 +59,7 @@ Authorized by Wahaj on 2026-11-13. Work in order; one focused PR per item; each 
 ## Worker A native-resume delivery details
 
 - [x] G6 agy native resume: exact-ID command/capability with owner-approved explicit --mode plan, verified interactively on Windows with agy 1.5.7. Mode changes remain with the person in the native CLI. Depends on baseline PR #189 while unmerged; packaged/macOS/Linux acceptance remains unverified.
+
+## Worker A native-usage delivery details
+
+- [x] G7: existing opt-in Antigravity limits now prefer the running server and fall back to bounded, no-inference usage metadata from verified agy 1.5.7; ADR 0029 amended. Other CLI versions stay gated; native macOS/Linux and independent network acceptance remain unverified. Depends on baseline #189 while unmerged.
