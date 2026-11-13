@@ -1,5 +1,12 @@
 # Worker A handoff
 
+## 2026-11-13: Antigravity exhausted cross-check against RESOURCE_EXHAUSTED
+
+- PR https://github.com/mwahaj36/spawnt/pull/218; branch `feat/antigravity-resource-exhausted`, head `bbb73a7`, depends on baseline #189.
+- Changed files: `crates/adapters/src/antigravity.rs`, `crates/adapters/src/lib.rs`, `crates/store/src/lib.rs`, `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-antigravity-resource-exhausted.md`, `docs/sessions/README.md`.
+- Tests: `tests::antigravity_resource_exhausted_marks_error_and_exhausted_quota` (`gnomcode-adapters`), `tests::antigravity_resource_exhausted_overrides_optimistic_api_quota` (`gnomcode-store`).
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS, `cargo clippy --workspace --all-targets -- -D warnings` PASS, `cargo test --workspace` PASS.
+
 ## 2026-11-13: D3 ingest file watcher and idle back-off
 
 - PR https://github.com/mwahaj36/spawnt/pull/217; branch `feat/ingest-watcher-backoff`, head `f6ea879`, depends on baseline #189.
