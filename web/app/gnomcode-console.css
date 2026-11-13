@@ -1632,7 +1632,7 @@ html{touch-action:manipulation}
 /* Section C PWA app lock */
 .sp-lock-screen { min-height: 100dvh; display: grid; place-items: center; padding: var(--sp-5); background: var(--sp-bg); color: var(--sp-text); }
 .sp-lock-card { width: min(100%, 380px); display: grid; gap: var(--sp-3); padding: var(--sp-6); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); background: var(--sp-surface); box-shadow: var(--sp-card-shadow); }
-.sp-lock-badge { justify-self: start; font: 600 11px/1 var(--sp-font-mono); letter-spacing: 0.04em; color: var(--sp-accent); }
+.sp-lock-badge { justify-self: start; font: 600 12px/1 var(--sp-font-mono); letter-spacing: 0.04em; color: var(--sp-accent); }
 .sp-lock-card h1 { margin: 0; font: 600 22px/1.2 var(--sp-font-sans); color: var(--sp-text); }
 .sp-lock-sub { margin: 0; font: 400 var(--sp-fs-body)/1.45 var(--sp-font-sans); color: var(--sp-text-2); }
 .sp-lock-status { margin: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--sp-accent); border-radius: var(--sp-control-radius); background: var(--sp-surface-2); color: var(--sp-text); font: 500 var(--sp-fs-meta)/1.4 var(--sp-font-sans); }
