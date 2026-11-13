@@ -565,11 +565,6 @@ export function SettingsView() {
     }
   };
 
-  const openShellAction = (action: string) => {
-    const target = document.querySelector<HTMLElement>(`[data-action="${action}"]`);
-    target?.click();
-  };
-
   return (
     <div className="sp-settings-root">
       <section className="sp-settings-section">
@@ -1382,7 +1377,7 @@ export function SettingsView() {
           <button
             type="button"
             className="btn-control"
-            onClick={() => openShellAction('onboarding-start')}
+            onClick={() => window.__gnomcodeLocalActions?.startOnboarding?.()}
           >
             Getting started
           </button>

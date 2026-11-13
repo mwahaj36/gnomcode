@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import vm from 'node:vm';
+const require=createRequire(new URL('../package.json',import.meta.url));
+const ts=require('typescript');const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');
+const presenters=await import(new URL('../lib/console-presentation.js',import.meta.url));
+const code=ts.transpileModule(readFileSync(new URL('../app/components/ConsoleTourView.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+const exports={};vm.runInNewContext(code,{exports,require(name){return name.includes('console-presentation')?presenters:require(name);},Intl});
+test('the Overview tour is a bounded preview and detailed sessions stay in their own tab', () => {
+  const html=renderToStaticMarkup(React.createElement(exports.ConsoleTourView,{kind:'overview'}));
+  assert.doesNotMatch(html,/sp-session-table|sp-activity-grid/,'Overview is a compact preview, not a full dashboard');
+  assert.match(html,/sp-tour-overview-list/);
+  assert.equal((html.match(/class="sp-tour-overview-row"/g)||[]).length,3);
+  assert.equal((html.match(/data-sample-day=/g)||[]).length,7);
+  assert.match(html,/39\.3k/);assert.match(html,/\$0\.86/);
+  const sessions=renderToStaticMarkup(React.createElement(exports.ConsoleTourView,{kind:'sessions'}));assert.match(sessions,/sp-session-table/,'detailed sessions remain in their own tab');
+
+});

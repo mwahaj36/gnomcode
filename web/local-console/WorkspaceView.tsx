@@ -160,6 +160,8 @@ export function WorkspaceView() {
 
   const [activeSessionId, setActiveSessionId] = useState('');
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const launchAgentRef = useRef<HTMLSelectElement | null>(null);
+  const focusLauncherRef = useRef(false);
 
   // Launcher form state
   const [launchAgent, setLaunchAgent] = useState('claude');
@@ -549,6 +551,14 @@ export function WorkspaceView() {
     [closeAgentTerminal, loadInstalledAgents],
   );
 
+  // The first-run tour hands the launcher focus; opening it with New leaves focus where it is.
+  useEffect(() => {
+    if (launcherOpen && focusLauncherRef.current) {
+      focusLauncherRef.current = false;
+      launchAgentRef.current?.focus();
+    }
+  }, [launcherOpen]);
+
   // Sync rendered conversation list via shared pure helper
   useEffect(() => {
     if (!sessionListRef.current) return;
@@ -643,10 +653,12 @@ export function WorkspaceView() {
       }
     };
     const onWorkspaceAction = (event: Event) => {
-      const detail = (event as CustomEvent<{ type?: string; sessionId?: string; folder?: string }>)
-        .detail;
+      const detail = (
+        event as CustomEvent<{ type?: string; sessionId?: string; folder?: string; focus?: boolean }>
+      ).detail;
       if (!detail?.type) return;
       if (detail.type === 'new-session') {
+        focusLauncherRef.current = Boolean(detail.focus);
         openLauncher(true, detail.folder);
       } else if (detail.type === 'open-session' && detail.sessionId) {
         void loadChat(detail.sessionId);
@@ -658,6 +670,7 @@ export function WorkspaceView() {
     window.addEventListener('gnomcode:view-change', onViewChange);
     window.addEventListener('gnomcode:reload-view', onReload);
     window.addEventListener('gnomcode:workspace-action', onWorkspaceAction);
+    window.__gnomcodeLocalActions?.workspaceReady?.();
     return () => {
       window.removeEventListener('gnomcode:view-change', onViewChange);
       window.removeEventListener('gnomcode:reload-view', onReload);
@@ -1516,6 +1529,7 @@ export function WorkspaceView() {
                 <label>
                   Agent
                   <select
+                    ref={launchAgentRef}
                     value={launchAgent}
                     onChange={(event) => setLaunchAgent(event.target.value)}
                   >

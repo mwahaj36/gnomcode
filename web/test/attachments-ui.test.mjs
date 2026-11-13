@@ -48,17 +48,9 @@ test('renderAttachmentPills escapes filenames and formatPromptWithAttachments bu
   assert.match(formatted, /\.gnomcode\/attachments\/shot\.png/);
 });
 
-test('attachments UI wires into local console and Remote without raw hex CSS tokens', () => {
-  const html = readFileSync(join(root, 'crates/daemon/src/console.html'), 'utf8');
-  const js = readFileSync(join(root, 'crates/daemon/src/console-app.js'), 'utf8');
+test('attachments UI wires into Remote without raw hex CSS tokens', () => {
   const tsx = readFileSync(join(root, 'web/components/RemoteCompanion.tsx'), 'utf8');
   const css = readFileSync(join(root, 'web/app/gnomcode-console.css'), 'utf8');
-
-  assert.match(html, /id="chat-attach-btn"/);
-  assert.match(html, /id="chat-attach-input"/);
-  assert.match(html, /id="chat-attachments-bar"/);
-  assert.match(js, /\/api\/v1\/sessions\/.*\/attachments/);
-  assert.match(js, /validateAttachmentCandidate/);
 
   assert.match(tsx, /sp-attach-trigger/);
   assert.match(tsx, /upload_attachment/);

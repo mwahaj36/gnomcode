@@ -12,10 +12,6 @@ $Cargo = (Get-Command cargo.exe -ErrorAction Stop).Source
 $Csc = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
 if (-not (Test-Path $Csc)) { throw ".NET Framework C# compiler is required" }
 $Out = Join-Path $RepoRoot "web/public/downloads"
-& node scripts/check-console.mjs
-if ($LASTEXITCODE -ne 0) { throw "Embedded console JavaScript is invalid" }
-& node scripts/check-native-navigation.mjs
-if ($LASTEXITCODE -ne 0) { throw "Native console navigation/recovery regression failed" }
 & powershell -NoProfile -File scripts/check-tray.ps1
 if ($LASTEXITCODE -ne 0) { throw "Native tray icon regression failed" }
 
@@ -24,6 +20,12 @@ if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $RepoRoot "target" }
 $NativeExe = Join-Path $TargetDir "release/gnomcode.exe"
 if ((& $NativeExe --version) -ne "gnomcode $Version") { throw "Binary version mismatch" }
+Push-Location (Join-Path $RepoRoot "web")
+try {
+  $env:GNOMCODE_BINARY = $NativeExe
+  & npm run test:e2e
+  if ($LASTEXITCODE -ne 0) { throw "Console browser tests failed against the release binary" }
+} finally { Remove-Item Env:GNOMCODE_BINARY -ErrorAction SilentlyContinue; Pop-Location }
 & $Cargo about generate about.hbs --output-file "$Out/THIRD_PARTY_NOTICES.html"
 if ($LASTEXITCODE -ne 0) { throw "Third-party notices generation failed; install cargo-about --features cli --locked" }
 $TerminalLicense = [System.Net.WebUtility]::HtmlEncode([IO.File]::ReadAllText((Join-Path $RepoRoot "web/public/vendor/XTERM-LICENSE.txt")))

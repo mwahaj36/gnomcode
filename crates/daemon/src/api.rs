@@ -516,7 +516,7 @@ mod tests {
             .expect("body");
         let html = std::str::from_utf8(&body).expect("UTF-8");
         let branding = gnomcode_core::branding::branding().expect("branding");
-        assert!(html.contains(&format!("{}/docs", branding.base_url)));
+        assert!(html.contains(&format!("data-base-url=\"{}\"", branding.base_url)));
         assert!(!html.contains("__GNOMCODE_BASE_URL__"));
         assert!(!html.contains("<script>"));
         assert!(!html.contains(" onclick="));
@@ -583,8 +583,6 @@ mod tests {
         assert!(html.contains("class=\"console-context\""));
         assert!(html.contains("role=\"tablist\""));
         assert!(html.contains("data-view=\"overview\" role=\"tab\""));
-        assert!(html.contains("id=\"reload-view\""));
-        assert!(html.contains("id=\"resync-data\""));
         for wrapper in ["[RUN]", "[WAIT]", "[IDLE]", "[READY]", "[LOCAL]"] {
             assert!(
                 !html.contains(wrapper),

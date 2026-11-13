@@ -120,3 +120,32 @@ test('the daemon refuses the console API without the bearer token and never echo
   await expect.poll(() => queries.length).toBeGreaterThan(0);
   expect(queries.filter((url) => url.includes('token='))).toEqual([]);
 });
+
+test('a folder deep link opens the launcher on that folder and is consumed', async ({ page, daemon, openConsole }) => {
+  await openConsole(`#sessions?folder=${encodeURIComponent("C:\work\space & quote'")}`);
+  await expect(page.locator('#console-title')).toHaveText('Workspace');
+  const launcher = page.locator('.ide-launcher');
+  await expect(launcher.getByRole('heading', { name: 'New agent session' })).toBeVisible();
+  await expect(launcher.getByLabel('Workspace directory')).toHaveValue("C:\work\space & quote'");
+  const url = new URL(page.url());
+  expect(url.hash).toBe('#sessions');
+  expect(url.searchParams.get('token')).toBe(daemon.token);
+});
+
+test('every navigation keeps the launch address so a reload stays authorized', async ({ page, daemon, openConsole }) => {
+  await openConsole();
+  for (const name of ['Workspace', 'Settings', 'Home']) {
+    await page.getByRole('tab', { name }).click();
+    expect(new URL(page.url()).searchParams.get('token')).toBe(daemon.token);
+  }
+  await page.getByRole('tab', { name: 'Usage' }).click();
+  await page.reload();
+  await expect(page.locator('#console-title')).toHaveText('Usage');
+  await expect(page.locator('#sync-state')).toHaveText('Local daemon connected');
+});
+
+test('a missing token is reported with an action instead of an endless spinner', async ({ page, daemon }) => {
+  await page.goto(daemon.base + '/');
+  await expect(page.locator('#sync-state')).toHaveText('Local data unavailable');
+  await expect(page.locator('#sync-state')).toHaveClass(/local-status-error/);
+});

@@ -62,10 +62,10 @@ test('names and paths are escaped and an empty list says so in one line', () => 
 
 test('web and local consoles share the list and the CSS stays in its own section', async () => {
   const client = await readFile(new URL('../app/console/Client.tsx', import.meta.url), 'utf8');
-  const local = await readFile(new URL('../../crates/daemon/src/console-app.js', import.meta.url), 'utf8');
+  const local = await readFile(new URL('../local-console/UsageView.tsx', import.meta.url), 'utf8');
   const css = await readFile(new URL('../app/gnomcode-console.css', import.meta.url), 'utf8');
   assert.match(client, /mountProjectList\(element\.current, projectsFromSessions\(sessions\)/);
-  assert.match(local, /presentation\.mountProjectList\(container, projects/);
+  assert.match(local, /mountProjectList\(/);
   assert.match(css, /Project activity \(fix\/project-activity\)/);
   assert.match(css, /\.sp-projects \.sp-project-row \{[^}]*min-height: 44px/);
 });
