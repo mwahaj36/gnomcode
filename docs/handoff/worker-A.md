@@ -1,5 +1,42 @@
 # Worker A handoff
 
+## Status at stop
+- **Last branch and commit**: `feat/e3-freeze-toggles` (`a868226`, PR #220).
+- **Half done / blocked**:
+  - **Item 7c (Gemini ACP approvals)**: Blocked because `gemini` CLI is not installed on this Windows host; cannot verify launch flags live without guessing. Shared `crates/pty/src/acp_approvals.rs` already accepts `"gemini-cli"`. Resume by installing `gemini`, verifying `gemini` ACP launch flag in a temp workspace, and wiring it in a dedicated PR.
+  - **Item 10 (E2 split `api.rs` and `store/lib.rs` by domain)**: Stopped as instructed because Worker B PRs (#190, #191, #192, #194, #195, #196, #198, #199, #201, #204, #206, #209, #211) are still open. Resume once all Worker B PRs and #189..#220 merge into `main`, then create one PR per domain as pure moves.
+- **PRs in merge order** (all `OPEN`, `fix/restore-green-baseline` first):
+  1. #189 (`fix/restore-green-baseline`) — https://github.com/mwahaj36/spawnt/pull/189
+  2. #187 (G5 interrupt backend) — https://github.com/mwahaj36/spawnt/pull/187
+  3. #193 (G6 agy resume) — https://github.com/mwahaj36/spawnt/pull/193
+  4. #197 (G7 usage fallback) — https://github.com/mwahaj36/spawnt/pull/197
+  5. #200 (G11 env scrub) — https://github.com/mwahaj36/spawnt/pull/200
+  6. #202 (G12 Unix process-group stop) — https://github.com/mwahaj36/spawnt/pull/202
+  7. #203 (G13 Codex/Gemini discovery) — https://github.com/mwahaj36/spawnt/pull/203
+  8. #205 (C workspace files, ADR 0035) — https://github.com/mwahaj36/spawnt/pull/205
+  9. #207 (C session changes, ADR 0037) — https://github.com/mwahaj36/spawnt/pull/207
+  10. #208 (C session artifacts, ADR 0039) — https://github.com/mwahaj36/spawnt/pull/208
+  11. #210 (C attachments, ADR 0041) — https://github.com/mwahaj36/spawnt/pull/210
+  12. #212 (C quick-actions, ADR 0043) — https://github.com/mwahaj36/spawnt/pull/212
+  13. #213 (G8 Claude error parsing) — https://github.com/mwahaj36/spawnt/pull/213
+  14. #214 (G3 vt100 + G14 guarded Enter) — https://github.com/mwahaj36/spawnt/pull/214
+  15. #215 (Codex app-server approvals, ADR 0045) — https://github.com/mwahaj36/spawnt/pull/215
+  16. #216 (Antigravity `agy acp` approvals, ADR 0047) — https://github.com/mwahaj36/spawnt/pull/216
+  17. #217 (D3 notify watcher + idle back-off) — https://github.com/mwahaj36/spawnt/pull/217
+  18. #218 (Antigravity `RESOURCE_EXHAUSTED` cross-check) — https://github.com/mwahaj36/spawnt/pull/218
+  19. #219 (Failover E2E Claude -> Codex) — https://github.com/mwahaj36/spawnt/pull/219
+  20. #220 (E3 freeze toggles, ADR 0049) — https://github.com/mwahaj36/spawnt/pull/220
+  - Handoff log PR: #185 (`docs/handoff-worker-A`) — https://github.com/mwahaj36/spawnt/pull/185
+
+## 2026-11-13: E3 freeze Teams, extra adapters, scheduled messages, and account sync behind off-by-default toggles
+- PR: https://github.com/mwahaj36/spawnt/pull/220 (`feat/e3-freeze-toggles`, commit `a868226`, ADR 0049)
+- Changed: added `gnomcode_core::FeatureToggles` (all `false` by default) in `crates/core/src/lib.rs`, `Database::get_feature_toggles` / `set_feature_toggles` in `crates/store/src/lib.rs` (using `desktop_preferences`), `crates/daemon/src/features.rs` (`GET/POST /api/v1/settings/features` and Remote `features.get` / `features.set`), plus gates in `crates/ingest/src/lib.rs` (`scan_log_files_with_extra`), `crates/daemon/src/automation.rs` (`deliver_due` + `schedule`), `crates/daemon/src/sync.rs` (`spawn_cloud_sync`), and `crates/daemon/src/pro.rs` (`is_teams_enabled`). Updated `docs/SPEC.md`, `docs/ROADMAP_1.0.md`, `docs/sessions/2026-11-13-e3-freeze-toggles.md`, `docs/sessions/README.md`.
+- Evidence & Tests: `features_http_and_remote_default_false_and_roundtrip`, `scheduled_messages_are_frozen_by_default`, `scan_log_files_filters_proper_extensions_and_names`.
+- Gate (`CARGO_INCREMENTAL=0`): `cargo fmt --all` PASS; `cargo clippy --workspace --all-targets -- -D warnings` PASS; `cargo test --workspace` PASS.
+- Verified live: HTTP/Remote toggle round-trip and frozen `schedule` guard in-process. Not verified: live daemon + Supabase sync with `account_sync_enabled = true`.
+- Deviations/risks: None; existing data and code preserved.
+- Dependencies: Depends on #189.
+
 ## 2026-11-13: Failover end to end (Claude exhausted, continue in Codex)
 - PR: https://github.com/mwahaj36/spawnt/pull/219 (`feat/failover-e2e-demo`, commit `18e98bd`)
 - Changed: added `crates/daemon/tests/failover_e2e.rs`, ticked `docs/ROADMAP_1.0.md`, added `docs/sessions/2026-11-13-failover-e2e-demo.md` and `docs/sessions/README.md` entry.
