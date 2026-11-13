@@ -156,6 +156,10 @@ function cycleTheme() {
           section.hidden = true;
           return;
         }
+        if (section.dataset.legacyUsage === 'true' && typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage) {
+          section.hidden = true;
+          return;
+        }
         section.hidden = !section.dataset.localView.split(',').includes(view);
       });
       if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.sessions)) {
@@ -163,7 +167,13 @@ function cycleTheme() {
       }
       document.querySelectorAll('.view-content').forEach(section => section.classList.toggle('active', section.id === `view-${view}` || (section.id === 'view-console' && CONSOLE_VIEWS.includes(view))));
       if (updateUrl && window.location.hash.slice(1) !== view) history.pushState(null, '', consoleViewUrl(view));
-      if (view === 'usage') { scrollHeatmapToToday(); void loadHeatmap(); void loadProjects(); }
+      if (view === 'usage') {
+        if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('gnomcode:view-change', { detail: { view } }));
+        } else {
+          scrollHeatmapToToday(); void loadHeatmap(); void loadProjects();
+        }
+      }
       if (view === 'settings') { void loadProData(); }
       if (view === 'overview') {
         if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
@@ -672,6 +682,7 @@ function cycleTheme() {
     }
 
     async function loadReport() {
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage) return true;
       try {
         const requestedRange = currentTimeline;
         let url = `/api/v1/report?range=${currentTimeline}`;
@@ -722,6 +733,7 @@ function cycleTheme() {
     // The trailing-year grid changes slowly, so it is fetched at most once a minute, never on the 2-second poll.
     let lastHeatmapAt = 0;
     async function loadHeatmap(force = false) {
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage && window.__gnomcodeReactViews.overview) return true;
       if (!force && Date.now() - lastHeatmapAt < 60000) return true;
       lastHeatmapAt = Date.now();
       const container = document.getElementById('usage-heatmap');
@@ -776,6 +788,10 @@ function cycleTheme() {
     });
 
     async function loadProjects() {
+      if (typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage && window.__gnomcodeReactViews.sessions) {
+        projectsLoaded = true;
+        return true;
+      }
       const container = document.getElementById('project-rollups');
       const range = currentTimeline;
       try {
@@ -2086,7 +2102,9 @@ function cycleTheme() {
         const jsonStr = JSON.stringify(res) + Math.floor(Date.now() / 60000);
         if (jsonStr === lastQuotaJson) return true;
         const presentation = await import('/console-presentation.js');
-        presentation.updateProviderCards(document.getElementById('quota-table'), res, { cost: true });
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage)) {
+          presentation.updateProviderCards(document.getElementById('quota-table'), res, { cost: true });
+        }
         if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
           presentation.updateProviderCards(document.getElementById('home-limits'), res, { cost: false });
         }
@@ -2098,7 +2116,9 @@ function cycleTheme() {
         if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.overview)) {
           document.getElementById('home-limits').textContent = 'Provider limits unavailable. Retry Reload view.';
         }
-        document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
+        if (!(typeof window !== 'undefined' && window.__gnomcodeReactViews && window.__gnomcodeReactViews.usage)) {
+          document.getElementById('quota-table').textContent = 'Quota refresh failed. Last observations are stale; retry Reload view.';
+        }
         return false;
       }
     }
