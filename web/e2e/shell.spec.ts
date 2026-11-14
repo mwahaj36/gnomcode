@@ -171,3 +171,25 @@ test('the console is one React root and the retired script is gone', async ({ pa
   expect(scripts).not.toContain('/console-app.js');
   expect((await fetch(`${daemon.base}/console-app.js`, { headers: { Authorization: `Bearer ${daemon.token}` } })).status).toBe(404);
 });
+
+test('keyboard focus on a nav tab shows a ring and mouse selection shows no outline (owner decision)', async ({ page, openConsole }) => {
+  await openConsole();
+  const usage = page.getByRole('tab', { name: 'Usage' });
+  await usage.click();
+  await expect(usage).toHaveCSS('outline-style', 'none');
+  await page.keyboard.press('Tab');
+  const focused = page.locator('.sp-console-nav :focus-visible');
+  await expect(focused).toHaveCount(1);
+  await expect(focused).toHaveCSS('outline-style', 'solid');
+});
+
+test('no view scrolls the page horizontally at phone width (owner decision)', async ({ page, openConsole }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openConsole();
+  for (const name of ['Home', 'Workspace', 'Usage', 'Settings']) {
+    await page.getByRole('tab', { name }).click();
+    await expect(page.locator('#console-title')).toHaveText(name);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `${name} overflows horizontally`).toBeLessThanOrEqual(0);
+  }
+});

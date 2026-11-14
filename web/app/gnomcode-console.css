@@ -1289,7 +1289,7 @@ body.sp-native-console .sp-nav-sessions .ide-sidebar{width:100%;max-width:none;h
 body.sp-native-console .sp-nav-footer{margin-top:auto;display:flex;flex-direction:column;gap:var(--sp-1);flex:none;padding-top:var(--sp-1)}
 body.sp-native-console[data-rail] .rail-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);opacity:1;pointer-events:none}
 body.sp-native-console[data-rail="expanded"] .rail-label{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
-body.sp-native-console .sp-console-nav .tab-btn,body.sp-native-console .sp-console-nav #navigation-toggle{position:relative;color:var(--sp-text-3);background:transparent;border:0;outline:none;text-transform:none;letter-spacing:0;min-height:40px;padding:8px 10px}
+body.sp-native-console .sp-console-nav .tab-btn,body.sp-native-console .sp-console-nav #navigation-toggle{position:relative;color:var(--sp-text-3);background:transparent;border:0;text-transform:none;letter-spacing:0;min-height:40px;padding:8px 10px}
 body.sp-native-console .sp-console-nav :is(.tab-btn,#navigation-toggle):hover{color:var(--sp-text-2);background:var(--sp-surface-raised)}
 body.sp-native-console .sp-console-nav .tab-btn.active,body.sp-native-console .sp-console-nav .tab-btn[aria-selected="true"]{color:var(--sp-text);background:var(--sp-surface-raised);font-weight:500;border:0;box-shadow:none}
 body.sp-native-console .sp-console-nav .tab-btn.active::after{display:none;content:none}
@@ -1319,7 +1319,7 @@ body.sp-native-console .ide-sidebar .sp-group-label{margin:var(--sp-3) var(--sp-
  body.sp-native-console .sp-console-workspace>.sp-console-nav{position:fixed;inset:auto 0 0 0;z-index:40;width:100%;height:calc(var(--rail-h) + env(safe-area-inset-bottom));flex-direction:row;align-items:stretch;padding:0 max(var(--sp-2),env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--sp-2),env(safe-area-inset-left));border-right:0;border-bottom:0;border-top:1px solid var(--sp-border);overflow:visible}
  body.sp-native-console .sp-console-nav :is(.app-brand,.sp-nav-sessions,.sp-nav-footer,#account-entry,#navigation-toggle){display:none}
  body.sp-native-console .sp-rail-tabs{display:flex;flex-direction:row;flex:1;gap:var(--sp-1)}
- body.sp-native-console .sp-console-nav .tab-btn{flex:1;justify-content:center;width:auto;min-height:48px;padding:0;border-radius:var(--sp-r-sm)}
+ body.sp-native-console .sp-console-nav .tab-btn{flex:1;justify-content:center;width:auto;min-height:48px;padding:0;border-radius:var(--sp-r-control)}
  body.sp-native-console #tab-btn-settings{margin-top:0}
  body.sp-native-console[data-rail] .rail-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
  body.sp-native-console .sp-console-content{padding:0 var(--sp-4) calc(var(--rail-h) + var(--sp-4) + env(safe-area-inset-bottom))}
