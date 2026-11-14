@@ -92,3 +92,13 @@ This runs:
    - Smoke-test installer: `web/public/downloads/Gnomcode-Setup.exe`.
    - Verify Windows Settings -> "Installed apps" displays `Gnomcode Mission Control vX.Y.Z`.
    - Test `Gnomcode-Uninstall.exe` cleanly purges services, registry entries, and shortcuts.
+
+## Website deploys (manual)
+
+Git pushes no longer deploy the website (`web/vercel.json` sets `git.deploymentEnabled: false`), so merges never use up the Vercel free plan's daily deploy limit. Deploy production by hand when a release or website change is ready, from the repository root (the Vercel project's root directory is `web/`; `.vercelignore` applies):
+
+```sh
+npx vercel@latest login          # once, by the owner
+npx vercel@latest link           # once, pick the existing project
+npx vercel@latest deploy --prod
+```
