@@ -35,6 +35,8 @@
   --sp-r-card: 12px;
   --sp-r-bubble: 14px;
   --sp-r-pill: 999px;
+  --sp-r-md: var(--sp-r-popover);
+  --sp-r-lg: var(--sp-r-card);
   --sp-content-max: 1200px;
   --sp-gutter: 32px;
 
