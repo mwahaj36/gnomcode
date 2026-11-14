@@ -39,8 +39,6 @@ export default function LandingPage() {
   const [tourVisible, setTourVisible] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
   const tourScreenRef = useRef<HTMLDivElement>(null);
-  const marqueeRef = useRef<HTMLDivElement>(null);
-  const speedFrame = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -81,21 +79,6 @@ export default function LandingPage() {
     return () => observer.disconnect();
   }, [tab, tourVisible]);
 
-  function setMarqueeSpeed(target: number) {
-    const animation = marqueeRef.current?.getAnimations()[0];
-    if (!animation) return;
-    cancelAnimationFrame(speedFrame.current);
-    const start = animation.playbackRate;
-    const started = performance.now();
-    const step = (now: number) => {
-      const progress = Math.min((now - started) / 450, 1);
-      animation.playbackRate = start + (target - start) * (1 - Math.pow(1 - progress, 3));
-      if (progress < 1) speedFrame.current = requestAnimationFrame(step);
-    };
-    speedFrame.current = requestAnimationFrame(step);
-  }
-
-  useEffect(() => () => cancelAnimationFrame(speedFrame.current), []);
 
   useEffect(() => {
     const sections = document.querySelectorAll<HTMLElement>(".sp-page [data-reveal]");
@@ -140,7 +123,7 @@ export default function LandingPage() {
 
 
 
-      <section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><div className="sp-marquee-window" onMouseEnter={() => setMarqueeSpeed(0)} onMouseLeave={() => setMarqueeSpeed(1)}><div className="sp-marquee-track" ref={marqueeRef}>{[false, true].map((duplicate) => <div className="sp-agent-list" aria-hidden={duplicate || undefined} key={String(duplicate)}>{agents.map((agent) => <span className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></span>)}</div>)}</div></div></div></section>
+      <section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><ul className="sp-agent-row">{agents.map((agent) => <li className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></li>)}</ul></div></section>
 
       <section className="sp-features sp-width" id="features" data-reveal><div className="sp-section-head"><h2>Keep working across agents.</h2><span>LAUNCH / SWITCH / CONTINUE</span></div><div className="sp-feature-grid">{features.map(([title, copy]) => <article key={title}><h3>{title}</h3><p>{copy}</p><span className="sp-feature-line" aria-hidden="true" /></article>)}</div></section>
 
