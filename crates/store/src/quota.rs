@@ -97,6 +97,59 @@ impl Database {
         Ok(())
     }
 
+    /// Resolves the quota pool (`limit_id`) that owns `model` for `provider` from `quota_pool_member`.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn quota_pool_for_model(
+        &self,
+        provider: &str,
+        model: &str,
+    ) -> Result<Option<String>, Error> {
+        let model = model.trim();
+        if model.is_empty() {
+            return Ok(None);
+        }
+        let mut stmt = self.conn.prepare(obfstr::obfstr!(
+            "SELECT limit_id, member FROM quota_pool_member WHERE provider = ?1"
+        ))?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([provider], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(Result::ok)
+            .collect();
+        let needle = model.to_ascii_lowercase();
+        if let Some((pool, _)) = rows
+            .iter()
+            .find(|(_, member)| member.trim().eq_ignore_ascii_case(&needle))
+        {
+            return Ok(Some(pool.clone()));
+        }
+        let norm_needle: String = needle
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
+        let mut matches = Vec::new();
+        for (pool, member) in &rows {
+            let norm_member: String = member
+                .to_ascii_lowercase()
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .collect();
+            if !norm_member.is_empty()
+                && (norm_member == norm_needle
+                    || norm_needle.contains(&norm_member)
+                    || norm_member.contains(&norm_needle))
+                && !matches.contains(pool)
+            {
+                matches.push(pool.clone());
+            }
+        }
+        if matches.len() == 1 {
+            return Ok(matches.into_iter().next());
+        }
+        Ok(None)
+    }
+
     /// Applies each recorded `RESOURCE_EXHAUSTED` error to the pool of the model that raised it.
     ///
     /// The model is mapped to a pool from the limits source's own data (the pool name and its

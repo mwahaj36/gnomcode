@@ -240,6 +240,28 @@ impl Database {
         Ok(())
     }
 
+    /// Finds the ingested source file path for a Codex rollout session id.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if query execution fails.
+    pub fn find_codex_rollout_path(&self, raw_session_id: &str) -> Result<Option<String>, Error> {
+        let needle = raw_session_id.trim();
+        if needle.is_empty() {
+            return Ok(None);
+        }
+        let pattern = format!("%{needle}%");
+        self.conn
+            .query_row(
+                obfstr::obfstr!(
+                    "SELECT file_path FROM source_file WHERE file_path LIKE ?1 ORDER BY last_ingested_at DESC LIMIT 1"
+                ),
+                params![pattern],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     /// Queries the latest committed checkpoint for a log file.
     ///
     /// # Errors

@@ -235,6 +235,17 @@ mod tests {
             super::codex::clean_stored_conversation(legacy)[0].content,
             "Explain this screenshot.\n\n[Image attachment: preview unavailable in imported history]"
         );
+        let bare = include_bytes!("../../../fixtures/codex/2026-11-14/bare-image-tag.jsonl");
+        let bare_batch = CodexAdapter::new().parse(&FileCtx::default(), bare);
+        assert_eq!(
+            bare_batch.chat_events[0].content,
+            "Why is the header clipped?\n\n[Image attachment: preview unavailable in imported history]"
+        );
+        assert!(
+            !bare_batch.chat_events[0]
+                .content
+                .contains("codex-clipboard-fixture")
+        );
     }
     #[test]
     fn native_titles_are_retained_by_supported_transcript_adapters() {
