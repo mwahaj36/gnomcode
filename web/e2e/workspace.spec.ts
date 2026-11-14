@@ -15,7 +15,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     );
     await openConsole('#sessions');
     await openClaudeConversation(page);
-    const tools = page.getByRole('toolbar', { name: 'Conversation tools' });
+    const tools = page.getByRole('complementary', { name: 'Conversation tools' });
     await tools.getByRole('button', { name: 'Files' }).click();
     const panel = page.locator('.sp-files-panel');
     await expect(panel.getByRole('heading', { name: 'Workspace files' })).toBeVisible();
@@ -43,7 +43,7 @@ test.describe('read-only workspace panels on an observed session', () => {
   test('Files explains a session without a workspace folder', async ({ page, openConsole }) => {
     await openConsole('#sessions');
     await page.locator('.ide-session').first().click();
-    await page.getByRole('toolbar', { name: 'Conversation tools' }).getByRole('button', { name: 'Files' }).click();
+    await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Files', exact: true }).click();
     await expect(page.locator('.sp-files-panel [role="alert"]')).toContainText('Workspace repository path is unavailable for this session.');
   });
 
@@ -55,7 +55,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     );
     await openConsole('#sessions');
     await openClaudeConversation(page);
-    await page.getByRole('toolbar', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes' }).click();
+    await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes', exact: true }).click();
     const panel = page.locator('.sp-changes-panel');
     await expect(panel.getByRole('heading', { name: 'Workspace changes' })).toBeVisible();
     await expect(panel.getByRole('list', { name: 'Changed files' })).toContainText('src/app.ts');
@@ -69,7 +69,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     await page.route('**/api/v1/sessions/*/changes', (route) => route.fulfill({ status: 400, json: { message: 'not a repo' } }));
     await openConsole('#sessions');
     await openClaudeConversation(page);
-    await page.getByRole('toolbar', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes' }).click();
+    await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes', exact: true }).click();
     await expect(page.locator('.sp-changes-panel [role="alert"]')).toContainText('This workspace is not a git repository.');
   });
 
@@ -87,7 +87,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     );
     await openConsole('#sessions');
     await openClaudeConversation(page);
-    await page.getByRole('toolbar', { name: 'Conversation tools' }).getByRole('button', { name: 'Artifacts' }).click();
+    await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Artifacts', exact: true }).click();
     const panel = page.locator('.sp-artifacts-panel');
     await expect(panel.getByRole('status')).toHaveText('2 workspace changes');
     await expect(panel.locator('iframe')).toHaveAttribute('sandbox', '');
