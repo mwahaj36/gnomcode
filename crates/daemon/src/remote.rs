@@ -1381,7 +1381,16 @@ pub(crate) fn conversation_sessions(
                         .is_ok_and(|started| session.last_event_at < started)
             })
         });
-        let limits = crate::api::conversation_quota(&quota, agent, chrono::Utc::now());
+        let now = chrono::Utc::now();
+        let limits = crate::api::conversation_quota(&quota, agent, now);
+        let active_model = observed
+            .and_then(|s| s.model.as_deref())
+            .or_else(|| host.and_then(|h| h.model.as_deref()));
+        let provider_slug = crate::agent_for_model("@default", Some(agent)).unwrap_or(agent);
+        let model_pool =
+            active_model.and_then(|m| db.quota_pool_for_model(provider_slug, m).ok().flatten());
+        let header_limit =
+            crate::api::conversation_headline_quota(&quota, model_pool.as_deref(), agent, now);
         row["agent"] = json!(agent);
         if let Some(label) = observed
             .and_then(|session| gnomcode_core::surface_label(agent, session.surface.as_str()))
@@ -1430,6 +1439,32 @@ pub(crate) fn conversation_sessions(
         row["can_resume"] = json!(can_resume);
         row["can_reset"] = json!(managed && matches!(agent, "codex" | "claude-code"));
         row["limits"] = json!(limits);
+        row["header_limit"] = json!(header_limit);
+        let queued_count = db
+            .scheduled_messages(&root)
+            .map(|items| items.iter().filter(|m| m.status == "pending").count())
+            .unwrap_or(0);
+        let (delivery_mode, delivery_reason, can_queue) = if !managed {
+            (
+                "observed_read_only",
+                "Observed external session. Use Continue here in Actions to start a managed session.",
+                false,
+            )
+        } else if can_prompt {
+            ("immediate", "Ready for immediate delivery.", true)
+        } else {
+            (
+                "queue_until_ready",
+                "Session is busy or awaiting input; prompts will queue until the next safe turn boundary.",
+                true,
+            )
+        };
+        row["delivery_capability"] = json!({
+            "mode": delivery_mode,
+            "reason": delivery_reason,
+            "can_queue": can_queue,
+            "queued_count": queued_count,
+        });
         if host.is_some_and(|record| {
             observed.is_none_or(|session| {
                 chrono::DateTime::parse_from_rfc3339(&record.started_at)
