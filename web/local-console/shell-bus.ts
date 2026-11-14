@@ -29,6 +29,21 @@ export function startOnboarding(): void {
   controller?.startTour();
 }
 
+let providerSetupWanted = false;
+
+/** Asks Settings to scroll to the provider setup checklist (from onboarding or the doctor link). */
+export function requestProviderSetup(): void {
+  providerSetupWanted = true;
+  window.dispatchEvent(new CustomEvent('gnomcode:provider-setup'));
+}
+
+/** Returns and clears a pending provider setup request. */
+export function takeProviderSetupRequest(): boolean {
+  const wanted = providerSetupWanted;
+  providerSetupWanted = false;
+  return wanted;
+}
+
 /** The five places the shell can show; `auth` is the Account view reached from the rail or Settings. */
 export type ConsoleView = 'overview' | 'sessions' | 'usage' | 'settings' | 'auth';
 

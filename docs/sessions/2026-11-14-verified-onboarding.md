@@ -22,3 +22,11 @@ Replace the four-step tour (#183) with one verified onboarding: pick providers, 
 ## Verification
 
 Rust: fmt, clippy -D warnings, `cargo test --workspace` (CARGO_INCREMENTAL=0), cargo deny. Web gates and Playwright listed in PR B.
+
+## UI (PR B)
+
+- `web/local-console/ProviderSetup.tsx`: `ProviderChecklist` (one component for onboarding, Settings > Providers, doctor link), `CopySnippet`, `ProviderSetupPanel`.
+- `web/local-console/Onboarding.tsx`: Providers -> Set up (per provider, WSL "Run in") -> Phone (pairing polled from `/api/v1/remote/devices`, notification permission) -> Done. Replaces the four-step tour; old dismiss flag counts as finished.
+- Primary buttons in onboarding use `--sp-cta-bg` (red stays for danger, owner decision).
+- Screenshots: `assets/onboarding/{welcome,checklist,settings}-{light,dark}-{1440,390}.png`.
+- Verification: web typecheck, lint, 140 unit tests, build, full Playwright (105 incl. 9 new onboarding specs with a mocked status endpoint), desktop build and 41 tests.

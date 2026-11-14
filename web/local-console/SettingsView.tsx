@@ -1,6 +1,7 @@
 'use client';
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { ProviderSetupPanel } from './ProviderSetup';
 import {
   updateProviderSources,
   type ProviderOverview,
@@ -563,6 +564,8 @@ export function SettingsView() {
     <div className="sp-settings-root">
       <section className="sp-settings-section">
         <h2>Providers</h2>
+        <ProviderSetupPanel />
+        <h3>Limit sources</h3>
         <div ref={providerListRef} className="sp-provider-sources">
           Loading providers...
         </div>

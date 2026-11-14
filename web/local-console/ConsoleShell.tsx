@@ -5,13 +5,18 @@ import { toggleChatList, useChatListCollapsed } from './chat-list';
 import { HomeView } from './HomeView';
 import { fetchLocalJson } from './local-api';
 import { SettingsView } from './SettingsView';
-import { type ConsoleView, registerNavigator, workspaceAction } from './shell-bus';
+import { type ConsoleView, registerNavigator, requestProviderSetup, workspaceAction } from './shell-bus';
 import { ShellDialogs } from './ShellDialogs';
 import { UsageView } from './UsageView';
 import { WorkspaceView } from './WorkspaceView';
 
 // Old links keep working: Limits and Projects moved into Usage, Automations into Settings.
-const VIEW_ALIASES: Record<string, string> = { limits: 'usage', projects: 'usage', automations: 'settings' };
+const VIEW_ALIASES: Record<string, string> = {
+  limits: 'usage',
+  projects: 'usage',
+  automations: 'settings',
+  'settings/providers': 'settings',
+};
 const VIEWS: ConsoleView[] = ['overview', 'sessions', 'usage', 'settings', 'auth'];
 const CONSOLE_VIEWS: ConsoleView[] = ['overview', 'sessions', 'usage'];
 const TITLES: Record<ConsoleView, string> = {
@@ -73,6 +78,7 @@ function storeFlag(key: string, value: string): void {
 
 // Rewrites an old #limits/#projects/#automations hash in place, so Back does not bounce through the old name.
 function normalizeHash(): void {
+  if (window.location.hash === '#settings/providers') requestProviderSetup();
   const target = VIEW_ALIASES[window.location.hash.slice(1)];
   if (target) history.replaceState(null, '', viewUrl(target));
 }
