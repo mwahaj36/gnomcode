@@ -756,11 +756,46 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
             .iter()
             .filter(|p| matches!(p.status.as_str(), "authenticated" | "configured"))
             .flat_map(|p| p.models.iter())
-            .filter(|m| matches!(provider(&m.agent), "codex" | "claude-code"))
+            .filter(|m| matches!(provider(&m.agent), "codex" | "claude-code" | "antigravity"))
             .collect();
-        let candidates: Vec<_> = choices
+        let candidate_labels: Vec<(String, String)> = store(db, {
+            let pairs: Vec<(String, String, String)> = choices
+                .iter()
+                .map(|c| {
+                    (
+                        provider(&c.agent).to_owned(),
+                        c.model.clone(),
+                        c.display_name.clone(),
+                    )
+                })
+                .collect();
+            move |db| {
+                Ok(pairs
+                    .into_iter()
+                    .map(|(agent, model, display_name)| {
+                        let pool = if agent == "antigravity" {
+                            db.quota_pool_for_model(&agent, &display_name)
+                                .ok()
+                                .flatten()
+                                .or_else(|| db.quota_pool_for_model(&agent, &model).ok().flatten())
+                        } else {
+                            None
+                        };
+                        (agent, pool.unwrap_or(model))
+                    })
+                    .collect())
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            choices
+                .iter()
+                .map(|c| (provider(&c.agent).to_owned(), c.model.clone()))
+                .collect()
+        });
+        let candidates: Vec<_> = candidate_labels
             .iter()
-            .map(|c| (provider(&c.agent), c.model.as_str()))
+            .map(|(agent, label)| (agent.as_str(), label.as_str()))
             .collect();
         let selected = gnomcode_core::routing::select_failover(
             (provider(&source.0), &source.1),
@@ -806,7 +841,7 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
                     crate::prepare_model_change(db, &id, &choice.model, Some(&choice.agent))
                         .await?;
                 let record = crate::execute_switch(prepared).await?;
-                crate::remote::record_model_change(&*db.lock().await, &id, &record)?;
+                crate::remote::persist_model_change(db, &id, &record).await?;
                 Ok::<_, crate::HandoffError>(record)
             }
             .await;
