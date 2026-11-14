@@ -1,6 +1,8 @@
 import { type KeyboardEvent, type MouseEvent, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { AccountView } from './AccountView';
 import { ApprovalsCard } from './ApprovalsCard';
+import { CommandPalette } from './CommandPalette';
+import { fetchAccount, signOutDesktop } from './settings-index';
 import { toggleChatList, useChatListCollapsed } from './chat-list';
 import { HomeView } from './HomeView';
 import { fetchLocalJson } from './local-api';
@@ -262,8 +264,12 @@ export function ConsoleShell() {
     return () => document.removeEventListener('click', onClick);
   }, [navigate]);
 
-  // The account view reports whether this desktop is connected; the rail offers Sign in only while it is not.
+  // The account view reports whether this desktop is connected; the rail offers Sign in or Sign out.
   useEffect(() => {
+    void fetchAccount().then(
+      (account) => setPaired(account.paired),
+      () => undefined,
+    );
     const onState = (event: Event) => setPaired(Boolean((event as CustomEvent<{ paired: boolean }>).detail.paired));
     window.addEventListener('gnomcode:account-state', onState);
     return () => window.removeEventListener('gnomcode:account-state', onState);
@@ -357,6 +363,35 @@ export function ConsoleShell() {
             </button>
             <button
               type="button"
+              className="tab-btn"
+              id="account-sign-out"
+              aria-label="Sign out of Gnomcode"
+              title="Sign out of Gnomcode"
+              hidden={!paired}
+              onClick={() => void signOutDesktop()}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 17l5-5-5-5M19 12H7M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5" />
+              </svg>
+              <span className="rail-label">Sign out</span>
+            </button>
+            <button
+              type="button"
+              className="tab-btn"
+              id="command-palette-entry"
+              aria-label="Search commands and settings"
+              aria-keyshortcuts="Control+K Meta+K"
+              title="Search commands and settings (Ctrl+K)"
+              onClick={() => window.dispatchEvent(new CustomEvent('gnomcode:command-palette'))}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="6" />
+                <path d="M20 20l-4.5-4.5" />
+              </svg>
+              <span className="rail-label">Search</span>
+            </button>
+            <button
+              type="button"
               id="navigation-toggle"
               aria-label={railLabel}
               title={railLabel}
@@ -431,6 +466,7 @@ export function ConsoleShell() {
         </div>
       </div>
       <ShellDialogs />
+      <CommandPalette />
     </>
   );
 }

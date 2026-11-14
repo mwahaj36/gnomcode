@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl, LocalApiError } from './local-api';
 import { confirmAction, showNotice } from './shell-bus';
+import { signOutDesktop } from './settings-index';
 
 interface AccountState {
   paired?: boolean;
@@ -147,21 +148,10 @@ export function AccountView() {
 
   const unpair = async () => {
     if (busyRef.current) return;
-    if (!(await confirmAction('Disconnect this desktop from your account? Recorded local sessions will stay on this device.', 'Disconnect desktop'))) {
-      return;
-    }
     busyRef.current = true;
     setBusy('unpair');
     try {
-      await fetchLocalMutation('/api/v1/auth/session', { method: 'DELETE', timeoutMs: 30000 });
-      await check();
-    } catch (error) {
-      const refused = error instanceof LocalApiError;
-      showNotice(
-        refused
-          ? 'Could not disconnect. Reload the account status and retry.'
-          : 'Connection could not be confirmed. Reload the account status before retrying.',
-      );
+      if (await signOutDesktop()) await check();
     } finally {
       busyRef.current = false;
       setBusy(null);
@@ -207,10 +197,10 @@ export function AccountView() {
             <p id="auth-paired-email">{account?.email || 'Connected account'}</p>
             <p>
               This desktop is linked to your account. Account access lets any signed-in device open its available sessions.
-              Disconnecting stops Remote and keeps its recorded local sessions.
+              Signing out disconnects this desktop, stops Remote and keeps recorded local sessions.
             </p>
             <button id="auth-disconnect-button" type="button" className="btn-control" disabled={busy === 'unpair'} onClick={() => void unpair()}>
-              {busy === 'unpair' ? 'Disconnecting...' : 'Disconnect desktop'}
+              {busy === 'unpair' ? 'Signing out...' : 'Sign out'}
             </button>
           </div>
           <div id="auth-unpaired-card" hidden={!unpaired}>

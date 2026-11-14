@@ -273,3 +273,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-14 - Verified provider onboarding](2026-11-14-verified-onboarding.md)
 - [2026-11-14 - Chat rendering and harness entry classification](2026-11-14-chat-rendering.md)
 - [2026-11-14 - Subagent sidebar fixes](2026-11-14-subagent-sidebar.md)
+- [2026-11-14 - Settings information architecture and Sign out](2026-11-14-settings-ia.md)

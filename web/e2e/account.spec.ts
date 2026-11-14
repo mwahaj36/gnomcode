@@ -99,8 +99,8 @@ test('the pairing token field is masked until revealed and connects with consent
   expect(posted).toMatchObject({ access_token: 'abc', remote_access_confirmed: true });
 
   // Disconnect confirms, then returns to the sign-in card.
-  await page.getByRole('button', { name: 'Disconnect desktop' }).click();
-  await expect(page.locator('#confirm-heading')).toHaveText('Disconnect desktop');
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.locator('#confirm-heading')).toHaveText('Sign out');
   await page.locator('#confirm-accept').click();
   await expect(page.locator('#auth-unpaired-card')).toBeVisible();
 });
@@ -121,17 +121,17 @@ test('a failed disconnect raises a dismissible notice and Escape cancels the con
   });
   await openConsole('#auth');
   const dialog = page.locator('#confirm-dialog');
-  await page.getByRole('button', { name: 'Disconnect desktop' }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(page.locator('#app-notice')).toBeHidden();
 
-  await page.getByRole('button', { name: 'Disconnect desktop' }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page.locator('#confirm-accept').click();
   const notice = page.locator('#app-notice');
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText('Could not disconnect. Reload the account status and retry.');
+  await expect(notice).toContainText('Could not sign out. Reload the account status and retry.');
   await notice.getByRole('button', { name: 'Dismiss' }).click();
   await expect(notice).toBeHidden();
 });
