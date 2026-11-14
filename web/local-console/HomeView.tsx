@@ -70,10 +70,10 @@ export function HomeView() {
       const data = await fetchLocalJson<ActivityHeatmap>('/api/v1/activity/heatmap');
       if (activityRef.current) {
         updateHeatmap(activityRef.current, data, {
-          weeks: 12,
+          weeks: 53,
           stats: false,
-          legend: false,
-          months: false,
+          legend: true,
+          months: true,
         });
       }
     } catch {
@@ -167,9 +167,11 @@ export function HomeView() {
   return (
     <div className="sp-home-react">
       <section className="sp-section" id="home-limits" ref={limitsRef} />
-      <section className="sp-section" id="home-sessions" ref={sessionsRef} />
-      <section className="sp-section" id="home-today" ref={todayRef} />
-      <div id="home-activity" ref={activityRef} />
+      <div className="sp-home-grid">
+        <div id="home-activity" ref={activityRef} />
+        <section className="sp-section" id="home-today" ref={todayRef} />
+        <section className="sp-section" id="home-sessions" ref={sessionsRef} />
+      </div>
     </div>
   );
 }

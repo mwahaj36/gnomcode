@@ -1,7 +1,7 @@
 import { expect, test } from './fixtures';
 
 test.describe('Home', () => {
-  test('shows limits, sessions, today tiles and the activity grid in that order', async ({ page, openConsole }) => {
+  test('shows limits, activity, today tiles and sessions in the redesigned Home layout', async ({ page, openConsole }) => {
     await openConsole();
     await expect(page.locator('#console-title')).toHaveText('Home');
     await expect(page.locator('#home-limits .sp-provider-card')).toHaveCount(3);
@@ -12,11 +12,11 @@ test.describe('Home', () => {
     await expect(page.locator('#home-sessions .sp-session-row')).toHaveCount(2);
     await expect(page.locator('#home-today')).toContainText('Tokens today');
     await expect(page.locator('#home-today')).toContainText('Active sessions');
-    await expect(page.locator('#home-activity')).toContainText('Last 12 weeks');
+    await expect(page.locator('#home-activity')).toContainText('Activity');
     const order = await page
-      .locator('#home-limits, #home-sessions, #home-today, #home-activity')
+      .locator('#home-limits, #home-activity, #home-today, #home-sessions')
       .evaluateAll((nodes) => nodes.map((node) => node.id));
-    expect(order).toEqual(['home-limits', 'home-sessions', 'home-today', 'home-activity']);
+    expect(order).toEqual(['home-limits', 'home-activity', 'home-today', 'home-sessions']);
   });
 
   test('a session row opens that conversation in Workspace', async ({ page, openConsole }) => {
@@ -206,12 +206,12 @@ test.describe('Settings', () => {
   });
 });
 
-test('the Home activity grid is separated from the Today tiles', async ({ page, openConsole }) => {
+test('the Home activity grid is separated from the Today tiles in the 2fr/1fr desktop grid', async ({ page, openConsole }) => {
   await openConsole();
-  await expect(page.locator('#home-activity')).toContainText('Last 12 weeks');
+  await expect(page.locator('#home-activity')).toContainText('Activity');
   const today = await page.locator('#home-today').boundingBox();
   const activity = await page.locator('#home-activity').boundingBox();
-  expect((activity?.y ?? 0) - ((today?.y ?? 0) + (today?.height ?? 0))).toBeGreaterThanOrEqual(16);
+  expect((today?.x ?? 0) - ((activity?.x ?? 0) + (activity?.width ?? 0))).toBeGreaterThanOrEqual(16);
 });
 
 test.describe('Stale and reset quota states', () => {
