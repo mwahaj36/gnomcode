@@ -38,6 +38,7 @@ import {
   type WorktreeDiffData,
 } from '../lib/worktree-presentation.mjs';
 import { collapseChatList, toggleChatList } from './chat-list';
+import { PaneResizer } from './pane-resizer';
 import { markWorkspaceReady, navigateTo } from './shell-bus';
 import {
   fetchLocalJson,
@@ -249,6 +250,38 @@ export function WorkspaceView() {
   const [resumeBusy, setResumeBusy] = useState(false);
   const [continueHereBusy, setContinueHereBusy] = useState(false);
   const [sidePanel, setSidePanel] = useState<WorkspaceSidePanel | null>(null);
+  // Overview card beside the conversation; a per-viewer layout preference. Narrow windows start with it
+  // closed because it overlays the conversation there.
+  const [overviewOpen, setOverviewOpenState] = useState(() => {
+    if (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 1181px)').matches) return false;
+    try {
+      return localStorage.getItem('gnomcode.overview') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const setOverviewOpen = (open: boolean) => {
+    setOverviewOpenState(open);
+    try {
+      localStorage.setItem('gnomcode.overview', open ? '1' : '0');
+    } catch {
+      // Storage unavailable
+    }
+  };
+  // On narrow windows the Overview overlays the conversation, so opening a tool from it closes it
+  // (without changing the remembered desktop preference) and closing the tool returns to the chat.
+  const openTool = (panel: WorkspaceSidePanel) => {
+    if (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 1181px)').matches) setOverviewOpenState(false);
+    setSidePanel(panel);
+  };
+  const automationRef = useRef<HTMLDetailsElement | null>(null);
+  const openAutomation = () => {
+    const details = automationRef.current;
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView({ block: 'nearest' });
+    details.querySelector<HTMLElement>('summary')?.focus();
+  };
   const [queuedPrompts, setQueuedPrompts] = useState<
     Array<{ id: string; text: string; status: string; created_at?: string; error?: string | null }>
   >([]);
@@ -2405,33 +2438,24 @@ export function WorkspaceView() {
                   Resume conversation
                 </button>
               ) : null}
-                <div className="sp-header-panel-toggles" role="toolbar" aria-label="Conversation tools">
-                  <button
-                    ref={toolsTriggerRef}
-                    type="button"
-                    className={`btn-control${sidePanel === 'files' ? ' is-active' : ''}`}
-                    aria-expanded={sidePanel === 'files'}
-                    onClick={() => setSidePanel((cur) => (cur === 'files' ? null : 'files'))}
-                  >
-                    Files
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-control${sidePanel === 'changes' ? ' is-active' : ''}`}
-                    aria-expanded={sidePanel === 'changes'}
-                    onClick={() => setSidePanel((cur) => (cur === 'changes' ? null : 'changes'))}
-                  >
-                    Changes
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-control${sidePanel === 'artifacts' ? ' is-active' : ''}`}
-                    aria-expanded={sidePanel === 'artifacts'}
-                    onClick={() => setSidePanel((cur) => (cur === 'artifacts' ? null : 'artifacts'))}
-                  >
-                    Artifacts
-                  </button>
-                </div>
+                <button
+                  ref={toolsTriggerRef}
+                  type="button"
+                  className="btn-control sp-overview-toggle"
+                  aria-label="Overview"
+                  title="Overview: changes, files, terminals, artifacts and limits"
+                  aria-pressed={overviewOpen || Boolean(sidePanel)}
+                  onClick={() => {
+                    if (sidePanel) {
+                      setSidePanel(null);
+                      setOverviewOpen(false);
+                    } else setOverviewOpen(!overviewOpen);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                    <path d="M3 4h18v16H3z M15 4v16" />
+                  </svg>
+                </button>
                 {canInterruptActive ? (
                   <button
                     type="button"
@@ -2448,7 +2472,21 @@ export function WorkspaceView() {
                     Stop
                   </button>
                 ) : null}
-              <details className="conversation-menu">
+              <details
+                className="conversation-menu"
+                onToggle={(event) => {
+                  // Keep the menu inside the pane: anchor it to the left when the header has wrapped.
+                  const menu = event.currentTarget.querySelector<HTMLElement>(':scope > div');
+                  const pane = event.currentTarget.closest('.sp-workspace-chat-panel');
+                  if (!menu || !pane || !event.currentTarget.open) return;
+                  menu.style.left = '';
+                  menu.style.right = '';
+                  if (menu.getBoundingClientRect().left < pane.getBoundingClientRect().left) {
+                    menu.style.left = '0';
+                    menu.style.right = 'auto';
+                  }
+                }}
+              >
                 <summary aria-label="Conversation actions">Actions</summary>
                 <div>
                   {imported ? (
@@ -2847,7 +2885,7 @@ export function WorkspaceView() {
               </small>
             </form>
 
-                <details className="profile-disclosure sp-chat-automation">
+                <details ref={automationRef} className="profile-disclosure sp-chat-automation">
                   <summary>Schedule and automation</summary>
                   <p>
                     Saved on this laptop after confirmation. Keep it awake with Gnomcode running.
@@ -2959,23 +2997,63 @@ export function WorkspaceView() {
                   </div>
                 </details>
               </div>
-              {sidePanel ? (
-                <div
-                  className="sp-workspace-modal-backdrop"
-                  role="presentation"
-                  onClick={(event) => {
-                    if (event.target === event.currentTarget) {
-                      setSidePanel(null);
-                      toolsTriggerRef.current?.focus();
-                    }
-                  }}
-                >
+              {!sidePanel && overviewOpen ? (
+                <aside className="sp-overview" aria-label="Conversation tools">
+                  <div className="sp-overview-head">
+                    <span>Overview</span>
+                    <button
+                      type="button"
+                      className="btn-control sp-icon-btn"
+                      aria-label="Hide overview"
+                      onClick={() => {
+                        setOverviewOpen(false);
+                        toolsTriggerRef.current?.focus();
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6 6 18" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button type="button" className="sp-overview-item" onClick={() => openTool('changes')}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12m0 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm12-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 0c0 6-12 3-12 9" /></svg>
+                    Changes
+                  </button>
+                  <button type="button" className="sp-overview-item" onClick={() => openTool('files')}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z M14 3v4h4" /></svg>
+                    Files
+                  </button>
+                  <button type="button" className="sp-overview-item" onClick={() => openTool('artifacts')}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></svg>
+                    Artifacts
+                  </button>
+                  {!imported ? (
+                    <button type="button" className="sp-overview-item" aria-pressed={terminalStreamOpen} onClick={handleToggleAgentTerminal}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z m4 5 3 3-3 3m5 0h5" /></svg>
+                      {terminalStreamOpen ? 'Show conversation' : 'Agent terminal'}
+                    </button>
+                  ) : null}
+                  <button type="button" className="sp-overview-item" aria-pressed={workspaceTerminalOpen} onClick={() => void handleOpenWorkspaceTerminal()}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M7 15h10" /></svg>
+                    Workspace terminal
+                  </button>
+                  <div className="sp-overview-sep" />
+                  <button type="button" className="sp-overview-item sp-overview-sub" onClick={openAutomation}>
+                    Schedule and automation
+                  </button>
+                  <div className="sp-overview-sep" />
                   <div
-                    className="sp-workspace-modal"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Workspace files, changes, and artifacts"
-                  >
+                    className="sp-overview-limits"
+                    dangerouslySetInnerHTML={{ __html: renderProviderCards(providerOverviews, { cost: false }) }}
+                  />
+                  <button type="button" className="sp-overview-item sp-overview-sub" onClick={() => navigateTo('usage')}>
+                    View usage
+                  </button>
+                </aside>
+              ) : null}
+              {sidePanel ? (
+                  <aside className="sp-inspector" aria-label="Workspace files, changes, and artifacts">
+                    <PaneResizer cssVar="--inspector-w" label="Resize tools panel" min={360} max={960} initial={560} direction={-1} />
                     <div className="sp-workspace-modal-head">
                       <div className="sp-header-panel-toggles" role="tablist" aria-label="Inspector views">
                         {(['files', 'changes', 'artifacts'] as const).map((tab) => (
@@ -3013,8 +3091,7 @@ export function WorkspaceView() {
                         hideToolbar
                       />
                     </div>
-                  </div>
-                </div>
+                  </aside>
               ) : null}
             </div>
 
