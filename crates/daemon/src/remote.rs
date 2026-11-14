@@ -868,13 +868,29 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             {
                 return json!({"type":"error","message":"Invalid prompt"});
             }
+            let queue_if_busy = request
+                .get("queue_if_busy")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let prompt_id = request
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(crate::api::valid_message_id)
+                .map(ToOwned::to_owned);
             match crate::deliver_conversation_prompt(db, session_id, text).await {
-                Ok(()) => json!({"type":"prompt_ack","session_id":session_id}),
-                Err(
-                    error @ (crate::HandoffError::Busy
-                    | crate::HandoffError::NotReady
-                    | crate::HandoffError::ImportedSession),
-                ) => json!({"type":"error","message":error.to_string()}),
+                Ok(()) => json!({
+                    "type": "prompt_ack",
+                    "session_id": session_id,
+                    "status": "sent",
+                    "id": prompt_id
+                }),
+                Err(error @ (crate::HandoffError::Busy | crate::HandoffError::NotReady)) => {
+                    queue_or_reject_prompt(db, session_id, text, prompt_id, queue_if_busy, error)
+                        .await
+                }
+                Err(error @ crate::HandoffError::ImportedSession) => {
+                    json!({"type":"error","message":error.to_string()})
+                }
                 Err(_) => {
                     json!({"type":"error","message":"Delivery could not be confirmed. Check the conversation before retrying; your draft is saved."})
                 }
@@ -927,6 +943,37 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
         }
         Some("interrupt") => crate::interrupt::command(db, request.clone()).await,
         _ => json!({"type":"error","message":"Unsupported remote command"}),
+    }
+}
+
+async fn queue_or_reject_prompt(
+    db: &Arc<Mutex<Database>>,
+    session_id: &str,
+    text: &str,
+    prompt_id: Option<String>,
+    queue_if_busy: bool,
+    error: crate::HandoffError,
+) -> Value {
+    if !queue_if_busy {
+        return json!({"type":"error","message":error.to_string()});
+    }
+    let msg_id = prompt_id.unwrap_or_else(|| {
+        let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default();
+        format!("rq-{nanos}")
+    });
+    let guard = db.lock().await;
+    match guard.schedule_message(&msg_id, session_id, text, 0) {
+        Ok(_) => json!({
+            "type": "prompt_ack",
+            "session_id": session_id,
+            "status": "queued",
+            "id": msg_id,
+            "reason": match error {
+                crate::HandoffError::Busy => "Agent is busy; queued for next safe turn boundary.",
+                _ => "Agent is not at prompt yet; queued for next safe turn boundary.",
+            }
+        }),
+        Err(_) => json!({"type":"error","message":error.to_string()}),
     }
 }
 
@@ -2652,5 +2699,41 @@ mod tests {
             .map(|row| row["id"].as_str().expect("id"))
             .collect();
         assert_eq!(ids, ["p"]);
+    }
+
+    #[tokio::test]
+    async fn remote_prompt_queues_when_busy_and_queue_if_busy_enabled() {
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("db")));
+        let rejected = queue_or_reject_prompt(
+            &db,
+            "s-busy",
+            "follow up",
+            Some("req-1".to_owned()),
+            false,
+            crate::HandoffError::Busy,
+        )
+        .await;
+        assert_eq!(rejected["type"], "error");
+
+        let queued = queue_or_reject_prompt(
+            &db,
+            "s-busy",
+            "follow up",
+            Some("req-2".to_owned()),
+            true,
+            crate::HandoffError::Busy,
+        )
+        .await;
+        assert_eq!(queued["type"], "prompt_ack");
+        assert_eq!(queued["status"], "queued");
+        assert_eq!(queued["id"], "req-2");
+        let pending = db
+            .lock()
+            .await
+            .scheduled_messages("s-busy")
+            .expect("scheduled");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, "req-2");
+        assert_eq!(pending[0].text, "follow up");
     }
 }
