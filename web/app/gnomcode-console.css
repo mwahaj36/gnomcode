@@ -1265,6 +1265,7 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-heatmap-grid .sp-heat:hover { outline: 1px solid var(--sp-text-2); }
 .sp-heatmap-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: var(--sp-3); font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
 .sp-heatmap-legend span { margin: 0 var(--sp-1); }
+.sp-heatmap-legend .sp-heat { flex: 0 0 10px; width: 10px; height: 10px; min-height: 0; }
 .sp-heatstrip { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; margin-top: var(--sp-4); }
 .sp-heatstrip .sp-heat { width: auto; height: 28px; }
 .sp-heatstrip-hours { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; margin: var(--sp-1) 0 var(--sp-4); font-size: var(--sp-fs-meta); color: var(--sp-text-3); font-variant-numeric: tabular-nums; }
@@ -1592,12 +1593,12 @@ html{touch-action:manipulation}
 @media (max-height:450px){.sp-remote-tools{display:none}}
 
 /* Section C artifacts view */
-.sp-artifacts-panel { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); background: var(--sp-surface); margin-bottom: var(--sp-3); }
+.sp-artifacts-panel { display: grid; container-type: inline-size; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-card); background: var(--sp-surface); margin-bottom: var(--sp-3); }
 .sp-artifacts-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .sp-artifacts-head strong { font: 600 var(--sp-fs-body)/1.3 var(--sp-font-sans); color: var(--sp-text); margin-right: auto; }
 .sp-artifacts-changes { font: 500 var(--sp-fs-meta)/1.3 var(--sp-font-sans); color: var(--sp-text-2); padding: 2px 8px; border: 1px solid var(--sp-border); border-radius: var(--sp-control-radius); background: var(--sp-surface-2); }
 .sp-artifacts-layout { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
-.sp-artifacts-list { display: grid; gap: var(--sp-1); max-height: 280px; overflow-y: auto; }
+.sp-artifacts-list { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--sp-1); max-height: 280px; overflow-y: auto; }
 .sp-artifact-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 36px; padding: 6px var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-control-radius); background: var(--sp-surface-2); color: var(--sp-text); font: 400 var(--sp-fs-meta)/1.35 var(--sp-font-sans); text-align: left; cursor: pointer; }
 .sp-artifact-item.is-selected { border-color: var(--sp-accent); background: var(--sp-surface); font-weight: 600; }
 .sp-artifact-badge { flex: 0 0 auto; font: 600 11px/1 var(--sp-font-mono); color: var(--sp-accent); }
@@ -1614,6 +1615,10 @@ html{touch-action:manipulation}
 .sp-remote-tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-2) 0 0; }
 .sp-remote-tool-btn { min-height: 36px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-control-radius); background: var(--sp-surface-2); color: var(--sp-text); font: 500 var(--sp-fs-meta)/1 var(--sp-font-sans); cursor: pointer; }
 .sp-artifacts-sheet-body { display: grid; gap: var(--sp-3); padding-top: var(--sp-2); }
+@container (max-width: 600px) {
+  .sp-artifacts-layout { grid-template-columns: minmax(0, 1fr); }
+  .sp-artifacts-list { max-height: 160px; }
+}
 @media (max-width: 760px) {
   .sp-artifacts-layout { grid-template-columns: minmax(0, 1fr); }
   .sp-artifact-item, .sp-remote-tool-btn { min-height: 44px; }
@@ -1801,7 +1806,7 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 #auth-unpaired-card>form button[type="submit"]{justify-self:start;margin-top:8px}
 
 /* Home: the activity grid gets the same section gap as the other Home sections. */
-#home-activity{margin-top:var(--sp-5)}
+#home-activity{margin-top:0}
 
 /* ---- PR 1: Themed scrollbars, non-wrapping pills, and motion guard ---- */
 :is(.sp-native-console, .sp-console-app, .sp-remote),
@@ -1855,14 +1860,17 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 /* ---- PR 4: Home 2fr/1fr desktop grid, mobile stack, session tokens ---- */
 .sp-home-react{display:grid;gap:var(--sp-6)}
 .sp-home-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-6);align-items:start}
+.sp-home-grid > .sp-section{margin-top:0}
+#home-limits .sp-card-grid{align-items:stretch}
+#home-limits .sp-provider-card:not([open]) > summary{box-sizing:border-box;min-height:88px;height:100%}
 #home-activity{order:1;min-width:0}
 #home-today{order:2;min-width:0}
 #home-sessions{order:3;min-width:0}
 @media (min-width:1024px){
   .sp-home-grid{grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}
   #home-activity{grid-column:1;grid-row:1;order:0}
-  #home-sessions{grid-column:1;grid-row:2;order:0}
-  #home-today{grid-column:2;grid-row:1 / span 2;order:0}
+  #home-today{grid-column:2;grid-row:1;order:0}
+  #home-sessions{grid-column:1 / -1;grid-row:2;order:0}
   #home-today .sp-tiles{grid-template-columns:minmax(0,1fr)}
 }
 .sp-session-tokens{font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;flex:none}
@@ -2099,15 +2107,28 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-remote .sp-chat-card.sp-chat-user header,.sp-remote .sp-chat-card.sp-chat-user header strong,.sp-remote .sp-chat-card.sp-chat-user time{color:var(--sp-text-2)}
 .sp-remote .sp-chat-card.sp-chat-assistant{background:transparent;border:0}
 
-/* Wide transcript with modest gutters (issue 301) */
+/* Wide readable Antigravity 2.0 conversation & composer column (issues 301, 323, 307, 335) */
 .sp-native-console .sp-workspace-chat-panel{max-width:none;width:100%;padding:0 clamp(12px,2vw,24px);display:flex;flex-direction:column;min-height:0;height:100%}
-.sp-native-console .sp-chat-stream-box,.sp-native-console .sp-chat-stream{max-width:none;width:100%}
+.sp-native-console .sp-chat-stream-box{max-width:840px;width:100%;margin-inline:auto}
+.sp-native-console .sp-chat-stream{max-width:840px;width:100%;margin-inline:auto;padding-bottom:16px}
+.sp-native-console .sp-chat-composer{max-width:840px;width:100%;margin-inline:auto;border:1px solid var(--sp-border-strong,var(--sp-border));border-radius:16px;background:var(--sp-surface);padding:12px 14px 10px;gap:8px;transition:border-color .15s ease,box-shadow .15s ease}
+.sp-native-console .sp-chat-composer:focus-within{border-color:var(--sp-accent);box-shadow:0 0 0 1px var(--sp-accent)}
+.sp-native-console .sp-chat-composer .composer-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:4px;border-top:1px solid color-mix(in srgb,var(--sp-border) 55%,transparent)}
+.sp-native-console .sp-chat-composer .composer-model{display:inline-flex;align-items:center;gap:6px;background:var(--sp-surface-2);border:1px solid var(--sp-border);border-radius:999px;padding:2px 10px}
+.sp-native-console .sp-chat-composer .composer-model select{max-width:220px;min-height:32px;padding:2px 4px;border:0;background:transparent;color:var(--sp-text);font-size:12px;font-weight:500}
+.sp-native-console .sp-chat-composer .btn-primary{border-radius:999px;padding:0 16px;min-height:36px;margin-left:auto}
 .sp-native-console .sp-chat-card.sp-chat-user{padding:10px 14px}
 .sp-native-console .sp-chat-card header{gap:8px;font-size:12px;color:var(--sp-text-3)}
 .sp-native-console .sp-chat-card .sp-chat-copy{opacity:0;transition:opacity .12s ease;min-height:28px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;border-radius:6px;background:transparent;border:1px solid transparent;color:var(--sp-text-3);font-size:12px}
 .sp-native-console .sp-chat-card:hover .sp-chat-copy,.sp-native-console .sp-chat-card:focus-within .sp-chat-copy,.sp-native-console .sp-chat-card .sp-chat-copy[data-copy-state]{opacity:1}
 .sp-native-console .sp-chat-card .sp-chat-copy:hover{background:var(--sp-surface-2);color:var(--sp-text);border-color:var(--sp-border)}
 @media (hover:none){.sp-native-console .sp-chat-card .sp-chat-copy{opacity:1;min-height:36px}}
+.sp-workspace-modal-backdrop{position:fixed;inset:0;z-index:80;background:rgb(0 0 0 / .56);display:grid;place-items:center;padding:16px}
+.sp-workspace-modal{width:min(920px,94vw);max-height:84dvh;display:flex;flex-direction:column;background:var(--sp-surface);border:1px solid var(--sp-border-strong,var(--sp-border));border-radius:16px;box-shadow:0 24px 64px rgb(0 0 0 / .45);overflow:hidden}
+.sp-workspace-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--sp-border);background:var(--sp-surface-2)}
+.sp-workspace-modal-close{min-height:44px;min-width:44px;padding:0 14px}
+.sp-workspace-modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:16px}
+.onboarding-header button{min-height:44px;min-width:44px}
 
 /* Copy icon consistency (issue 306) */
 .sp-copy-btn,.sp-code-btn{display:inline-flex;align-items:center;gap:5px}

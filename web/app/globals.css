@@ -460,7 +460,7 @@ body {
 
 /* The desktop rail opens above embedded Remote; phones use Remote's own toolbar. */
 .sp-web-app .sp-console-workspace>.sp-console-nav{z-index:45}
-@media(max-width:760px){.sp-web-app:has(.sp-remote:is(.is-paired,.is-reconnecting)) .sp-console-workspace>.sp-console-nav{visibility:hidden}}
+@media(max-width:760px){.sp-web-app:has(> .sp-console-workspace > .sp-console-content > div:not([hidden]) > .sp-remote:is(.is-paired,.is-reconnecting)) .sp-console-workspace>.sp-console-nav{visibility:hidden}}
 
 /* Reading surfaces share the established documentation typography. */
 .sp-guide-page { max-width: 880px; }

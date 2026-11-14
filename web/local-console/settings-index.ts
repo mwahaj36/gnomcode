@@ -9,6 +9,7 @@ export const SETTINGS_SECTIONS: { id: string; title: string; keywords: string }[
   { id: 'settings-remote', title: 'Remote and devices', keywords: 'remote devices phone pair unpair qr access mobile' },
   { id: 'settings-automations', title: 'Automations', keywords: 'automations reconnect resume rules spend limit guardrail usage rules' },
   { id: 'settings-privacy', title: 'Privacy and data', keywords: 'privacy data reload rescan local history delete export' },
+  { id: 'settings-pricing', title: 'Pricing', keywords: 'pricing subscription monthly cost openai claude google custom model overrides storage' },
   { id: 'settings-appearance', title: 'Appearance', keywords: 'appearance theme dark light mode' },
   { id: 'settings-updates', title: 'Updates', keywords: 'updates desktop restart version' },
   { id: 'settings-about', title: 'About', keywords: 'about guide getting started onboarding documentation pricing download version' },
