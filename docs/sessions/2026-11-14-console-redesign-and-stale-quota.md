@@ -14,7 +14,7 @@
   - PR #272: `72ch` transcript, collapsed subagents capped at 5 inline, dedicated `All chats` pane, IDE provider quota badges + Usage popover (`View Usage ›`), single-line padded mobile quick prompts.
   - PR #273: Full-width `Limits` -> `2fr/1fr` `Activity` (53-week grid with months & mobile right-first scroll) + `Sessions` (with token readout) left, `Today` right; multi-pool Antigravity `Low` vs `Out` card state in Rust + `SPEC.md`.
   - PR #274: Single-column grouped Settings & Account cards with `44px` mobile touch targets.
-  - PR 6: Web/Remote/PWA CSS parity and engineering session record.
+  - PR #275: Engineering session record only (no CSS changes landed in this PR).
 
 ## Decisions
 - Scoped the multi-pool `Low` vs `Exhausted` card rule to providers with `> 1` distinct `pool` / `limit_id` so single-pool providers (Claude Code, Codex) still report `Exhausted` when their `Session` window is 100% used.
@@ -25,3 +25,8 @@
 - Web: `node scripts/build-local-console.mjs`, `cd web && npm run typecheck && npm test && npm run lint`.
 - Desktop: `cd apps/desktop && npm run build && npm test`.
 - Playwright E2E: `cd web && npx playwright test e2e/shell.spec.ts e2e/views.spec.ts e2e/phone.spec.ts`.
+
+## Release review notes
+- #272 was auto-closed by GitHub when its stacked base branch was deleted after #271 merged; its branch was re-submitted as #279 and merged.
+- Reviewer fixes on top of the authored PRs: nav tab keyboard focus ring restored (a stray `outline: none` outranked the focus rule), undefined `--sp-r-sm/md/lg` radius tokens defined or replaced, subagent summary wording matches the owner decision (`N running · M subagents`), `EST` label on All chats cost, Escape closes the Usage popover, and e2e guards added for the brand-red heatmap ramp, no horizontal page scroll at 390px, nav focus ring and 44px Settings controls.
+- `docs/design/owner-ui-decisions.md` is the binding list; the e2e guards above keep the heatmap and layout decisions from regressing.
