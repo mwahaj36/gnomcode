@@ -7,7 +7,7 @@ export const SETTINGS_SECTIONS: { id: string; title: string; keywords: string }[
   { id: 'settings-providers', title: 'Providers', keywords: 'providers claude codex antigravity install sign in integrate hook limits wsl setup add provider' },
   { id: 'settings-notifications', title: 'Notifications', keywords: 'notifications alerts push sound desktop phone waiting' },
   { id: 'settings-remote', title: 'Remote and devices', keywords: 'remote devices phone pair unpair qr access mobile' },
-  { id: 'settings-automations', title: 'Automations', keywords: 'automations reconnect resume rules spend limit guardrail usage rules' },
+  { id: 'settings-automations', title: 'Automations', keywords: 'automations reconnect resume rules spend limit guardrail usage rules auto switch handoff failover routing policy model provider limit reached' },
   { id: 'settings-privacy', title: 'Privacy and data', keywords: 'privacy data reload rescan local history delete export' },
   { id: 'settings-pricing', title: 'Pricing', keywords: 'pricing subscription monthly cost openai claude google custom model overrides storage' },
   { id: 'settings-appearance', title: 'Appearance', keywords: 'appearance theme dark light mode' },

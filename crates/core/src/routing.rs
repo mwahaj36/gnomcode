@@ -111,6 +111,41 @@ mod tests {
             None
         );
     }
+    /// Simulates a Claude Code session whose 5h window hit its limit and asserts the
+    /// handoff decision for each routing policy.
+    #[test]
+    fn limit_reached_handoff_decision_per_policy() {
+        let now = Utc::now();
+        let source = ("claude-code", "claude-opus");
+        let candidates = [
+            ("claude-code", "claude-code"),
+            ("claude-code", "claude-haiku"),
+            ("codex", "gpt-other"),
+            ("antigravity", "gemini-pool"),
+        ];
+        let quotas = [
+            quota("claude-code", "claude-opus", 100.0, now),
+            quota("claude-code", "claude-haiku", 40.0, now),
+            quota("codex", "gpt-other", 60.0, now),
+            quota("antigravity", "gemini-pool", 20.0, now),
+        ];
+        let decide = |policy| select_failover(source, policy, &candidates, &quotas, now);
+        assert_eq!(decide(RoutingPolicy::AskFirst), None);
+        assert_eq!(decide(RoutingPolicy::Automatic), Some(3));
+        assert_eq!(decide(RoutingPolicy::DenyCrossProvider), Some(1));
+        // Same provider without a separate model pool never qualifies.
+        assert_eq!(
+            select_failover(
+                source,
+                RoutingPolicy::DenyCrossProvider,
+                &candidates[..1],
+                &quotas,
+                now
+            ),
+            None
+        );
+    }
+
     #[test]
     fn unknown_or_exhausted_shared_windows_never_imply_model_headroom() {
         let now = Utc::now();

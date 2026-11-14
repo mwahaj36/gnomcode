@@ -1034,7 +1034,8 @@ pub(crate) fn record_model_change(
             .map_or(0, |event| event.turn_index.saturating_add(1)),
         role: gnomcode_core::ChatRole::System,
         content: format!(
-            "Switching to {}...",
+            "Switching to {} ({})...",
+            target.agent,
             target.model.as_deref().unwrap_or("agent default")
         ),
         created_at: chrono::Utc::now(),

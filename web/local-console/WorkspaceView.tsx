@@ -662,8 +662,13 @@ export function WorkspaceView() {
   const currentCliAgent = CLI_AGENT_MAP[currentSessionAgent] || currentSessionAgent;
   const matchedCatalogOption = useMemo(
     () =>
+      // After a cross-provider switch the host reports no model (CLI default) or a display name.
       allCatalogModels.find(
-        (item) => item.model === currentSessionModel && item.agent === currentCliAgent,
+        (item) =>
+          item.agent === currentCliAgent &&
+          (currentSessionModel
+            ? item.model === currentSessionModel || item.display_name === currentSessionModel
+            : item.model === '@default'),
       ) ?? null,
     [allCatalogModels, currentSessionModel, currentCliAgent],
   );
