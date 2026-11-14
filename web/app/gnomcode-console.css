@@ -2073,3 +2073,21 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-preview-csv{max-height:60vh;overflow:auto}.sp-preview-csv table{width:max-content;min-width:100%}
 .sp-preview-csv :is(th,td){white-space:nowrap;font:13px/1.5 var(--sp-font-mono)}.sp-preview-csv th{position:sticky;top:0}
 .sp-preview-markdown{padding:4px 0}
+/* Live chat state: shape plus text, never color alone */
+.sp-live{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font:inherit}
+.sp-live-shape{flex:none;width:8px;height:8px;box-sizing:border-box}
+.sp-live[data-live="working"] .sp-live-shape{width:10px;height:10px;border:2px solid var(--sp-accent);border-right-color:transparent;border-radius:50%;animation:sp-live-spin .9s linear infinite}
+.sp-live[data-live="waiting_for_you"] .sp-live-shape{background:var(--sp-warn);transform:rotate(45deg)}
+.sp-live[data-live="idle"] .sp-live-shape{border:1.5px solid var(--sp-text-3);border-radius:50%}
+.sp-live[data-live="stopped"] .sp-live-shape{background:var(--sp-text-3);border-radius:1px}
+.sp-live[data-live="waiting_for_you"] .sp-live-label{color:var(--sp-text);font-weight:600}
+.sp-live-basis{padding:0 6px;border:1px solid var(--sp-border);border-radius:var(--sp-r-pill,999px);color:var(--sp-text-3);font-size:11px;line-height:16px}
+.sp-conversation-live{margin-left:10px;display:inline-flex;vertical-align:middle;font-size:var(--sp-fs-meta)}
+.sp-activity{display:flex;align-items:center;gap:10px;min-height:40px;margin:8px 0 0;padding:6px 8px 6px 14px;border:1px solid var(--sp-border);border-radius:var(--sp-r-pill,999px);background:var(--sp-surface);color:var(--sp-text-2);font:13px/1.4 var(--sp-font-sans)}
+.sp-activity>span:first-child{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.sp-activity .sp-live-label{overflow:hidden;text-overflow:ellipsis;color:var(--sp-text)}
+.sp-activity-elapsed{font-variant-numeric:tabular-nums;color:var(--sp-text-3)}
+.sp-activity-stop{margin-left:auto;min-height:32px}
+@keyframes sp-live-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sp-live[data-live="working"] .sp-live-shape{animation:none;border-right-color:var(--sp-accent);border-style:dotted}}
+@media(max-width:767px){.sp-activity-stop{min-height:44px}}

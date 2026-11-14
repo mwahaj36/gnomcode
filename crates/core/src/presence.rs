@@ -103,6 +103,104 @@ pub fn classify_presence_with_host(
         _ => SessionPresence::Inactive,
     }
 }
+
+/// What the chat interface shows about a session right now (`SPEC §3.9`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveState {
+    /// Producing output or running tools.
+    Working,
+    /// An approval or question is pending.
+    WaitingForYou,
+    /// Turn finished; waiting for the next message.
+    Idle,
+    /// Process exited, crashed or the session ended.
+    Stopped,
+}
+
+/// Live state with its trust level and a short current-step label.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveStatus {
+    /// Displayed state.
+    pub state: LiveState,
+    /// `exact` when a live Gnomcode host or an explicit end confirms it, `estimated` when it is
+    /// inferred from log recency.
+    pub basis: crate::TrustLevel,
+    /// Current step while working ("Thinking", "Running Bash"), empty otherwise.
+    pub step: String,
+}
+
+/// Derives the chat live state from presence, the stored state and host evidence.
+///
+/// `hosted` is whether Gnomcode hosts this session; `host_alive` whether that host process
+/// is running. A hosted session whose host is gone is Stopped even if its log looks busy.
+#[must_use]
+pub fn live_status(
+    presence: SessionPresence,
+    state: &str,
+    hosted: bool,
+    host_alive: bool,
+    latest_tool: Option<&str>,
+) -> LiveStatus {
+    use crate::TrustLevel::{Estimated, Exact};
+    let (live, basis) = if (hosted && !host_alive) || state == "error" {
+        (LiveState::Stopped, Exact)
+    } else {
+        match presence {
+            SessionPresence::Running => (
+                LiveState::Working,
+                if host_alive { Exact } else { Estimated },
+            ),
+            SessionPresence::AwaitingApproval => (LiveState::WaitingForYou, Estimated),
+            SessionPresence::Ended => (LiveState::Stopped, Exact),
+            SessionPresence::RecentlyIdle | SessionPresence::Inactive => (
+                LiveState::Idle,
+                if host_alive && state == "idle" {
+                    Exact
+                } else {
+                    Estimated
+                },
+            ),
+        }
+    };
+    let step = match live {
+        LiveState::Working => match (state, latest_tool) {
+            ("tool", Some(tool)) if !tool.trim().is_empty() => step_label(tool),
+            ("tool", _) => "Running a tool".to_owned(),
+            _ => "Thinking".to_owned(),
+        },
+        _ => String::new(),
+    };
+    LiveStatus {
+        state: live,
+        basis,
+        step,
+    }
+}
+
+/// Short, content-free label for a tool name.
+fn step_label(tool: &str) -> String {
+    let name: String = tool
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ':'))
+        .take(40)
+        .collect();
+    match name.to_ascii_lowercase().as_str() {
+        "bash" | "shell" | "exec_command" | "run_command" | "powershell" => {
+            "Running a command".to_owned()
+        }
+        "edit" | "multiedit" | "write" | "apply_patch" | "notebookedit" => {
+            "Editing files".to_owned()
+        }
+        "read" | "view_file" => "Reading files".to_owned(),
+        "grep" | "glob" | "search" | "codebase_search" => "Searching".to_owned(),
+        "webfetch" | "websearch" => "Browsing".to_owned(),
+        "task" | "agent" => "Running a subagent".to_owned(),
+        _ if name.is_empty() => "Running a tool".to_owned(),
+        _ => format!("Running {name}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,6 +314,62 @@ mod tests {
                 true,
             ),
             SessionPresence::Inactive
+        );
+    }
+
+    #[test]
+    fn live_status_distinguishes_the_four_states_with_trust() {
+        use crate::TrustLevel::{Estimated, Exact};
+        let working = live_status(SessionPresence::Running, "tool", true, true, Some("Bash"));
+        assert_eq!(
+            (working.state, working.basis, working.step.as_str()),
+            (LiveState::Working, Exact, "Running a command")
+        );
+        let inferred = live_status(SessionPresence::Running, "thinking", false, false, None);
+        assert_eq!(
+            (inferred.state, inferred.basis, inferred.step.as_str()),
+            (LiveState::Working, Estimated, "Thinking")
+        );
+        assert_eq!(
+            live_status(
+                SessionPresence::AwaitingApproval,
+                "awaiting_approval",
+                false,
+                false,
+                None
+            )
+            .state,
+            LiveState::WaitingForYou
+        );
+        let idle = live_status(SessionPresence::RecentlyIdle, "idle", true, true, None);
+        assert_eq!((idle.state, idle.basis), (LiveState::Idle, Exact));
+        assert_eq!(
+            live_status(SessionPresence::Inactive, "unknown", false, false, None).basis,
+            Estimated
+        );
+        assert_eq!(
+            live_status(SessionPresence::Ended, "ended", false, false, None).state,
+            LiveState::Stopped
+        );
+        let crashed = live_status(SessionPresence::Running, "tool", true, false, Some("Bash"));
+        assert_eq!(
+            (crashed.state, crashed.basis, crashed.step.as_str()),
+            (LiveState::Stopped, Exact, "")
+        );
+        assert_eq!(
+            live_status(SessionPresence::Inactive, "error", false, false, None).state,
+            LiveState::Stopped
+        );
+        assert_eq!(
+            live_status(
+                SessionPresence::Running,
+                "tool",
+                false,
+                false,
+                Some("<b>x</b>")
+            )
+            .step,
+            "Running bxb"
         );
     }
 }

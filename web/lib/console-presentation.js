@@ -302,6 +302,33 @@ export function renderOngoing(sessions) {
   }).join('') : '<p>No ongoing sessions at the last observation.</p>'}</section>`;
 }
 
+
+const LIVE_LABELS = { working: 'Working', waiting_for_you: 'Waiting for you', idle: 'Idle', stopped: 'Stopped' };
+
+/** Live chat state from the daemon: text plus a shape, never color alone. Inferred states say so. */
+export function renderLiveBadge(live) {
+  if (!live || !LIVE_LABELS[live.state]) return '';
+  const inferred = live.basis === 'exact' ? '' : '<span class="sp-live-basis" title="Inferred from recent log activity, not confirmed by a running process">Inferred</span>';
+  return `<span class="sp-live" data-live="${escape(live.state)}"><span class="sp-live-shape" aria-hidden="true"></span><span class="sp-live-label">${LIVE_LABELS[live.state]}</span>${inferred}</span>`;
+}
+
+export function formatElapsed(fromIso, nowMs = Date.now()) {
+  const start = Date.parse(fromIso || '');
+  if (!Number.isFinite(start)) return '';
+  const secs = Math.max(0, Math.floor((nowMs - start) / 1000));
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`;
+  return `${Math.floor(secs / 3600)}h ${String(Math.floor(secs / 60) % 60).padStart(2, '0')}m`;
+}
+
+/** Bottom-of-transcript activity line while the agent works; empty otherwise. */
+export function renderActivityIndicator(live, turnStartedAt, nowMs = Date.now()) {
+  if (live?.state !== 'working') return '';
+  const elapsed = formatElapsed(turnStartedAt, nowMs);
+  const inferred = live.basis === 'exact' ? '' : '<span class="sp-live-basis">Inferred</span>';
+  return `<span class="sp-live" data-live="working"><span class="sp-live-shape" aria-hidden="true"></span><span class="sp-live-label">${escape(live.step || 'Working')}</span></span>${elapsed ? `<time class="sp-activity-elapsed">${escape(elapsed)}</time>` : ''}${inferred}`;
+}
+
 export function updateOngoing(element, sessions) { updateMarkup(element, renderOngoing(sessions)); }
 
 const HOME_GROUPS = [['needs_you', 'Needs you'], ['running', 'Running'], ['recent', 'Recent']];
@@ -743,7 +770,7 @@ export function renderSessionList(sessions, selected = '', query = '') {
     const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
     const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
     lastGroup = group;
-    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
+    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${session.live && !session.state_label ? renderLiveBadge(session.live) : escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
