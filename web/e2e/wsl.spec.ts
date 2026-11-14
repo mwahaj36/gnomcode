@@ -52,3 +52,52 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('All chats filters by where a chat runs', async ({ page, openConsole }) => {
+  await reshapeConversations(page, { repo_path: LONG });
+  await openConsole('#sessions');
+  await page.locator('.sp-all-chats-trigger').first().click();
+  const pane = page.locator('.sp-all-chats-pane');
+  const chips = pane.getByRole('group', { name: 'Filter by where it runs' });
+  await expect(chips.getByRole('button', { name: 'WSL: Ubuntu-22.04' })).toBeVisible();
+  const before = await pane.locator('.sp-all-chat-row').count();
+  await chips.getByRole('button', { name: 'WSL: Ubuntu-22.04' }).click();
+  await expect(pane.locator('.sp-all-chat-row .sp-wsl-badge').first()).toHaveText('WSL: Ubuntu-22.04');
+  const wslRows = await pane.locator('.sp-all-chat-row').count();
+  await chips.getByRole('button', { name: 'Windows' }).click();
+  await expect(pane.locator('.sp-all-chat-row .sp-wsl-badge')).toHaveCount(0);
+  expect(wslRows).toBeLessThanOrEqual(before);
+});
+
+test('provider card source line names WSL sources', async ({ page, openConsole }) => {
+  await page.route('**/api/v1/providers/overview', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    for (const card of body) if (card.provider === 'claude-code') card.wsl_sources = ['WSL: Ubuntu-22.04'];
+    await route.fulfill({ response, json: body });
+  });
+  await openConsole('#usage');
+  const card = page.locator('.sp-provider-card[data-provider="claude-code"]').first();
+  await expect(card).toBeAttached();
+  if (await card.locator('.sp-provider-foot').count()) await expect(card.locator('.sp-provider-foot .sp-wsl-badge')).toHaveText('WSL: Ubuntu-22.04');
+});
+
+test('Integrate in WSL appears when the Claude hook is missing and posts the distro', async ({ page, openConsole }) => {
+  await page.route('**/api/v1/wsl/distros', (route) =>
+    route.fulfill({ json: { distros: [{ name: 'Ubuntu-22.04', label: 'WSL: Ubuntu-22.04', running: true, claude_hook: 'missing' }] } }),
+  );
+  const posts: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/wsl/integrate', async (route) => {
+    posts.push(route.request().postDataJSON());
+    await route.fulfill({ json: { ok: true, message: 'Claude hook installed in Ubuntu-22.04 (1 profile(s)).' } });
+  });
+  await openConsole('#sessions');
+  await page.getByRole('button', { name: 'New', exact: true }).first().click();
+  const form = page.locator('.ide-launcher');
+  await form.getByLabel('Agent').selectOption('claude');
+  await form.getByLabel('Run in').selectOption('Ubuntu-22.04');
+  await form.getByRole('button', { name: 'Integrate in WSL' }).click();
+  await expect(form.getByRole('status').filter({ hasText: 'hook installed' })).toBeVisible();
+  expect(posts[0]).toEqual({ distro: 'Ubuntu-22.04' });
+  await expect(form.getByRole('button', { name: 'Integrate in WSL' })).toHaveCount(0);
+});

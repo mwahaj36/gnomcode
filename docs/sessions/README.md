@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-14 WSL follow-ups](2026-11-14-wsl-follow-ups.md)
 - [2026-11-14 WSL console UI](2026-11-14-wsl-ui.md)
 - [2026-11-14 WSL launch and resume](2026-11-14-wsl-launch.md)
 - [2026-11-14 WSL discovery and ingest roots](2026-11-14-wsl-platform-ingest.md)

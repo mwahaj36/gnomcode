@@ -36,6 +36,27 @@ pub(crate) struct ProviderOverview {
     /// Why the opt-in live source is not refreshing this provider's readings.
     #[serde(skip_serializing_if = "Option::is_none")]
     source_issue: Option<String>,
+    /// Running WSL distros that also hold this agent's logs (`WSL: Ubuntu`). Limits stay
+    /// one per account: snapshots from both places merge on provider, pool and window.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    wsl_sources: Vec<String>,
+}
+
+/// Distro labels whose running share holds logs for `slug` (ADR 0060). Cached discovery.
+fn wsl_sources(slug: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for root in gnomcode_platform::wsl::discover_wsl_roots() {
+        if !root.exists || root.agent.as_str() != slug {
+            continue;
+        }
+        if let Some(distro) = gnomcode_core::wsl::distro_of(&root.path.to_string_lossy()) {
+            let label = gnomcode_core::wsl::distro_label(distro);
+            if !out.contains(&label) {
+                out.push(label);
+            }
+        }
+    }
+    out
 }
 
 pub(super) const CORE_PROVIDERS: [&str; 3] = ["claude-code", "codex", "antigravity"];
@@ -185,6 +206,7 @@ pub(super) fn provider_overviews(
                 updated_at: windows.iter().map(|w| w.snapshot.observed_at).max(),
                 cost: costs.remove(&slug),
                 source_issue: crate::vendor_limits::issue(&slug),
+                wsl_sources: wsl_sources(&slug),
                 provider: slug,
                 display_name,
                 windows,
