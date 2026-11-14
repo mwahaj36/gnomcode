@@ -15,11 +15,13 @@ import {
   isSessionRunningState,
   reconcileChat,
   renderConversationLimits,
+  renderProviderCards,
   renderSessionList,
   updateChat,
   type ConversationLimit,
   type PendingChat,
   type ProjectActivity,
+  type ProviderOverview,
 } from '../lib/console-presentation.js';
 import {
   formatWorktreeBadge,
@@ -27,7 +29,7 @@ import {
   type WorktreeDiffData,
 } from '../lib/worktree-presentation.mjs';
 import { collapseChatList, toggleChatList } from './chat-list';
-import { markWorkspaceReady } from './shell-bus';
+import { markWorkspaceReady, navigateTo } from './shell-bus';
 import {
   fetchLocalJson,
   fetchLocalMutation,
@@ -148,6 +150,17 @@ export function WorkspaceView() {
   const [projects, setProjects] = useState<ProjectActivity[]>([]);
   const [installedAgents, setInstalledAgents] = useState<InstalledAgent[]>([]);
   const [providers, setProviders] = useState<CatalogProvider[]>([]);
+  const [providerOverviews, setProviderOverviews] = useState<ProviderOverview[]>([]);
+  const [usagePopoverOpen, setUsagePopoverOpen] = useState(false);
+  const [allChatsOpen, setAllChatsOpen] = useState(false);
+  useEffect(() => {
+    if (!usagePopoverOpen) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setUsagePopoverOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [usagePopoverOpen]);
   const [catalogError, setCatalogError] = useState(false);
 
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -296,9 +309,20 @@ export function WorkspaceView() {
 
   const loadChatModels = useCallback(async () => {
     try {
-      const data = await fetchLocalJson<{ providers?: CatalogProvider[] }>('/api/v1/model-catalog');
-      setProviders(Array.isArray(data?.providers) ? data.providers : []);
-      setCatalogError(false);
+      const [catalogResult, overviewResult] = await Promise.allSettled([
+        fetchLocalJson<{ providers?: CatalogProvider[] }>('/api/v1/model-catalog'),
+        fetchLocalJson<ProviderOverview[]>('/api/v1/providers/overview'),
+      ]);
+      if (catalogResult.status === 'fulfilled') {
+        setProviders(Array.isArray(catalogResult.value?.providers) ? catalogResult.value.providers : []);
+        setCatalogError(false);
+      } else {
+        setProviders([]);
+        setCatalogError(true);
+      }
+      if (overviewResult.status === 'fulfilled') {
+        setProviderOverviews(Array.isArray(overviewResult.value) ? overviewResult.value : []);
+      }
     } catch {
       setProviders([]);
       setCatalogError(true);
@@ -1279,11 +1303,19 @@ export function WorkspaceView() {
   };
 
   const handleSessionListClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const allChatsBtn = (event.target as HTMLElement).closest<HTMLElement>(
+      '[data-action="open-all-chats"]',
+    );
+    if (allChatsBtn) {
+      setAllChatsOpen(true);
+      return;
+    }
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-action="load-chat"]');
     const sessionId = target?.dataset.arg;
     if (!sessionId) return;
+    setAllChatsOpen(false);
     void loadChat(sessionId);
-    if (window.matchMedia('(max-width: 760px)').matches) {
+    if (window.matchMedia('(max-width: 767px)').matches) {
       collapseChatList();
     }
   };
@@ -1488,8 +1520,33 @@ export function WorkspaceView() {
             </div>
           ) : null}
         </div>
+        <button
+          type="button"
+          className="btn-control sp-all-chats-trigger"
+          aria-pressed={allChatsOpen}
+          onClick={() => setAllChatsOpen((open) => !open)}
+        >
+          {allChatsOpen ? 'Back to chat' : 'All chats ›'}
+        </button>
       </aside>
   );
+
+  const providerBadgeLabel = (name: string): string => {
+    const lower = name.toLowerCase();
+    const match = providerOverviews.find(
+      (item) =>
+        item.display_name?.toLowerCase() === lower ||
+        item.provider?.toLowerCase() === lower ||
+        (lower.includes('claude') && item.provider === 'claude-code') ||
+        (lower.includes('codex') && item.provider === 'codex') ||
+        (lower.includes('antigravity') && item.provider === 'antigravity'),
+    );
+    if (!match) return '';
+    if (match.state === 'exhausted') return ' (Out)';
+    const hw = match.headline_window as { remaining_pct?: number } | null | undefined;
+    const rem = hw?.remaining_pct;
+    return Number.isFinite(rem) ? ` (${Math.round(rem as number)}% left)` : '';
+  };
 
   return (
     <section className="ide-layout" aria-label="Agent workspace">
@@ -1517,7 +1574,130 @@ export function WorkspaceView() {
           <span>Conversations</span>
         </button>
 
-        {!launcherOpen && !activeSessionId ? (
+        {allChatsOpen ? (
+          <section className="sp-all-chats-pane" aria-label="All chats">
+            <header className="sp-all-chats-head">
+              <div>
+                <h2>All chats</h2>
+                <p className="sp-all-chats-meta">{`${totalCount} conversations`}</p>
+              </div>
+              <button
+                type="button"
+                className="btn-control"
+                onClick={() => setAllChatsOpen(false)}
+              >
+                Back to chat
+              </button>
+            </header>
+            <div className="sp-all-chats-toolbar">
+              <input
+                type="search"
+                aria-label="Search all chats"
+                placeholder="Search all chats"
+                value={searchQuery}
+                onChange={(event) => {
+                  setPage(1);
+                  setSearchQuery(event.target.value);
+                }}
+              />
+              <div className="sp-all-chats-chips" role="group" aria-label="Filter by provider">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'claude-code', label: 'Claude Code' },
+                  { id: 'codex', label: 'Codex' },
+                  { id: 'antigravity', label: 'Antigravity' },
+                ].map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    className={`sp-chip sp-filter-chip${agentFilter === chip.id ? ' is-active' : ''}`}
+                    aria-pressed={agentFilter === chip.id}
+                    onClick={() => {
+                      setPage(1);
+                      setAgentFilter(chip.id);
+                    }}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`sp-chip sp-filter-chip${statusFilter === 'active' ? ' is-active' : ''}`}
+                  aria-pressed={statusFilter === 'active'}
+                  onClick={() => {
+                    setPage(1);
+                    setStatusFilter((cur) => (cur === 'active' ? 'all' : 'active'));
+                  }}
+                >
+                  Running
+                </button>
+              </div>
+              <label className="sp-all-chats-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeSubagents}
+                  onChange={(event) => {
+                    setPage(1);
+                    setIncludeSubagents(event.target.checked);
+                  }}
+                />
+                Include subagents
+              </label>
+            </div>
+            <div className="sp-all-chats-list">
+              {sessions.length ? (
+                sessions.map((item) => {
+                  const tokens =
+                    item.total_tokens ?? (item.input_tokens ?? 0) + (item.output_tokens ?? 0);
+                  const tokenText =
+                    tokens > 0
+                      ? tokens >= 1000
+                        ? `${(tokens / 1000).toFixed(1)}K tokens`
+                        : `${tokens} tokens`
+                      : '';
+                  const costText =
+                    item.cost_basis &&
+                    item.cost_basis !== 'unknown' &&
+                    typeof item.total_cost_usd === 'number'
+                      ? `$${item.total_cost_usd.toFixed(2)} ${
+                          { estimated: 'EST', exact: 'EXACT', api: 'API' }[item.cost_basis] ?? 'EST'
+                        }`
+                      : '';
+                  const meta = [
+                    item.project_name || item.agent,
+                    item.model,
+                    item.state,
+                    tokenText,
+                    costText,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ');
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="sp-session-row sp-all-chat-row"
+                      aria-current={item.id === activeSessionId}
+                      onClick={() => {
+                        setAllChatsOpen(false);
+                        void loadChat(item.id);
+                      }}
+                    >
+                      <span className="sp-session-main">
+                        <strong>{item.title || item.project_name || 'Untitled session'}</strong>
+                        <span>{meta}</span>
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="sp-empty">No matching conversations.</p>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {!allChatsOpen && !launcherOpen && !activeSessionId ? (
           <div className="sp-empty sp-workspace-empty">
             <p>Pick a conversation or start a new one.</p>
             <button type="button" className="btn-primary" onClick={() => openLauncher(true)}>
@@ -1526,7 +1706,7 @@ export function WorkspaceView() {
           </div>
         ) : null}
 
-        {launcherOpen ? (
+        {!allChatsOpen && launcherOpen ? (
           <section className="ide-launcher" aria-label="New agent session">
             <h2>New agent session</h2>
             <p>Choose an agent and the folder it should work in.</p>
@@ -1707,7 +1887,7 @@ export function WorkspaceView() {
           </section>
         ) : null}
 
-        {activeSessionId ? (
+        {!allChatsOpen && activeSessionId ? (
           <section className="sp-workspace-chat-panel" aria-label="Conversation">
             <div className="conversation-heading">
               <div>
@@ -1719,12 +1899,46 @@ export function WorkspaceView() {
                   {imported ? ' · Observed' : ''}
                 </p>
               </div>
-              <div
-                className="sp-conversation-limits"
-                role="status"
-                aria-label="Remaining limits"
-                dangerouslySetInnerHTML={{ __html: limitsMarkup }}
-              />
+              <div className="sp-limits-popover-wrap">
+                <button
+                  type="button"
+                  className="sp-limits-popover-trigger"
+                  aria-expanded={usagePopoverOpen}
+                  aria-label="Remaining limits — View Usage"
+                  onClick={() => setUsagePopoverOpen((open) => !open)}
+                >
+                  <span
+                    className="sp-conversation-limits"
+                    role="status"
+                    aria-label="Remaining limits"
+                    dangerouslySetInnerHTML={{ __html: limitsMarkup }}
+                  />
+                  <span className="sp-limits-view-link">Usage ›</span>
+                </button>
+                {usagePopoverOpen ? (
+                  <div className="sp-usage-popover" role="region" aria-label="All provider usage">
+                    <div className="sp-usage-popover-head">
+                      <strong>Provider usage</strong>
+                      <button
+                        type="button"
+                        className="sp-link"
+                        onClick={() => {
+                          setUsagePopoverOpen(false);
+                          navigateTo('usage');
+                        }}
+                      >
+                        View Usage ›
+                      </button>
+                    </div>
+                    <div
+                      className="sp-usage-popover-body"
+                      dangerouslySetInnerHTML={{
+                        __html: renderProviderCards(providerOverviews, { cost: false }),
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
               {activeSession?.can_resume ? (
                 <button
                   type="button"
@@ -2014,7 +2228,10 @@ export function WorkspaceView() {
                           {catalogError ? 'Model catalog unavailable' : 'Agent default'}
                         </option>
                         {providers.map((provider) => (
-                          <optgroup key={provider.name} label={provider.name}>
+                          <optgroup
+                            key={provider.name}
+                            label={`${provider.name}${providerBadgeLabel(provider.name)}`}
+                          >
                             {provider.models?.length ? (
                               provider.models.map((item) => (
                                 <option

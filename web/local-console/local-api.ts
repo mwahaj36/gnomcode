@@ -14,6 +14,13 @@ export interface LocalSessionSummary {
   worktree_branch?: string;
   worktree_path?: string;
   limits?: unknown[];
+  project_name?: string;
+  last_event_at?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  total_cost_usd?: number;
+  cost_basis?: string;
 }
 
 export interface LocalSessionsResponse {

@@ -16,9 +16,9 @@ const parent = over => ({
 test('home row shows a subagent count badge and an expandable nested list', () => {
   const html = renderHomeSessions([parent()]);
   assert.match(html, /fleethud · Claude Code · opus-5 · 3 subagents/);
-  assert.match(html, /<details class="sp-subagents" data-key="sub:claude-code:p"><summary>3 subagents · 1 active<\/summary>/);
+  assert.match(html, /<details class="sp-subagents" data-key="sub:claude-code:p"><summary>1 running · 3 subagents<\/summary>/);
   assert.match(html, /data-action="open-home-session" data-arg="claude-code:agent-a"/);
-  assert.match(html, /1 older not shown/);
+  assert.match(html, /View 1 more in All chats/);
   assert.equal((html.match(/class="sp-session-row"/g) || []).length, 1, 'subagents are not top-level rows');
 });
 
@@ -26,7 +26,24 @@ test('workspace list nests subagents under the parent and opens them as chats', 
   const html = renderSessionList([parent({ subagent_count: 2 })], 'claude-code:p');
   assert.match(html, /<\/button><details class="sp-subagents"/);
   assert.match(html, /data-action="load-chat" data-arg="claude-code:agent-b"/);
-  assert.doesNotMatch(html, /older not shown/);
+  assert.doesNotMatch(html, /more in All chats/);
+});
+
+test('subagent inline list caps at 5 rows and links overflow to All chats', () => {
+  const many = Array.from({ length: 7 }, (_, i) => ({
+    id: `claude-code:sub-${i}`,
+    title: `Sub ${i}`,
+    model: 'sonnet',
+    state: 'idle',
+    presence: 'inactive',
+    is_ongoing: false,
+    home_group: 'recent',
+    last_event_at: recent,
+  }));
+  const html = renderSubagents(parent({ subagent_count: 7, subagents_ongoing: 0, subagents: many }));
+  assert.equal((html.match(/class="sp-subagent-row"/g) || []).length, 5);
+  assert.match(html, /data-action="open-all-chats"/);
+  assert.match(html, /View 2 more in All chats/);
 });
 
 test('sessions without subagents render no group and singular copy is used', () => {
