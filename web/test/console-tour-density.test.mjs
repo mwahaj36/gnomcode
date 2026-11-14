@@ -9,14 +9,15 @@ const presenters=await import(new URL('../lib/console-presentation.js',import.me
 const code=ts.transpileModule(readFileSync(new URL('../app/components/ConsoleTourView.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 const exports={};vm.runInNewContext(code,{exports,require(name){return name.includes('console-presentation')?presenters:require(name);},Intl});
 const render=kind=>renderToStaticMarkup(React.createElement(exports.ConsoleTourView,{kind}));
-test('the Overview tour is the console Home: limits, then activity and sessions beside today', () => {
+test('the Overview tour is the console Home: limits, then activity with year highlights beside today; sessions have their own tab', () => {
   const html=render('overview');
   assert.match(html,/sp-home-grid/);
   assert.equal((html.match(/class="sp-card sp-provider-card"/g)||[]).length,3);
   assert.equal((html.match(/sp-provider-mark--logo/g)||[]).length,3,'every provider uses the real logo, never a letter');
   assert.match(html,/sp-heatmap-months|sp-heat-month|>Nov</);
   assert.match(html,/Tokens today/);
-  assert.match(html,/Needs you/);
+  assert.match(html,/longest streak/);
+  assert.doesNotMatch(html,/Needs you/);
 });
 test('the Sessions tour shows status groups, subagents and a WSL badge', () => {
   const html=render('sessions');
