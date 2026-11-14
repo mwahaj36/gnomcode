@@ -754,6 +754,47 @@ fn generate_bearer_token() -> Result<String, Error> {
     Ok(hex)
 }
 
+/// Slow safety-net scan while the file watcher is healthy (SPEC §4.4, D3).
+const IDLE_FALLBACK_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Ticks every `interval` but runs `pass` only when the watcher saw a change or its
+/// idle back-off elapsed. Without a watcher every tick runs (plain polling, fail open).
+async fn run_reconcile_loop<F>(
+    interval: Duration,
+    watching: bool,
+    watcher: &mut gnomcode_ingest::watcher::IngestWatcher,
+    mut pass: F,
+) where
+    F: FnMut() -> Result<u64, gnomcode_ingest::Error> + Send + 'static,
+{
+    let mut ticker = tokio::time::interval(interval);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        ticker.tick().await;
+        let due = if watching {
+            watcher.take_due()
+        } else {
+            Some(false)
+        };
+        let Some(dirty) = due else { continue };
+        let Ok((returned, result)) = tokio::task::spawn_blocking(move || {
+            let result = pass();
+            (pass, result)
+        })
+        .await
+        else {
+            tracing::error!("ingestion worker stopped");
+            return;
+        };
+        pass = returned;
+        let ingested = result.unwrap_or_else(|error| {
+            tracing::warn!("ingestion pass failed: {error}");
+            0
+        });
+        watcher.record_scan(dirty || ingested > 0);
+    }
+}
+
 /// Orchestrator managing background polling and event ingestion.
 pub struct DaemonOrchestrator {
     db: Arc<Mutex<Database>>,
@@ -777,7 +818,8 @@ impl DaemonOrchestrator {
         })
     }
 
-    /// Spawns a background task running periodic log reconciliation every `poll_interval`.
+    /// Spawns the background reconciler: file-watcher driven, checked every `poll_interval`,
+    /// with a slow idle fallback scan; plain `poll_interval` polling if the watcher fails.
     pub fn spawn_reconciler(&self) -> JoinHandle<()> {
         let db_path = self.db_path.clone();
         let interval = self.poll_interval;
@@ -789,41 +831,37 @@ impl DaemonOrchestrator {
                 tracing::error!("ingestion database could not start");
                 return;
             };
-            let mut ticker = tokio::time::interval(interval);
-            loop {
-                ticker.tick().await;
-                let Ok((db, result)) = tokio::task::spawn_blocking(move || {
-                    let result = ingest_all(&mut ingest_db);
-                    if let Ok(sessions) = ingest_db.list_active_sessions(usize::MAX)
-                        && remote::sync_conversation_bindings(
-                            &ingest_db,
-                            &sessions,
-                            &gnomcode_pty::list_active_sessions(),
-                        )
-                        .is_err()
-                    {
-                        tracing::warn!("conversation binding could not be saved");
-                    }
-                    let _ = ingest_db.reconcile_antigravity_projects();
-                    let _ = gnomcode_ingest::reproject_all(&mut ingest_db);
-                    if let Err(error) = pro::run_guardrails(&ingest_db) {
-                        tracing::warn!("guardrail evaluation failed: {error}");
-                    }
-                    if let Err(error) = pro::run_context_relay(&ingest_db) {
-                        tracing::warn!("context relay evaluation failed: {error}");
-                    }
-                    (ingest_db, result)
-                })
-                .await
-                else {
-                    tracing::error!("ingestion worker stopped");
-                    return;
-                };
-                ingest_db = db;
-                if let Err(error) = result {
-                    tracing::warn!("ingestion pass failed: {error}");
-                }
+            let mut watcher = gnomcode_ingest::watcher::IngestWatcher::new(
+                interval,
+                interval.max(IDLE_FALLBACK_INTERVAL),
+            );
+            let watching = watcher.is_watching();
+            if !watching {
+                tracing::warn!("file watcher unavailable; polling every {interval:?}");
             }
+            run_reconcile_loop(interval, watching, &mut watcher, move || {
+                let result = ingest_all(&mut ingest_db);
+                if let Ok(sessions) = ingest_db.list_active_sessions(usize::MAX)
+                    && remote::sync_conversation_bindings(
+                        &ingest_db,
+                        &sessions,
+                        &gnomcode_pty::list_active_sessions(),
+                    )
+                    .is_err()
+                {
+                    tracing::warn!("conversation binding could not be saved");
+                }
+                let _ = ingest_db.reconcile_antigravity_projects();
+                let _ = gnomcode_ingest::reproject_all(&mut ingest_db);
+                if let Err(error) = pro::run_guardrails(&ingest_db) {
+                    tracing::warn!("guardrail evaluation failed: {error}");
+                }
+                if let Err(error) = pro::run_context_relay(&ingest_db) {
+                    tracing::warn!("context relay evaluation failed: {error}");
+                }
+                result
+            })
+            .await;
         })
     }
 
@@ -1140,6 +1178,98 @@ mod tests {
         assert!(
             found,
             "scheduled reconciliation must ingest the isolated native fixture"
+        );
+    }
+
+    fn counting_pass() -> (
+        std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        impl FnMut() -> Result<u64, gnomcode_ingest::Error> + Send + 'static,
+    ) {
+        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let inner = std::sync::Arc::clone(&count);
+        (count, move || {
+            inner.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(0)
+        })
+    }
+
+    #[tokio::test]
+    async fn reconcile_loop_runs_on_file_event_and_idles_otherwise() {
+        use gnomcode_ingest::watcher::IngestWatcher;
+        use std::sync::atomic::Ordering;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut watcher = IngestWatcher::with_paths(
+            &[dir.path().to_path_buf()],
+            std::time::Duration::from_secs(60),
+            std::time::Duration::from_secs(60),
+        );
+        assert!(watcher.is_watching(), "OS watcher must start on a temp dir");
+        let (count, pass) = counting_pass();
+        let loop_task = tokio::spawn(async move {
+            super::run_reconcile_loop(
+                std::time::Duration::from_millis(20),
+                true,
+                &mut watcher,
+                pass,
+            )
+            .await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        // Initial dirty pass only: 60 s back-off keeps idle ticks from scanning.
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        std::fs::write(
+            dir.path().join("rollout-x.jsonl"),
+            "{}
+",
+        )
+        .expect("write");
+        let mut woke = false;
+        for _ in 0..150 {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            if count.load(Ordering::SeqCst) >= 2 {
+                woke = true;
+                break;
+            }
+        }
+        // SQLite writes in a watched dir must not retrigger (feedback loop).
+        let settled = count.load(Ordering::SeqCst);
+        std::fs::write(dir.path().join("state.db-wal"), "x").expect("db write");
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        let after_db = count.load(Ordering::SeqCst);
+        loop_task.abort();
+        assert!(woke, "file write must trigger a reconcile");
+        assert_eq!(
+            after_db, settled,
+            "own db writes must not trigger a reconcile"
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_loop_falls_back_to_polling_without_watcher() {
+        use gnomcode_ingest::watcher::IngestWatcher;
+        use std::sync::atomic::Ordering;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut watcher = IngestWatcher::with_paths(
+            &[dir.path().join("missing")],
+            std::time::Duration::from_secs(60),
+            std::time::Duration::from_secs(60),
+        );
+        assert!(!watcher.is_watching(), "nothing watchable means no watcher");
+        let (count, pass) = counting_pass();
+        let loop_task = tokio::spawn(async move {
+            super::run_reconcile_loop(
+                std::time::Duration::from_millis(20),
+                false,
+                &mut watcher,
+                pass,
+            )
+            .await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        loop_task.abort();
+        assert!(
+            count.load(Ordering::SeqCst) >= 5,
+            "fallback must poll every tick"
         );
     }
 }
