@@ -41,5 +41,5 @@ test('external images are not loaded and data images become thumbnails', () => {
 test('attachment references become thumbnail placeholders and messages carry copy', () => {
   const html = renderChatCards([{ role: 'user', created_at: at, content: 'See this\n[Attachment: .gnomcode/attachments/s.png]' }]);
   assert.match(html, /data-attachment-path=".gnomcode\/attachments\/s.png"/);
-  assert.match(html, /aria-label="Copy message"/);
+  assert.match(html, /aria-label="Copy (?:your |assistant )?message"/);
 });
