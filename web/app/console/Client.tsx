@@ -398,9 +398,9 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
       if (data?.session) {
         const {access_token,refresh_token,expires_at,expires_in,user}=data.session;
         const tokenStr=btoa(JSON.stringify({access_token,refresh_token,expires_at,expires_in,user:{id:user.id,email:user.email}}));
-        await navigator.clipboard.writeText(tokenStr);
-        setCopyFeedback("Copied account connection");
-        setTimeout(() => setCopyFeedback(""), 3500);
+        const ok = await (await import("../../lib/console-presentation")).copyTextToClipboard(tokenStr);
+        setCopyFeedback(ok ? "Copied account connection" : "Failed to copy");
+        if (ok) setTimeout(() => setCopyFeedback(""), 3500);
       }
     } catch {
       setCopyFeedback("Failed to copy");

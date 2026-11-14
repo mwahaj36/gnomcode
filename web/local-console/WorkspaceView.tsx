@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  copyTextToClipboard,
   formatPromptWithAttachments,
   isSessionRunningState,
   renderLiveBadge,
@@ -46,7 +47,7 @@ import {
   type LocalSessionsResponse,
   type LocalTerminalInstance,
 } from './local-api';
-import { AttachmentsBar, QuickActionsBar, SessionTools, useSessionAttachments } from './WorkspaceTools';
+import { AttachmentsBar, QuickActionsBar, SessionTools, useSessionAttachments, type WorkspaceSidePanel } from './WorkspaceTools';
 
 interface HostedSession {
   session_id: string;
@@ -247,6 +248,18 @@ export function WorkspaceView() {
   const [sendBusy, setSendBusy] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [continueHereBusy, setContinueHereBusy] = useState(false);
+  const [sidePanel, setSidePanel] = useState<WorkspaceSidePanel | null>(null);
+  const [queuedPrompts, setQueuedPrompts] = useState<
+    Array<{ id: string; text: string; status: string; created_at?: string; error?: string | null }>
+  >([]);
+  const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
+  const [editingQueueText, setEditingQueueText] = useState('');
+  const [sessionContextMenu, setSessionContextMenu] = useState<{
+    session: LocalSessionSummary;
+    x: number;
+    y: number;
+  } | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
 
   // Automation state
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
@@ -628,11 +641,15 @@ export function WorkspaceView() {
     const result = reconcileChat(chatEvents, sessionPending, activeSession?.state || '');
     updateChat(chatStreamRef.current, result.events);
     const repo = activeSession?.repo_path;
-    if (repo) {
-      hydrateAttachmentThumbs(chatStreamRef.current, (path) =>
-        fetchLocalJson(`/api/v1/repos/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`),
-      );
-    }
+    hydrateAttachmentThumbs(chatStreamRef.current, (path) => {
+      if (path.startsWith('/api/v1/')) {
+        return fetchLocalJson(path);
+      }
+      if (!repo) {
+        return Promise.reject(new Error('Workspace repository path unavailable'));
+      }
+      return fetchLocalJson(`/api/v1/repos/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`);
+    });
   }, [activeSessionId, chatEvents, pendingBySession, activeSession?.state, activeSession?.repo_path]);
 
   // Keep model switcher value aligned with active session/hosted model
@@ -979,13 +996,9 @@ export function WorkspaceView() {
   const resolvedLaunchPath = runIn ? wslFolder(runIn, launchRepo) : launchRepo.trim();
 
   const copyLaunchPath = async () => {
-    try {
-      await navigator.clipboard.writeText(resolvedLaunchPath);
-      setPathCopied(true);
-      window.setTimeout(() => setPathCopied(false), 1500);
-    } catch {
-      setPathCopied(false);
-    }
+    const ok = await copyTextToClipboard(resolvedLaunchPath);
+    setPathCopied(ok);
+    if (ok) window.setTimeout(() => setPathCopied(false), 1500);
   };
 
   const integrateInWsl = async (distro: string) => {
@@ -1143,6 +1156,30 @@ export function WorkspaceView() {
     }
   };
 
+  const loadQueue = useCallback(async (sessionId: string) => {
+    if (!sessionId) {
+      setQueuedPrompts([]);
+      return;
+    }
+    try {
+      const data = await fetchLocalJson<{
+        items?: Array<{ id: string; text: string; status: string; created_at?: string; error?: string | null }>;
+      }>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`);
+      if (activeSessionIdRef.current === sessionId) {
+        setQueuedPrompts(Array.isArray(data?.items) ? data.items : []);
+      }
+    } catch {
+      // Queue endpoint unavailable for non-managed or closed sessions
+    }
+  }, []);
+
+  useEffect(() => {
+    setSidePanel(null);
+    setEditingQueueId(null);
+    setEditingQueueText('');
+    void loadQueue(activeSessionId);
+  }, [activeSessionId, loadQueue]);
+
   const sendPromptText = async (rawText: string, fromComposer: boolean) => {
     const sessionId = activeSessionId;
     const draft = rawText.trim();
@@ -1151,8 +1188,9 @@ export function WorkspaceView() {
     if (!text || !sessionId || pendingSendRef.current.has(sessionId)) return;
 
     const generation = deletionGenRef.current[sessionId] || 0;
+    const requestId = createUuid();
     const optimistic: PendingChat = {
-      id: createUuid(),
+      id: requestId,
       text,
       created_at: new Date().toISOString(),
       baseline: chatEvents.map((item) => item.event_id),
@@ -1165,21 +1203,40 @@ export function WorkspaceView() {
     }));
     pendingSendRef.current.add(sessionId);
     setSendBusy(true);
-    setDeliveryStatus('');
+    setDeliveryStatus('Sending...');
 
     try {
-      await fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(sessionId)}/prompt`, {
+      const res = await fetchLocalMutation<{
+        queued?: boolean;
+        status?: string;
+        delivery_state?: string;
+      }>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/prompt`, {
         method: 'POST',
-        body: { text },
+        body: { text, id: requestId, queue_if_busy: true },
       });
       if ((deletionGenRef.current[sessionId] || 0) !== generation) return;
 
-      setPendingBySession((prev) => ({
-        ...prev,
-        [sessionId]: (prev[sessionId] || []).map((item) =>
-          item.id === optimistic.id ? { ...item, delivered: true } : item,
-        ),
-      }));
+      if (res?.queued) {
+        setPendingBySession((prev) => ({
+          ...prev,
+          [sessionId]: (prev[sessionId] || []).filter((item) => item.id !== optimistic.id),
+        }));
+        if (sessionId === activeSessionIdRef.current) {
+          setDeliveryStatus('Queued for next safe turn boundary.');
+          void loadQueue(sessionId);
+        }
+      } else {
+        setPendingBySession((prev) => ({
+          ...prev,
+          [sessionId]: (prev[sessionId] || []).map((item) =>
+            item.id === optimistic.id ? { ...item, delivered: true } : item,
+          ),
+        }));
+        if (sessionId === activeSessionIdRef.current) {
+          setDeliveryStatus('Sent.');
+        }
+      }
+
       if (fromComposer) {
         attachments.clearSaved(sessionId);
         setDraftsBySession((prev) =>
@@ -1200,11 +1257,49 @@ export function WorkspaceView() {
       }));
       if (sessionId === activeSessionIdRef.current) {
         const msg = error instanceof Error ? error.message : 'The terminal did not accept the prompt.';
-        setDeliveryStatus(`Could not send. ${msg}`);
+        const uncertain = /timeout|abort|network|502|503|504|uncertain/i.test(msg);
+        setDeliveryStatus(
+          uncertain
+            ? `Delivery uncertain. Check conversation before retrying. (${msg})`
+            : `Failed: ${msg}`,
+        );
       }
     } finally {
       pendingSendRef.current.delete(sessionId);
       setSendBusy(pendingSendRef.current.has(activeSessionIdRef.current));
+    }
+  };
+
+  const handleSaveQueuedPrompt = async (msgId: string) => {
+    const clean = editingQueueText.trim();
+    if (!activeSessionId || !clean) return;
+    try {
+      await fetchLocalMutation(
+        `/api/v1/sessions/${encodeURIComponent(activeSessionId)}/queue/${encodeURIComponent(msgId)}`,
+        { method: 'PATCH', body: { text: clean } },
+      );
+      setEditingQueueId(null);
+      setEditingQueueText('');
+      await loadQueue(activeSessionId);
+    } catch (error) {
+      setDeliveryStatus(error instanceof Error ? error.message : 'Could not update queued message.');
+    }
+  };
+
+  const handleCancelQueuedPrompt = async (msgId: string) => {
+    if (!activeSessionId) return;
+    try {
+      await fetchLocalMutation(
+        `/api/v1/sessions/${encodeURIComponent(activeSessionId)}/queue/${encodeURIComponent(msgId)}`,
+        { method: 'DELETE' },
+      );
+      if (editingQueueId === msgId) {
+        setEditingQueueId(null);
+        setEditingQueueText('');
+      }
+      await loadQueue(activeSessionId);
+    } catch (error) {
+      setDeliveryStatus(error instanceof Error ? error.message : 'Could not cancel queued message.');
     }
   };
 
@@ -1397,6 +1492,34 @@ export function WorkspaceView() {
     }
   };
 
+  const openSessionMenuForId = useCallback(
+    (sessionId: string, x: number, y: number) => {
+      const match = sessions.find((item) => item.id === sessionId);
+      if (!match) return;
+      const clampedX = Math.max(8, Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 800) - 210));
+      const clampedY = Math.max(8, Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 600) - 220));
+      setSessionContextMenu({ session: match, x: clampedX, y: clampedY });
+    },
+    [sessions],
+  );
+
+  useEffect(() => {
+    if (!sessionContextMenu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.sp-session-context-menu')) setSessionContextMenu(null);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setSessionContextMenu(null);
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [sessionContextMenu]);
+
   const handleSessionListClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const allChatsBtn = (event.target as HTMLElement).closest<HTMLElement>(
       '[data-action="open-all-chats"]',
@@ -1405,13 +1528,40 @@ export function WorkspaceView() {
       setAllChatsOpen(true);
       return;
     }
+    const menuBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-action="session-menu"]');
+    if (menuBtn?.dataset.arg) {
+      event.stopPropagation();
+      const rect = menuBtn.getBoundingClientRect();
+      openSessionMenuForId(menuBtn.dataset.arg, rect.right - 180, rect.bottom + 4);
+      return;
+    }
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-action="load-chat"]');
     const sessionId = target?.dataset.arg;
     if (!sessionId) return;
+    setSessionContextMenu(null);
     setAllChatsOpen(false);
     void loadChat(sessionId);
     if (window.matchMedia('(max-width: 767px)').matches) {
       collapseChatList();
+    }
+  };
+
+  const handleSessionListContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('[data-session-id]');
+    const sessionId = row?.dataset.sessionId;
+    if (!sessionId) return;
+    event.preventDefault();
+    openSessionMenuForId(sessionId, event.clientX, event.clientY);
+  };
+
+  const handleSessionListKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if ((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu') {
+      const row = (event.target as HTMLElement).closest<HTMLElement>('[data-session-id]');
+      const sessionId = row?.dataset.sessionId;
+      if (!sessionId) return;
+      event.preventDefault();
+      const rect = row.getBoundingClientRect();
+      openSessionMenuForId(sessionId, rect.left + 24, rect.bottom + 4);
     }
   };
 
@@ -1439,12 +1589,17 @@ export function WorkspaceView() {
     !imported &&
     (activeHosted !== null || (activeSession as { hosted?: boolean } | null)?.hosted !== false) &&
     (activeLive?.state === 'working' || isSessionRunningState(activeSession?.state || ''));
+  const headerLimits = useMemo(() => {
+    if (activeSession?.header_limit !== undefined) {
+      return activeSession.header_limit ? [activeSession.header_limit as ConversationLimit] : [];
+    }
+    return Array.isArray(activeSession?.limits)
+      ? (activeSession.limits as ConversationLimit[]).slice(0, 1)
+      : [];
+  }, [activeSession?.header_limit, activeSession?.limits]);
   const limitsMarkup = useMemo(
-    () =>
-      renderConversationLimits(
-        Array.isArray(activeSession?.limits) ? (activeSession.limits as ConversationLimit[]) : [],
-      ),
-    [activeSession?.limits],
+    () => renderConversationLimits(headerLimits),
+    [headerLimits],
   );
   const currentDraft = draftsBySession[activeSessionId] || '';
   const hasCatalogModels = allCatalogModels.length > 0;
@@ -1592,9 +1747,96 @@ export function WorkspaceView() {
           ref={sessionListRef}
           className="sp-workspace-list"
           onClick={handleSessionListClick}
+          onContextMenu={handleSessionListContextMenu}
+          onKeyDown={handleSessionListKeyDown}
+          onTouchStart={(event) => {
+            const row = (event.target as HTMLElement).closest<HTMLElement>('[data-session-id]');
+            const sessionId = row?.dataset.sessionId;
+            if (!sessionId || !event.touches[0]) return;
+            const touch = event.touches[0];
+            if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = window.setTimeout(() => {
+              openSessionMenuForId(sessionId, touch.clientX, touch.clientY);
+            }, 500);
+          }}
+          onTouchEnd={() => {
+            if (longPressTimerRef.current) {
+              window.clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+          }}
+          onTouchMove={() => {
+            if (longPressTimerRef.current) {
+              window.clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+          }}
         >
           Loading conversations...
         </div>
+        {sessionContextMenu ? (
+          <div
+            className="sp-session-context-menu"
+            role="menu"
+            aria-label="Conversation actions"
+            style={{ top: `${sessionContextMenu.y}px`, left: `${sessionContextMenu.x}px` }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const target = sessionContextMenu.session.id;
+                setSessionContextMenu(null);
+                setAllChatsOpen(false);
+                void loadChat(target);
+              }}
+            >
+              Open conversation
+            </button>
+            {sessionContextMenu.session.source === 'imported' ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={async () => {
+                  const target = sessionContextMenu.session.id;
+                  setSessionContextMenu(null);
+                  await loadChat(target);
+                  void fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(target)}/continue-here`, {
+                    method: 'POST',
+                  }).then(() => loadConversations()).then(() => loadChat(target));
+                }}
+              >
+                Continue here
+              </button>
+            ) : null}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const target = sessionContextMenu.session.id;
+                setSessionContextMenu(null);
+                void fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(target)}/focus`, {
+                  method: 'POST',
+                });
+              }}
+            >
+              Focus agent window
+            </button>
+            {sessionContextMenu.session.repo_path ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const path = sessionContextMenu.session.repo_path || '';
+                  setSessionContextMenu(null);
+                  void copyTextToClipboard(path);
+                }}
+              >
+                Copy workspace path
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="pagination">
           <span>{`${page} / ${totalPages} · ${totalCount} conversations`}</span>
@@ -2137,22 +2379,76 @@ export function WorkspaceView() {
                   Resume conversation
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="btn-control"
-                onClick={() => void handleOpenWorkspaceTerminal()}
-              >
-                Terminal
-              </button>
+                <div className="sp-header-panel-toggles" role="group" aria-label="Workspace panels">
+                  <button
+                    type="button"
+                    className={`btn-control${sidePanel === 'files' ? ' is-active' : ''}`}
+                    aria-expanded={sidePanel === 'files'}
+                    onClick={() => setSidePanel((cur) => (cur === 'files' ? null : 'files'))}
+                  >
+                    Files
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-control${sidePanel === 'changes' ? ' is-active' : ''}`}
+                    aria-expanded={sidePanel === 'changes'}
+                    onClick={() => setSidePanel((cur) => (cur === 'changes' ? null : 'changes'))}
+                  >
+                    Changes
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-control${sidePanel === 'artifacts' ? ' is-active' : ''}`}
+                    aria-expanded={sidePanel === 'artifacts'}
+                    onClick={() => setSidePanel((cur) => (cur === 'artifacts' ? null : 'artifacts'))}
+                  >
+                    Artifacts
+                  </button>
+                </div>
+                {canInterruptActive ? (
+                  <button
+                    type="button"
+                    className="btn-control sp-interrupt-btn"
+                    aria-label="Interrupt running turn"
+                    title="Sends Esc to interrupt the active turn without closing the session"
+                    onClick={() =>
+                      void fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(activeSessionId)}/interrupt`, {
+                        method: 'POST',
+                        body: { request_id: createUuid() },
+                      })
+                    }
+                  >
+                    Stop
+                  </button>
+                ) : null}
               <details className="conversation-menu">
                 <summary aria-label="Conversation actions">Actions</summary>
                 <div>
+                  {imported ? (
+                    <button
+                      type="button"
+                      className="btn-control"
+                      disabled={continueHereBusy}
+                      onClick={() => void handleContinueHere()}
+                    >
+                      {continueHereBusy ? 'Continuing...' : 'Continue here'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn-control"
                     onClick={() => void handleFocusChat()}
                   >
-                    Focus Window
+                    {activeSession?.agent === 'antigravity'
+                      ? 'Open in Antigravity'
+                      : 'Focus agent window'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-control"
+                    onClick={() => void handleOpenWorkspaceTerminal()}
+                  >
+                    Terminal
                   </button>
                   {!imported ? (
                     <button
@@ -2183,11 +2479,8 @@ export function WorkspaceView() {
               </details>
             </div>
 
-            <SessionTools
-              sessionId={activeSessionId}
-              repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
-              canInterrupt={canInterruptActive}
-            />
+            <div className={`sp-workspace-body${sidePanel ? ' has-side-panel' : ''}`}>
+              <div className="sp-workspace-main-col">
             {activeSession?.worktree ||
             activeSession?.worktree_branch ||
             activeSession?.worktree_path ||
@@ -2312,14 +2605,13 @@ export function WorkspaceView() {
                 type="button"
                 className="btn-control"
                 onClick={() => {
-                  void navigator.clipboard
-                    .writeText(copyPath)
-                    .then(() => setActionStatus('Workspace path copied.'))
-                    .catch(() =>
-                      setActionStatus(
-                        'Could not copy the path. Check clipboard access and retry.',
-                      ),
-                    );
+                  void copyTextToClipboard(copyPath).then((ok) =>
+                    setActionStatus(
+                      ok
+                        ? 'Workspace path copied.'
+                        : 'Could not copy the path. Check clipboard access and retry.',
+                    ),
+                  );
                 }}
               >
                 Copy workspace path
@@ -2337,7 +2629,7 @@ export function WorkspaceView() {
               onClick={handleChatStreamClick}
             />
             {activeLive?.state === 'working' && !terminalStreamOpen ? (
-              <div className="sp-activity" role="status" aria-label="Agent activity">
+              <div className="sp-activity-inline" role="status" aria-label="Agent activity">
                 <span dangerouslySetInnerHTML={{ __html: activityMarkup }} />
                 {canInterruptActive ? (
                   <button
@@ -2359,14 +2651,154 @@ export function WorkspaceView() {
               hidden={!terminalStreamOpen}
             />
 
-            {imported ? (
-              <div className="sp-imported-banner">
-                <div className="sp-imported-info">
-                  <span>
-                    {`This conversation is active in ${importedAgentLabel}. Responses, tokens and quota are observed in real time.`}
-                  </span>
+            {queuedPrompts.length > 0 ? (
+              <div className="sp-queued-list" role="region" aria-label="Queued messages">
+                <p className="sp-queued-head">
+                  {`${queuedPrompts.length} queued ${queuedPrompts.length === 1 ? 'message' : 'messages'} · sends on next safe turn`}
+                </p>
+                {queuedPrompts.map((item) => (
+                  <div key={item.id} className="sp-queued-item">
+                    {editingQueueId === item.id ? (
+                      <div className="sp-queued-edit">
+                        <textarea
+                          rows={2}
+                          aria-label="Edit queued message"
+                          value={editingQueueText}
+                          onChange={(event) => setEditingQueueText(event.target.value)}
+                        />
+                        <div className="sp-queued-actions">
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => void handleSaveQueuedPrompt(item.id)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-control"
+                            onClick={() => {
+                              setEditingQueueId(null);
+                              setEditingQueueText('');
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="sp-queued-text">{item.text}</span>
+                        <div className="sp-queued-actions">
+                          <button
+                            type="button"
+                            className="btn-control"
+                            onClick={() => {
+                              setEditingQueueId(item.id);
+                              setEditingQueueText(item.text);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-control"
+                            onClick={() => void handleCancelQueuedPrompt(item.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {!imported ? (
+              <QuickActionsBar disabled={sendBusy} onSend={(text) => void sendPromptText(text, false)} />
+            ) : null}
+            <form className="sp-chat-composer" onSubmit={handleSendPrompt}>
+              <AttachmentsBar items={attachments.items} status={attachments.status} onRemove={attachments.remove} />
+              <input
+                ref={attachInputRef}
+                type="file"
+                hidden
+                accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  void attachments.pick(file);
+                }}
+              />
+              <textarea
+                ref={promptInputRef}
+                className="sp-chat-composer-input"
+                aria-label="Message the agent"
+                rows={1}
+                maxLength={4000}
+                placeholder={
+                  imported
+                    ? `Draft a message (observed in ${importedAgentLabel})...`
+                    : activeLive?.state === 'working'
+                      ? 'Queue a message for when the agent finishes...'
+                      : 'Message the agent...'
+                }
+                value={currentDraft}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setDraftsBySession((prev) => ({ ...prev, [activeSessionId]: next }));
+                  resizePrompt();
+                }}
+                onKeyDown={handlePromptKeyDown}
+              />
+              <div className="composer-toolbar">
+                <div className="composer-model">
+                  <select
+                    aria-label="Model"
+                    disabled={!hasCatalogModels || modelHandoffBusy}
+                    value={selectedModelValue}
+                    onChange={(event) => void handleModelSwitch(event.target.value)}
+                  >
+                    <option value="">
+                      {catalogError ? 'Model catalog unavailable' : 'Agent default'}
+                    </option>
+                    {providers.map((provider) => (
+                      <optgroup
+                        key={provider.name}
+                        label={`${provider.name}${providerBadgeLabel(provider.name)}`}
+                      >
+                        {provider.models?.length ? (
+                          provider.models.map((item) => (
+                            <option
+                              key={`${item.agent}:${item.model}`}
+                              value={`${item.agent}:${item.model}`}
+                            >
+                              {item.display_name || item.model}
+                            </option>
+                          ))
+                        ) : (
+                          <option disabled>{provider.message || 'No models'}</option>
+                        )}
+                      </optgroup>
+                    ))}
+                    {currentSessionModel && !matchedCatalogOption ? (
+                      <option value={currentSessionModel} disabled>
+                        {`${currentSessionModel} (current)`}
+                      </option>
+                    ) : null}
+                  </select>
+                  <span role="status">{modelStatusText}</span>
                 </div>
-                <div className="sp-imported-actions">
+                {deliveryStatus ? (
+                  <span className="sp-composer-status" role="status">
+                    {deliveryStatus}
+                  </span>
+                ) : null}
+                <button type="button" className="btn-control" onClick={() => attachInputRef.current?.click()}>
+                  Attach
+                </button>
+                {imported ? (
                   <button
                     type="button"
                     className="btn-primary"
@@ -2375,101 +2807,18 @@ export function WorkspaceView() {
                   >
                     {continueHereBusy ? 'Continuing...' : 'Continue here'}
                   </button>
-                  <button
-                    type="button"
-                    className="btn-control"
-                    onClick={() => void handleFocusChat()}
-                  >
-                    {activeSession?.agent === 'antigravity'
-                      ? 'Open in Antigravity'
-                      : 'Focus Agent Window'}
+                ) : (
+                  <button type="submit" className="btn-primary" disabled={sendBusy}>
+                    {activeLive?.state === 'working' ? 'Queue' : 'Send'}
                   </button>
-                </div>
+                )}
               </div>
-            ) : (
-              <>
-                <QuickActionsBar disabled={sendBusy} onSend={(text) => void sendPromptText(text, false)} />
-                <form className="sp-chat-composer" onSubmit={handleSendPrompt}>
-                  <AttachmentsBar items={attachments.items} status={attachments.status} onRemove={attachments.remove} />
-                  <input
-                    ref={attachInputRef}
-                    type="file"
-                    hidden
-                    accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      event.target.value = '';
-                      void attachments.pick(file);
-                    }}
-                  />
-                  <textarea
-                    ref={promptInputRef}
-                    className="sp-chat-composer-input"
-                    aria-label="Message the agent"
-                    rows={1}
-                    maxLength={4000}
-                    placeholder={
-                      activeLive?.state === 'working'
-                        ? 'Queue a message for when the agent finishes...'
-                        : 'Message the agent...'
-                    }
-                    value={currentDraft}
-                    onChange={(event) => {
-                      const next = event.target.value;
-                      setDraftsBySession((prev) => ({ ...prev, [activeSessionId]: next }));
-                      resizePrompt();
-                    }}
-                    onKeyDown={handlePromptKeyDown}
-                  />
-                  <div className="composer-toolbar">
-                    <div className="composer-model">
-                      <select
-                        aria-label="Model"
-                        disabled={!hasCatalogModels || modelHandoffBusy}
-                        value={selectedModelValue}
-                        onChange={(event) => void handleModelSwitch(event.target.value)}
-                      >
-                        <option value="">
-                          {catalogError ? 'Model catalog unavailable' : 'Agent default'}
-                        </option>
-                        {providers.map((provider) => (
-                          <optgroup
-                            key={provider.name}
-                            label={`${provider.name}${providerBadgeLabel(provider.name)}`}
-                          >
-                            {provider.models?.length ? (
-                              provider.models.map((item) => (
-                                <option
-                                  key={`${item.agent}:${item.model}`}
-                                  value={`${item.agent}:${item.model}`}
-                                >
-                                  {item.display_name || item.model}
-                                </option>
-                              ))
-                            ) : (
-                              <option disabled>{provider.message || 'No models'}</option>
-                            )}
-                          </optgroup>
-                        ))}
-                        {currentSessionModel && !matchedCatalogOption ? (
-                          <option value={currentSessionModel} disabled>
-                            {`${currentSessionModel} (current)`}
-                          </option>
-                        ) : null}
-                      </select>
-                      <span role="status">{modelStatusText}</span>
-                    </div>
-                    <button type="button" className="btn-control" onClick={() => attachInputRef.current?.click()}>
-                      Attach
-                    </button>
-                    <button type="submit" className="btn-primary" disabled={sendBusy}>
-                      {activeLive?.state === 'working' ? 'Queue' : 'Send'}
-                    </button>
-                  </div>
-                  <small className="sp-chat-composer-help">
-                    Enter to send · Shift+Enter for a new line
-                  </small>
-                </form>
+              <small className="sp-chat-composer-help">
+                {imported
+                  ? `Observed in ${importedAgentLabel}. Drafts are saved locally; choose Continue here to send.`
+                  : 'Enter to send · Shift+Enter for a new line'}
+              </small>
+            </form>
 
                 <details className="profile-disclosure sp-chat-automation">
                   <summary>Schedule and automation</summary>
@@ -2582,8 +2931,20 @@ export function WorkspaceView() {
                     ))}
                   </div>
                 </details>
-              </>
-            )}
+              </div>
+              {sidePanel ? (
+                <aside className="sp-workspace-side-panel" aria-label="Workspace tools panel">
+                  <SessionTools
+                    sessionId={activeSessionId}
+                    repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
+                    canInterrupt={canInterruptActive}
+                    panel={sidePanel}
+                    onPanelChange={setSidePanel}
+                    hideToolbar
+                  />
+                </aside>
+              ) : null}
+            </div>
 
             <section
               className="sp-workspace-terminal"

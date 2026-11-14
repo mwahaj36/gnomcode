@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CHECK_ICON_SVG, COPY_ICON_SVG, copyTextToClipboard } from '../lib/console-presentation';
 import { fetchLocalJson } from './local-api';
 import { takeProviderSetupRequest } from './shell-bus';
 
@@ -76,24 +77,28 @@ export function useProviderStatus(provider: string, distro: string | undefined, 
 
 /** Command snippet with a copy button; the user runs it in their own terminal. */
 export function CopySnippet({ command, label }: { command: string; label: string }) {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-    }
+    const ok = await copyTextToClipboard(command);
+    setStatus(ok ? 'copied' : 'failed');
+    window.setTimeout(() => setStatus('idle'), 1600);
   };
   return (
     <div className="sp-snippet">
       <code aria-label={label}>{command}</code>
-      <button type="button" className="btn-control sp-snippet-copy" onClick={copy} aria-label={`Copy: ${command}`}>
-        {copied ? 'Copied' : 'Copy'}
+      <button
+        type="button"
+        className="btn-control sp-snippet-copy sp-copy-btn"
+        onClick={copy}
+        aria-label={`Copy ${label}: ${command}`}
+        title={status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : `Copy ${label}`}
+        data-copy-state={status === 'idle' ? undefined : status}
+      >
+        <span className="sp-copy-icon" dangerouslySetInnerHTML={{ __html: status === 'copied' ? CHECK_ICON_SVG : COPY_ICON_SVG }} />
+        <span className="sp-copy-label">{status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : 'Copy'}</span>
       </button>
       <span className="sr-only" role="status" aria-live="polite">
-        {copied ? 'Copied to clipboard' : ''}
+        {status === 'copied' ? 'Copied to clipboard' : status === 'failed' ? 'Copy failed' : ''}
       </span>
     </div>
   );

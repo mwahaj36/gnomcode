@@ -113,3 +113,6 @@ export type LiveStatus = { state: 'working' | 'waiting_for_you' | 'idle' | 'stop
 export function renderLiveBadge(live: LiveStatus | null | undefined): string;
 export function formatElapsed(fromIso: string | null | undefined, nowMs?: number): string;
 export function renderActivityIndicator(live: LiveStatus | null | undefined, turnStartedAt: string | null | undefined, nowMs?: number): string;
+export const COPY_ICON_SVG: string;
+export const CHECK_ICON_SVG: string;
+export function copyTextToClipboard(text: string): Promise<boolean>;

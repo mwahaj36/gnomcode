@@ -251,8 +251,32 @@ function httpStatusOf(err: unknown): string {
   return err instanceof Error ? err.message : '';
 }
 
-export function SessionTools({ sessionId, repoPath, canInterrupt }: { sessionId: string; repoPath: string; canInterrupt: boolean }) {
-  const [panel, setPanel] = useState<PanelKey | null>(null);
+export type WorkspaceSidePanel = PanelKey;
+
+export function SessionTools({
+  sessionId,
+  repoPath,
+  canInterrupt,
+  panel: controlledPanel,
+  onPanelChange,
+  hideToolbar = false,
+}: {
+  sessionId: string;
+  repoPath: string;
+  canInterrupt: boolean;
+  panel?: PanelKey | null;
+  onPanelChange?: (next: PanelKey | null) => void;
+  hideToolbar?: boolean;
+}) {
+  const [internalPanel, setInternalPanel] = useState<PanelKey | null>(null);
+  const panel = controlledPanel !== undefined ? controlledPanel : internalPanel;
+  const setPanel = useCallback(
+    (next: PanelKey | null) => {
+      if (controlledPanel === undefined) setInternalPanel(next);
+      onPanelChange?.(next);
+    },
+    [controlledPanel, onPanelChange],
+  );
   const [changesHtml, setChangesHtml] = useState('');
   const [filesHtml, setFilesHtml] = useState('');
   const [fileBodyHtml, setFileBodyHtml] = useState('');
@@ -375,15 +399,14 @@ export function SessionTools({ sessionId, repoPath, canInterrupt }: { sessionId:
     }
   }, [sessionId]);
 
+  useEffect(() => {
+    if (panel === 'changes') void loadChanges();
+    if (panel === 'files') void loadFiles('');
+    if (panel === 'artifacts') void loadArtifacts();
+  }, [panel, loadChanges, loadFiles, loadArtifacts]);
+
   const toggle = (key: PanelKey) => {
-    if (panel === key) {
-      setPanel(null);
-      return;
-    }
-    setPanel(key);
-    if (key === 'changes') void loadChanges();
-    if (key === 'files') void loadFiles('');
-    if (key === 'artifacts') void loadArtifacts();
+    setPanel(panel === key ? null : key);
   };
 
   const interrupt = async () => {
@@ -424,29 +447,31 @@ export function SessionTools({ sessionId, repoPath, canInterrupt }: { sessionId:
 
   return (
     <>
-      <div className="sp-session-tools" role="toolbar" aria-label="Conversation tools">
-        <button type="button" className="btn-control" aria-expanded={panel === 'files'} onClick={() => toggle('files')}>
-          Files
-        </button>
-        <button type="button" className="btn-control" aria-expanded={panel === 'changes'} onClick={() => toggle('changes')}>
-          Changes
-        </button>
-        <button type="button" className="btn-control" aria-expanded={panel === 'artifacts'} onClick={() => toggle('artifacts')}>
-          Artifacts
-        </button>
-        {canInterrupt ? (
-          <button
-            type="button"
-            className="btn-control sp-interrupt-btn"
-            aria-label="Interrupt running turn"
-            title="Sends Esc to interrupt the active turn without closing the session"
-            disabled={interruptBusy}
-            onClick={() => void interrupt()}
-          >
-            Interrupt
+      {!hideToolbar ? (
+        <div className="sp-session-tools" role="toolbar" aria-label="Conversation tools">
+          <button type="button" className="btn-control" aria-expanded={panel === 'files'} onClick={() => toggle('files')}>
+            Files
           </button>
-        ) : null}
-      </div>
+          <button type="button" className="btn-control" aria-expanded={panel === 'changes'} onClick={() => toggle('changes')}>
+            Changes
+          </button>
+          <button type="button" className="btn-control" aria-expanded={panel === 'artifacts'} onClick={() => toggle('artifacts')}>
+            Artifacts
+          </button>
+          {canInterrupt ? (
+            <button
+              type="button"
+              className="btn-control sp-interrupt-btn"
+              aria-label="Interrupt running turn"
+              title="Sends Esc to interrupt the active turn without closing the session"
+              disabled={interruptBusy}
+              onClick={() => void interrupt()}
+            >
+              Interrupt
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {interruptStatus ? <p role="status">{interruptStatus}</p> : null}
 
       {panel === 'changes' ? (

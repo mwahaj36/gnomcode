@@ -1,6 +1,42 @@
 import MarkdownIt from "./markdown-it.mjs";
 import { PROVIDER_LOGOS } from "./provider-logos.js";
 
+export const COPY_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9A1.5 1.5 0 0 0 3.5 10.5H5.5"/></svg>';
+export const CHECK_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5"/></svg>';
+
+export async function copyTextToClipboard(text) {
+  const value = String(text ?? '');
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fall back to execCommand when clipboard API is blocked or unavailable.
+    }
+  }
+  if (typeof document !== 'undefined' && document.body && typeof document.execCommand === 'function') {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.top = '-9999px';
+    area.style.left = '-9999px';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    area.setSelectionRange(0, value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+  return false;
+}
+
 export const sessionStateLabel = state => ({ thinking: 'Running', tool: 'Running', running: 'Running', awaiting_approval: 'Waiting', waiting: 'Waiting', idle: 'Idle', error: 'Error', ended: 'Ended' }[state] || 'Unknown');
 // Shared presentation only. Rust supplies totals, pricing, and chart proportions.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -262,7 +298,8 @@ export function renderHeatmap(data, { weeks = 53, stats = true, legend = true, m
   const figures = stats && summary ? `<div class="sp-heatmap-stats"><div><strong>${escape(tokens(summary.total_tokens))}</strong><span>tokens, past year</span></div><div><strong>${escape(summary.active_days ?? 'Unknown')}</strong><span>active days</span></div><div${streakTitle}><strong>${escape(summary.current_streak ?? 'Unknown')}</strong><span>day streak</span></div><div${busiest ? ` title="${escape(tokens(busiest.total_tokens))} tokens"` : ''}><strong>${busiest ? escape(monthDay(busiest.date)) : 'None'}</strong><span>busiest day</span></div></div>` : '';
   const description = summary ? `${tokens(summary.total_tokens)} tokens over ${summary.active_days} active days. Details below.` : 'Token activity by day.';
   const key = legend ? '<div class="sp-heatmap-legend" aria-hidden="true"><span>Less</span><i class="sp-heat" data-level="0"></i><i class="sp-heat" data-level="1"></i><i class="sp-heat" data-level="2"></i><i class="sp-heat" data-level="3"></i><i class="sp-heat" data-level="4"></i><span>More</span></div>' : '';
-  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>${weeks < 53 ? `Last ${weeks} weeks` : 'Activity'}</h2><span class="sp-section-meta">Days in UTC</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" tabindex="0" role="group" aria-label="Activity grid, scrollable">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
+  const cols = Math.max(1, Math.ceil(days.length / 7));
+  return `<section class="sp-section sp-heatmap${stats ? '' : ' sp-heatmap--mini'}" aria-label="${label}"><header class="sp-section-head"><h2>${weeks < 53 ? `Last ${weeks} weeks` : 'Activity'}</h2><span class="sp-section-meta">Days in UTC</span></header><div class="sp-card sp-heatmap-card">${figures}<div class="sp-heatmap-scroll" role="group" aria-label="Activity grid" style="--cols:${cols}">${labels.length ? `<div class="sp-heatmap-months" aria-hidden="true">${labels.map(mark => `<span style="--col:${mark.col}">${escape(mark.text)}</span>`).join('')}</div>` : ''}<div class="sp-heatmap-body"><div class="sp-heatmap-days" aria-hidden="true"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div><div class="sp-heatmap-grid" role="img" aria-label="${escape(description)}">${cells}</div></div></div>${key}</div></section>`;
 }
 
 export function renderHourStrip(report) {
@@ -610,15 +647,16 @@ function summaryLine(p, windows) {
   if (p.source_issue) return `<span class="sp-provider-line sp-provider-line--issue" title="${escape(p.source_issue)}">${escape(p.source_issue)}</span>`;
   const head = windows[Number.isInteger(p.headline_window) && windows[p.headline_window] ? p.headline_window : 0];
   const state = stateOf(head);
-  const label = escape(windowLabel(head));
+  const label = escape(head.pool ? `${head.window_label || windowLabel(head)}` : windowLabel(head));
   const when = whenPart(head.resets_at, { short: true });
   const exhaustedPools = windows.filter(win => stateOf(win) === 'exhausted').length;
   const outNote = exhaustedPools > 0 && exhaustedPools < windows.length ? ` · ${exhaustedPools} pool${exhaustedPools === 1 ? '' : 's'} out` : '';
   const seen = seenText(head);
   const seenSuffix = (head.stale || awaiting(head)) && seen ? ` · <span class="sp-seen-inline">${escape(seen)}</span>` : '';
-  const text = state === 'exhausted' ? `${label} <b>exhausted</b>${when ? ` · back ${escape(whenPart(head.resets_at))}` : ''}${seenSuffix}`
-    : awaiting(head) ? `${label} <span class="sp-reset-muted">Reset, not confirmed</span> <span class="sp-trust-tag">EST</span>${seenSuffix}`
-      : `${label} <b>${escape(valueText(head))}</b>${outNote}${when && !outNote ? ` · resets ${escape(when)}` : ''}${seenSuffix}`;
+  const poolPrefix = head.pool ? `${escape(head.pool)} · ` : '';
+  const text = state === 'exhausted' ? `${poolPrefix}${label} <b>exhausted</b>${when ? ` · back ${escape(whenPart(head.resets_at))}` : ''}${seenSuffix}`
+    : awaiting(head) ? `${poolPrefix}${label} <span class="sp-reset-muted">Reset, not confirmed</span> <span class="sp-trust-tag">EST</span>${seenSuffix}`
+      : `${poolPrefix}${label} <b>${escape(valueText(head))}</b>${outNote}${when && !outNote ? ` · resets ${escape(when)}` : ''}${seenSuffix}`;
   return `<span class="sp-provider-line">${text}</span>`;
 }
 
@@ -629,7 +667,7 @@ function costLine(p) {
 
 function emptyCard(p) {
   const text = p.source_issue || p.enable_hint || 'No reading yet.';
-  const command = p.enable_command ? `<button type="button" class="sp-copy" data-copy="${escape(p.enable_command)}"><code>${escape(p.enable_command)}</code><span>Copy</span></button>` : '';
+  const command = p.enable_command ? `<button type="button" class="sp-copy" data-copy="${escape(p.enable_command)}" aria-label="Copy command ${escape(p.enable_command)}"><code>${escape(p.enable_command)}</code><span class="sp-copy-action">${COPY_ICON_SVG}<span class="sp-copy-label">Copy</span></span></button>` : '';
   return `<article class="sp-card sp-provider-card sp-provider-card--empty" data-provider="${escape(p.provider)}"><header class="sp-provider-head"><div class="sp-provider-id">${providerMark(p)}<div><span class="sp-provider-name">${escape(providerName(p))}</span>${p.plan ? `<span class="sp-provider-plan">${escape(p.plan)}</span>` : ''}</div></div>${chip('unknown')}</header><p class="sp-provider-empty">${escape(text)}</p>${command}</article>`;
 }
 
@@ -770,7 +808,7 @@ export function renderSessionList(sessions, selected = '', query = '') {
     const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
     const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
     lastGroup = group;
-    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${session.live && !session.state_label ? renderLiveBadge(session.live) : escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
+    return `${heading}<div class="ide-session-row" data-session-id="${escape(session.id)}"><button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" data-subagent="${isSubagent ? 'true' : 'false'}" aria-current="${session.id === selected}"><strong class="ide-session-title">${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span class="ide-session-meta">${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${session.live && !session.state_label ? renderLiveBadge(session.live) : escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button><button type="button" class="ide-session-more" data-action="session-menu" data-arg="${escape(session.id)}" aria-label="Actions for ${escape(session.title || session.project_name || 'session')}" title="More actions">&#8942;</button></div>${renderSubagents(session, 'load-chat')}`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
@@ -816,7 +854,7 @@ export function highlightCode(code, language = '') {
 export function renderCodeBlock(code, language = '') {
   const text = String(code ?? '').replace(/\n$/, '');
   const label = language ? language.replace(/[^\w+#.-]/g, '').slice(0, 24) || 'text' : (DIFF_RE.test(text) ? 'diff' : 'text');
-  return `<div class="sp-code" data-wrap="false"><div class="sp-code-bar"><span class="sp-code-lang">${escape(label)}</span><button type="button" class="sp-code-btn" data-code-wrap aria-pressed="false">Wrap</button><button type="button" class="sp-code-btn" data-chat-copy="${escape(text)}">Copy</button></div><pre tabindex="0"><code>${highlightCode(text, label)}</code></pre></div>`;
+  return `<div class="sp-code" data-wrap="false"><div class="sp-code-bar"><span class="sp-code-lang">${escape(label)}</span><button type="button" class="sp-code-btn" data-code-wrap aria-pressed="false">Wrap</button><button type="button" class="sp-code-btn sp-copy-btn" data-chat-copy="${escape(text)}" aria-label="Copy ${escape(label)} code" title="Copy code">${COPY_ICON_SVG}<span class="sp-copy-label">Copy</span></button></div><pre tabindex="0"><code>${highlightCode(text, label)}</code></pre></div>`;
 }
 
 const SYSTEM_EVENT_TYPES = new Set(['task_notification','reminder','command','subagent_report','compact_summary','interrupt']);
@@ -837,16 +875,33 @@ function renderToolEvent(evt) {
   return `<details class="sp-chat-system sp-chat-tool" data-chat-id="${escape(evt.event_id || '')}" data-kind="tool"><summary><span class="sp-chat-system-mark" aria-hidden="true"></span><span class="sp-chat-system-text">${escape(label)}</span></summary>${body}</details>`;
 }
 
+function renderToolGroup(tools) {
+  if (tools.length === 1) return renderToolEvent(tools[0]);
+  const names = [...new Set(tools.map(t => t.tool_name).filter(Boolean))];
+  const summary = `Worked for ${tools.length} steps${names.length ? ` (${names.slice(0, 3).join(', ')}${names.length > 3 ? ', ...' : ''})` : ''}`;
+  const items = tools.map(evt => `<li data-chat-id="${escape(evt.event_id || '')}"><strong>${escape(evt.tool_name || 'tool')}</strong>${evt.status ? ` <span class="sp-worked-status">${escape(evt.status)}</span>` : ''}</li>`).join('');
+  return `<details class="sp-chat-system sp-chat-tool sp-chat-worked" data-kind="tool-group"><summary><span class="sp-chat-system-mark" aria-hidden="true"></span><span class="sp-chat-system-text">${escape(summary)}</span></summary><ul class="sp-worked-list">${items}</ul></details>`;
+}
+
 const ATTACHMENT_REF_RE = /^\[Attachment: ([^\]\n]+)\]$/gm;
+const UNAVAILABLE_IMG_TEXT = '[Image attachment: preview unavailable in imported history]';
 
 function renderUserBody(content) {
   const refs = [...content.matchAll(ATTACHMENT_REF_RE)].map(m => m[1].trim());
-  const text = content.replace(ATTACHMENT_REF_RE, '').trim();
-  const thumbs = refs.map(path => {
-    const name = path.split('/').pop();
+  let text = content.replace(ATTACHMENT_REF_RE, '').trim();
+  const unavailableCount = text.split(UNAVAILABLE_IMG_TEXT).length - 1;
+  if (unavailableCount > 0) {
+    text = text.replaceAll(UNAVAILABLE_IMG_TEXT, '').trim();
+  }
+  const thumbs = refs.map((path, i) => {
+    const isImportedApi = path.startsWith('/api/v1/conversations/');
+    const name = isImportedApi ? `Image #${i + 1}` : path.split('/').pop();
     return `<button type="button" class="sp-chat-thumb sp-chat-thumb--pending" data-attachment-path="${escape(path)}" aria-label="Open attachment ${escape(name)}"><span>${escape(name)}</span></button>`;
   }).join('');
-  return `${escape(text)}${thumbs ? `<div class="sp-chat-thumbs">${thumbs}</div>` : ''}`;
+  const unavailable = Array.from({ length: unavailableCount }, (_, i) =>
+    `<span class="sp-chat-thumb sp-chat-thumb--unavailable" role="status"><span>Image #${i + 1} unavailable</span></span>`,
+  ).join('');
+  return `${escape(text)}${thumbs || unavailable ? `<div class="sp-chat-thumbs">${thumbs}${unavailable}</div>` : ''}`;
 }
 
 /** Binds copy, wrap and image-open controls inside rendered chat markup once per container. */
@@ -858,11 +913,25 @@ export function bindChatInteractions(element) {
     const copy = origin?.closest?.('[data-chat-copy]');
     if (copy) {
       event.stopPropagation();
-      const reset = copy.textContent;
-      Promise.resolve(navigator.clipboard?.writeText(copy.dataset.chatCopy ?? ''))
-        .then(() => { copy.textContent = 'Copied'; })
-        .catch(() => { copy.textContent = 'Select and copy'; })
-        .finally(() => setTimeout(() => { copy.textContent = reset; }, 1500));
+      const label = copy.querySelector('.sp-copy-label');
+      const resetText = label ? label.textContent : copy.textContent;
+      const setLabel = (next) => {
+        if (label) label.textContent = next;
+        else copy.textContent = next;
+      };
+      copyTextToClipboard(copy.dataset.chatCopy ?? '')
+        .then(() => {
+          copy.dataset.copyState = 'copied';
+          setLabel('Copied');
+        })
+        .catch(() => {
+          copy.dataset.copyState = 'error';
+          setLabel('Copy failed');
+        })
+        .finally(() => setTimeout(() => {
+          delete copy.dataset.copyState;
+          setLabel(resetText);
+        }, 1600));
       return;
     }
     const wrap = origin?.closest?.('[data-code-wrap]');
@@ -935,26 +1004,37 @@ export function renderChatCards(events) {
   if (!Array.isArray(events) || !events.length) {
     return '<div class="sp-chat-empty"><p>No conversation history recorded for this session.</p></div>';
   }
-  return `<div class="sp-chat-stream">${events.map(evt => {
-    if (evt.role === 'system' && SYSTEM_EVENT_TYPES.has(evt.status)) return renderSystemEvent(evt);
-    if (evt.role === 'tool') return renderToolEvent(evt);
-    if (evt.role === 'system') return `<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleString())}</time></div>`;
+  const chunks = [];
+  for (let i = 0; i < events.length; i++) {
+    const evt = events[i];
+    if (evt.role === 'tool') {
+      const group = [evt];
+      while (i + 1 < events.length && events[i + 1].role === 'tool') {
+        group.push(events[++i]);
+      }
+      chunks.push(renderToolGroup(group));
+      continue;
+    }
+    if (evt.role === 'system' && SYSTEM_EVENT_TYPES.has(evt.status)) { chunks.push(renderSystemEvent(evt)); continue; }
+    if (evt.role === 'system') { chunks.push(`<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleString())}</time></div>`); continue; }
     const role = evt.role || 'system';
     const roleLabel = role === 'user' ? 'You' : 'Agent';
     const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';
     const approvalPrompt = evt.status === 'pending' ? `<p class="sp-approval-banner">Approval is pending in the agent.</p>` : '';
-    return `<article data-chat-id="${escape(evt.event_id || '')}" class="sp-chat-card sp-chat-${escape(role)}${evt.waiting ? ' sp-chat-waiting' : ''}">
+    const copyBtn = evt.waiting ? '' : `<button type="button" class="sp-code-btn sp-copy-btn sp-chat-copy" data-chat-copy="${escape(evt.content)}" aria-label="Copy ${role === 'user' ? 'your message' : 'assistant reply'}" title="Copy message">${COPY_ICON_SVG}<span class="sp-copy-label">Copy</span></button>`;
+    chunks.push(`<article data-chat-id="${escape(evt.event_id || '')}" class="sp-chat-card sp-chat-${escape(role)}${evt.waiting ? ' sp-chat-waiting' : ''}">
       <header>
         <strong>${escape(roleLabel)}</strong>
         ${statusBadge}
         <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
-        ${evt.waiting ? '' : `<button type="button" class="sp-code-btn sp-chat-copy" data-chat-copy="${escape(evt.content)}" aria-label="Copy message">Copy</button>`}
+        ${copyBtn}
       </header>
       <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : renderUserBody(evt.content)}</div>
       ${evt.delivery_note ? `<p class="sp-chat-delivery-note" role="status">${escape(evt.delivery_note)}</p>` : ''}
       ${approvalPrompt}
-    </article>`;
-  }).join('')}</div>`;
+    </article>`);
+  }
+  return `<div class="sp-chat-stream">${chunks.join('')}</div>`;
 }
 
 export function reconcileChat(events, pending, state = '') {
