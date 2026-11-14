@@ -7,12 +7,12 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, hydrateAttachmentThumbs, bindPreviewInteractions, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, middleTruncate, wslFolder } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, hydrateAttachmentThumbs, bindPreviewInteractions, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, renderLiveBadge, renderActivityIndicator, type LiveStatus, middleTruncate, wslFolder } from '../lib/console-presentation';
 import { formatWorktreeBadge, renderWorktreeDiffMarkup, type WorktreeDiffData } from '../lib/worktree-presentation.mjs';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
-type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean; worktree?:boolean; worktree_branch?:string; worktree_path?:string };
+type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; hosted?:boolean; live?:LiveStatus; turn_started_at?:string; worktree?:boolean; worktree_branch?:string; worktree_path?:string };
 type ChatEvent = { event_id: string; turn_index: number; created_at: string; role: string; content: string; status?: string | null };
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
@@ -38,6 +38,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [fileData, setFileData] = useState<RepoFileData | null>(null);
   const filesRequested = useRef(false);
   const thumbRequests = useRef(new Map<string, (preview: RepoFileData) => void>());
+  const [liveTick, setLiveTick] = useState(() => Date.now());
   const [artifactsPanel, setArtifactsPanel] = useState(false);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [selectedArtifactId, setSelectedArtifactId] = useState('');
@@ -289,6 +290,12 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   }, [events, selected, optimistic, sessions]);
 
   useEffect(() => bindPreviewInteractions(document.body), []);
+  const working = sessions.find(session => session.id === selected)?.live?.state === 'working';
+  useEffect(() => {
+    if (!working) return;
+    const timer = window.setInterval(() => setLiveTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [working]);
   useEffect(() => { if (autoConnect.current && link.room) {autoConnect.current = false; void connect();} });
 
   useEffect(() => {
@@ -836,7 +843,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   return <section ref={remoteRoot} className={`sp-remote ${embedded?'is-embedded':''} ${phase === 'paired' ? 'is-paired' : (phase==='reconnecting'||(phase==='unavailable'&&workspace))?'is-reconnecting':''}`} aria-label="Encrypted Remote conversation">
     <header className="remote-heading">
       {workspace && <button ref={sidebarToggle} className="remote-sidebar-toggle" type="button" aria-label={showSessions ? "Close conversations" : "Open conversations"} aria-controls="remote-session-sidebar" aria-expanded={showSessions} onClick={() => setShowSessions(!showSessions)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>}
-      <div><Heading aria-live="polite">{workspace ? active?.title || 'Conversations' : 'Connect your desktop'}</Heading>{!workspace && <p className="remote-heading-sub">Open a linked desktop to chat with your agents from this browser.</p>}{connected && <button type="button" className="sp-conversation-limits sp-limits-trigger" aria-label="Remaining limits, open details" onClick={()=>setLimitsPanel(true)} dangerouslySetInnerHTML={{__html:renderConversationLimits(active?.limits || [])}} />}</div>
+      <div><Heading aria-live="polite">{workspace ? active?.title || 'Conversations' : 'Connect your desktop'}</Heading>{workspace && active?.live && <span className="sp-conversation-live" role="status" dangerouslySetInnerHTML={{__html:renderLiveBadge(active.live)}} />}{!workspace && <p className="remote-heading-sub">Open a linked desktop to chat with your agents from this browser.</p>}{connected && <button type="button" className="sp-conversation-limits sp-limits-trigger" aria-label="Remaining limits, open details" onClick={()=>setLimitsPanel(true)} dangerouslySetInnerHTML={{__html:renderConversationLimits(active?.limits || [])}} />}</div>
       {connected && <button type="button" className="remote-new" aria-label="New conversation" onClick={startNew}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg></button>}
       <button type="button" className="remote-notif-button" aria-label="Notifications" title={notifGranted ? "Notifications active (click to test)" : "Enable notifications"} onClick={() => void toggleOrTestNotifications()}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke={notifGranted ? "var(--sp-accent)" : "currentColor"} strokeWidth="1.6" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9m4.3 13a2 2 0 0 0 3.4 0"/></svg><span className="remote-btn-label">Notifications</span></button>
       <button type="button" className="remote-desktop-button" aria-label="Desktop connection" title="Desktop connection" onClick={()=>setDesktopPanel(true)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span className="remote-btn-label">Connection</span></button>
@@ -943,6 +950,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           loadingHistory.current = true; setHistoryLoading(true); loadChat(selectedRef.current, events[0]?.event_id);
         }}>Load earlier messages</button>}
         <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" />
+        {active?.live?.state === 'working' && <div className="sp-activity" role="status" aria-label="Agent activity"><span dangerouslySetInnerHTML={{__html:renderActivityIndicator(active.live, active.turn_started_at, liveTick)}} />{isSessionRunningState(active.state) && <button type="button" className="btn-control sp-activity-stop" disabled={!connected || interrupting} onClick={()=>void requestInterrupt()}>Stop</button>}</div>}
         <details hidden={active?.source === 'imported'} className="remote-automation"><summary>Schedule and automation</summary>
           <p>Saved on your laptop after confirmation. Keep it awake with Gnomcode running. Message text is redacted before storage.</p>
           <label htmlFor="remote-schedule-time">Delivery time (your local time)</label><input id="remote-schedule-time" type="datetime-local" value={scheduleTime} onChange={event=>setScheduleTime(event.target.value)} />

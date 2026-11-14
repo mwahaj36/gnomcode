@@ -1170,6 +1170,12 @@ pub(crate) fn nest_subagents(rows: &mut [Value]) {
         if running > 0 && row["state"] != "awaiting_approval" {
             row["state"] = json!("thinking");
             row["state_label"] = json!(gnomcode_core::subagent::working_label(running));
+            // Inferred from subagent activity: the parent's own log is quiet.
+            row["live"] = json!(gnomcode_core::presence::LiveStatus {
+                state: gnomcode_core::presence::LiveState::Working,
+                basis: gnomcode_core::TrustLevel::Estimated,
+                step: "Running a subagent".to_owned(),
+            });
         }
         nested.truncate(NESTED_SUBAGENT_LIMIT);
         row["subagents"] = json!(nested);
@@ -1394,6 +1400,32 @@ pub(crate) fn conversation_sessions(
             fields.extend(extra);
         }
         row["hosted"] = json!(host.is_some());
+        if let Some(session) = observed {
+            let (kind, tool, turn) = db.live_inputs(&session.id)?;
+            let state = session.state.as_str();
+            let open_execution = matches!(
+                (state, kind.as_deref()),
+                ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
+            );
+            let age = (chrono::Utc::now() - session.last_event_at).num_milliseconds();
+            let presence = gnomcode_core::presence::classify_presence_with_host(
+                state,
+                Some(age),
+                open_execution,
+                host.is_some(),
+            );
+            let live = gnomcode_core::presence::live_status(
+                presence,
+                state,
+                host.is_some(),
+                host.is_some(),
+                tool.as_deref(),
+            );
+            if live.state == gnomcode_core::presence::LiveState::Working {
+                row["turn_started_at"] = json!(turn);
+            }
+            row["live"] = json!(live);
+        }
         row["can_prompt"] = json!(can_prompt);
         row["can_resume"] = json!(can_resume);
         row["can_reset"] = json!(managed && matches!(agent, "codex" | "claude-code"));

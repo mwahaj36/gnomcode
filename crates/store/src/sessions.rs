@@ -46,6 +46,12 @@ pub struct SessionListItem {
     /// Home board group derived from presence; absent in payloads from older daemons.
     #[serde(default)]
     pub home_group: Option<gnomcode_core::presence::HomeGroup>,
+    /// Chat live state (Working, Waiting for you, Idle, Stopped) with trust and current step.
+    #[serde(default)]
+    pub live: Option<gnomcode_core::presence::LiveStatus>,
+    /// When the current turn's user message was recorded, only while Working.
+    #[serde(default)]
+    pub turn_started_at: Option<String>,
     /// Started at timestamp.
     pub started_at: String,
     /// Last event timestamp.
@@ -133,6 +139,9 @@ pub struct SessionFocusTarget {
     pub repo_root: Option<String>,
 }
 
+/// Latest activity kind, latest tool name and latest user message time for a session.
+pub type LiveInputs = (Option<String>, Option<String>, Option<String>);
+
 impl Database {
     /// Reads the last observed activity for incremental parsing.
     ///
@@ -156,6 +165,31 @@ impl Database {
             "ended" => Some(SessionState::Ended),
             _ => None,
         }))
+    }
+
+    /// Latest activity kind and tool name, plus the time of the latest user message, for the
+    /// chat live state.
+    ///
+    /// # Errors
+    /// Returns an error if the activity or chat tables cannot be read.
+    pub fn live_inputs(&self, id: &str) -> Result<LiveInputs, Error> {
+        let (kind, tool) = self
+            .conn
+            .query_row(
+                obfstr::obfstr!("SELECT kind, tool_name FROM activity_event WHERE session_id=?1 ORDER BY julianday(timestamp) DESC, id DESC LIMIT 1"),
+                [id],
+                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()?
+            .unwrap_or((None, None));
+        let turn: Option<String> = self.conn.query_row(
+            obfstr::obfstr!(
+                "SELECT MAX(created_at) FROM chat_event WHERE session_id=?1 AND role='user'"
+            ),
+            [id],
+            |row| row.get(0),
+        )?;
+        Ok((kind, tool, turn))
     }
 
     /// Lists recorded sessions with source state, ordered by latest activity.
@@ -472,7 +506,9 @@ impl Database {
                 COALESCE(SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END), 0),
                 (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1),
-                s.parent_session_id
+                s.parent_session_id,
+                (SELECT tool_name FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1),
+                (SELECT MAX(ce.created_at) FROM chat_event ce WHERE ce.session_id = s.id AND ce.role = 'user')
             FROM page s
             LEFT JOIN usage_record u ON s.id = u.session_id
             GROUP BY s.id
@@ -519,6 +555,8 @@ impl Database {
                 ("thinking", Some("prompt")) | ("tool", Some("tool_start"))
             );
             let host_alive = live_hosted_ids.iter().any(|live_id| live_id == &id);
+            let latest_tool: Option<String> = row.get(20)?;
+            let turn_started_at: Option<String> = row.get(21)?;
             let presence = gnomcode_core::presence::classify_presence_with_host(
                 &state_str,
                 age,
@@ -527,6 +565,13 @@ impl Database {
             );
             let is_ongoing = presence.is_ongoing();
             let is_active = presence.is_active();
+            let live = gnomcode_core::presence::live_status(
+                presence,
+                &state_str,
+                host_alive,
+                host_alive,
+                latest_tool.as_deref(),
+            );
             let state = if presence == gnomcode_core::presence::SessionPresence::Inactive
                 && matches!(state_str.as_str(), "thinking" | "tool")
             {
@@ -567,6 +612,10 @@ impl Database {
                 is_ongoing,
                 presence,
                 home_group: Some(presence.home_group()),
+                turn_started_at: (live.state == gnomcode_core::presence::LiveState::Working)
+                    .then_some(turn_started_at)
+                    .flatten(),
+                live: Some(live),
                 started_at,
                 last_event_at: last_event_at_str,
                 input_tokens: input_tokens.max(0) as u64,
@@ -706,6 +755,14 @@ impl Database {
                 item.is_ongoing = true;
                 item.is_active = live;
                 item.home_group = Some(HomeGroup::Running);
+                if live {
+                    // The parent's log is quiet while a subagent works: inferred, not observed.
+                    item.live = Some(gnomcode_core::presence::LiveStatus {
+                        state: gnomcode_core::presence::LiveState::Working,
+                        basis: gnomcode_core::TrustLevel::Estimated,
+                        step: "Running a subagent".to_owned(),
+                    });
+                }
                 if item.state == "unknown" {
                     "idle".clone_into(&mut item.state);
                 }
@@ -1291,6 +1348,15 @@ mod tests {
             gnomcode_core::presence::SessionPresence::Inactive
         );
         assert_eq!(by_id("non-hosted").state, "unknown");
+        let live = |id: &str| by_id(id).live.clone().expect("live status");
+        let alive = live("hosted-alive");
+        assert_eq!(alive.state, gnomcode_core::presence::LiveState::Working);
+        assert_eq!(alive.basis, gnomcode_core::TrustLevel::Exact);
+        assert_eq!(alive.step, "Running a tool");
+        let silent = live("non-hosted");
+        assert_eq!(silent.state, gnomcode_core::presence::LiveState::Idle);
+        assert_eq!(silent.basis, gnomcode_core::TrustLevel::Estimated);
+        assert!(by_id("non-hosted").turn_started_at.is_none());
 
         for filter in ["active", "ongoing"] {
             let (rows, total) = db

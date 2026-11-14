@@ -39,6 +39,10 @@ pub enum NotificationEventKind {
     LimitLow,
     /// Provider quota reset (`reset_passed` followed by a fresh reading).
     LimitReset,
+    /// A working or waiting session's process exited or the session ended.
+    SessionStopped,
+    /// A session hit an error that needs the user.
+    NeedsAttention,
 }
 
 impl NotificationEventKind {
@@ -50,6 +54,8 @@ impl NotificationEventKind {
             Self::TurnFinished => "turn_finished",
             Self::LimitLow => "limit_low",
             Self::LimitReset => "limit_reset",
+            Self::SessionStopped => "session_stopped",
+            Self::NeedsAttention => "needs_attention",
         }
     }
 
@@ -61,6 +67,8 @@ impl NotificationEventKind {
             Self::TurnFinished => "Turn finished",
             Self::LimitLow => "Limit low",
             Self::LimitReset => "Limit reset",
+            Self::SessionStopped => "Agent stopped",
+            Self::NeedsAttention => "Needs attention",
         }
     }
 }
@@ -102,6 +110,9 @@ impl NotificationSettings {
             NotificationEventKind::TurnFinished => self.turn_finished,
             NotificationEventKind::LimitLow => self.limit_low,
             NotificationEventKind::LimitReset => self.limit_reset,
+            // Stops share the turn-finished preference; errors share the needs-you preference.
+            NotificationEventKind::SessionStopped => self.turn_finished,
+            NotificationEventKind::NeedsAttention => self.approval_waiting,
         }
     }
 
@@ -430,6 +441,53 @@ impl NotificationEngine {
                 continue;
             }
 
+            // One notification per stop: only a session that was working or waiting reports its
+            // exit. A turn that already finished (Idle) and then exits stays silent, so a turn end
+            // and a process exit in the same moment never notify twice.
+            let fresh_event = now.signed_duration_since(session.last_event_at) <= fresh;
+            let prev_state = prev.as_ref().map(|p| p.last_state);
+            let stop_kind = match session.state {
+                SessionState::Ended
+                    if matches!(
+                        prev_state,
+                        Some(
+                            SessionState::Thinking
+                                | SessionState::Tool
+                                | SessionState::AwaitingApproval
+                        )
+                    ) =>
+                {
+                    Some((NotificationEventKind::SessionStopped, "stopped"))
+                }
+                SessionState::Error if prev_state.is_some_and(|p| p != SessionState::Error) => {
+                    Some((NotificationEventKind::NeedsAttention, "error"))
+                }
+                _ => None,
+            };
+            if let Some((kind, label)) = stop_kind
+                && fresh_event
+                && settings.is_enabled(kind)
+            {
+                let dedup_id = format!(
+                    "{label}:{}:{}",
+                    session.id,
+                    session.last_event_at.to_rfc3339()
+                );
+                if let Some(decision) = self.try_accept_decision(
+                    &session.id,
+                    &session.id,
+                    dedup_id,
+                    RedactedNotificationPayload {
+                        event: kind,
+                        agent: agent_id_display(session.agent).to_owned(),
+                        session_title: redact_notification_title(session.title.as_deref()),
+                    },
+                    now,
+                ) {
+                    out.push(decision);
+                }
+            }
+
             let age_ms = now
                 .signed_duration_since(session.last_event_at)
                 .num_milliseconds();
@@ -720,6 +778,162 @@ mod tests {
             basis: TrustLevel::Api,
             observed_at,
         }
+    }
+
+    fn at(state: SessionState, t: DateTime<Utc>) -> Session {
+        make_session(
+            "claude-code:stop",
+            AgentId::ClaudeCode,
+            Some("Secret task"),
+            state,
+            t,
+        )
+    }
+
+    #[test]
+    fn no_notification_while_working_or_on_tool_steps() {
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        let t0 = base_time();
+        for (i, state) in [
+            SessionState::Thinking,
+            SessionState::Tool,
+            SessionState::Thinking,
+            SessionState::Tool,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let t = t0 + Duration::minutes(i as i64 * 3);
+            assert!(
+                engine
+                    .evaluate(&[at(state, t)], &[], &settings, t)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn process_exit_while_working_notifies_once() {
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        let t0 = base_time();
+        assert!(
+            engine
+                .evaluate(&[at(SessionState::Tool, t0)], &[], &settings, t0)
+                .is_none()
+        );
+        let t1 = t0 + Duration::seconds(30);
+        let batch = engine
+            .evaluate(&[at(SessionState::Ended, t1)], &[], &settings, t1)
+            .expect("exit while working notifies");
+        assert_eq!(batch.decisions.len(), 1);
+        assert_eq!(batch.push_event, NotificationEventKind::SessionStopped);
+        assert!(!batch.desktop_message.is_empty());
+        let t2 = t1 + Duration::seconds(10);
+        assert!(
+            engine
+                .evaluate(&[at(SessionState::Ended, t1)], &[], &settings, t2)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn turn_end_then_exit_together_notifies_once() {
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        let t0 = base_time();
+        engine.evaluate(&[at(SessionState::Thinking, t0)], &[], &settings, t0);
+        let done = t0 + Duration::minutes(5);
+        let first = engine
+            .evaluate(
+                &[at(SessionState::Idle, done)],
+                &[],
+                &settings,
+                done + Duration::seconds(10),
+            )
+            .expect("turn finished");
+        assert_eq!(first.push_event, NotificationEventKind::TurnFinished);
+        let exit = done + Duration::seconds(11);
+        assert!(
+            engine
+                .evaluate(&[at(SessionState::Ended, exit)], &[], &settings, exit)
+                .is_none(),
+            "exit right after a reported turn end must not notify again"
+        );
+    }
+
+    #[test]
+    fn exit_during_turn_settle_reports_only_the_stop() {
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        let t0 = base_time();
+        engine.evaluate(&[at(SessionState::Thinking, t0)], &[], &settings, t0);
+        let done = t0 + Duration::minutes(5);
+        assert!(
+            engine
+                .evaluate(&[at(SessionState::Idle, done)], &[], &settings, done)
+                .is_none()
+        );
+        let exit = done + Duration::seconds(2);
+        let batch = engine
+            .evaluate(&[at(SessionState::Ended, exit)], &[], &settings, exit)
+            .expect("one stop");
+        assert_eq!(batch.decisions.len(), 1);
+        assert_eq!(batch.push_event, NotificationEventKind::SessionStopped);
+        let later = exit + Duration::seconds(30);
+        assert!(
+            engine
+                .evaluate(&[at(SessionState::Ended, exit)], &[], &settings, later)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn error_needs_attention_and_respects_preference() {
+        let t0 = base_time();
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        engine.evaluate(&[at(SessionState::Tool, t0)], &[], &settings, t0);
+        let t1 = t0 + Duration::seconds(5);
+        let batch = engine
+            .evaluate(&[at(SessionState::Error, t1)], &[], &settings, t1)
+            .expect("error notifies");
+        assert_eq!(batch.push_event, NotificationEventKind::NeedsAttention);
+
+        let mut quiet = NotificationEngine::new();
+        let off = NotificationSettings {
+            approval_waiting: false,
+            ..NotificationSettings::default()
+        };
+        quiet.evaluate(&[at(SessionState::Tool, t0)], &[], &off, t0);
+        assert!(
+            quiet
+                .evaluate(&[at(SessionState::Error, t1)], &[], &off, t1)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn idle_session_that_exits_stays_silent_and_stale_exit_is_ignored() {
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        let t0 = base_time();
+        engine.evaluate(&[at(SessionState::Idle, t0)], &[], &settings, t0);
+        let t1 = t0 + Duration::minutes(1);
+        assert!(
+            engine
+                .evaluate(&[at(SessionState::Ended, t1)], &[], &settings, t1)
+                .is_none()
+        );
+
+        let mut late = NotificationEngine::new();
+        late.evaluate(&[at(SessionState::Tool, t0)], &[], &settings, t0);
+        let t2 = t0 + Duration::hours(1);
+        assert!(
+            late.evaluate(&[at(SessionState::Ended, t0)], &[], &settings, t2)
+                .is_none()
+        );
     }
 
     #[test]
