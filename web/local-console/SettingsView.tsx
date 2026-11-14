@@ -2,12 +2,13 @@
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ProviderSetupPanel } from './ProviderSetup';
+import { fetchAccount, sectionMatches, SETTINGS_SECTIONS, signOutDesktop } from './settings-index';
 import {
   updateProviderSources,
   type ProviderOverview,
 } from '../lib/console-presentation.js';
 import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl } from './local-api';
-import { navigateTo, startOnboarding } from './shell-bus';
+import { navigateTo, revealSection, startOnboarding, takeSettingsQuery } from './shell-bus';
 
 interface RemoteDeviceRow {
   id: string;
@@ -96,6 +97,22 @@ function formatAgeLabel(isoStr?: string): string {
 
 export function SettingsView() {
   const providerListRef = useRef<HTMLDivElement | null>(null);
+  const [query, setQuery] = useState(() => takeSettingsQuery());
+  const [accountState, setAccountState] = useState<{ paired: boolean; email?: string | null } | null>(null);
+  useEffect(() => {
+    void fetchAccount().then(setAccountState, () => setAccountState(null));
+    const onState = (event: Event) => {
+      if (!(event as CustomEvent<{ paired: boolean }>).detail.paired) setAccountState({ paired: false });
+      else void fetchAccount().then(setAccountState, () => undefined);
+    };
+    const onQuery = () => setQuery(takeSettingsQuery());
+    window.addEventListener('gnomcode:account-state', onState);
+    window.addEventListener('gnomcode:settings-query', onQuery);
+    return () => {
+      window.removeEventListener('gnomcode:account-state', onState);
+      window.removeEventListener('gnomcode:settings-query', onQuery);
+    };
+  }, []);
   const baseUrl = getConsoleBaseUrl();
 
   const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>(() => {
@@ -560,9 +577,71 @@ export function SettingsView() {
     }
   };
 
+  const visible = SETTINGS_SECTIONS.filter((section) => sectionMatches(section, query));
+  const shown = (id: string) => visible.some((section) => section.id === id);
+
   return (
+    <div className="sp-settings-layout">
+      <nav className="sp-settings-nav" aria-label="Settings sections">
+        <input
+          id="settings-search"
+          type="search"
+          className="sp-settings-search"
+          placeholder="Search settings"
+          aria-label="Search settings"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <ul>
+          {visible.map((section) => (
+            <li key={section.id}>
+              <a
+                href={`#${section.id}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  revealSection(section.id);
+                }}
+              >
+                {section.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+        {visible.length === 0 ? <p role="status">No settings match.</p> : null}
+      </nav>
     <div className="sp-settings-root">
-      <section className="sp-settings-section">
+      <section id="settings-account" className="sp-settings-section" hidden={!shown('settings-account')}>
+        <h2>Account</h2>
+        <div className="sp-setting-row">
+          <div>
+            <p className="sp-setting-label">{accountState?.paired ? accountState.email || 'Signed in' : 'Not signed in'}</p>
+            <p className="sp-setting-desc">{cloudSyncStatus}</p>
+          </div>
+          <button className="btn-control" type="button" onClick={() => navigateTo('auth')}>
+            Manage account
+          </button>
+        </div>
+        {accountState?.paired ? (
+          <div className="sp-setting-row sp-danger-zone">
+            <div>
+              <p className="sp-setting-label">Sign out</p>
+              <p className="sp-setting-desc">Disconnects this desktop and stops Remote. Local history stays.</p>
+            </div>
+            <button
+              id="settings-sign-out"
+              className="btn-control sp-btn-danger"
+              type="button"
+              onClick={async () => {
+                if (await signOutDesktop()) setAccountState({ paired: false });
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      <section id="settings-providers" className="sp-settings-section" hidden={!shown('settings-providers')}>
         <h2>Providers</h2>
         <ProviderSetupPanel />
         <h3>Limit sources</h3>
@@ -571,7 +650,7 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="profile-appearance sp-settings-section">
+      <section id="settings-appearance" className="profile-appearance sp-settings-section" hidden={!shown('settings-appearance')}>
         <h2>Appearance</h2>
         <button
           className="theme-control"
@@ -583,8 +662,8 @@ export function SettingsView() {
         </button>
       </section>
 
-      <section className="profile-devices sp-settings-section" aria-label="Devices and Remote">
-        <h2>Devices and Remote</h2>
+      <section id="settings-remote" className="profile-devices sp-settings-section" aria-label="Remote and devices" hidden={!shown('settings-remote')}>
+        <h2>Remote and devices</h2>
         <p role="status">{remoteStatus}</p>
         {desktopId ? (
           <p>
@@ -660,7 +739,7 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="sp-settings-section">
+      <section id="settings-automations" className="sp-settings-section" hidden={!shown('settings-automations')}>
         <h2>Automations</h2>
         {automationStatus ? <p role="status">{automationStatus}</p> : null}
 
@@ -1001,7 +1080,7 @@ export function SettingsView() {
         </details>
       </section>
 
-      <section className="sp-settings-section" aria-label="Notifications">
+      <section id="settings-notifications" className="sp-settings-section" aria-label="Notifications" hidden={!shown('settings-notifications')}>
         <h2>Notifications</h2>
         <p className="sp-field-note">
           Choose which local desktop and paired phone alerts are enabled. Alerts include only agent
@@ -1301,8 +1380,8 @@ export function SettingsView() {
         </div>
       </details>
 
-      <section className="profile-data sp-settings-section">
-        <h2>Data</h2>
+      <section id="settings-privacy" className="profile-data sp-settings-section" hidden={!shown('settings-privacy')}>
+        <h2>Privacy and data</h2>
         <p aria-live="polite">{lastUpdatedText}</p>
         <div className="console-hero-actions">
           <button
@@ -1324,24 +1403,8 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="sp-settings-section">
-        <div className="sp-account-row">
-          <div>
-            <h2>Account</h2>
-            <p role="status">{cloudSyncStatus}</p>
-          </div>
-          <button
-            className="btn-control"
-            type="button"
-            onClick={() => navigateTo('auth')}
-          >
-            Manage account
-          </button>
-        </div>
-      </section>
-
-      <section className="sp-settings-section">
-        <h2>Desktop updates</h2>
+      <section id="settings-updates" className="sp-settings-section" hidden={!shown('settings-updates')}>
+        <h2>Updates</h2>
         <p role="status">{updateStatusText}</p>
         <label className="sp-notify-toggle">
           <input
@@ -1367,8 +1430,8 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="sp-settings-section">
-        <h2>Guide</h2>
+      <section id="settings-about" className="sp-settings-section" hidden={!shown('settings-about')}>
+        <h2>About</h2>
         <p role="status">{appBuildText}</p>
         <div className="sp-settings-resources">
           <button
@@ -1389,6 +1452,7 @@ export function SettingsView() {
           </a>
         </div>
       </section>
+    </div>
     </div>
   );
 }
