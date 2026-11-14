@@ -803,6 +803,8 @@ export function SettingsView() {
         <h2>Automations</h2>
         {automationStatus ? <p role="status">{automationStatus}</p> : null}
 
+        <RoutingPolicySetting />
+
         <div className="table-container">
           <div className="table-header-controls">
             <h3>Reconnect after a limit</h3>
@@ -1423,6 +1425,48 @@ export function SettingsView() {
         </div>
       </section>
     </div>
+    </div>
+  );
+}
+
+/** Global limit-reached routing policy (`/api/v1/routing/policy`); the daemon decides and switches. */
+function RoutingPolicySetting() {
+  const [policy, setPolicy] = useState('');
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    fetchLocalJson<{ policy?: string }>('/api/v1/routing/policy')
+      .then((value) => setPolicy(value.policy || 'ask_first'))
+      .catch(() => setStatus('Routing policy is unavailable while the daemon is unreachable.'));
+  }, []);
+  const save = async (next: string) => {
+    const previous = policy;
+    setPolicy(next);
+    try {
+      await fetchLocalMutation('/api/v1/routing/policy', { method: 'POST', body: { policy: next } });
+      setStatus('Saved on this laptop.');
+    } catch (error) {
+      setPolicy(previous);
+      setStatus(error instanceof Error ? error.message : 'Could not save routing policy.');
+    }
+  };
+  return (
+    <div className="table-container" id="settings-auto-switch">
+      <div className="table-header-controls">
+        <h3>Switch when a limit is reached</h3>
+      </div>
+      <p>
+        When an agent hits its usage limit, Gnomcode can move the conversation to another model with
+        fresh known quota. Send your next message to continue; tasks are not replayed.
+      </p>
+      <label>
+        When an agent reaches a limit
+        <select value={policy} disabled={!policy} onChange={(event) => void save(event.target.value)}>
+          <option value="ask_first">Let me choose</option>
+          <option value="automatic">Automatically switch model or provider</option>
+          <option value="deny_cross_provider">Automatically switch within provider</option>
+        </select>
+      </label>
+      {status ? <p role="status">{status}</p> : null}
     </div>
   );
 }
