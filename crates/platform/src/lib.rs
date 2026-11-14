@@ -727,14 +727,24 @@ mod focus_target_tests {
     }
 }
 
+/// Maps an agent identifier to the `gnomcode launch` argument, or `None` when it cannot be launched
+/// in a terminal. Claude Code, Codex and Antigravity (`agy`) are all relay-launchable targets.
+#[must_use]
+pub fn relay_launch_agent(agent: &str) -> Option<&'static str> {
+    match agent {
+        "claude" | "claude-code" => Some("claude"),
+        "codex" => Some("codex"),
+        "antigravity" | "agy" => Some("agy"),
+        _ => None,
+    }
+}
+
 /// Starts a CLI agent through the independent PTY owner without shell interpolation (`SPEC §3.14.1`).
-/// IDE agents need a user-operated editor session and return false.
+/// Returns false for identifiers [`relay_launch_agent`] does not recognise.
 #[must_use]
 pub fn spawn_agent_in_terminal(agent: &str, cwd: &str) -> bool {
-    let clean_agent = match agent {
-        "claude" | "claude-code" => "claude",
-        "codex" => "codex",
-        _ => return false,
+    let Some(clean_agent) = relay_launch_agent(agent) else {
+        return false;
     };
     let Ok(exe) = std::env::current_exe() else {
         return false;
@@ -821,6 +831,16 @@ pub fn send_desktop_notification(title: &str, body: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn relay_launches_all_three_supported_agents_and_rejects_others() {
+        assert_eq!(super::relay_launch_agent("claude"), Some("claude"));
+        assert_eq!(super::relay_launch_agent("claude-code"), Some("claude"));
+        assert_eq!(super::relay_launch_agent("codex"), Some("codex"));
+        assert_eq!(super::relay_launch_agent("antigravity"), Some("agy"));
+        assert_eq!(super::relay_launch_agent("agy"), Some("agy"));
+        assert_eq!(super::relay_launch_agent("gemini"), None);
+    }
+
     #[test]
     fn antigravity_cli_and_ide_roots_respect_gemini_home() {
         const CHILD: &str = "GNOMCODE_TEST_AGY_ROOTS";
