@@ -39,7 +39,7 @@ impl DeviceTrust {
 }
 
 pub(crate) fn path() -> std::path::PathBuf {
-    gnomcode_platform::gnomcode_home().join(obfstr::obfstr!("remote-device.json"))
+    gnomcode_platform::gnomcode_home().join("remote-device.json")
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {

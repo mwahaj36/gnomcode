@@ -7,7 +7,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parent.parent
 with tempfile.TemporaryDirectory(prefix='gnomcode-package-check-') as tmp:
     tree=Path(tmp)
-    for name in ['scripts/package-artifacts.py','Cargo.toml','LICENSE','docs/legal/EULA.txt','web/public/icons/gnomcode.icns','web/public/icons/gnomcode-256.png','web/public/fonts/Inter-LICENSE.txt']:
+    for name in ['scripts/package-artifacts.py','Cargo.toml','LICENSE','LICENSE','web/public/icons/gnomcode.icns','web/public/icons/gnomcode-256.png','web/public/fonts/Inter-LICENSE.txt']:
         target=tree/name; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes((root/name).read_bytes())
     out=tree/'web/public/downloads'; out.mkdir(parents=True)
     (out/'THIRD_PARTY_NOTICES.html').write_text('test notice '*150)
@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='gnomcode-package-check-') as tmp:
         assert 'gnomcode.app/Contents/Resources/gnomcode.icns' in names
         assert bundle.getmember('gnomcode.app/Contents/MacOS/gnomcode').mode & 0o111
         assert 'fonts/Inter-LICENSE.txt' in names
-        assert bundle.extractfile('LICENSE').read() == (root/'docs/legal/EULA.txt').read_bytes()
+        assert bundle.extractfile('LICENSE').read() == (root/'LICENSE').read_bytes()
     header[:4]=b'\x7fELF'; header[18:20]=(62).to_bytes(2,'little'); binary.write_bytes(header)
     assert run('--linux-x86-64').returncode==0
     manifest=(out/'SHA256SUMS').read_text()

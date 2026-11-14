@@ -49,7 +49,7 @@ PRs [#126](https://github.com/mwahaj36/spawnt/pull/126) and [#127](https://githu
 | Cross-platform release | Automated three-OS CI passed, but packaged-app and real-agent acceptance across platforms and architectures remain open | Test approved builds on Windows, macOS Intel/Apple Silicon and Linux as advertised: PTY crash survival/reattach, env/path overrides, focus fallbacks, tray, autostart, shell and packaged startup. Document Wayland/WSL limits. | CI artifacts plus actual OS/architecture and packaged-build acceptance matrix; narrow launch scope if needed |
 | Distribution | 0.9.0 artifacts are development/draft builds | Follow `cut-release`, approve legal inputs, build selected targets, verify hashes/notices and clean install/uninstall. Smoke-test npm optional dependencies/offline CLI. Publish approved assets and update manifest only after approval. | Verified hashes, install logs, published URLs, rollback test |
 | Signing and OS trust | Windows setup unsigned; macOS signing/notarization unverified | Obtain approved signing credentials securely. Sign/test Windows and macOS as advertised, or explicitly accept and document unsigned distribution. | Signature checks, clean-machine behavior and owner decision |
-| Legal and payments | Jurisdiction, commercial terms, prices/refunds and payout eligibility unresolved | Confirm legal identity/contact and jurisdiction with owner/legal reviewer; timezone is not legal jurisdiction. Reconcile EULA, privacy, terms and refund policy. Configure payments/tax/payouts and appropriate hosting plan before selling. | Approved texts, jurisdiction, prices and checkout/refund tests |
+| Legal | Apache-2.0 adopted (ADR 0062); no payments in 1.0. Trademark policy, DCO and security contact need owner confirmation | Confirm legal identity/contact and jurisdiction with owner/legal reviewer; timezone is not legal jurisdiction. Reconcile LICENSE, privacy and terms. | Approved texts, jurisdiction, prices and checkout/refund tests |
 
 ## Product closure
 
@@ -72,7 +72,7 @@ The [product audit](APP_AUDIT_2026-11-01.md) identifies managed worktrees, integ
 - Verify production canonical URLs, robots, sitemap, all guide/legal links and social preview after deployment. Disabled platform downloads must not become dead installer links.
 - Validate JSON-LD with the Schema.org validator and inspect indexing after deployment. Never fabricate ratings, customers or production certification.
 - Produce approved 1200 × 630 social artwork from its specification if the final asset is absent; verify the crop and readability.
-- Approve privacy/terms before purchases. Governing jurisdiction requires owner/legal input; preserve the EULA's mandatory-law protections.
+- Approve privacy/terms before launch.
 - Recheck vendor installation, pricing and quota sources at publication. Limits vary by plan and model.
 - Separate account metadata consent from encrypted Remote consent; publish a working support contact.
 - Confirm commercial hosting eligibility, relay capacity, abuse controls and recovery procedures without product analytics.

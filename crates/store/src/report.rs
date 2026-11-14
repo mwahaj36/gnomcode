@@ -357,7 +357,7 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if query execution fails.
     pub fn generate_usage_report(&self) -> Result<Vec<ReportRow>, Error> {
-        let mut stmt = self.conn.prepare(obfstr::obfstr!(
+        let mut stmt = self.conn.prepare(
             r#"
             SELECT
                 p.name AS project_name,
@@ -375,8 +375,8 @@ impl Database {
             WHERE s.surface <> 'cloud'
             GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
-            "#
-        ))?;
+            "#,
+        )?;
 
         let rows = stmt.query_map([], |row| {
             let agent_str: String = row.get(1)?;
@@ -433,7 +433,7 @@ impl Database {
         from: Option<&str>,
         to: Option<&str>,
     ) -> Result<Vec<DailyUsage>, Error> {
-        let mut statement = self.conn.prepare(obfstr::obfstr!(r#"
+        let mut statement = self.conn.prepare(r#"
             SELECT CASE WHEN ?3 = 'today' THEN strftime('%Y-%m-%dT%H:00:00Z', u.timestamp) ELSE date(u.timestamp) END,
                 SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
@@ -442,7 +442,7 @@ impl Database {
             FROM usage_record u JOIN session s ON s.id = u.session_id
             WHERE s.surface <> 'cloud' AND (?1 IS NULL OR julianday(u.timestamp) >= julianday(?1)) AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
             GROUP BY 1 ORDER BY 1
-        "#))?;
+        "#)?;
         let rows = statement
             .query_map(params![from, to, range_kind], |row| {
                 let tokens: i64 = row.get(1)?;
@@ -490,9 +490,7 @@ impl Database {
         let first_recorded: Option<chrono::NaiveDate> = self
             .conn
             .query_row(
-                obfstr::obfstr!(
-                    "SELECT MIN(date(u.timestamp)) FROM usage_record u JOIN session s ON s.id = u.session_id WHERE s.surface <> 'cloud'"
-                ),
+                "SELECT MIN(date(u.timestamp)) FROM usage_record u JOIN session s ON s.id = u.session_id WHERE s.surface <> 'cloud'",
                 [],
                 |row| row.get::<_, Option<String>>(0),
             )?
@@ -608,8 +606,7 @@ impl Database {
             }
         };
 
-        let mut stmt = self.conn.prepare(obfstr::obfstr!(
-            r#"
+        let mut stmt = self.conn.prepare(r#"
             SELECT
                 p.name AS project_name,
                 s.agent AS agent_str,
@@ -630,8 +627,7 @@ impl Database {
               AND (?2 IS NULL OR julianday(u.timestamp) <= julianday(?2))
             GROUP BY p.id, s.agent, u.model
             ORDER BY total_cost DESC
-            "#
-        ))?;
+            "#)?;
 
         let mut total_spend = 0.0;
         let mut total_savings = 0.0;

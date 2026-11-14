@@ -1,7 +1,7 @@
 {
   "name": "@gnomcode/cli-win32-arm64",
   "version": "1.0.0",
-  "license": "SEE LICENSE IN EULA.txt",
+  "license": "Apache-2.0",
   "os": [
     "win32"
   ],
@@ -10,7 +10,7 @@
   ],
   "files": [
     "bin",
-    "EULA.txt",
+    "LICENSE",
     "THIRD_PARTY_NOTICES.html"
   ]
 }

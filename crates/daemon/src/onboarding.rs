@@ -210,7 +210,7 @@ fn signed_in_step(inputs: &Inputs<'_>, account: Option<&str>) -> Step {
     };
     match inputs.provider {
         "claude" => {
-            let creds = inputs.claude_dir.join(obfstr::obfstr!(".credentials.json"));
+            let creds = inputs.claude_dir.join(".credentials.json");
             if creds.is_file() || account.is_some() {
                 Step {
                     state: StepState::Done,
@@ -225,11 +225,7 @@ fn signed_in_step(inputs: &Inputs<'_>, account: Option<&str>) -> Step {
             }
         }
         "codex" => {
-            if inputs
-                .codex_dir
-                .join(obfstr::obfstr!("auth.json"))
-                .is_file()
-            {
+            if inputs.codex_dir.join("auth.json").is_file() {
                 Step {
                     state: StepState::Done,
                     note: "Sign-in recorded".into(),

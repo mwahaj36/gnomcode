@@ -16,7 +16,7 @@ test('stages only a matching platform binary and required legal notices', () => 
     assert.throws(() => stagePlatform({root, target:'../unsafe', binary:path.join(root,'binary'), eula:path.join(root,'eula'), notices:path.join(root,'notices')}));
     stagePlatform({root, target:'win32-x64', binary:path.join(root,'binary'), eula:path.join(root,'eula'), notices:path.join(root,'notices')});
     assert.equal(fs.readFileSync(path.join(pkg,'bin','gnomcode.exe'),'utf8'),'binary');
-    assert.equal(fs.readFileSync(path.join(pkg,'EULA.txt'),'utf8'),'eula');
+    assert.equal(fs.readFileSync(path.join(pkg,'LICENSE'),'utf8'),'eula');
     assert.equal(fs.readFileSync(path.join(pkg,'THIRD_PARTY_NOTICES.html'),'utf8'),'notices');
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
 });

@@ -215,7 +215,7 @@ fn check_agent_clis(clis: &[AgentCliStatus]) -> DoctorCheck {
 }
 
 fn check_claude_signin(claude_dir: &Path, now: DateTime<Utc>) -> DoctorCheck {
-    let creds_path = claude_dir.join(obfstr::obfstr!(".credentials.json"));
+    let creds_path = claude_dir.join(".credentials.json");
     let Ok(chunk) = gnomcode_platform::read_from_offset(&creds_path, 0) else {
         return DoctorCheck {
             id: "claude_signin".into(),
@@ -237,7 +237,7 @@ fn check_claude_signin(claude_dir: &Path, now: DateTime<Utc>) -> DoctorCheck {
         };
     };
     let expires_ms = parsed
-        .get(obfstr::obfstr!("claudeAiOauth"))
+        .get("claudeAiOauth")
         .and_then(|oauth| oauth.get("expiresAt"))
         .and_then(serde_json::Value::as_i64);
     let Some(expires_ms) = expires_ms else {

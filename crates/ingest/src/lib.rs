@@ -558,14 +558,14 @@ fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error
             AgentId::Codex => root
                 .path
                 .parent()
-                .map(|parent| vec![parent.join(obfstr::obfstr!("session_index.jsonl"))])
+                .map(|parent| vec![parent.join("session_index.jsonl")])
                 .unwrap_or_default(),
             AgentId::ClaudeCode => fs::read_dir(&root.path)
                 .into_iter()
                 .flatten()
                 .flatten()
                 .filter(|entry| entry.path().is_dir())
-                .map(|entry| entry.path().join(obfstr::obfstr!("sessions-index.json")))
+                .map(|entry| entry.path().join("sessions-index.json"))
                 .collect(),
             _ => Vec::new(),
         };

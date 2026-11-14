@@ -13,7 +13,7 @@ Pre-release stubs for Homebrew, Scoop, winget, and AUR. Replace `PLACEHOLDER` va
 1. The `mwahaj36/gnomcode-releases` repository is made public.
 2. A signed v1.0 release exists with verified SHA-256 checksums.
 3. Code-signing (Windows) and notarization (macOS) are complete.
-4. Legal review of the EULA is done and the draft marking is removed.
+4. Release inputs use the Apache-2.0 LICENSE.
 
 ## Verified name availability (2026-10-28)
 

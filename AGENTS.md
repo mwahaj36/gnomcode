@@ -4,7 +4,7 @@ Rules for any AI agent (or human) working in this repo. Read this first, every s
 
 ## 1. What this project is
 
-Gnomcode is a local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. 1.0 supports exactly Claude Code, Codex and Antigravity (ADR 0058); control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
+Gnomcode is a free, open source (Apache-2.0) local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. 1.0 supports exactly Claude Code, Codex and Antigravity (ADR 0058); control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
 
 **Single source of truth: [`docs/SPEC.md`](docs/SPEC.md).** Before working on a feature, read the relevant SPEC section. If your change alters scope, architecture, the roadmap or deliverables, update SPEC.md **in the same change**. Never let code and SPEC drift apart.
 
@@ -19,7 +19,7 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 5. **Loopback only.** Servers bind to `127.0.0.1` and require the bearer token plus Host/Origin validation.
 6. **Every number declares its trust level** (`exact | estimated | api | unknown`). Never present an estimate as exact.
 7. **Never escalate agent permissions.** Auto-resume and guardrails must never pass `--dangerously-skip-permissions`, `--yolo` or similar flags.
-8. **Protect the closed-source binary (SPEC §6.8).** Keep 100% of business logic (parsing, pricing, quota math, rules, routing) in Rust, never in TypeScript. Wrap sensitive string literals (SQL, adapter path patterns, license checks) with `obfstr!`. Never enable sourcemaps or Electron DevTools in release builds, and never use `.exe` packers (UPX/VMProtect).
+8. **Keep business logic in Rust (SPEC 6.8, ADR 0062).** Parsing, pricing, quota math, rules and routing live in Rust, never in TypeScript. Gnomcode is open source under Apache-2.0: no string obfuscation, license checks or packers. Release builds still disable sourcemaps and Electron DevTools.
 9. **No emojis anywhere.** Never use emojis in CLI output, UI components, tray labels, notifications, documentation, commit messages, or comments. Use clean typography, geometric SVG icons, or plain-text badges (`[WAIT]`, `[RUN]`, `EXACT`, `EST`).
 
 ## 3. Repo map

@@ -5,8 +5,8 @@ const targets = ['win32-x64','win32-arm64','darwin-x64','darwin-arm64','linux-x6
 function inspectRelease(root, cargoPath) {
   const errors = [];
   let approvedEula;
-  try { approvedEula = fs.readFileSync(path.join(path.dirname(cargoPath), 'docs/legal/EULA.txt')); }
-  catch { errors.push('Approved EULA source is missing'); }
+  try { approvedEula = fs.readFileSync(path.join(path.dirname(cargoPath), 'LICENSE')); }
+  catch { errors.push('Approved license source is missing'); }
   const shim = JSON.parse(fs.readFileSync(path.join(root, 'gnomcode/package.json'), 'utf8'));
   const cargo = fs.readFileSync(cargoPath, 'utf8');
   const workspaceVersion = cargo.match(/\[workspace\.package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/);
@@ -25,12 +25,12 @@ function inspectRelease(root, cargoPath) {
       const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
       if (manifest.name !== name || manifest.version !== dependencies[name] || manifest.version !== shim.version) errors.push(`${name}: version or name mismatch`);
     } catch { errors.push(`${name}: manifest missing or invalid`); }
-    for (const file of ['EULA.txt', 'THIRD_PARTY_NOTICES.html', path.join('bin', target.startsWith('win32-') ? 'gnomcode.exe' : 'gnomcode')]) checkFile(dir, file, name);
+    for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.html', path.join('bin', target.startsWith('win32-') ? 'gnomcode.exe' : 'gnomcode')]) checkFile(dir, file, name);
   }
-  for (const file of ['EULA.txt', 'THIRD_PARTY_NOTICES.html']) checkFile(path.join(root, 'gnomcode'), file, 'gnomcode');
+  for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.html']) checkFile(path.join(root, 'gnomcode'), file, 'gnomcode');
   for (const dir of [path.join(root, 'gnomcode'), ...targets.map(target => path.join(root, 'platform', target))]) {
-    try { if (approvedEula && !fs.readFileSync(path.join(dir, 'EULA.txt')).equals(approvedEula)) errors.push(`${dir}: does not match approved EULA`); } catch {}
-    try { if (/\bdraft\b/i.test(fs.readFileSync(path.join(dir, 'EULA.txt'), 'utf8'))) errors.push(`${dir}: EULA is marked as a draft`); } catch {}
+    try { if (approvedEula && !fs.readFileSync(path.join(dir, 'LICENSE')).equals(approvedEula)) errors.push(`${dir}: does not match approved license`); } catch {}
+    try { if (/\bdraft\b/i.test(fs.readFileSync(path.join(dir, 'LICENSE'), 'utf8'))) errors.push(`${dir}: license is marked as a draft`); } catch {}
   }
   return errors;
 }

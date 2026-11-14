@@ -255,10 +255,9 @@ fn claude_access_token() -> Result<String, String> {
 }
 
 fn claude_oauth_in(dir: &Path) -> Result<serde_json::Value, String> {
-    let file =
-        gnomcode_platform::read_from_offset(&dir.join(obfstr::obfstr!(".credentials.json")), 0)
-            .map_err(|_| "Claude sign-in not found; sign in to Claude Code".to_owned())?
-            .bytes;
+    let file = gnomcode_platform::read_from_offset(&dir.join(".credentials.json"), 0)
+        .map_err(|_| "Claude sign-in not found; sign in to Claude Code".to_owned())?
+        .bytes;
     serde_json::from_slice::<serde_json::Value>(&file)
         .ok()
         .and_then(|value| value.get("claudeAiOauth").cloned())
@@ -288,9 +287,9 @@ fn claude_access_token_in(dir: &Path, now_ms: i64) -> Result<String, String> {
 async fn fetch_claude(client: &reqwest::Client) -> Result<Vec<QuotaSnapshot>, String> {
     let token = claude_access_token()?;
     let response = client
-        .get(obfstr::obfstr!("https://api.anthropic.com/api/oauth/usage").to_owned())
+        .get("https://api.anthropic.com/api/oauth/usage".to_owned())
         .bearer_auth(token)
-        .header("anthropic-beta", obfstr::obfstr!("oauth-2025-04-20"))
+        .header("anthropic-beta", "oauth-2025-04-20")
         .header("Accept", "application/json")
         .header(
             "User-Agent",
@@ -353,10 +352,10 @@ async fn fetch_antigravity() -> Result<Vec<QuotaSnapshot>, String> {
             let request = client
                 .post(format!(
                     "http://127.0.0.1:{port}{}{method}",
-                    obfstr::obfstr!("/exa.language_server_pb.LanguageServerService/")
+                    "/exa.language_server_pb.LanguageServerService/"
                 ))
                 .header("Connect-Protocol-Version", "1")
-                .header(obfstr::obfstr!("X-Codeium-Csrf-Token"), csrf)
+                .header("X-Codeium-Csrf-Token", csrf)
                 .json(&serde_json::json!({
                     "metadata": {"ideName": "antigravity", "extensionName": "antigravity", "locale": "en"}
                 }));

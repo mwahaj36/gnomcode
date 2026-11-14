@@ -92,11 +92,11 @@ export const faqGroups = [
     "questions": [
       {
         "question": "What is free and what is paid?",
-        "answer": "All local features are free without a local license. Remote is a paid category; commercial prices and terms are not finalized. There is no Teams product."
+        "answer": "Everything in 1.0 is free and open source under Apache-2.0, including Remote. There is no paid tier and no Teams product."
       },
       {
         "question": "Does Gnomcode charge per token?",
-        "answer": "Gnomcode reports estimated API-equivalent usage rather than reselling inference. Your agent provider determines its own subscription or usage charges; final paid Gnomcode service terms require launch approval."
+        "answer": "Gnomcode reports estimated API-equivalent usage rather than reselling inference. Your agent provider determines its own subscription or usage charges."
       },
       {
         "question": "Does Gnomcode read my agent API keys?",

@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-14 Apache-2.0 open source licensing](2026-11-14-apache-2-licensing.md)
 - [2026-11-14 WSL follow-ups](2026-11-14-wsl-follow-ups.md)
 - [2026-11-14 WSL console UI](2026-11-14-wsl-ui.md)
 - [2026-11-14 WSL launch and resume](2026-11-14-wsl-launch.md)
