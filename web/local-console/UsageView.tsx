@@ -85,7 +85,13 @@ export function UsageView() {
       const key = JSON.stringify(res) + Math.floor(Date.now() / 60000);
       if (key === lastQuotaKeyRef.current) return;
       if (quotaRef.current) {
-        updateProviderCards(quotaRef.current, res, { cost: true });
+        updateProviderCards(quotaRef.current, res, {
+          cost: true,
+          onResetBoundary: () => {
+            lastQuotaKeyRef.current = '';
+            void loadQuota();
+          },
+        });
       }
       lastQuotaKeyRef.current = key;
     } catch {

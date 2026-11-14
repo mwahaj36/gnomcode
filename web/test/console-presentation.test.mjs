@@ -22,7 +22,7 @@ test("shared console escaping, unknown data, trust, reset and freshness states",
   assert.doesNotMatch(activity, /\$0\.00/);
   const quota = renderQuota([{ provider: '<script>', limit_id: 'sample', window: 'weekly', used_pct: 75, remaining_pct: 25, resets_at: '2020-01-01', reset_passed: true, basis: 'exact' }], null);
   assert.match(quota, /sp-provider-card/);
-  assert.match(quota, /Awaiting next reading/);
+  assert.match(quota, /Reset, not confirmed/);
   assert.doesNotMatch(quota, /<script>/);
   const fullQuota = renderQuota([{ provider: 'codex', limit_id: 'sample', window: 'weekly', used_pct: 75, remaining_pct: 25, resets_at: '2099-01-01', basis: 'exact', state: 'ok' }], new Date().toISOString());
   assert.match(fullQuota, /Last received/);
@@ -101,7 +101,7 @@ test("project rows, shared styles and ongoing sessions keep their contracts", as
   assert.match(windows,/50% left/);assert.match(windows,/92% left/);
   const stale=renderQuota([{provider:'claude-code',limit_id:'claude',window:'weekly',used_pct:2,remaining_pct:98,resets_at:'2099-01-01T00:00:00Z',basis:'exact',observed_at:new Date(Date.now()-9*3600000).toISOString(),source_issue:'Claude sign-in expired; run `claude` in a terminal to refresh it'}],new Date().toISOString());
   assert.match(stale,/Claude sign-in expired/,'a stale live source is named instead of showing a current-looking reset time');
-  assert.match(stale,/seen 9h ago/);
+  assert.match(stale,/Seen 9h ago/i);
 
 });
 
