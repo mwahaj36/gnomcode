@@ -137,7 +137,7 @@ impl Database {
     /// Returns [`Error`] on SQLite failure.
     pub fn disarm_resume_queue(&self, session_id: &str) -> Result<(), Error> {
         let root = self.conversation_id(session_id)?;
-        self.conn.execute(obfstr::obfstr!("DELETE FROM resume_queue WHERE session_id=?1 OR session_id=?2 OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?2 UNION SELECT native_id FROM conversation_member WHERE conversation_id=?2)"),params![session_id,root])?;
+        self.conn.execute("DELETE FROM resume_queue WHERE session_id=?1 OR session_id=?2 OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?2 UNION SELECT native_id FROM conversation_member WHERE conversation_id=?2)",params![session_id,root])?;
         Ok(())
     }
 

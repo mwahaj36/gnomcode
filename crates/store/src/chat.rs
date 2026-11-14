@@ -8,7 +8,7 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if the maintenance marker cannot be read.
     pub fn chat_format_needs_repair(&self) -> Result<bool, Error> {
-        Ok(self.conn.query_row(obfstr::obfstr!("SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=13) AND EXISTS(SELECT 1 FROM session)"), [], |row| row.get(0))?)
+        Ok(self.conn.query_row("SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=13) AND EXISTS(SELECT 1 FROM session)", [], |row| row.get(0))?)
     }
 
     /// Repairs existing session metadata from native logs without replaying usage or deleted chats.
@@ -22,10 +22,10 @@ impl Database {
     ) -> Result<(), Error> {
         let tx = self.conn.unchecked_transaction()?;
         for project in projects {
-            tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO project(id,canonical_key,repo_root,name,git_branch) VALUES (?1,?2,?3,?4,?5)"),params![project.id,project.canonical_key,project.repo_root,project.name,project.git_branch])?;
+            tx.execute("INSERT OR IGNORE INTO project(id,canonical_key,repo_root,name,git_branch) VALUES (?1,?2,?3,?4,?5)",params![project.id,project.canonical_key,project.repo_root,project.name,project.git_branch])?;
         }
         for session in sessions {
-            tx.execute(obfstr::obfstr!("UPDATE session SET project_id=?2,parent_session_id=coalesce(?3,parent_session_id),surface=?4 WHERE id=?1"),params![session.id,session.project_id,session.parent_session_id,session.surface.as_str()])?;
+            tx.execute("UPDATE session SET project_id=?2,parent_session_id=coalesce(?3,parent_session_id),surface=?4 WHERE id=?1",params![session.id,session.project_id,session.parent_session_id,session.surface.as_str()])?;
         }
         tx.commit()?;
         Ok(())
@@ -38,12 +38,11 @@ impl Database {
     pub fn repair_chat_contents(&self, events: &[ChatEvent]) -> Result<(), Error> {
         let transaction = self.conn.unchecked_transaction()?;
         {
-            let mut previous = transaction.prepare(obfstr::obfstr!(
-                "SELECT content,role FROM chat_event WHERE event_id=?1 AND session_id=?2"
-            ))?;
-            let mut statement = transaction.prepare(obfstr::obfstr!(
-                "UPDATE chat_event SET content=?1 WHERE event_id=?2 AND session_id=?3"
-            ))?;
+            let mut previous = transaction.prepare(
+                "SELECT content,role FROM chat_event WHERE event_id=?1 AND session_id=?2",
+            )?;
+            let mut statement = transaction
+                .prepare("UPDATE chat_event SET content=?1 WHERE event_id=?2 AND session_id=?3")?;
             for event in events {
                 let stored: Option<(String, String)> = previous
                     .query_row(params![event.event_id, event.session_id], |row| {
@@ -82,7 +81,7 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if the maintenance marker cannot be saved.
     pub fn finish_chat_format_repair(&self) -> Result<(), Error> {
-        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (11,datetime('now')),(13,datetime('now'))"), [])?;
+        self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (11,datetime('now')),(13,datetime('now'))", [])?;
         Ok(())
     }
 
@@ -93,7 +92,7 @@ impl Database {
     pub fn insert_chat_event(&self, event: &ChatEvent) -> Result<(), Error> {
         let created_at = event.created_at.to_rfc3339();
         self.conn.execute(
-            obfstr::obfstr!(r#"
+            r#"
             INSERT INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at)
             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
             WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)
@@ -101,7 +100,7 @@ impl Database {
                 content = excluded.content,
                 tool_name = excluded.tool_name,
                 status = excluded.status
-            "#),
+            "#,
             params![
                 event.event_id,
                 event.session_id,
@@ -122,8 +121,17 @@ impl Database {
     /// # Errors
     /// Returns [`Error`] if the query fails.
     pub fn conversation_title_candidates(&self, session_id: &str) -> Result<Vec<String>, Error> {
-        let mut titles: Vec<String> = self.conn.query_row(obfstr::obfstr!("SELECT title FROM session WHERE id=?1 AND title IS NOT NULL AND trim(title)<>''"), [session_id], |row| row.get(0)).optional()?.into_iter().collect();
-        let mut statement = self.conn.prepare(obfstr::obfstr!("SELECT substr(content, 1, 8192) FROM chat_event WHERE session_id = ?1 AND role = 'user' ORDER BY turn_index, created_at, event_id LIMIT 16"))?;
+        let mut titles: Vec<String> = self
+            .conn
+            .query_row(
+                "SELECT title FROM session WHERE id=?1 AND title IS NOT NULL AND trim(title)<>''",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .into_iter()
+            .collect();
+        let mut statement = self.conn.prepare("SELECT substr(content, 1, 8192) FROM chat_event WHERE session_id = ?1 AND role = 'user' ORDER BY turn_index, created_at, event_id LIMIT 16")?;
         let rows = statement.query_map(params![session_id], |row| row.get(0))?;
         titles.extend(rows.collect::<Result<Vec<_>, _>>()?);
         Ok(titles)
@@ -141,7 +149,7 @@ impl Database {
             .collect();
         if !title.is_empty() {
             self.conn.execute(
-                obfstr::obfstr!("UPDATE session SET title=?2 WHERE id=?1 AND title IS NOT ?2"),
+                "UPDATE session SET title=?2 WHERE id=?1 AND title IS NOT ?2",
                 params![session_id, title],
             )?;
         }
@@ -169,7 +177,7 @@ impl Database {
         let session: Option<String> = self
             .conn
             .query_row(
-                obfstr::obfstr!("SELECT session_id FROM chat_event WHERE event_id=?1"),
+                "SELECT session_id FROM chat_event WHERE event_id=?1",
                 params![id],
                 |row| row.get(0),
             )
@@ -286,7 +294,7 @@ impl Database {
         let source: Option<(Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                obfstr::obfstr!("SELECT model,title FROM session WHERE id = ?1"),
+                "SELECT model,title FROM session WHERE id = ?1",
                 params![session_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
@@ -321,13 +329,10 @@ impl Database {
         let tx = self.conn.unchecked_transaction()?;
         mark_deleted(
             &tx,
-            obfstr::obfstr!("SELECT event_id FROM chat_event WHERE session_id=?1"),
+            "SELECT event_id FROM chat_event WHERE session_id=?1",
             [session_id],
         )?;
-        let deleted = tx.execute(
-            obfstr::obfstr!("DELETE FROM chat_event WHERE session_id=?1"),
-            [session_id],
-        )?;
+        let deleted = tx.execute("DELETE FROM chat_event WHERE session_id=?1", [session_id])?;
         tx.commit()?;
         Ok(deleted)
     }
@@ -350,13 +355,11 @@ impl Database {
         let notice = format!("handoff:{host_id}:source");
         mark_deleted(
             &tx,
-            obfstr::obfstr!(
-                "SELECT event_id FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3"
-            ),
+            "SELECT event_id FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3",
             params![session_id, host_id, notice],
         )?;
         let deleted = tx.execute(
-            obfstr::obfstr!("DELETE FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3"),
+            "DELETE FROM chat_event WHERE session_id IN (?1, ?2) OR event_id=?3",
             params![session_id, host_id, notice],
         )?;
         tx.commit()?;
@@ -370,17 +373,17 @@ impl Database {
     pub fn purge_chat_events_older_than(&self, days: u32) -> Result<usize, Error> {
         let tx = self.conn.unchecked_transaction()?;
         let cutoff: f64 = tx.query_row(
-            obfstr::obfstr!("SELECT julianday('now', '-' || ?1 || ' days')"),
+            "SELECT julianday('now', '-' || ?1 || ' days')",
             [days],
             |row| row.get(0),
         )?;
         mark_deleted(
             &tx,
-            obfstr::obfstr!("SELECT event_id FROM chat_event WHERE julianday(created_at) < ?1"),
+            "SELECT event_id FROM chat_event WHERE julianday(created_at) < ?1",
             [cutoff],
         )?;
         let deleted = tx.execute(
-            obfstr::obfstr!("DELETE FROM chat_event WHERE julianday(created_at) < ?1"),
+            "DELETE FROM chat_event WHERE julianday(created_at) < ?1",
             [cutoff],
         )?;
         tx.commit()?;

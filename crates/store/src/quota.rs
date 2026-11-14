@@ -110,9 +110,9 @@ impl Database {
         if model.is_empty() {
             return Ok(None);
         }
-        let mut stmt = self.conn.prepare(obfstr::obfstr!(
-            "SELECT limit_id, member FROM quota_pool_member WHERE provider = ?1"
-        ))?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT limit_id, member FROM quota_pool_member WHERE provider = ?1")?;
         let rows: Vec<(String, String)> = stmt
             .query_map([provider], |row| Ok((row.get(0)?, row.get(1)?)))?
             .filter_map(Result::ok)

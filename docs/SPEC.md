@@ -7,7 +7,7 @@
 | Version | 0.9.0 development builds; earlier unpublished 1.x artifacts retired |
 | Owner | Wahaj (@mwahaj36) |
 | Site | `https://gnomcode.vercel.app` |
-| License | Proprietary, closed source; all local features free |
+| License | Apache-2.0, open source; everything in 1.0 free (ADR 0062) |
 
 This file owns product scope, architecture and delivery status. [PRODUCT](../PRODUCT.md) explains the product for discussion. [LAUNCH_CHECKLIST](LAUNCH_CHECKLIST.md) lists blockers and closure evidence. [Sessions](sessions/README.md) preserve engineering history. The [previous specification](history/SPEC-before-2026-10-29-refresh.md) is archived for detailed historical design, not normative status.
 
@@ -38,7 +38,7 @@ Lead with orchestration, continuity and encrypted remote control. Monitoring and
 
 ### 1.5 Commercial model
 
-All local features are free, with no account/license requirement: CLI, daemon, Electron shell, chat, launch, handoff, guardrails, alerts, Resume Queue, analytics and exports. Remote is a paid category; prices/terms are not finalized. The Remote prototype currently checks a signed license or live validated Pro account. Retain existing optional metadata sync under its explicit separate privacy exception. Do not reinstate old paid-local gates. There is no Teams product in 1.0; the old Teams tier is removed (ADR 0058).
+Gnomcode 1.0 is free and open source (Apache-2.0, ADR 0062) with no paid tier: CLI, daemon, Electron shell, chat, launch, handoff, guardrails, alerts, Resume Queue, analytics, exports and Remote. No feature checks a license. Retain existing optional metadata sync under its explicit separate privacy exception. Do not reinstate old paid-local gates. There is no Teams product in 1.0; the old Teams tier is removed (ADR 0058).
 
 ### 1.6 Boundaries
 
@@ -280,7 +280,7 @@ Source: `mwahaj36/gnomcode`; releases: `mwahaj36/gnomcode-releases`. Preserve pr
 
 ### 6.2 Release artifacts
 
-CLI, Electron packages and notices/EULA/hashes per approved platform. Target npm shim plus seven platform packages: Windows/macOS x64+arm64, Linux x64+arm64 and Linux x64 musl. Targets are not claims of publication. Download links follow actual approved assets. Windows Electron installers and checksums are published to the public binary-only `mwahaj36/gnomcode-releases` repository; private source remains separate. Website download routes redirect only an explicit asset allow-list to the current release.
+CLI, Electron packages and notices/LICENSE/hashes per approved platform. Target npm shim plus seven platform packages: Windows/macOS x64+arm64, Linux x64+arm64 and Linux x64 musl. Targets are not claims of publication. Download links follow actual approved assets. Windows Electron installers and checksums are published to the public binary-only `mwahaj36/gnomcode-releases` repository; private source remains separate. Website download routes redirect only an explicit asset allow-list to the current release.
 
 On `workflow_dispatch` with `package=true`, `.github/workflows/ci.yml` (`package-desktop`) builds the release daemon and packages the Electron app without publishing for `ubuntu-22.04` (`x64` `.deb` and `.zip`), `macos-15-intel` (`x64` `.zip`), and `macos-15` (`arm64` `.zip`).
 
@@ -304,15 +304,15 @@ The downloads page offers only published artifacts, labels unsigned Windows deve
 
 ### 6.6 Support
 
-Developer contact: `mwahaj25@gmail.com` from bundled EULA. Keep actionable errors, source/trust disclosure and a documented offline path.
+Developer contact: GitHub Issues and private vulnerability reporting (SECURITY.md). Keep actionable errors, source/trust disclosure and a documented offline path.
 
 ### 6.7 Payments and licensing
 
-Local operations never check a paid license. Remote retains existing prototype entitlement checks. Final prices, refund/payment terms, legal jurisdiction and commercial hosting eligibility require owner approval before selling.
+No operation checks a license or entitlement (ADR 0062). Any future paid hosted service (relay, team features) needs its own ADR and terms before selling.
 
 ### 6.8 Binary and UI protection
 
-Business logic in Rust. Obfuscate sensitive literals. Strip release symbols as configured; disable release DevTools and sourcemaps; validate Electron security fuses. Never use executable packers. Bundle third-party notices and verify exact packaged payloads.
+Business logic stays in Rust as an architecture rule, not a protection measure. No string obfuscation, license checks or packers. Disable release DevTools and sourcemaps; validate Electron security fuses. Bundle LICENSE, NOTICE and third-party notices and verify exact packaged payloads.
 
 ## 7. Deployment constraints
 
@@ -327,7 +327,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | ADR | Decision | Status |
 | :--- | :--- | :--- |
 | [0001](./adr/0001-rust-core.md) | Rust for core, CLI, daemon and hooks | Accepted |
-| [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Accepted |
+| [0002](./adr/0002-closed-source-free-tray.md) | Closed source; free tray; Pro = guardrails/rules/Resume Queue/analytics/sync via signed license file | Superseded by 0062 |
 | [0003](./adr/0003-distribution-and-deployment.md) | Private source repo, public binaries-only releases repo, npm + OS package managers, Tauri tray, Cloudflare web | Accepted |
 | [0004](./adr/0004-cloud-session-collectors.md) | Portable opt-in cloud collectors, measured usage imports, isolated cloud presence rows | Accepted |
 | [0006](./adr/0006-shared-spawnt-console-ui.md) | Shared token source and matched local/cloud presentation; preserve separate data adapters and existing native runtime pending a separate migration | Accepted |
@@ -376,6 +376,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0060](./adr/0060-wsl-support.md) | WSL support: registry discovery without booting, 9P slow poll, `wsl.exe` launch, distro tags | Accepted |
 | [0061](./adr/0061-verified-onboarding.md) | Verified provider onboarding: per-provider status endpoint in Rust, one checklist UI | Accepted |
 | [0064](./adr/0064-provider-aware-prompt-delivery.md) | Provider-aware immediate or next-safe-turn queued prompt delivery with idempotency and non-replay | Accepted |
+| [0062](./adr/0062-open-source-apache-2.md) | Apache-2.0 open source, no paid tier in 1.0; supersedes 0002 | Accepted |
 
 ## 10. Open decisions
 
@@ -471,3 +472,7 @@ Successful phone/console holds now queue the existing structured ApprovalWaiting
 Authenticated, trusted Remote requests continue_here, worktree_merge, worktree_discard, worktree_open_pr and approvals refresh room activity, alongside existing interrupt and approval requests. Existing authorization and dispatch behavior are unchanged.
 
 SPEC section 5 delivery: complete; verification is recorded in the session below.
+
+## Open source licensing - 2026-11-14
+
+ADR 0062: LICENSE is the Apache License 2.0 and replaces docs/legal/EULA.txt in the installer, desktop staging, npm packages, archives and web downloads. Release checks compare shipped LICENSE files byte-for-byte with the root LICENSE. obfstr and the Remote license/owner-email gate were removed; license-file activation endpoints remain pending a follow-up cleanup. The repository stays private until the owner decides otherwise.

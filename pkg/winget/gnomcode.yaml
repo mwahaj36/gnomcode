@@ -14,8 +14,8 @@ PackageVersion: PLACEHOLDER
 PackageName: Gnomcode
 Publisher: Wahaj
 PublisherUrl: https://gnomcode.vercel.app
-License: BUSL-1.1
-LicenseUrl: https://gnomcode.vercel.app/legal/eula
+License: Apache-2.0
+LicenseUrl: https://github.com/mwahaj36/spawnt/blob/main/LICENSE
 ShortDescription: Mission control for AI coding agents
 Description: |
   Gnomcode is live mission control for AI coding agents (Claude Code, Codex and

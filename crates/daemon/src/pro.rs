@@ -24,69 +24,6 @@ pub struct LicenseStatus {
     pub expires_at: Option<String>,
 }
 
-/// Verifies the signed local license at a Pro feature entry point.
-#[must_use]
-#[inline(always)]
-pub fn has_pro_license() -> bool {
-    // Offline signed license keys remain usable without network access.
-    let Ok(bytes) = fs::read(gnomcode_home().join("license.key")) else {
-        return false;
-    };
-    let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes) else {
-        return false;
-    };
-    matches!(
-        verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX),
-        Ok(Tier::Pro | Tier::Team)
-    )
-}
-
-/// Checks a signed license or a live, server-validated Pro account before Remote pairing.
-pub async fn has_remote_access() -> bool {
-    if has_pro_license() {
-        return true;
-    }
-    let Ok(client) = reqwest::Client::builder()
-        .https_only(true)
-        .timeout(Duration::from_secs(10))
-        .build()
-    else {
-        return false;
-    };
-    let path = gnomcode_home().join("session.json");
-    let Ok(Some(auth)) = crate::sync::read_cloud_auth(&client, &path).await else {
-        return false;
-    };
-    let Ok(response) = client
-        .get(format!("{}/auth/v1/user", auth.base_url))
-        .header("apikey", auth.public_key)
-        .bearer_auth(auth.access_token)
-        .send()
-        .await
-    else {
-        return false;
-    };
-    let Ok(user) = response.error_for_status() else {
-        return false;
-    };
-    let Ok(user) = user.json::<serde_json::Value>().await else {
-        return false;
-    };
-    user.get("id").and_then(serde_json::Value::as_str) == Some(auth.user_id.as_str())
-        && cloud_user_is_pro(&user)
-}
-
-fn cloud_user_is_pro(user: &serde_json::Value) -> bool {
-    user.get("email")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|email| email.eq_ignore_ascii_case(obfstr::obfstr!("mwahaj25@gmail.com")))
-        || matches!(
-            user.pointer("/app_metadata/plan")
-                .and_then(serde_json::Value::as_str),
-            Some("pro" | "team")
-        )
-}
-
 /// Returns details on the local license status.
 #[must_use]
 pub fn get_license_status() -> LicenseStatus {
@@ -121,27 +58,9 @@ pub fn get_license_status() -> LicenseStatus {
     }
 }
 
-/// Returns license status after validating any cloud entitlement with the auth server.
+/// Returns the local license status. Remote needs no license.
 pub async fn get_verified_license_status() -> LicenseStatus {
-    let status = get_license_status();
-    if status.licensed || !has_remote_access().await {
-        return status;
-    }
-    let account = fs::read(gnomcode_home().join("session.json"))
-        .ok()
-        .and_then(|raw| serde_json::from_slice::<serde_json::Value>(&raw).ok());
-    let email = account
-        .as_ref()
-        .and_then(|value| value.pointer("/user/email"))
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_owned);
-    LicenseStatus {
-        tier: "pro".to_owned(),
-        licensed: true,
-        license_id: None,
-        customer_name: email,
-        expires_at: None,
-    }
+    get_license_status()
 }
 
 /// Activates an Ed25519-signed license key.
@@ -318,19 +237,6 @@ mod remote_entitlement_tests {
             executed_at: None,
         };
         assert!(super::execute_relay_handoff(&entry).is_err());
-    }
-
-    #[test]
-    fn pro_claim_requires_server_controlled_metadata_or_primary_account() {
-        assert!(!super::cloud_user_is_pro(
-            &serde_json::json!({"email":"free@example.invalid","user_metadata":{"plan":"pro"}})
-        ));
-        assert!(super::cloud_user_is_pro(
-            &serde_json::json!({"email":"free@example.invalid","app_metadata":{"plan":"pro"}})
-        ));
-        assert!(super::cloud_user_is_pro(
-            &serde_json::json!({"email":"mwahaj25@gmail.com"})
-        ));
     }
 
     #[test]

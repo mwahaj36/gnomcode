@@ -145,7 +145,7 @@ pub fn available_models() -> Vec<ModelCatalogItem> {
         .and_then(|root| {
             root.path
                 .parent()
-                .map(|path| path.join(obfstr::obfstr!("models_cache.json")))
+                .map(|path| path.join("models_cache.json"))
         });
     let Some(path) = cache else {
         return Vec::new();

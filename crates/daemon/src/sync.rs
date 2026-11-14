@@ -488,10 +488,9 @@ pub(crate) async fn validate_session(
 
 pub(crate) fn cloud_config() -> (String, String) {
     let url = std::env::var("GNOMCODE_SUPABASE_URL")
-        .unwrap_or_else(|_| obfstr::obfstr!("https://jjnuxngvhuvxkxrfmnqx.supabase.co").to_owned());
-    let key = std::env::var("GNOMCODE_SUPABASE_KEY").unwrap_or_else(|_| {
-        obfstr::obfstr!("sb_publishable_o2ZiGak7RHq_cmL81BOeZQ_g7JJeyCI").to_owned()
-    });
+        .unwrap_or_else(|_| "https://jjnuxngvhuvxkxrfmnqx.supabase.co".to_owned());
+    let key = std::env::var("GNOMCODE_SUPABASE_KEY")
+        .unwrap_or_else(|_| "sb_publishable_o2ZiGak7RHq_cmL81BOeZQ_g7JJeyCI".to_owned());
     (url.trim_end_matches('/').to_owned(), key)
 }
 

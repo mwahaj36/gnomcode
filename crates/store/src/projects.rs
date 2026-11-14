@@ -35,42 +35,37 @@ pub struct ProjectUsage {
 }
 
 pub(crate) fn antigravity_workspace(root: &std::path::Path, conv_id: &str) -> Option<String> {
-    [
-        obfstr::obfstr!("antigravity-cli"),
-        obfstr::obfstr!("antigravity"),
-    ]
-    .iter()
-    .find_map(|product| {
-        let path = root
-            .join(product)
-            .join(obfstr::obfstr!("conversation_summaries.db"));
-        let conn =
-            rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .ok()?;
-        let uris: String = conn
-            .query_row(
-                obfstr::obfstr!(
-                    "SELECT workspace_uris FROM conversation_summaries WHERE conversation_id = ?1"
-                ),
-                params![conv_id],
-                |row| row.get(0),
+    ["antigravity-cli", "antigravity"]
+        .iter()
+        .find_map(|product| {
+            let path = root.join(product).join("conversation_summaries.db");
+            let conn = rusqlite::Connection::open_with_flags(
+                path,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
             )
             .ok()?;
-        let value: serde_json::Value = serde_json::from_str(&uris).ok()?;
-        let uri = value
-            .as_array()?
-            .first()?
-            .as_str()?
-            .replace("%3A", ":")
-            .replace("%3a", ":");
-        let path = uri.strip_prefix("file://").unwrap_or(&uri);
-        let path = if path.as_bytes().get(2) == Some(&b':') {
-            path.strip_prefix('/').unwrap_or(path)
-        } else {
-            path
-        };
-        Some(path.to_owned())
-    })
+            let uris: String = conn
+                .query_row(
+                    "SELECT workspace_uris FROM conversation_summaries WHERE conversation_id = ?1",
+                    params![conv_id],
+                    |row| row.get(0),
+                )
+                .ok()?;
+            let value: serde_json::Value = serde_json::from_str(&uris).ok()?;
+            let uri = value
+                .as_array()?
+                .first()?
+                .as_str()?
+                .replace("%3A", ":")
+                .replace("%3a", ":");
+            let path = uri.strip_prefix("file://").unwrap_or(&uri);
+            let path = if path.as_bytes().get(2) == Some(&b':') {
+                path.strip_prefix('/').unwrap_or(path)
+            } else {
+                path
+            };
+            Some(path.to_owned())
+        })
 }
 
 impl Database {
@@ -324,7 +319,7 @@ impl Database {
         if timeline.items_count == 0 {
             return Ok(Vec::new());
         }
-        let mut statement = self.conn.prepare(obfstr::obfstr!(r#"
+        let mut statement = self.conn.prepare(r#"
             SELECT p.id, p.name,
                 SUM(u.input_tokens + u.output_tokens + CASE WHEN s.agent IN ('codex', 'gemini-cli') THEN 0
                     ELSE u.cache_read_tokens + u.cache_write_5m_tokens + u.cache_write_1h_tokens END),
@@ -333,7 +328,7 @@ impl Database {
             FROM usage_record u JOIN session s ON s.id = u.session_id JOIN project p ON p.id = s.project_id
             WHERE s.surface <> 'cloud' AND p.canonical_key <> '/unknown' AND julianday(u.timestamp) >= julianday(?1) AND julianday(u.timestamp) <= julianday(?2)
             GROUP BY p.id ORDER BY SUM(CASE WHEN u.cost_basis = 'unknown' THEN 0 ELSE u.cost_usd END) DESC, p.id
-        "#))?;
+        "#)?;
         let rows =
             statement.query_map(params![timeline.earliest_at, timeline.latest_at], |row| {
                 let tokens: i64 = row.get(2)?;

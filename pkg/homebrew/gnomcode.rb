@@ -5,7 +5,7 @@
 #   1. A signed v1.0 release tarball is available at gnomcode.vercel.app/downloads.
 #   2. Real SHA-256 checksums are substituted below.
 #   3. macOS builds are verified on both x86_64 and arm64 hardware.
-#   4. Legal review of the EULA is complete.
+#   4. Release inputs use the Apache-2.0 LICENSE.
 #
 # Hosting: https://github.com/mwahaj36/homebrew-tap
 # Install (future): brew install mwahaj36/tap/gnomcode

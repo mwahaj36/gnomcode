@@ -14,7 +14,7 @@ public static class CheckInstallerPayload {
         }
     }
     public static int Main(string[] args) {
-        if (args.Length != 4 && args.Length != 5) throw new ArgumentException("Usage: checker setup.exe engine.exe notices.html version [approved-EULA.txt]");
+        if (args.Length != 4 && args.Length != 5) throw new ArgumentException("Usage: checker setup.exe engine.exe notices.html version [approved-LICENSE]");
         Assembly installer = Assembly.LoadFile(Path.GetFullPath(args[0]));
         if (installer.GetName().Version.ToString() != args[3]) throw new Exception("Installer assembly version mismatch");
         if (System.Diagnostics.FileVersionInfo.GetVersionInfo(args[0]).FileVersion != args[3]) throw new Exception("Installer file version mismatch");
