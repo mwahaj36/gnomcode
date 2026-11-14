@@ -6,7 +6,7 @@ ADR 0060 PR 2: discover running WSL distros without booting any, ingest their ag
 ## Outcomes
 - `gnomcode_core::wsl`: distro tag, Linux path to UNC and back.
 - `gnomcode_platform::wsl`: `Lxss` registry parsing, running-list parsing (UTF-16), stopped-distro skip, home root building, two-spelling dedupe, 60 s cached discovery merged into `discover_agent_roots`.
-- Ingest maps Linux project folders from WSL logs to `\wsl.localhost\<distro>\...`; project keys fold `wsl$` into `wsl.localhost`.
+- Ingest maps Linux project folders from WSL logs to `\\wsl.localhost\<distro>\...`; project keys fold `wsl$` into `wsl.localhost`.
 - Watcher gives WSL roots no OS watch; the back-off poll covers them.
 
 ## Problems and fixes
