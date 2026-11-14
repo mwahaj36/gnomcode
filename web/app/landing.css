@@ -199,3 +199,5 @@
 @media (max-width: 640px) { .sp-nav-right > .sp-nav-cta { display: none; } .sp-nav-right > .sp-account-cta { display: inline-flex; } .sp-nav-links .sp-nav-download-mobile { display: block; } }
 
 .sp-tour-kpi-line em, .sp-tour-overview-chart figcaption, .sp-tour-overview-columns { font-size: 11px; }
+.sp-agent-row{display:flex;flex:1;align-items:center;justify-content:space-between;gap:24px;margin:0;padding:0;list-style:none}.sp-agent-row .sp-agent-item{flex:1;justify-content:center}.sp-agent-row .sp-agent-item+.sp-agent-item{border-left:1px solid var(--border)}
+@media(max-width:640px){.sp-marquee>.sp-width{height:auto;padding:20px 0;flex-direction:column;align-items:flex-start;gap:12px}.sp-agent-row{width:100%;gap:0}.sp-agent-row .sp-agent-item strong{font-size:14px}}
