@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gnomcode Console Redesign Mockup</title>
+<style>
+:root {
+  color-scheme: dark;
+  --sp-bg: #070708;
+  --sp-surface: #0d0d0f;
+  --sp-surface-raised: #141416;
+  --sp-surface-overlay: #18181b;
+  --sp-border: #242428;
+  --sp-border-strong: #38383e;
+  --sp-text: #f6f7f8;
+  --sp-text-2: #a9b4c2;
+  --sp-text-3: #8d99aa;
+  --sp-accent: #becbd8;
+  --sp-cta-bg: #f6f7f8;
+  --sp-cta-hover: #dfe4ea;
+  --sp-cta-text: #0c1119;
+  --sp-accent-soft: rgb(190 203 216 / .12);
+  --sp-ok: #3fcf8e;
+  --sp-ok-soft: rgb(63 207 142 / .14);
+  --sp-warn: #f5a524;
+  --sp-warn-soft: rgb(245 165 36 / .14);
+  --sp-danger: #ff4d5e;
+  --sp-danger-soft: rgb(255 77 94 / .14);
+  --sp-unknown: #5b6472;
+  --sp-heat-0: #17171a;
+  --sp-heat-1: #4d131d;
+  --sp-heat-2: #8a182b;
+  --sp-heat-3: #c91e3a;
+  --sp-heat-4: #ff2544;
+  --sp-shadow-card: inset 0 1px 0 rgb(255 255 255 / .04);
+  --sp-shadow-popover: 0 12px 32px rgb(0 0 0 / .45);
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+  --sp-r-code: 4px; --sp-r-control: 6px; --sp-r-popover: 8px; --sp-r-card: 12px; --sp-r-bubble: 14px; --sp-r-pill: 999px;
+  --sp-fs-meta: 12px; --sp-fs-control: 13px; --sp-fs-body: 14px; --sp-fs-strong: 15px; --sp-fs-title: 20px; --sp-fs-number: 28px;
+  --sp-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sp-font-mono: "JetBrains Mono", Consolas, monospace;
+  --sp-ease: cubic-bezier(.2, .8, .2, 1);
+  --sp-dur: 150ms;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --sp-bg: #f6f7f8;
+  --sp-surface: #ffffff;
+  --sp-surface-raised: #edf0f3;
+  --sp-surface-overlay: #ffffff;
+  --sp-border: #d9dfe6;
+  --sp-border-strong: #becbd8;
+  --sp-text: #0c1119;
+  --sp-text-2: #4a5565;
+  --sp-text-3: #525e70;
+  --sp-accent: #252e99;
+  --sp-cta-bg: #252e99;
+  --sp-cta-hover: #1d2478;
+  --sp-cta-text: #ffffff;
+  --sp-accent-soft: rgb(37 46 153 / .10);
+  --sp-ok: #12955c;
+  --sp-ok-soft: rgb(18 149 92 / .12);
+  --sp-warn: #b86e00;
+  --sp-warn-soft: rgb(184 110 0 / .12);
+  --sp-danger: #d4102e;
+  --sp-danger-soft: rgb(212 16 46 / .10);
+  --sp-unknown: #8a94a3;
+  --sp-heat-0: #e4e9ee;
+  --sp-heat-1: #fecdd3;
+  --sp-heat-2: #fda4af;
+  --sp-heat-3: #fb7185;
+  --sp-heat-4: #ff2544;
+  --sp-shadow-card: 0 1px 2px rgb(12 17 25 / .05);
+  --sp-shadow-popover: 0 10px 28px rgb(12 17 25 / .12);
+}
+
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--sp-border-strong) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--sp-border-strong); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--sp-text-3); }
+body { margin: 0; background: var(--sp-bg); color: var(--sp-text); font: 400 var(--sp-fs-body)/1.5 var(--sp-font-sans); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
+svg.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* Mockup review bar */
+.review-bar { position: sticky; top: 0; z-index: 90; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); background: var(--sp-surface-overlay); border-bottom: 1px solid var(--sp-border-strong); font-size: var(--sp-fs-meta); }
+.review-bar strong { margin-right: var(--sp-2); color: var(--sp-text); }
+.review-seg { display: inline-flex; padding: 2px; border-radius: var(--sp-r-control); background: var(--sp-surface-raised); border: 1px solid var(--sp-border); }
+.review-seg button { height: 26px; padding: 0 var(--sp-3); border: 0; border-radius: 4px; background: transparent; color: var(--sp-text-2); cursor: pointer; font-size: var(--sp-fs-meta); font-weight: 500; }
+.review-seg button.active { background: var(--sp-surface); color: var(--sp-text); box-shadow: 0 1px 2px rgb(0 0 0 / .15); }
+.review-toggle { height: 30px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-r-control); background: var(--sp-surface); color: var(--sp-text-2); cursor: pointer; font-size: var(--sp-fs-meta); }
+.review-toggle.active { border-color: var(--sp-accent); color: var(--sp-accent); background: var(--sp-accent-soft); }
+
+/* Viewport frame for desktop vs phone preview */
+.stage { display: flex; justify-content: center; min-height: calc(100vh - 47px); }
+.viewport { width: 100%; display: flex; flex-direction: column; background: var(--sp-bg); }
+.viewport.is-phone { width: 390px; height: 844px; margin: var(--sp-4) 0; border: 1px solid var(--sp-border-strong); border-radius: 28px; overflow: hidden; box-shadow: var(--sp-shadow-popover); }
+
+/* App shell: unified 268px left sidebar (nav + conversations integrated) + main canvas */
+.shell { display: grid; grid-template-columns: 268px minmax(0, 1fr); flex: 1; min-height: 0; }
+.shell.list-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+.shell.list-collapsed .sidebar { display: none; }
+.sidebar { display: flex; flex-direction: column; border-right: 1px solid var(--sp-border); background: var(--sp-surface); min-height: 0; }
+.sidebar-brand { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-3) var(--sp-2); }
+.brand-id { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--sp-fs-strong); }
+.rail-brand { width: 22px; height: 22px; border: 2px solid var(--sp-text); border-radius: 6px; flex: none; }
+.nav-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 0 var(--sp-3) var(--sp-2); border-bottom: 1px solid var(--sp-border); }
+.nav-pill { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 42px; border: 0; border-radius: var(--sp-r-control); background: transparent; color: var(--sp-text-3); font-size: 11px; font-weight: 500; cursor: pointer; transition: background var(--sp-dur) var(--sp-ease), color var(--sp-dur) var(--sp-ease); }
+.nav-pill:hover { background: var(--sp-surface-raised); color: var(--sp-text-2); }
+.nav-pill[aria-current="page"] { background: var(--sp-surface-raised); color: var(--sp-text); }
+.icon-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: var(--sp-r-control); background: transparent; color: var(--sp-text-2); cursor: pointer; transition: background var(--sp-dur) var(--sp-ease), color var(--sp-dur) var(--sp-ease); }
+.icon-btn:hover { background: var(--sp-surface-raised); color: var(--sp-text); }
+.ws-shell { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.sessions-head { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--sp-border); }
+.search-box { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 var(--sp-2); border: 1px solid var(--sp-border); border-radius: var(--sp-r-control); background: var(--sp-bg); }
+.search-box input { width: 100%; min-width: 0; border: 0; background: transparent; font-size: var(--sp-fs-control); outline: none; }
+.btn-new { flex: none; height: 32px; padding: 0 var(--sp-3); border: 0; border-radius: var(--sp-r-control); background: var(--sp-cta-bg); color: var(--sp-cta-text); font-size: var(--sp-fs-control); font-weight: 500; cursor: pointer; }
+.btn-new:hover { background: var(--sp-cta-hover); }
+
+.sessions-scroll { flex: 1; overflow-y: auto; padding: var(--sp-1) var(--sp-2) var(--sp-3); }
+.list-group { margin: var(--sp-3) var(--sp-2) var(--sp-1); font-size: var(--sp-fs-meta); font-weight: 600; color: var(--sp-text-3); display: flex; justify-content: space-between; }
+.conv-row { width: 100%; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2); border: 0; border-radius: var(--sp-r-control); background: transparent; text-align: left; cursor: pointer; transition: background var(--sp-dur) var(--sp-ease); }
+.conv-row:hover { background: var(--sp-surface-raised); }
+.conv-row.active { background: var(--sp-surface-raised); }
+.conv-row.subagent { padding-left: var(--sp-5); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sp-unknown); }
+.dot.run { background: var(--sp-ok); }
+.dot.warn { background: var(--sp-warn); }
+.conv-main { min-width: 0; }
+.conv-title { display: block; font-size: var(--sp-fs-control); font-weight: 500; color: var(--sp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-meta { display: block; font-size: var(--sp-fs-meta); color: var(--sp-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-time { font-size: var(--sp-fs-meta); color: var(--sp-text-3); font-variant-numeric: tabular-nums; }
+
+.sidebar-foot { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--sp-border); font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
+
+/* Mobile bottom tab bar (iOS/Android thumb zone) */
+.viewport.is-phone .shell { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+.viewport.is-phone .main { order: 1; }
+.viewport.is-phone .sidebar { order: 2; border-right: 0; border-top: 1px solid var(--sp-border); }
+.viewport.is-phone .sidebar-brand, .viewport.is-phone .sessions-head, .viewport.is-phone .sessions-scroll, .viewport.is-phone .sidebar-foot { display: none; }
+.viewport.is-phone .nav-strip { padding: var(--sp-1) var(--sp-2) calc(var(--sp-1) + 4px); border-bottom: 0; }
+.viewport.is-phone .nav-pill { height: 44px; }
+
+/* Main area */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+
+/* Workspace layout: content + optional right inspector */
+.ws-grid { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-height: 0; position: relative; }
+.ws-grid.inspector-open { grid-template-columns: minmax(0, 1fr) 380px; }
+.viewport.is-phone .ws-grid.inspector-open { grid-template-columns: 1fr; }
+.viewport.is-phone .inspector { position: absolute; inset: 0; z-index: 35; border-left: 0; }
+
+.ws-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+.ws-header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); height: 52px; padding: 0 var(--sp-5); border-bottom: 1px solid var(--sp-border); background: var(--sp-bg); flex: none; }
+.ws-title-wrap { min-width: 0; display: flex; align-items: baseline; gap: var(--sp-3); }
+.ws-title { margin: 0; font-size: var(--sp-fs-strong); font-weight: 600; color: var(--sp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-sub { font-size: var(--sp-fs-meta); color: var(--sp-text-3); white-space: nowrap; }
+.ws-actions { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
+.viewport.is-phone .ws-header { padding: 0 var(--sp-3); }
+.viewport.is-phone .ws-sub { display: none; }
+
+/* Compact IDE-style Quota trigger */
+.quota-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-r-pill); background: var(--sp-surface); font-size: var(--sp-fs-meta); font-weight: 500; cursor: pointer; font-variant-numeric: tabular-nums; }
+.quota-pill:hover { border-color: var(--sp-border-strong); }
+.quota-pill.is-warn { color: var(--sp-warn); border-color: rgb(245 158 11 / .35); background: var(--sp-warn-soft); }
+.ring { width: 14px; height: 14px; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 2.5; }
+.ring .track { stroke: var(--sp-border-strong); }
+.ring .fill { stroke: currentColor; stroke-linecap: round; }
+
+.btn-quiet { height: 30px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-r-control); background: var(--sp-surface); color: var(--sp-text-2); font-size: var(--sp-fs-control); font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-quiet:hover { border-color: var(--sp-border-strong); color: var(--sp-text); }
+.btn-quiet.active { border-color: var(--sp-accent); color: var(--sp-accent); background: var(--sp-accent-soft); }
+
+/* Single-scroll transcript */
+.ws-scroll { flex: 1; overflow-y: auto; padding: var(--sp-6) var(--sp-5) var(--sp-4); }
+.viewport.is-phone .ws-scroll { padding: var(--sp-4) var(--sp-3); }
+.measure { max-width: 72ch; margin: 0 auto; display: grid; gap: var(--sp-5); }
+
+.msg-user { justify-self: end; max-width: 82%; padding: var(--sp-3) var(--sp-4); border-radius: var(--sp-r-bubble) var(--sp-r-bubble) 4px var(--sp-r-bubble); background: var(--sp-surface-raised); border: 1px solid var(--sp-border-strong); color: var(--sp-text); font-size: var(--sp-fs-body); }
+.msg-agent { display: grid; gap: var(--sp-3); font-size: var(--sp-fs-strong); line-height: 1.65; color: var(--sp-text); }
+.msg-meta { font-size: var(--sp-fs-meta); color: var(--sp-text-3); display: flex; gap: var(--sp-2); align-items: center; }
+.msg-agent p { margin: 0; }
+.code-block { max-width: 88ch; background: var(--sp-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-r-popover); overflow: hidden; }
+.code-head { display: flex; justify-content: space-between; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--sp-border); font-size: var(--sp-fs-meta); color: var(--sp-text-3); font-family: var(--sp-font-mono); }
+.code-block pre { margin: 0; padding: var(--sp-3); overflow-x: auto; font: 400 13px/1.55 var(--sp-font-mono); color: var(--sp-text); }
+
+/* Docked composer */
+.composer-dock { flex: none; padding: 0 var(--sp-5) var(--sp-4); background: var(--sp-bg); position: relative; }
+.viewport.is-phone .composer-dock { padding: 0 var(--sp-3) var(--sp-3); }
+.composer-inner { max-width: 72ch; margin: 0 auto; display: grid; gap: var(--sp-2); }
+.quick-row { display: flex; flex-wrap: nowrap; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px 0; }
+.quick-row::-webkit-scrollbar { display: none; }
+.quick-chip { flex: 0 0 auto; white-space: nowrap; height: 32px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-r-pill); background: var(--sp-surface); color: var(--sp-text-2); font-size: var(--sp-fs-meta); font-weight: 500; cursor: pointer; }
+.viewport.is-phone .quick-chip { height: 36px; padding: 0 14px; }
+.quick-chip:hover { border-color: var(--sp-border-strong); color: var(--sp-text); }
+
+.composer-box { border: 1px solid var(--sp-border-strong); border-radius: var(--sp-r-card); background: var(--sp-surface); overflow: hidden; transition: border-color var(--sp-dur) var(--sp-ease); }
+.composer-box:focus-within { border-color: var(--sp-accent); }
+.composer-error { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); background: var(--sp-danger-soft); border-bottom: 1px solid rgb(239 68 68 / .25); font-size: var(--sp-fs-meta); color: var(--sp-danger); }
+.composer-error-actions { display: flex; gap: var(--sp-2); }
+.composer-error button { height: 24px; padding: 0 var(--sp-2); border-radius: 4px; border: 1px solid currentColor; background: transparent; color: inherit; font-size: var(--sp-fs-meta); font-weight: 500; cursor: pointer; }
+.composer-input { width: 100%; border: 0; background: transparent; padding: var(--sp-3) var(--sp-4) var(--sp-2); resize: none; font-size: var(--sp-fs-body); color: var(--sp-text); outline: none; }
+.composer-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }
+.composer-left { display: flex; align-items: center; gap: var(--sp-2); }
+.model-trigger { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--sp-2); border: 0; border-radius: var(--sp-r-control); background: transparent; color: var(--sp-text-2); font-size: var(--sp-fs-control); font-weight: 500; cursor: pointer; }
+.model-trigger:hover { background: var(--sp-surface-raised); color: var(--sp-text); }
+.composer-right { display: flex; align-items: center; gap: var(--sp-2); }
+.btn-send { height: 32px; padding: 0 var(--sp-4); border: 0; border-radius: var(--sp-r-control); background: var(--sp-cta-bg); color: var(--sp-cta-text); font-size: var(--sp-fs-control); font-weight: 500; cursor: pointer; }
+.btn-send:hover { background: var(--sp-cta-hover); }
+
+/* IDE-style Popover (Model + Usage) */
+.popover { position: absolute; bottom: 84px; left: max(var(--sp-5), calc(50% - 36ch)); z-index: 40; display: flex; gap: var(--sp-2); align-items: flex-end; }
+.viewport.is-phone .popover { left: var(--sp-3); right: var(--sp-3); flex-direction: column; align-items: stretch; }
+.pop-card { width: 290px; border: 1px solid var(--sp-border-strong); border-radius: var(--sp-r-card); background: var(--sp-surface-overlay); box-shadow: var(--sp-shadow-popover); padding: var(--sp-2); font-size: var(--sp-fs-control); }
+.viewport.is-phone .pop-card { width: 100%; }
+.pop-head { padding: var(--sp-2) var(--sp-2) var(--sp-1); font-size: var(--sp-fs-meta); font-weight: 600; color: var(--sp-text-3); }
+.pop-row { display: flex; align-items: center; justify-content: space-between; padding: 6px var(--sp-2); border-radius: var(--sp-r-control); cursor: pointer; }
+.pop-row:hover { background: var(--sp-surface-raised); }
+.pop-row.selected { color: var(--sp-text); font-weight: 500; }
+.pop-sep { height: 1px; background: var(--sp-border); margin: var(--sp-2) 0; }
+.usage-pool { padding: var(--sp-2); }
+.usage-pool-name { font-weight: 600; font-size: var(--sp-fs-control); margin-bottom: var(--sp-2); }
+.usage-line { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.usage-line small { display: block; color: var(--sp-text-3); font-size: var(--sp-fs-meta); }
+.usage-right { display: flex; align-items: center; gap: var(--sp-2); font-weight: 500; }
+
+/* Right Inspector */
+.inspector { border-left: 1px solid var(--sp-border); background: var(--sp-surface); display: flex; flex-direction: column; min-height: 0; }
+.inspector-head { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--sp-border); height: 52px; }
+.seg { display: inline-flex; padding: 2px; border-radius: var(--sp-r-control); background: var(--sp-bg); border: 1px solid var(--sp-border); }
+.seg button { height: 26px; padding: 0 var(--sp-2); border: 0; border-radius: 4px; background: transparent; color: var(--sp-text-2); font-size: var(--sp-fs-meta); font-weight: 500; cursor: pointer; }
+.seg button.active { background: var(--sp-surface-raised); color: var(--sp-text); }
+.inspector-body { flex: 1; overflow-y: auto; padding: var(--sp-3); display: grid; gap: var(--sp-3); align-content: start; }
+.diff-file { border: 1px solid var(--sp-border); border-radius: var(--sp-r-popover); overflow: hidden; }
+.diff-head { padding: var(--sp-2) var(--sp-3); background: var(--sp-surface-raised); font: 500 var(--sp-fs-meta)/1.4 var(--sp-font-mono); border-bottom: 1px solid var(--sp-border); }
+.diff-line { padding: 2px var(--sp-3); font: 400 12px/1.6 var(--sp-font-mono); white-space: pre; }
+.diff-add { background: var(--sp-ok-soft); color: var(--sp-ok); }
+.diff-del { background: var(--sp-danger-soft); color: var(--sp-danger); }
+
+/* Home view */
+.home-scroll { flex: 1; overflow-y: auto; padding: var(--sp-5) var(--sp-6) var(--sp-7); }
+.viewport.is-phone .home-scroll { padding: var(--sp-4) var(--sp-3) var(--sp-6); }
+.home-page { width: 100%; display: grid; gap: var(--sp-5); }
+.home-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: var(--sp-5); align-items: start; }
+.home-col { display: grid; gap: var(--sp-5); min-width: 0; }
+.home-col > *, .card { min-width: 0; }
+.viewport.is-phone .home-split { grid-template-columns: 1fr; gap: var(--sp-4); }
+.viewport.is-phone .home-page { gap: var(--sp-4); }
+.viewport.is-phone .card { padding: var(--sp-3); }
+.viewport.is-phone .hm-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.viewport.is-phone .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+.viewport.is-phone .tiles .tile:last-child { grid-column: 1 / -1; }
+.viewport.is-phone .tile strong { font-size: var(--sp-fs-title); }
+.viewport.is-phone .sess-row { min-height: 48px; padding: var(--sp-3); }
+.page-title { margin: 0; font-size: var(--sp-fs-title); font-weight: 600; letter-spacing: -.01em; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--sp-3); }
+.sec-head h2 { margin: 0; font-size: var(--sp-fs-strong); font-weight: 500; }
+.sec-head span { font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
+.card-grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.viewport.is-phone .card-grid { grid-template-columns: 1fr; }
+.card { background: var(--sp-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-r-card); padding: var(--sp-4); }
+.prov-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.prov-id { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.prov-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--sp-surface-raised); display: grid; place-items: center; font-weight: 500; flex: none; }
+.prov-id h3 { margin: 0; font-size: var(--sp-fs-strong); font-weight: 500; }
+.prov-id p { margin: 0; font-size: var(--sp-fs-meta); color: var(--sp-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 var(--sp-2); border-radius: var(--sp-r-pill); font-size: var(--sp-fs-meta); font-weight: 500; flex: none; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--sp-ok); background: var(--sp-ok-soft); }
+.chip.warn { color: var(--sp-warn); background: var(--sp-warn-soft); }
+.chip.danger { color: var(--sp-danger); background: var(--sp-danger-soft); }
+
+/* Heatmap */
+.hm-stats { display: flex; flex-wrap: wrap; gap: var(--sp-6); margin-bottom: var(--sp-4); }
+.hm-stats strong { display: block; font-size: var(--sp-fs-title); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hm-stats span { font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
+.hm-wrap { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--sp-2); align-items: end; }
+.hm-days { display: grid; grid-template-rows: repeat(7, 11px); gap: 3px; font-size: 10px; line-height: 11px; color: var(--sp-text-3); padding-bottom: 10px; }
+.hm-scroll { overflow-x: auto; padding-bottom: var(--sp-2); min-width: 0; }
+.hm-months { display: grid; grid-template-columns: repeat(53, 11px); gap: 3px; margin-bottom: 4px; font-size: 10px; line-height: 12px; color: var(--sp-text-3); }
+.hm-months span { white-space: nowrap; }
+.hm-grid { display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column; grid-auto-columns: 11px; gap: 3px; width: max-content; }
+.hm-cell { width: 11px; height: 11px; border-radius: 2px; background: var(--sp-heat-0); }
+.hm-cell[data-l="1"] { background: var(--sp-heat-1); }
+.hm-cell[data-l="2"] { background: var(--sp-heat-2); }
+.hm-cell[data-l="3"] { background: var(--sp-heat-3); }
+.hm-cell[data-l="4"] { background: var(--sp-heat-4); }
+.hm-legend { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: var(--sp-2); font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
+
+/* Tiles & Sessions */
+.tiles { display: grid; gap: var(--sp-3); grid-template-columns: 1fr; }
+.tile strong { display: block; font-size: var(--sp-fs-number); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.tile span { font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
+.sess-list { border: 1px solid var(--sp-border); border-radius: var(--sp-r-card); background: var(--sp-surface); overflow: hidden; }
+.sess-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--sp-border); cursor: pointer; }
+.sess-row:first-child { border-top: 0; }
+.sess-row:hover { background: var(--sp-surface-raised); }
+.sess-tok { display: flex; align-items: center; gap: 8px; font-size: var(--sp-fs-meta); color: var(--sp-text-3); font-variant-numeric: tabular-nums; }
+.sess-bar { width: 56px; height: 4px; border-radius: var(--sp-r-pill); background: var(--sp-surface-raised); overflow: hidden; }
+.sess-bar > i { display: block; height: 100%; border-radius: var(--sp-r-pill); background: var(--sp-text-2); }
+.viewport.is-phone .sess-bar { display: none; }
+
+/* Subagent disclosure & capped expansion */
+.subagent-toggle { display: flex; align-items: center; gap: 6px; width: calc(100% - 20px); margin: 2px 0 4px 20px; padding: 4px 8px; border: 0; border-radius: var(--sp-r-control); background: transparent; color: var(--sp-text-3); font-size: var(--sp-fs-meta); cursor: pointer; text-align: left; }
+.subagent-toggle:hover { background: var(--sp-surface-raised); color: var(--sp-text-2); }
+.subagent-toggle .chev { display: inline-block; transition: transform .15s; font-size: 10px; }
+.subagent-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.subagent-tree { margin-left: 14px; padding-left: 8px; border-left: 1px solid var(--sp-border); display: grid; gap: 2px; margin-bottom: 4px; }
+.subagent-tree .conv-row { padding: 5px 8px; }
+.subagent-more { border: 0; background: transparent; color: var(--sp-accent); font-size: var(--sp-fs-meta); padding: 4px 8px; text-align: left; cursor: pointer; border-radius: var(--sp-r-control); }
+.subagent-more:hover { background: var(--sp-accent-soft); }
+.link-btn { border: 0; background: transparent; color: var(--sp-text-2); font-size: var(--sp-fs-meta); cursor: pointer; padding: 2px 6px; border-radius: var(--sp-r-control); }
+.link-btn:hover { color: var(--sp-text); background: var(--sp-surface-raised); }
+
+/* View All Chats pane */
+.allchats-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: var(--sp-5) var(--sp-6) var(--sp-7); }
+.viewport.is-phone .allchats-scroll { padding: var(--sp-4) var(--sp-3) var(--sp-6); }
+.allchats-page { width: 100%; min-width: 0; display: grid; gap: var(--sp-4); }
+.allchats-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.allchats-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; min-width: 0; }
+.allchats-search { flex: 1; min-width: 0; max-width: 420px; width: 100%; height: 34px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-r-control); background: var(--sp-surface); color: var(--sp-text); font-size: var(--sp-fs-control); outline: none; }
+.allchats-search:focus { border-color: var(--sp-accent); }
+.filter-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.viewport.is-phone .allchats-toolbar { flex-direction: column; align-items: stretch; }
+.viewport.is-phone .allchats-search { max-width: none; }
+.filter-chip { height: 28px; padding: 0 10px; border: 1px solid var(--sp-border); border-radius: var(--sp-r-pill); background: var(--sp-surface); color: var(--sp-text-2); font-size: var(--sp-fs-meta); cursor: pointer; white-space: nowrap; flex: none; }
+.filter-chip.active { border-color: var(--sp-accent); background: var(--sp-accent-soft); color: var(--sp-text); }
+.chat-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--sp-border); cursor: pointer; min-width: 0; }
+.viewport.is-phone .chat-item { padding: var(--sp-3); }
+.chat-item > div { min-width: 0; }
+.chat-item strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-item:first-child { border-top: 0; }
+.chat-item:hover { background: var(--sp-surface-raised); }
+.chat-item-meta { font-size: var(--sp-fs-meta); color: var(--sp-text-3); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
+.badge-sub { display: inline-flex; align-items: center; white-space: nowrap; flex: none; padding: 1px 6px; border-radius: var(--sp-r-pill); background: var(--sp-surface-raised); border: 1px solid var(--sp-border); font-size: 11px; color: var(--sp-text-2); }
+
+/* Command Palette */
+.cmd-backdrop { position: fixed; inset: 0; z-index: 80; background: rgb(0 0 0 / .5); display: grid; place-items: start center; padding-top: 14vh; }
+.cmd-box { width: min(520px, 92vw); border: 1px solid var(--sp-border-strong); border-radius: var(--sp-r-card); background: var(--sp-surface-overlay); box-shadow: var(--sp-shadow-popover); overflow: hidden; }
+.cmd-input { width: 100%; border: 0; border-bottom: 1px solid var(--sp-border); background: transparent; padding: var(--sp-3) var(--sp-4); font-size: var(--sp-fs-body); outline: none; }
+.cmd-list { padding: var(--sp-2); display: grid; gap: 2px; }
+.cmd-item { display: flex; justify-content: space-between; padding: var(--sp-2) var(--sp-3); border-radius: var(--sp-r-control); font-size: var(--sp-fs-control); cursor: pointer; }
+.cmd-item.hot { background: var(--sp-accent-soft); color: var(--sp-accent); }
+
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="review-bar">
+  <strong>Mockup Review</strong>
+  <div class="review-seg" role="group" aria-label="Screen">
+    <button type="button" class="active" data-view-btn="workspace">Workspace</button>
+    <button type="button" data-view-btn="home">Home</button>
+    <button type="button" data-view-btn="allchats">All chats</button>
+  </div>
+  <div class="review-seg" role="group" aria-label="Viewport">
+    <button type="button" class="active" data-vp-btn="desktop">Desktop 1440</button>
+    <button type="button" data-vp-btn="phone">Phone 390</button>
+  </div>
+  <div class="review-seg" role="group" aria-label="Theme">
+    <button type="button" class="active" data-theme-btn="dark">Dark</button>
+    <button type="button" data-theme-btn="light">Light</button>
+  </div>
+  <button type="button" class="review-toggle active" id="tog-pop">Usage Popover</button>
+  <button type="button" class="review-toggle active" id="tog-insp">Inspector</button>
+  <button type="button" class="review-toggle" id="tog-err">Composer Error</button>
+  <button type="button" class="review-toggle" id="tog-cmd">Cmd+K Palette</button>
+</div>
+
+<div class="stage">
+  <div class="viewport" id="viewport">
+    <div class="shell" id="shell">
+      <aside class="sidebar" aria-label="Console navigation and conversations">
+        <div class="sidebar-brand">
+          <div class="brand-id"><span class="rail-brand" aria-hidden="true"></span><span>Gnomcode</span></div>
+          <button type="button" class="icon-btn" id="btn-collapse" title="Toggle sidebar (Ctrl+\)"><svg class="ico" viewBox="0 0 24 24"><path d="M3 4h18v16H3z M9 4v16"/></svg></button>
+        </div>
+        <nav class="nav-strip" aria-label="Console views">
+          <button type="button" class="nav-pill" data-nav="home"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10H3z M9 21v-6h6v6"/></svg><span>Home</span></button>
+          <button type="button" class="nav-pill" data-nav="workspace" aria-current="page"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span>Chats</span></button>
+          <button type="button" class="nav-pill" data-nav="usage"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10m8 10V4m8 16v-7"/></svg><span>Usage</span></button>
+          <button type="button" class="nav-pill" data-nav="settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg><span>Settings</span></button>
+        </nav>
+        <div class="sessions-head">
+          <div class="search-box">
+            <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input type="search" placeholder="Search sessions" aria-label="Search sessions">
+          </div>
+          <button type="button" class="btn-new">New</button>
+        </div>
+        <div class="sessions-scroll">
+          <div class="list-group"><span>Needs you</span><span>1</span></div>
+          <button type="button" class="conv-row">
+            <span class="dot warn"></span>
+            <span class="conv-main"><span class="conv-title">Approve migration script</span><span class="conv-meta">fleethud · Claude Code</span></span>
+            <span class="conv-time">2m</span>
+          </button>
+          <div class="list-group"><span>Running</span><span>2</span></div>
+          <button type="button" class="conv-row active">
+            <span class="dot run"></span>
+            <span class="conv-main"><span class="conv-title">Console redesign audit</span><span class="conv-meta">fleethud · Antigravity</span></span>
+            <span class="conv-time">now</span>
+          </button>
+          <button type="button" class="subagent-toggle" id="btn-subagents" aria-expanded="false">
+            <span class="chev">▸</span>
+            <span class="dot run" style="width:6px;height:6px"></span>
+            <span>1 running · 37 subagents</span>
+          </button>
+          <div class="subagent-tree" id="subagent-tree" hidden>
+            <button type="button" class="conv-row"><span class="dot run"></span><span class="conv-main"><span class="conv-title">Capture screenshots</span><span class="conv-meta">playwright · flash</span></span><span class="conv-time">1m</span></button>
+            <button type="button" class="conv-row"><span class="dot"></span><span class="conv-main"><span class="conv-title">Audit token contrast</span><span class="conv-meta">research · flash</span></span><span class="conv-time">6m</span></button>
+            <button type="button" class="conv-row"><span class="dot"></span><span class="conv-main"><span class="conv-title">Inspect HomeView layout</span><span class="conv-meta">research · flash</span></span><span class="conv-time">9m</span></button>
+            <button type="button" class="conv-row"><span class="dot"></span><span class="conv-main"><span class="conv-title">Check mobile breakpoints</span><span class="conv-meta">playwright · flash</span></span><span class="conv-time">14m</span></button>
+            <button type="button" class="conv-row"><span class="dot"></span><span class="conv-main"><span class="conv-title">Survey Settings controls</span><span class="conv-meta">research · flash</span></span><span class="conv-time">19m</span></button>
+            <button type="button" class="subagent-more" data-open-allchats>View 32 more in All chats ›</button>
+          </div>
+          <div class="list-group"><span>Recent</span><span>3</span></div>
+          <button type="button" class="conv-row">
+            <span class="dot"></span>
+            <span class="conv-main"><span class="conv-title">Quota pace calculation</span><span class="conv-meta">fleethud · Codex</span></span>
+            <span class="conv-time">1h</span>
+          </button>
+          <button type="button" class="conv-row">
+            <span class="dot"></span>
+            <span class="conv-main"><span class="conv-title">Fix Windows file share mode</span><span class="conv-meta">fleethud · Claude Code</span></span>
+            <span class="conv-time">4h</span>
+          </button>
+        </div>
+        <div class="sidebar-foot">
+          <button type="button" class="link-btn" data-open-allchats>All chats (142) ›</button>
+          <span>v1.0.0</span>
+        </div>
+      </aside>
+
+      <main class="main">
+          <section class="ws-grid inspector-open" id="view-workspace">
+          <div class="ws-pane">
+            <header class="ws-header">
+              <div class="ws-title-wrap">
+                <h1 class="ws-title">Console redesign audit</h1>
+                <span class="ws-sub">Antigravity · Running</span>
+              </div>
+              <div class="ws-actions">
+                <button type="button" class="quota-pill is-warn" id="btn-quota-pill" title="View all provider limits">
+                  <svg class="ring" viewBox="0 0 16 16"><circle class="track" cx="8" cy="8" r="6"/><circle class="fill" cx="8" cy="8" r="6" stroke-dasharray="37.7" stroke-dashoffset="32.8"/></svg>
+                  <span>13% left</span>
+                </button>
+                <button type="button" class="btn-quiet active" id="btn-inspector">Inspector</button>
+                <button type="button" class="icon-btn" title="More actions"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+              </div>
+            </header>
+
+            <div class="ws-scroll">
+              <div class="measure">
+                <div class="msg-user">Audit the workspace screen and consolidate Files, Changes, Artifacts, and Terminal into one right inspector.</div>
+                <div class="msg-agent">
+                  <div class="msg-meta"><strong>Antigravity</strong> · <span>Gemini 4 Hydrogen</span> · <span>00:48</span></div>
+                  <p>Consolidated all four panels into a single 380px right inspector with a unified segmented control. The transcript now scrolls once at a comfortable 72ch measure.</p>
+                  <div class="code-block">
+                    <div class="code-head"><span>web/app/gnomcode-tokens.css</span><span>CSS</span></div>
+                    <pre>:root {
+  --sp-accent: #5b8def;
+  --sp-danger: #ef4444;
+  --sp-text-3: #7c8798;
+}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- IDE-style Model + Usage Popover -->
+            <div class="popover" id="usage-popover">
+              <div class="pop-card">
+                <div class="pop-head">Switch Provider &amp; Model</div>
+                <div class="usage-pool-name" style="padding:4px 8px 2px">Antigravity</div>
+                <div class="pop-row" style="opacity:.7"><span>Gemini 4 Argon</span><span class="chip danger" style="height:18px;font-size:10px">Out</span></div>
+                <div class="pop-row selected"><span>Gemini 4 Hydrogen Medium</span><span class="chip warn" style="height:18px;font-size:10px">13% · ✓</span></div>
+                <div class="pop-sep"></div>
+                <div class="usage-pool-name" style="padding:4px 8px 2px">Claude Code</div>
+                <div class="pop-row"><span>Claude Opus 5.5</span><span class="chip ok" style="height:18px;font-size:10px">97%</span></div>
+                <div class="pop-row"><span>Claude Sonnet 5.5</span><span class="chip ok" style="height:18px;font-size:10px">97%</span></div>
+                <div class="pop-sep"></div>
+                <div class="usage-pool-name" style="padding:4px 8px 2px">Codex</div>
+                <div class="pop-row"><span>gpt-6.1-sol</span><span class="chip ok" style="height:18px;font-size:10px">100%</span></div>
+                <div class="pop-sep"></div>
+                <div class="pop-row" id="btn-view-usage" style="cursor:pointer"><span>View Usage</span><span>›</span></div>
+              </div>
+              <div class="pop-card" id="usage-card" hidden>
+                <div class="pop-head">Usage · All Providers</div>
+                <div class="usage-pool">
+                  <div class="usage-pool-name">Antigravity · Gemini Models</div>
+                  <div class="usage-line">
+                    <div><span>Weekly limit</span><small>Resets in 1d 22h</small></div>
+                    <div class="usage-right" style="color:var(--sp-warn)"><span>13% left</span><svg class="ring" viewBox="0 0 16 16"><circle class="track" cx="8" cy="8" r="6"/><circle class="fill" cx="8" cy="8" r="6" stroke-dasharray="37.7" stroke-dashoffset="32.8"/></svg></div>
+                  </div>
+                  <div class="usage-line">
+                    <div><span>5h limit</span><small>Resets in 1h 30m</small></div>
+                    <div class="usage-right" style="color:var(--sp-ok)"><span>83% left</span><svg class="ring" viewBox="0 0 16 16"><circle class="track" cx="8" cy="8" r="6"/><circle class="fill" cx="8" cy="8" r="6" stroke-dasharray="37.7" stroke-dashoffset="6.4"/></svg></div>
+                  </div>
+                </div>
+                <div class="pop-sep"></div>
+                <div class="usage-pool">
+                  <div class="usage-pool-name">Antigravity · Gemini 4 Argon</div>
+                  <div class="usage-line">
+                    <div><span>Weekly limit</span><small>Resets in 2d 13h</small></div>
+                    <div class="usage-right" style="color:var(--sp-danger)"><span>0% left</span></div>
+                  </div>
+                </div>
+                <div class="pop-sep"></div>
+                <div class="usage-pool">
+                  <div class="usage-pool-name">Claude Code</div>
+                  <div class="usage-line">
+                    <div><span>Weekly limit</span><small>Resets Fri</small></div>
+                    <div class="usage-right" style="color:var(--sp-ok)"><span>97% left</span></div>
+                  </div>
+                </div>
+                <div class="pop-sep"></div>
+                <div class="usage-pool">
+                  <div class="usage-pool-name">Codex</div>
+                  <div class="usage-line">
+                    <div><span>Weekly limit</span><small>Resets Mon</small></div>
+                    <div class="usage-right" style="color:var(--sp-ok)"><span>100% left</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="composer-dock">
+              <div class="composer-inner">
+                <div class="quick-row">
+                  <button type="button" class="quick-chip">Continue</button>
+                  <button type="button" class="quick-chip">Run tests</button>
+                  <button type="button" class="quick-chip">Summarize changes</button>
+                  <button type="button" class="quick-chip">Customize</button>
+                </div>
+                <div class="composer-box">
+                  <div class="composer-error" id="composer-error" hidden>
+                    <span>Could not send prompt. Agent is waiting at a trust prompt.</span>
+                    <div class="composer-error-actions">
+                      <button type="button">Retry</button>
+                      <button type="button">Open terminal</button>
+                    </div>
+                  </div>
+                  <textarea class="composer-input" rows="2" placeholder="Message Antigravity..."></textarea>
+                  <div class="composer-foot">
+                    <div class="composer-left">
+                      <button type="button" class="model-trigger" id="btn-model">
+                        <span>Gemini 4 Hydrogen Medium</span>
+                        <svg class="ico" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+                      </button>
+                    </div>
+                    <div class="composer-right">
+                      <button type="button" class="icon-btn" title="Attach file"><svg class="ico" viewBox="0 0 24 24"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
+                      <button type="button" class="btn-send">Send</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="inspector" id="inspector">
+            <div class="inspector-head">
+              <div class="seg" role="tablist">
+                <button type="button">Files</button>
+                <button type="button" class="active">Changes</button>
+                <button type="button">Artifacts</button>
+                <button type="button">Terminal</button>
+              </div>
+              <button type="button" class="icon-btn" id="close-inspector" aria-label="Close inspector"><svg class="ico" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </div>
+            <div class="inspector-body">
+              <div class="diff-file">
+                <div class="diff-head">M  web/app/gnomcode-tokens.css</div>
+                <div class="diff-line diff-del">-  --sp-primary: #ff2544;</div>
+                <div class="diff-line diff-add">+  --sp-accent: #5b8def;</div>
+                <div class="diff-line diff-add">+  --sp-danger: #ef4444;</div>
+              </div>
+              <div class="diff-file">
+                <div class="diff-head">M  web/local-console/WorkspaceView.tsx</div>
+                <div class="diff-line diff-add">+  &lt;RightInspector tab={tab} /&gt;</div>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <!-- HOME VIEW -->
+        <section class="home-scroll" id="view-home" hidden>
+          <div class="home-page">
+            <h1 class="page-title">Home</h1>
+
+            <div>
+              <div class="sec-head"><h2>Limits</h2><span>Updated just now</span></div>
+              <div class="card-grid">
+                <div class="card">
+                  <div class="prov-head">
+                    <div class="prov-id"><span class="prov-mark">C</span><div><h3>Claude Code</h3><p>Weekly 97% left · resets Fri</p></div></div>
+                    <span class="chip ok">OK</span>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="prov-head">
+                    <div class="prov-id"><span class="prov-mark">X</span><div><h3>Codex</h3><p>Weekly 100% left · resets Mon</p></div></div>
+                    <span class="chip ok">OK</span>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="prov-head">
+                    <div class="prov-id"><span class="prov-mark">A</span><div><h3>Antigravity</h3><p>Gemini Models 13% · 1 pool out</p></div></div>
+                    <span class="chip warn">Low</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-split">
+              <div class="home-col">
+                <div>
+                  <div class="sec-head"><h2>Activity</h2><span>Days in UTC</span></div>
+                  <div class="card">
+                    <div class="hm-stats">
+                      <div><strong>9.6B</strong><span>tokens, past year</span></div>
+                      <div><strong>44</strong><span>active days</span></div>
+                      <div><strong>39</strong><span>day streak</span></div>
+                      <div><strong>Oct 28</strong><span>busiest day</span></div>
+                    </div>
+                    <div class="hm-wrap">
+                      <div class="hm-days"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+                      <div class="hm-scroll" id="hm-scroll">
+                        <div class="hm-months" id="hm-months"></div>
+                        <div class="hm-grid" id="hm-grid"></div>
+                      </div>
+                    </div>
+                    <div class="hm-legend"><span>Less</span><i class="hm-cell" data-l="0"></i><i class="hm-cell" data-l="1"></i><i class="hm-cell" data-l="2"></i><i class="hm-cell" data-l="3"></i><i class="hm-cell" data-l="4"></i><span>More</span></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="sec-head"><h2>Sessions</h2><button type="button" class="link-btn" data-open-allchats>View all ›</button></div>
+                  <div class="sess-list">
+                    <div class="sess-row"><span class="dot warn"></span><div><strong>Approve migration script</strong><div style="font-size:12px;color:var(--sp-text-3)">fleethud · Claude Code</div></div><div class="sess-tok"><span class="sess-bar"><i style="width:28%"></i></span><span>42.1k</span></div><span style="font-size:12px;color:var(--sp-text-3)">2m</span></div>
+                    <div class="sess-row"><span class="dot run"></span><div><strong>Console redesign audit</strong><div style="font-size:12px;color:var(--sp-text-3)">fleethud · Antigravity · <span class="badge-sub">1 running · 37 subagents</span></div></div><div class="sess-tok"><span class="sess-bar"><i style="width:68%"></i></span><span>118k</span></div><span style="font-size:12px;color:var(--sp-text-3)">now</span></div>
+                    <div class="sess-row"><span class="dot"></span><div><strong>Quota pace calculation</strong><div style="font-size:12px;color:var(--sp-text-3)">fleethud · Codex</div></div><div class="sess-tok"><span class="sess-bar"><i style="width:14%"></i></span><span>19.4k</span></div><span style="font-size:12px;color:var(--sp-text-3)">1h</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="home-col">
+                <div>
+                  <div class="sec-head"><h2>Today</h2><span>API equivalent</span></div>
+                  <div class="tiles">
+                    <div class="card tile"><span>Tokens today</span><strong>138.1M</strong></div>
+                    <div class="card tile"><span>Est. spend today</span><strong>$41.20 est.</strong></div>
+                    <div class="card tile"><span>Active sessions</span><strong>2</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ALL CHATS PANE -->
+        <section class="allchats-scroll" id="view-all-chats" hidden>
+          <div class="allchats-page">
+            <div class="allchats-head">
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" class="btn-quiet" id="btn-back-ws">← Workspace</button>
+                <h1 class="page-title">All chats</h1>
+                <span class="badge-sub">142 sessions</span>
+              </div>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sp-text-2);cursor:pointer">
+                <input type="checkbox" id="chk-include-subagents"> Include subagents
+              </label>
+            </div>
+            <div class="allchats-toolbar">
+              <input class="allchats-search" type="search" placeholder="Search chats">
+              <div class="filter-chips">
+                <button type="button" class="filter-chip active">All</button>
+                <button type="button" class="filter-chip">Running (2)</button>
+                <button type="button" class="filter-chip">Needs approval (1)</button>
+                <button type="button" class="filter-chip">Claude Code</button>
+                <button type="button" class="filter-chip">Codex</button>
+                <button type="button" class="filter-chip">Antigravity</button>
+              </div>
+            </div>
+            <div class="sess-list">
+              <div class="chat-item">
+                <span class="dot warn"></span>
+                <div>
+                  <strong>Approve migration script</strong>
+                  <div class="chat-item-meta"><span>fleethud</span><span>·</span><span>Claude Code · Opus 5.5</span><span>·</span><span>42.1k tokens · $0.68 est.</span></div>
+                </div>
+                <span class="conv-time">2m</span>
+              </div>
+              <div class="chat-item">
+                <span class="dot run"></span>
+                <div>
+                  <strong>Console redesign audit</strong>
+                  <div class="chat-item-meta"><span>fleethud</span><span>·</span><span>Antigravity · Gemini 4 Hydrogen</span><span>·</span><span class="badge-sub">37 subagents</span><span>·</span><span>118k tokens</span></div>
+                </div>
+                <span class="conv-time">now</span>
+              </div>
+              <div class="chat-item">
+                <span class="dot"></span>
+                <div>
+                  <strong>Quota pace calculation</strong>
+                  <div class="chat-item-meta"><span>fleethud</span><span>·</span><span>Codex · gpt-6.1-sol</span><span>·</span><span>19.4k tokens</span></div>
+                </div>
+                <span class="conv-time">1h</span>
+              </div>
+              <div class="chat-item">
+                <span class="dot"></span>
+                <div>
+                  <strong>Fix Windows file share mode</strong>
+                  <div class="chat-item-meta"><span>fleethud</span><span>·</span><span>Claude Code · Sonnet 5.5</span><span>·</span><span>64.0k tokens · $0.31 est.</span></div>
+                </div>
+                <span class="conv-time">4h</span>
+              </div>
+              <div class="chat-item">
+                <span class="dot"></span>
+                <div>
+                  <strong>Complete Gnomcode 1.0 roadmap item G</strong>
+                  <div class="chat-item-meta"><span>fleethud</span><span>·</span><span>Codex · gpt-6.1-sol</span><span>·</span><span class="badge-sub">12 subagents</span><span>·</span><span>210k tokens</span></div>
+                </div>
+                <span class="conv-time">1d</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- Command Palette -->
+<div class="cmd-backdrop" id="cmd-palette" hidden>
+  <div class="cmd-box" role="dialog" aria-label="Command palette">
+    <input class="cmd-input" type="text" placeholder="Type a command or search sessions..." autofocus>
+    <div class="cmd-list">
+      <div class="cmd-item hot"><span>New session</span><span class="nav-kbd">⌘N</span></div>
+      <div class="cmd-item"><span>Go to Home</span><span class="nav-kbd">G H</span></div>
+      <div class="cmd-item"><span>Toggle Inspector</span><span class="nav-kbd">⌘I</span></div>
+      <div class="cmd-item"><span>Switch Theme (Dark / Light)</span><span class="nav-kbd">⌘T</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const vp = document.getElementById('viewport');
+const ws = document.getElementById('view-workspace');
+const hm = document.getElementById('view-home');
+const pop = document.getElementById('usage-popover');
+const insp = document.getElementById('inspector');
+const err = document.getElementById('composer-error');
+const cmd = document.getElementById('cmd-palette');
+
+const shell = document.getElementById('shell');
+const allChats = document.getElementById('view-all-chats');
+function switchView(name) {
+  document.querySelectorAll('[data-view-btn]').forEach(x => x.classList.toggle('active', x.dataset.viewBtn === name));
+  ws.hidden = name !== 'workspace';
+  hm.hidden = name !== 'home';
+  allChats.hidden = name !== 'allchats';
+  const navTarget = name === 'allchats' ? 'workspace' : name;
+  document.querySelectorAll('.nav-pill[data-nav]').forEach(n => n.setAttribute('aria-current', n.dataset.nav === navTarget ? 'page' : 'false'));
+  if (name === 'home') requestAnimationFrame(() => { hmScroll.scrollLeft = hmScroll.scrollWidth; });
+}
+document.querySelectorAll('.nav-pill[data-nav]').forEach(n => n.onclick = () => {
+  if (n.dataset.nav === 'home' || n.dataset.nav === 'workspace') switchView(n.dataset.nav);
+});
+document.querySelectorAll('[data-view-btn]').forEach(b => b.onclick = () => switchView(b.dataset.viewBtn));
+document.querySelectorAll('[data-open-allchats]').forEach(b => b.onclick = () => switchView('allchats'));
+document.getElementById('btn-back-ws').onclick = () => switchView('workspace');
+document.getElementById('btn-subagents').onclick = function () {
+  const open = this.getAttribute('aria-expanded') === 'true';
+  this.setAttribute('aria-expanded', String(!open));
+  document.getElementById('subagent-tree').hidden = open;
+};
+document.querySelectorAll('.filter-chip').forEach(c => c.onclick = () => {
+  document.querySelectorAll('.filter-chip').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+});
+document.querySelectorAll('[data-vp-btn]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-vp-btn]').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  vp.classList.toggle('is-phone', b.dataset.vpBtn === 'phone');
+  requestAnimationFrame(() => { hmScroll.scrollLeft = hmScroll.scrollWidth; });
+});
+document.querySelectorAll('[data-theme-btn]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-theme-btn]').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+});
+document.getElementById('btn-collapse').onclick = () => shell.classList.toggle('list-collapsed');
+const usageCard = document.getElementById('usage-card');
+document.getElementById('tog-pop').onclick = function () {
+  this.classList.toggle('active');
+  const open = this.classList.contains('active');
+  pop.hidden = !open;
+  usageCard.hidden = !open;
+};
+document.getElementById('tog-insp').onclick = function () { this.classList.toggle('active'); insp.hidden = !this.classList.contains('active'); ws.classList.toggle('inspector-open', !insp.hidden); };
+document.getElementById('tog-err').onclick = function () { this.classList.toggle('active'); err.hidden = !this.classList.contains('active'); };
+document.getElementById('tog-cmd').onclick = function () { this.classList.toggle('active'); cmd.hidden = !this.classList.contains('active'); };
+document.getElementById('btn-quota-pill').onclick = () => { pop.hidden = !pop.hidden; usageCard.hidden = false; };
+document.getElementById('btn-model').onclick = () => { pop.hidden = !pop.hidden; usageCard.hidden = true; };
+document.getElementById('btn-view-usage').onclick = () => { usageCard.hidden = !usageCard.hidden; };
+document.getElementById('close-inspector').onclick = () => { insp.hidden = true; ws.classList.remove('inspector-open'); };
+
+// Populate 53-week synthetic heatmap + month labels (scrolled to right/most-recent first)
+const monthsEl = document.getElementById('hm-months');
+const monthMarks = { 0: 'Nov', 4: 'Dec', 8: 'Jan', 13: 'Feb', 17: 'Mar', 21: 'Apr', 26: 'May', 30: 'Jun', 34: 'Jul', 39: 'Aug', 43: 'Sep', 48: 'Oct', 51: 'Nov' };
+for (let w = 0; w < 53; w++) {
+  const sp = document.createElement('span');
+  sp.textContent = monthMarks[w] || '';
+  monthsEl.appendChild(sp);
+}
+const grid = document.getElementById('hm-grid');
+let s = 11; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+for (let i = 0; i < 53 * 7; i++) {
+  const l = i < 260 ? (r() > .97 ? 1 : 0) : (r() < .25 ? 0 : Math.ceil(r() * 4));
+  const cell = document.createElement('i'); cell.className = 'hm-cell'; cell.dataset.l = l;
+  grid.appendChild(cell);
+}
+const hmScroll = document.getElementById('hm-scroll');
+hmScroll.scrollLeft = hmScroll.scrollWidth;
+document.querySelectorAll('[data-view-btn]').forEach(btn => btn.addEventListener('click', () => {
+  requestAnimationFrame(() => { hmScroll.scrollLeft = hmScroll.scrollWidth; });
+}));
+</script>
+</body>
+</html>
