@@ -341,3 +341,29 @@ test.describe('Stale and reset quota states', () => {
     });
   });
 });
+
+test.describe('Owner decision: brand-red activity heatmap', () => {
+  const ramps = {
+    dark: ['#17171a', '#4a121b', '#7d1626', '#ba1c35', '#ff2544'],
+    light: ['#e4e9ee', '#fcd1d8', '#f799a8', '#ec526b', '#ff2544'],
+  } as const;
+  for (const scheme of ['dark', 'light'] as const) {
+    test(`heat tokens and rendered cells keep the brand-red ramp in ${scheme} mode`, async ({ page, openConsole }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await openConsole();
+      await expect(page.locator('#home-activity .sp-heat[data-level]').first()).toBeVisible();
+      const tokens = await page.evaluate(() =>
+        [0, 1, 2, 3, 4].map((n) => getComputedStyle(document.documentElement).getPropertyValue(`--sp-heat-${n}`).trim().toLowerCase()),
+      );
+      expect(tokens).toEqual([...ramps[scheme]]);
+      const cells = await page.locator('#home-activity .sp-heat[data-level]').evaluateAll((nodes) =>
+        nodes.map((node) => [node.getAttribute('data-level'), getComputedStyle(node).backgroundColor] as const),
+      );
+      const hex = (value: string) => {
+        const [r, g, b] = value.match(/\d+/g)!.map(Number);
+        return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+      };
+      for (const [level, color] of cells) expect(hex(color)).toBe(ramps[scheme][Number(level)]);
+    });
+  }
+});
