@@ -42,11 +42,34 @@ pub(crate) struct ProviderOverview {
     wsl_sources: Vec<String>,
 }
 
+fn wsl_root_has_logs(root: &std::path::Path) -> bool {
+    fn scan(dir: &std::path::Path, depth: u8) -> bool {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if matches!(
+                    path.extension().and_then(|e| e.to_str()),
+                    Some("jsonl" | "pb" | "json")
+                ) {
+                    return true;
+                }
+            } else if depth < 2 && path.is_dir() && scan(&path, depth + 1) {
+                return true;
+            }
+        }
+        false
+    }
+    scan(root, 0)
+}
+
 /// Distro labels whose running share holds logs for `slug` (ADR 0060). Cached discovery.
 fn wsl_sources(slug: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for root in gnomcode_platform::wsl::discover_wsl_roots() {
-        if !root.exists || root.agent.as_str() != slug {
+        if !root.exists || root.agent.as_str() != slug || !wsl_root_has_logs(&root.path) {
             continue;
         }
         if let Some(distro) = gnomcode_core::wsl::distro_of(&root.path.to_string_lossy()) {

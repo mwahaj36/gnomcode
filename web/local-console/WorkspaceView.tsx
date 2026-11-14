@@ -2379,7 +2379,7 @@ export function WorkspaceView() {
                   Resume conversation
                 </button>
               ) : null}
-                <div className="sp-header-panel-toggles" role="group" aria-label="Workspace panels">
+                <div className="sp-header-panel-toggles" role="toolbar" aria-label="Conversation tools">
                   <button
                     type="button"
                     className={`btn-control${sidePanel === 'files' ? ' is-active' : ''}`}

@@ -145,14 +145,18 @@ test.describe('Settings', () => {
     await openConsole('#settings');
     const root = page.locator('#local-settings-root');
     for (const heading of ['Account', 'Providers', 'Notifications', 'Remote and devices', 'Automations', 'Privacy and data', 'Appearance', 'Updates', 'About']) {
+      await root.locator('.sp-settings-nav').getByRole('link', { name: heading, exact: true }).click();
       await expect(root.getByRole('heading', { name: heading })).toBeVisible();
+      if (heading === 'Remote and devices') {
+        await expect(root.getByText('Sign in to your account to make this desktop available.')).toBeVisible();
+      }
     }
-    await expect(root.getByText('Sign in to your account to make this desktop available.')).toBeVisible();
     await expect(root.getByText(/^Gnomcode \d/)).toBeVisible();
   });
 
   test('theme cycles system, light, dark and persists', async ({ page, openConsole }) => {
     await openConsole('#settings');
+    await page.locator('.sp-settings-nav').getByRole('link', { name: 'Appearance' }).click();
     const theme = page.locator('#local-settings-root').getByRole('button', { name: /^Theme/ });
     const html = page.locator('html');
     await expect(theme).toContainText('system');
@@ -162,6 +166,7 @@ test.describe('Settings', () => {
     await theme.click();
     await expect(html).toHaveAttribute('data-theme', 'dark');
     await page.reload();
+    await page.locator('.sp-settings-nav').getByRole('link', { name: 'Appearance' }).click();
     await expect(html).toHaveAttribute('data-theme', 'dark');
     expect(await page.evaluate(() => localStorage.getItem('gnomcode-theme'))).toBe('dark');
     await theme.click();
@@ -172,10 +177,12 @@ test.describe('Settings', () => {
   test('notification preferences save and survive a reload', async ({ page, openConsole }) => {
     await openConsole('#settings');
     const root = page.locator('#local-settings-root');
+    await root.locator('.sp-settings-nav').getByRole('link', { name: 'Notifications' }).click();
     await root.getByLabel(/Limit low/).setChecked(false);
     await root.getByRole('button', { name: 'Save notifications' }).click();
     await expect(root.getByText('Saved notification preferences.')).toBeVisible();
     await page.reload();
+    await root.locator('.sp-settings-nav').getByRole('link', { name: 'Notifications' }).click();
     await expect(root.getByLabel(/Limit low/)).not.toBeChecked();
     await root.getByLabel(/Limit low/).setChecked(true);
     await root.getByRole('button', { name: 'Save notifications' }).click();
@@ -184,6 +191,7 @@ test.describe('Settings', () => {
   test('usage rules can be added and removed', async ({ page, openConsole }) => {
     await openConsole('#settings');
     const root = page.locator('#local-settings-root');
+    await root.locator('.sp-settings-nav').getByRole('link', { name: 'Automations' }).click();
     await root.getByLabel('Spend limit (USD)').fill('7.5');
     await root.getByRole('button', { name: 'Add rule' }).click();
     const row = root.locator('tr', { hasText: '$7.50' });
@@ -194,6 +202,7 @@ test.describe('Settings', () => {
 
   test('Getting started opens the tour', async ({ page, openConsole }) => {
     await openConsole('#settings');
+    await page.locator('.sp-settings-nav').getByRole('link', { name: 'About' }).click();
     await page.locator('#local-settings-root').getByRole('button', { name: 'Getting started' }).click();
     await expect(page.locator('#onboarding-dialog')).toBeVisible();
   });
