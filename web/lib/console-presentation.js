@@ -50,6 +50,34 @@ const agentLabel = id => AGENT_NAMES[id] || 'Unsupported agent';
 const projectTime = project => { const time = Date.parse(project.last_active); return Number.isFinite(time) ? time : -Infinity; };
 
 /** The folder a project lives in, shortened for one line: home becomes ~, then at most the last three folders. */
+/** Distro named by a WSL share folder (wsl.localhost or wsl$, ADR 0060), else ''. */
+export function wslDistro(path) {
+  const m = /^(?:[\\/]{2}(?:\?[\\/]UNC[\\/])?)(?:wsl\.localhost|wsl\$)[\\/]+([^\\/]+)/i.exec(String(path ?? ''));
+  return m ? m[1] : '';
+}
+
+/** UNC folder for a Linux path inside a distro: /home/a in Ubuntu becomes the wsl.localhost share path. */
+export function wslFolder(distro, linuxPath) {
+  const clean = String(linuxPath ?? '').trim().replace(/\/+$/, '');
+  if (!distro || !clean.startsWith('/')) return '';
+  return `\\\\wsl.localhost\\${distro}${clean.replace(/\//g, '\\')}`;
+}
+
+/** Keeps both ends of a long path, eliding the middle. */
+export function middleTruncate(text, max = 48) {
+  const s = String(text ?? '');
+  if (s.length <= max) return s;
+  const keep = max - 3;
+  const head = Math.ceil(keep / 2);
+  return `${s.slice(0, head)}...${s.slice(s.length - (keep - head))}`;
+}
+
+/** `WSL: <distro>` badge for a session row, or ''. */
+export function wslBadge(session) {
+  const distro = wslDistro(session?.repo_path || session?.cwd);
+  return distro ? `<span class="sp-badge sp-wsl-badge" title="Runs in WSL distro ${escape(distro)}">WSL: ${escape(distro)}</span>` : '';
+}
+
 export function shortPath(path) {
   const parts = String(path ?? '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').split('/').filter(Boolean);
   if (parts.length < 2) return '';
@@ -316,7 +344,7 @@ function homeRow(session, group) {
   const meta = [project, session.surface_label || agentLabel(session.agent), session.model && session.model !== 'Unspecified' ? session.model : '', subagentBadge].filter(Boolean).join(' · ');
   const tokenBadge = totalTok > 0 ? `<span class="sp-session-tokens">${escape(tokens(totalTok))}</span>` : '';
   const context = fill === null ? '<span class="sp-session-context" aria-hidden="true"></span>' : `<span class="sp-session-context" title="Context ${fill}% full"><i style="--fill:${fill}%"></i></span>`;
-  return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${escape(meta)}</span></span>${tokenBadge}${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
+  return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${wslBadge(session)}${escape(meta)}</span></span>${tokenBadge}${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
 }
 
 export function renderHomeSessions(sessions) {
@@ -700,7 +728,7 @@ export function renderSessionList(sessions, selected = '', query = '') {
     const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
     const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
     lastGroup = group;
-    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
+    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
