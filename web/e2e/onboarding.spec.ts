@@ -63,6 +63,12 @@ const fresh = () => ({
 
 async function openSetup(page: Page, url: string) {
   await page.goto(`${url}#settings`);
+  const existing = page.locator('#onboarding-dialog');
+  await existing.waitFor({ state: 'visible', timeout: 1500 }).catch(() => {});
+  if (await existing.isVisible()) {
+    await existing.getByRole('button', { name: 'Close' }).click();
+    await expect(existing).not.toBeVisible();
+  }
   const mobileCat = page.locator('#settings-mobile-category');
   if (await mobileCat.isVisible()) {
     await mobileCat.selectOption('settings-about');
@@ -71,6 +77,12 @@ async function openSetup(page: Page, url: string) {
   }
   await page.locator('#local-settings-root').getByRole('button', { name: 'Getting started' }).click();
   await expect(page.locator('#onboarding-dialog')).toBeVisible();
+}
+
+async function advanceToProvider(page: Page) {
+  await page.locator('#onboarding-next').click();
+  await expect(page.locator('#onboarding-dialog [data-onboarding-step="account"]')).toBeVisible();
+  await page.locator('#onboarding-next').click();
 }
 
 test('detected providers are pre-checked and each step ticks as status flips', async ({ page, openConsole, daemon }) => {
@@ -82,7 +94,7 @@ test('detected providers are pre-checked and each step ticks as status flips', a
   await expect(dialog.getByRole('heading', { name: 'Which agents do you use?' })).toBeFocused();
   await expect(dialog.getByLabel('Claude Code')).toBeChecked();
   await expect(dialog.getByLabel('Codex')).not.toBeChecked();
-  await page.locator('#onboarding-next').click();
+  await advanceToProvider(page);
   await expect(page.locator('#onboarding-progress')).toHaveText('Claude Code: provider 1 of 1');
 
   const step = (id: string) => dialog.locator(`[data-step="${id}"]`);
@@ -115,7 +127,7 @@ test('copy buttons put the command on the clipboard', async ({ page, context, op
   await mockStatus(page, fresh());
   await openConsole('#settings');
   await openSetup(page, daemon.consoleUrl);
-  await page.locator('#onboarding-next').click();
+  await advanceToProvider(page);
   const copy = page.locator('#onboarding-dialog [data-step="signed_in"]').getByRole('button', { name: /Copy/ });
   await copy.click();
   await expect(copy).toHaveText('Copied');
@@ -129,7 +141,7 @@ test('Skip moves on, Close keeps progress and reopening resumes', async ({ page,
   await openSetup(page, daemon.consoleUrl);
   const dialog = page.locator('#onboarding-dialog');
   await dialog.getByLabel('Codex').check();
-  await page.locator('#onboarding-next').click();
+  await advanceToProvider(page);
   await expect(page.locator('#onboarding-progress')).toHaveText('Claude Code: provider 1 of 2');
   await dialog.getByRole('button', { name: 'Skip' }).click();
   await expect(page.locator('#onboarding-progress')).toHaveText('Codex: provider 2 of 2');
@@ -148,7 +160,7 @@ test('a WSL distro is passed to the status endpoint', async ({ page, openConsole
   await mockStatus(page, fresh(), seen);
   await openConsole('#settings');
   await openSetup(page, daemon.consoleUrl);
-  await page.locator('#onboarding-next').click();
+  await advanceToProvider(page);
   await page.locator('#onboarding-dialog').getByLabel('Run in').fill('Ubuntu');
   await expect.poll(() => seen.some((q) => q.includes('distro=Ubuntu') && q.includes('provider=claude'))).toBe(true);
   await expect(page.locator('#onboarding-dialog .sp-setup-meta')).toContainText('WSL: Ubuntu');
@@ -171,7 +183,7 @@ test('polling keeps rows in place (no layout shift)', async ({ page, openConsole
   await mockStatus(page, fresh());
   await openConsole('#settings');
   await openSetup(page, daemon.consoleUrl);
-  await page.locator('#onboarding-next').click();
+  await advanceToProvider(page);
   const row = page.locator('#onboarding-dialog [data-step="first_data"]');
   await expect(row).toBeVisible();
   const before = await row.boundingBox();
@@ -185,7 +197,7 @@ test('phone width: no horizontal scroll and 44px controls', async ({ page, openC
   await mockStatus(page, fresh());
   await openConsole('#settings');
   await openSetup(page, daemon.consoleUrl);
-  await page.locator('#onboarding-next').click();
+  await advanceToProvider(page);
   const dialog = page.locator('#onboarding-dialog');
   const overflow = await dialog.evaluate((d) => d.scrollWidth - d.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
