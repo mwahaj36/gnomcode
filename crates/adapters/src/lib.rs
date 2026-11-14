@@ -127,6 +127,34 @@ mod tests {
         }
     }
     #[test]
+    fn claude_harness_entries_become_system_events() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let batch = ClaudeAdapter::new().parse(
+            &FileCtx::default(),
+            include_bytes!("../../../fixtures/claude-code/synthetic/harness-entries.jsonl"),
+        );
+        let users: Vec<_> = batch
+            .chat_events
+            .iter()
+            .filter(|e| e.role == gnomcode_core::ChatRole::User)
+            .map(|e| e.content.as_str())
+            .collect();
+        assert_eq!(users, ["Please add tests"]);
+        assert!(
+            batch
+                .chat_events
+                .iter()
+                .all(|e| !e.content.contains("<task-notification>")
+                    && !e.content.contains("<system-reminder>"))
+        );
+        let rows: Vec<_> = batch
+            .chat_events
+            .iter()
+            .map(|e| (e.role.as_str(), e.status.clone(), e.content.clone()))
+            .collect();
+        insta::with_settings!({snapshot_path => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("snapshots")}, {insta::assert_debug_snapshot!("claude_harness_entries", rows);});
+    }
+    #[test]
     fn claude_user_turn_does_not_inherit_the_previous_completion() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let batch = ClaudeAdapter::new().parse(
