@@ -183,6 +183,9 @@ pub fn discover_wsl_roots() -> Vec<AgentRoot> {
 pub fn running_distros() -> Vec<String> {
     #[cfg(windows)]
     {
+        if std::env::var_os("GNOMCODE_DISABLE_WSL").is_some() {
+            return Vec::new();
+        }
         let registered = registry_distros();
         if registered.is_empty() {
             return Vec::new();
@@ -198,6 +201,9 @@ pub fn running_distros() -> Vec<String> {
 pub fn registered_distros() -> Vec<String> {
     #[cfg(windows)]
     {
+        if std::env::var_os("GNOMCODE_DISABLE_WSL").is_some() {
+            return Vec::new();
+        }
         registry_distros()
     }
     #[cfg(not(windows))]

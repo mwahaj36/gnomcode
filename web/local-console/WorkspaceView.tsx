@@ -13,7 +13,10 @@ import { createPortal } from 'react-dom';
 import {
   formatPromptWithAttachments,
   isSessionRunningState,
+  middleTruncate,
   reconcileChat,
+  wslDistro,
+  wslFolder,
   renderConversationLimits,
   renderProviderCards,
   renderSessionList,
@@ -182,6 +185,10 @@ export function WorkspaceView() {
   // Launcher form state
   const [launchAgent, setLaunchAgent] = useState('claude');
   const [launchRepo, setLaunchRepo] = useState('');
+  // "Run in" picker (ADR 0060): '' is Windows, otherwise a WSL distro name.
+  const [runIn, setRunIn] = useState('');
+  const [wslDistros, setWslDistros] = useState<{ name: string; label: string; running: boolean }[]>([]);
+  const [pathCopied, setPathCopied] = useState(false);
   const [launchModel, setLaunchModel] = useState('');
   const [launchWorktree, setLaunchWorktree] = useState(false);
   const [launchWorktreeBranch, setLaunchWorktreeBranch] = useState('');
@@ -557,7 +564,13 @@ export function WorkspaceView() {
       setLauncherOpen(open);
       setLaunchStatus('');
       if (folder) {
-        setLaunchRepo(folder);
+        // A WSL folder opens with its distro selected and its Linux path.
+        const distro = wslDistro(folder);
+        const linux = distro
+          ? '/' + folder.replace(/\\/g, '/').split('/').filter(Boolean).slice(2).join('/')
+          : '';
+        setRunIn(distro || rememberedRunIn(folder));
+        setLaunchRepo(distro ? linux : folder);
       }
       if (open) {
         void loadInstalledAgents();
@@ -918,17 +931,48 @@ export function WorkspaceView() {
     }
   };
 
+  useEffect(() => {
+    if (!launcherOpen) return;
+    let live = true;
+    fetchLocalJson<{ distros?: { name: string; label: string; running: boolean }[] }>('/api/v1/wsl/distros')
+      .then((data) => {
+        if (live) setWslDistros(Array.isArray(data?.distros) ? data.distros : []);
+      })
+      .catch(() => {
+        if (live) setWslDistros([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [launcherOpen]);
+
+  const resolvedLaunchPath = runIn ? wslFolder(runIn, launchRepo) : launchRepo.trim();
+
+  const copyLaunchPath = async () => {
+    try {
+      await navigator.clipboard.writeText(resolvedLaunchPath);
+      setPathCopied(true);
+      window.setTimeout(() => setPathCopied(false), 1500);
+    } catch {
+      setPathCopied(false);
+    }
+  };
+
   const handleLaunchSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    const repoPath = launchRepo.trim();
+    if (runIn && !resolvedLaunchPath) {
+      setLaunchStatus(`Enter a Linux folder in ${runIn}, for example /home/you/project.`);
+      return;
+    }
+    const repoPath = resolvedLaunchPath;
     if (!launchAgent || !repoPath) {
       setLaunchStatus('Please provide an agent and a workspace directory.');
       return;
     }
     setLaunchBusy(true);
-    setLaunchStatus(`Launching ${launchAgent}...`);
+    setLaunchStatus(runIn ? `Launching ${launchAgent} in WSL: ${runIn}...` : `Launching ${launchAgent}...`);
     try {
-      const record = await fetchLocalMutation<{ session_id: string }>('/api/v1/sessions/launch', {
+      const record = await fetchLocalMutation<{ session_id: string; starting?: string }>('/api/v1/sessions/launch', {
         method: 'POST',
         body: {
           agent: launchAgent,
@@ -939,7 +983,12 @@ export function WorkspaceView() {
             launchWorktree && launchWorktreeBranch.trim() ? launchWorktreeBranch.trim() : undefined,
         },
       });
-      setLaunchStatus(`Session ${record.session_id} launched! Opening conversation...`);
+      rememberRunIn(launchRepo.trim(), runIn);
+      setLaunchStatus(
+        record.starting
+          ? `${record.starting} Session ${record.session_id} is opening.`
+          : `Session ${record.session_id} launched! Opening conversation...`,
+      );
       await loadConversations();
       await loadChat(record.session_id);
       if (launchAgent === 'terminal') {
@@ -1737,17 +1786,42 @@ export function WorkspaceView() {
                   </select>
                 </label>
               </div>
+              {wslDistros.length ? (
+                <div>
+                  <label>
+                    Run in
+                    <select
+                      className="sp-run-in"
+                      value={runIn}
+                      onChange={(event) => {
+                        setRunIn(event.target.value);
+                        setLaunchRepo('');
+                      }}
+                    >
+                      <option value="">Windows</option>
+                      {wslDistros.map((distro) => (
+                        <option key={distro.name} value={distro.name}>
+                          {distro.label}
+                          {distro.running ? '' : ' (starts on launch)'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
               <div>
                 <label>
-                  Workspace directory
+                  {runIn ? `Linux folder in ${runIn}` : 'Workspace directory'}
                   <div className="workspace-field">
                     <input
                       type="text"
-                      placeholder="Choose a folder or enter its path"
+                      placeholder={runIn ? '/home/you/project' : 'Choose a folder or enter its path'}
+                      list={runIn ? 'sp-wsl-recent' : undefined}
                       value={launchRepo}
                       onChange={(event) => setLaunchRepo(event.target.value)}
                       required
                     />
+                    {runIn ? null : (
                     <button
                       type="button"
                       className="btn-control sp-launcher-browse"
@@ -1767,8 +1841,29 @@ export function WorkspaceView() {
                         <path d="M3 6h7l2 3h9v11H3V6Z" />
                       </svg>
                     </button>
+                    )}
                   </div>
                 </label>
+                {runIn ? (
+                  <datalist id="sp-wsl-recent">
+                    {recentWslFolders([...sessions, ...projects.map((p) => ({ repo_path: (p as { repo_root?: string }).repo_root }))], runIn).map((path) => (
+                      <option key={path} value={path} />
+                    ))}
+                  </datalist>
+                ) : null}
+                {runIn && resolvedLaunchPath ? (
+                  <div className="sp-path-line">
+                    <code title={resolvedLaunchPath}>{middleTruncate(resolvedLaunchPath, 52)}</code>
+                    <button
+                      type="button"
+                      className="btn-control sp-path-copy"
+                      onClick={() => void copyLaunchPath()}
+                      aria-label="Copy full path"
+                    >
+                      {pathCopied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div>
                 <label>
@@ -2415,4 +2510,43 @@ export function WorkspaceView() {
       </div>
     </section>
   );
+}
+
+const RUN_IN_KEY = 'gnomcode.runIn';
+
+function readRunIn(): Record<string, string> {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(RUN_IN_KEY) || '{}');
+    return value && typeof value === 'object' ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Last "Run in" choice for a folder (per project), '' for Windows. */
+function rememberedRunIn(folder: string): string {
+  return readRunIn()[folder.trim().toLowerCase()] || '';
+}
+
+function rememberRunIn(folder: string, runIn: string) {
+  try {
+    const all = readRunIn();
+    all[folder.toLowerCase()] = runIn;
+    window.localStorage.setItem(RUN_IN_KEY, JSON.stringify(all));
+  } catch {
+    // Per-viewer convenience only.
+  }
+}
+
+/** Linux folders of recent sessions in one distro, newest first. */
+function recentWslFolders(sessions: { repo_path?: string }[], distro: string): string[] {
+  const out: string[] = [];
+  for (const session of sessions) {
+    const path = session.repo_path || '';
+    if (wslDistro(path).toLowerCase() !== distro.toLowerCase()) continue;
+    const linux = '/' + path.replace(/\\/g, '/').split('/').filter(Boolean).slice(2).join('/');
+    if (!out.includes(linux)) out.push(linux);
+    if (out.length >= 8) break;
+  }
+  return out;
 }

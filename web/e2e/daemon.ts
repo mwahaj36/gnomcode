@@ -65,6 +65,8 @@ export async function startDaemon(options: { seed?: boolean; desktopClaude?: boo
     USERPROFILE: home,
     CLAUDE_CONFIG_DIR: path.join(home, 'claude'),
     CODEX_HOME: path.join(home, 'codex'),
+    // Never read this machine's WSL distros (ADR 0060); tests mock the picker.
+    GNOMCODE_DISABLE_WSL: '1',
   };
   const port = await freePort();
   const child: ChildProcess = spawn(binaryPath(), ['daemon', '--port', String(port)], {
