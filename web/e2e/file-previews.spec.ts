@@ -29,7 +29,10 @@ async function openFiles(page: Page, openConsole: (hash: string) => Promise<void
   const toggle = page.locator('#chat-list-toggle');
   if (await toggle.isVisible() && (await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
   await page.locator('.ide-session', { hasText: 'claude-code' }).first().click();
-  await page.getByRole('toolbar', { name: 'Conversation tools' }).getByRole('button', { name: 'Files' }).click();
+  const tools = page.getByRole('complementary', { name: 'Conversation tools' });
+  // Narrow windows start with the Overview closed; open it from the conversation header.
+  if (!(await tools.isVisible())) await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await tools.getByRole('button', { name: 'Files', exact: true }).click();
   return page.locator('.sp-files-panel');
 }
 

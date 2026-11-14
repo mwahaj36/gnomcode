@@ -7,6 +7,7 @@ import { fetchAccount, signOutDesktop } from './settings-index';
 import { toggleChatList, useChatListCollapsed } from './chat-list';
 import { HomeView } from './HomeView';
 import { fetchLocalJson } from './local-api';
+import { PaneResizer } from './pane-resizer';
 import { SettingsView } from './SettingsView';
 import { type ConsoleView, registerNavigator, requestProviderSetup, workspaceAction } from './shell-bus';
 import { ShellDialogs } from './ShellDialogs';
@@ -128,7 +129,8 @@ export function ConsoleShell() {
   const [folder] = useState(consumeExplorerFolder);
   const [view, setView] = useState<ConsoleView>(() => (folder ? 'sessions' : initialView()));
   const [navTick, setNavTick] = useState(0);
-  const [railExpanded, setRailExpanded] = useState(() => storedFlag('gnomcode-rail-expanded') !== '0');
+  // The rail is a compact icon column unless the person asks for labels.
+  const [railExpanded, setRailExpanded] = useState(() => storedFlag('gnomcode-rail-expanded') === '1');
   const [paired, setPaired] = useState(false);
   const [sync, setSync] = useState<{ text: string; failed: boolean }>({ text: 'Connecting', failed: false });
   const chatListCollapsed = useChatListCollapsed();
@@ -349,11 +351,6 @@ export function ConsoleShell() {
               );
             })}
           </div>
-          <div
-            id="console-nav-sessions"
-            className="sp-nav-sessions"
-            hidden={view !== 'sessions' || !railExpanded || chatListCollapsed}
-          />
           <div className="sp-nav-footer">
             <button
               type="button"
@@ -415,6 +412,10 @@ export function ConsoleShell() {
             </button>
           </div>
         </nav>
+        <div className="sp-chat-column" hidden={view !== 'sessions' || chatListCollapsed}>
+          <div id="console-nav-sessions" className="sp-nav-sessions" />
+          <PaneResizer cssVar="--chat-w" label="Resize conversations" min={220} max={440} initial={280} direction={1} />
+        </div>
         <div className="sp-console-content">
           <div className="console-context">
             <h1 id="console-title">{TITLES[view]}</h1>

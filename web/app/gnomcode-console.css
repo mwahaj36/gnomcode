@@ -2193,3 +2193,121 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-settings-mobile-bar{display:none;margin-top:8px}
 .sp-settings-mobile-select{width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface);color:var(--sp-text)}
 @media (max-width:760px){.sp-settings-layout{grid-template-columns:minmax(0,1fr);gap:14px}.sp-settings-nav{position:static}.sp-settings-nav ul{display:none}.sp-settings-mobile-bar{display:block}}
+
+/* ===== Console layout: icon rail, conversation column, inset work pane (desktop >= 768px) ===== */
+body.sp-native-console{--chat-w:280px;--inspector-w:560px;background:var(--sp-bg)}
+body.sp-resizing{cursor:col-resize;user-select:none}
+.sp-pane-resizer{position:absolute;top:0;bottom:0;width:8px;cursor:col-resize;z-index:6;touch-action:none}
+.sp-pane-resizer::after{content:"";position:absolute;top:12px;bottom:12px;left:3px;width:2px;border-radius:2px;transition:background .12s}
+.sp-pane-resizer:hover::after,.sp-pane-resizer:focus-visible::after,body.sp-resizing .sp-pane-resizer::after{background:var(--sp-border-strong)}
+.sp-pane-resizer:focus-visible{outline:none}
+.sp-chat-column[hidden]{display:none}
+@media(min-width:768px){
+ body.sp-native-console{--rail-w:56px}
+ body.sp-native-console[data-rail="expanded"]{--rail-w:208px}
+ body.sp-native-console .sp-console-workspace{grid-template-columns:var(--rail-w) auto minmax(0,1fr);height:100dvh;min-height:0;align-items:stretch;background:var(--sp-bg)}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{background:var(--sp-bg);border-right:0;padding:var(--sp-3) var(--sp-2);align-items:stretch}
+ body.sp-native-console[data-rail="collapsed"] .sp-console-nav{align-items:center}
+ body.sp-native-console[data-rail="collapsed"] .sp-console-nav :is(.tab-btn,#navigation-toggle,.app-brand){width:40px;min-height:40px;padding:0;justify-content:center;border-radius:10px}
+ body.sp-native-console .sp-console-nav .tab-btn.active::before{content:"";position:absolute;left:-8px;top:11px;bottom:11px;width:2px;border-radius:2px;background:var(--sp-text)}
+ body.sp-native-console .sp-chat-column{position:relative;width:var(--chat-w);min-width:0;height:100dvh;display:flex;flex-direction:column;padding:var(--sp-3) var(--sp-2) var(--sp-3) 0}
+ body.sp-native-console .sp-chat-column .sp-nav-sessions{flex:1 1 auto;min-height:0;margin:0;padding:0;border:0;display:flex;flex-direction:column}
+ body.sp-native-console .sp-chat-column .ide-sidebar{width:100%;height:100%;min-height:0;padding:0;border:0;background:transparent;box-shadow:none;position:static;overflow:auto}
+ body.sp-native-console .sp-chat-column .sp-pane-resizer{right:-4px}
+ body.sp-native-console .sp-console-content{margin:8px 8px 8px 0;padding:0 var(--sp-gutter) var(--sp-6);height:calc(100dvh - 16px);overflow:auto;background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:12px}
+ body.sp-native-console[data-console-view="sessions"] .sp-console-content{padding:0;overflow:hidden;display:flex;flex-direction:column}
+ body.sp-native-console[data-console-view="sessions"] .console-context{padding:0 var(--sp-3);min-height:48px}
+ body.sp-native-console[data-console-view="sessions"] #view-console{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+ body.sp-native-console[data-console-view="sessions"] #local-workspace-root{flex:1 1 auto;min-height:0}
+ body.sp-native-console .ide-layout{height:100%;min-height:0}
+}
+/* Conversation: plain agent text, pill user turns, floating composer */
+.sp-native-console .sp-workspace-chat-panel .conversation-heading{border-bottom:0;padding:var(--sp-2) 0}
+.sp-native-console .sp-workspace-body{gap:0;position:relative}
+.sp-native-console .sp-workspace-body:has(>.sp-overview),.sp-native-console .sp-workspace-body:has(>.sp-inspector){grid-template-columns:minmax(0,1fr) auto}
+.sp-native-console .sp-chat-composer{box-shadow:var(--sp-shadow-popover,0 12px 32px rgb(0 0 0 / .35));border-radius:18px;background:var(--sp-surface-raised)}
+.sp-native-console .sp-chat-composer:focus-within{border-color:var(--sp-border-strong);box-shadow:var(--sp-shadow-popover,0 12px 32px rgb(0 0 0 / .35)),0 0 0 1px var(--sp-border-strong)}
+.sp-native-console .sp-chat-composer .btn-primary[type="submit"]{background:var(--sp-cta-bg);color:var(--sp-cta-text);border-color:var(--sp-cta-bg)}
+.sp-native-console .sp-chat-composer .btn-primary[type="submit"]:hover{background:var(--sp-cta-hover)}
+.sp-overview-toggle{min-width:36px;padding:0 8px;display:inline-grid;place-items:center}
+.sp-overview-toggle[aria-pressed="true"]{background:var(--sp-surface-raised);color:var(--sp-text)}
+/* Overview card */
+.sp-overview{width:300px;margin:var(--sp-2) 0 0 var(--sp-4);align-self:start;background:var(--sp-surface-raised);border:1px solid var(--sp-border);border-radius:12px;box-shadow:var(--sp-shadow-popover,0 12px 32px rgb(0 0 0 / .35));padding:6px;max-height:calc(100% - 16px);overflow-y:auto}
+.sp-overview-head{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 4px;font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
+.sp-overview-head .sp-icon-btn{min-height:28px;min-width:28px;padding:0;border:0;background:transparent}
+.sp-overview-item{display:flex;align-items:center;gap:10px;width:100%;min-height:34px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--sp-text);font:inherit;font-size:var(--sp-fs-body);text-align:left;cursor:pointer}
+.sp-overview-item:hover,.sp-overview-item[aria-pressed="true"]{background:var(--sp-surface-2)}
+.sp-overview-item svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;color:var(--sp-text-2)}
+.sp-overview-sub{color:var(--sp-text-2);font-size:var(--sp-fs-control)}
+.sp-overview-sep{height:1px;background:var(--sp-border);margin:6px 4px}
+.sp-overview-limits{padding:0 4px 4px;font-size:var(--sp-fs-meta)}
+.sp-overview-limits :is(.sp-card,.sp-provider-card){box-shadow:none;background:transparent;border:0;padding:6px 4px}
+/* Docked tools panel (was a modal) */
+.sp-inspector{position:relative;width:var(--inspector-w);min-width:0;min-height:0;display:flex;flex-direction:column;border-left:1px solid var(--sp-border);margin-left:var(--sp-3);background:var(--sp-surface)}
+.sp-inspector>.sp-pane-resizer{left:-5px}
+.sp-inspector .sp-workspace-modal-head{background:transparent}
+.sp-inspector .sp-workspace-modal-body{flex:1 1 auto;min-height:0;overflow:auto;padding:12px}
+@media(max-width:1180px){
+ .sp-native-console .sp-workspace-body:has(>.sp-overview),.sp-native-console .sp-workspace-body:has(>.sp-inspector){grid-template-columns:minmax(0,1fr)}
+ .sp-overview{position:absolute;top:0;right:0;z-index:12;margin:var(--sp-2)}
+ .sp-inspector{position:absolute;top:0;right:0;bottom:0;z-index:12;width:min(var(--inspector-w),calc(100% - 24px));box-shadow:var(--sp-shadow-popover,0 12px 32px rgb(0 0 0 / .35))}
+}
+@media(max-width:767px){
+ .sp-inspector{position:fixed;inset:0 0 calc(var(--rail-h) + env(safe-area-inset-bottom)) 0;width:100%;margin:0;border-left:0;z-index:45}
+ .sp-inspector>.sp-pane-resizer{display:none}
+ .sp-overview{width:min(320px,calc(100vw - 32px))}
+}
+/* Home activity: highlights share the legend row */
+.sp-heatmap-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-4) var(--sp-6);flex-wrap:wrap;margin-top:var(--sp-4);padding-top:var(--sp-4);border-top:1px solid var(--sp-border)}
+.sp-heatmap-foot .sp-heatmap-stats{margin:0;flex:1 1 auto}
+.sp-heatmap-foot .sp-heatmap-legend{margin:0 0 0 auto}
+/* Conversation column: compact rows, quiet controls */
+.sp-chat-column .ide-sidebar{gap:6px}
+.sp-chat-column .ide-sidebar-title{display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 4px}
+.sp-chat-column .ide-sidebar-title h2{font-size:var(--sp-fs-control);font-weight:500;color:var(--sp-text-3)}
+.sp-chat-column .ide-sidebar-title .btn-control{min-height:28px;min-width:28px;padding:0;border:0;background:transparent}
+.sp-chat-column .ide-sidebar>.btn-control:first-of-type{justify-content:flex-start;gap:10px;min-height:36px;padding:0 12px;font-weight:500;background:var(--sp-surface-raised);border:1px solid var(--sp-border);border-radius:8px}
+.sp-chat-column .ide-sidebar>.btn-control:first-of-type::before{content:"+" / "";font-size:18px;line-height:1;color:var(--sp-text-2)}
+.sp-chat-column .ide-sidebar>label{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:0 4px}
+.sp-chat-column .ide-sidebar>label select,.sp-chat-column .ide-sidebar>input[type="search"]{min-height:32px;height:32px;font-size:var(--sp-fs-control);border-radius:8px;background:transparent}
+.sp-chat-column .conversation-filters>summary{font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:2px 4px}
+.sp-chat-column .ide-session-row{display:flex;align-items:center;border-radius:8px}
+.sp-chat-column .ide-session-row:hover,.sp-chat-column .ide-session-row:has([aria-current="true"]){background:var(--sp-surface-raised)}
+.sp-chat-column .ide-session{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:6px 6px 6px 10px;min-height:44px;background:transparent;border:0;text-align:left}
+.sp-chat-column .ide-session-title{grid-column:1;font-weight:500;font-size:var(--sp-fs-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-chat-column .ide-session time{grid-column:2;grid-row:1;font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap}
+.sp-chat-column .ide-session-meta{grid-column:1 / -1;font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-chat-column .ide-session-more{opacity:0;min-width:28px;min-height:28px;border:0;background:transparent;color:var(--sp-text-3)}
+.sp-chat-column .ide-session-row:is(:hover,:focus-within) .ide-session-more{opacity:1}
+.sp-chat-column .pagination{font-size:var(--sp-fs-meta)}
+/* Workspace: the conversation header is the pane's top bar; the view title stays for assistive tech */
+@media(min-width:768px){
+ body.sp-native-console[data-console-view="sessions"] .console-context{position:absolute;top:8px;left:8px;z-index:5;min-height:0;padding:0;background:transparent;border:0}
+ body.sp-native-console[data-console-view="sessions"] #console-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ body.sp-native-console[data-console-view="sessions"] .sp-console-content{position:relative}
+ body.sp-native-console[data-console-view="sessions"] .sp-workspace-chat-panel .conversation-heading,body.sp-native-console[data-console-view="sessions"] .ide-main>:first-child:not(.sp-workspace-chat-panel){padding-left:44px}
+}
+.sp-overview-limits .sp-section-head{display:none}
+@media(min-width:768px){body.sp-native-console .sp-console-workspace>.sp-console-content{grid-column:3}body.sp-native-console .sp-console-workspace>.sp-chat-column{grid-column:2}}
+@media(max-width:767px){body.sp-native-console[data-console-view="sessions"] .sp-workspace-chat-panel .conversation-heading{padding-left:44px}}
+/* Web console: same icon rail on the page ground and an inset work pane as the desktop console */
+@media(min-width:768px){
+ main.sp-web-app{background:var(--sp-bg);padding:8px 8px 8px 64px!important}
+ main.sp-web-app.web-navigation-expanded{padding-left:216px!important}
+ main.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;background:var(--sp-bg);border-right:0}
+ main.sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
+ main.sp-web-app .sp-console-content{max-width:none;margin:0;min-height:calc(100dvh - 16px);padding:0 var(--sp-gutter) var(--sp-6);background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:12px}
+}
+/* Pool rows: the value column sizes to its text and stacks the seen time under the percentage instead of spilling out */
+.sp-mini{grid-template-columns:minmax(48px,max-content) minmax(40px,1fr) minmax(0,max-content)}
+.sp-mini > span:first-child{min-width:0;overflow-wrap:anywhere}
+.sp-mini-value{display:flex;flex-direction:column;align-items:flex-end;white-space:normal;line-height:1.3;min-width:0;max-width:16ch;text-align:right}
+.sp-mini-value b{margin-right:0}
+/* Overview limits: provider cards fit the card width */
+.sp-overview-limits details.sp-provider-card,.sp-overview-limits .sp-provider-card{min-width:0;max-width:100%}
+.sp-overview-limits .sp-provider-head{flex-wrap:wrap;min-width:0}
+.sp-overview-limits .sp-provider-head>*{min-width:0}
+.sp-overview-limits :is(.sp-card-grid,.sp-provider-grid){grid-template-columns:minmax(0,1fr)!important}
+/* Meter labels and footers wrap instead of clipping in narrow cards */
+.sp-meter-top,.sp-meter-bottom{flex-wrap:wrap;row-gap:2px}
+.sp-meter-top>*,.sp-meter-bottom>*{min-width:0;overflow-wrap:anywhere}

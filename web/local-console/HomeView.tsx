@@ -71,7 +71,7 @@ export function HomeView() {
       if (activityRef.current) {
         updateHeatmap(activityRef.current, data, {
           weeks: 53,
-          stats: false,
+          stats: true,
           legend: true,
           months: true,
         });
