@@ -12,7 +12,7 @@ export const faqGroups = [
       },
       {
         "question": "Which operating systems are supported?",
-        "answer": "Windows, macOS and Linux are design targets. The current locally verified desktop packages are Windows development builds; other platform release acceptance remains open."
+        "answer": "Downloads are Windows x64 only. On Windows, Gnomcode also discovers sessions inside WSL distros and can launch agents there. macOS and Linux builds are not available."
       },
       {
         "question": "Do I install agent CLIs separately?",
@@ -75,7 +75,7 @@ export const faqGroups = [
       },
       {
         "question": "Can I approve permission prompts from my phone?",
-        "answer": "Yes for Claude Code: Gnomcode's optional hook forwards a one-line summary of the prompt, and nothing is ever allowed by default. Codex and Antigravity can be approved from the phone only in their opt-in protocol mode, which applies to new launches. Timeouts and errors leave the decision to the agent's own dialog."
+        "answer": "Yes, for all three agents. Claude Code: the optional hook from gnomcode integrate claude forwards a one-line summary of the prompt. Codex and Antigravity: turn on protocol mode first with gnomcode protocol-approvals enable codex (or antigravity); it is off by default and applies to new launches. Timeouts and errors leave the decision to the agent's own dialog, and nothing is ever allowed by default."
       },
       {
         "question": "What can I not do remotely?",
