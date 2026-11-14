@@ -2,5 +2,8 @@
   "productName": "Gnomcode",
   "baseUrl": "https://gnomcode.vercel.app",
   "sourceRepository": "https://github.com/mwahaj36/spawnt",
-  "releasesRepository": "https://github.com/mwahaj36/gnomcode-releases"
+  "releasesRepository": "https://github.com/mwahaj36/gnomcode-releases",
+  "remoteRelayUrl": "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay",
+  "supabaseUrl": "https://jjnuxngvhuvxkxrfmnqx.supabase.co",
+  "supabasePublishableKey": "sb_publishable_o2ZiGak7RHq_cmL81BOeZQ_g7JJeyCI"
 }

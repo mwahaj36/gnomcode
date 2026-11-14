@@ -14,6 +14,12 @@ pub struct Branding {
     pub source_repository: String,
     /// Binary releases repository URL.
     pub releases_repository: String,
+    /// Default WebSocket relay URL for paired Remote (overridable via `GNOMCODE_REMOTE_RELAY_URL`).
+    pub remote_relay_url: String,
+    /// Default Supabase project URL for optional account sync (overridable via `GNOMCODE_SUPABASE_URL`).
+    pub supabase_url: String,
+    /// Supabase publishable (anon) key for optional account sync (overridable via `GNOMCODE_SUPABASE_KEY`).
+    pub supabase_publishable_key: String,
 }
 
 /// Parses the bundled branding configuration without performing I/O.
@@ -31,5 +37,8 @@ mod tests {
         assert_eq!(branding.product_name, "Gnomcode");
         assert!(branding.base_url.starts_with("https://"));
         assert!(!branding.base_url.ends_with('/'));
+        assert!(branding.remote_relay_url.starts_with("wss://"));
+        assert!(branding.supabase_url.starts_with("https://"));
+        assert!(!branding.supabase_publishable_key.is_empty());
     }
 }

@@ -31,6 +31,15 @@ pub enum RemoteError {
     Persistence,
 }
 
+/// Resolves the Remote relay URL: `GNOMCODE_REMOTE_RELAY_URL` override, else the bundled branding default.
+fn default_relay_url() -> String {
+    std::env::var("GNOMCODE_REMOTE_RELAY_URL").unwrap_or_else(|_| {
+        gnomcode_core::branding::branding()
+            .map(|b| b.remote_relay_url.clone())
+            .unwrap_or_default()
+    })
+}
+
 /// Current pairing state returned only by the authenticated loopback API.
 #[derive(Clone, Serialize)]
 pub struct PairingStatus {
@@ -134,9 +143,7 @@ impl RemoteManager {
             getrandom::fill(&mut secret).map_err(|_| RemoteError::Relay)?;
             DeviceTrust {
                 room,
-                relay: std::env::var("GNOMCODE_REMOTE_RELAY_URL").unwrap_or_else(|_| {
-                    "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay".into()
-                }),
+                relay: default_relay_url(),
                 private,
                 secret,
                 last_activity: chrono::Utc::now().timestamp(),
