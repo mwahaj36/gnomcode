@@ -44,6 +44,33 @@ export function takeProviderSetupRequest(): boolean {
   return wanted;
 }
 
+let settingsQuery = '';
+
+/** Opens Settings filtered to `query` (from the command palette). */
+export function openSettingsSearch(query: string): void {
+  settingsQuery = query;
+  navigator?.('settings');
+  window.dispatchEvent(new CustomEvent('gnomcode:settings-query'));
+}
+
+/** Returns and clears a pending Settings search. */
+export function takeSettingsQuery(): string {
+  const value = settingsQuery;
+  settingsQuery = '';
+  return value;
+}
+
+/** Scrolls to a Settings section and moves focus to its heading. */
+export function revealSection(id: string): void {
+  const section = document.getElementById(id);
+  section?.scrollIntoView({ block: 'start' });
+  const heading = section?.querySelector<HTMLElement>('h2');
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }
+}
+
 /** The five places the shell can show; `auth` is the Account view reached from the rail or Settings. */
 export type ConsoleView = 'overview' | 'sessions' | 'usage' | 'settings' | 'auth';
 
