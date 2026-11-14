@@ -213,6 +213,32 @@ fn resolve_batch_projects(batch: &mut gnomcode_adapters::ParsedBatch) -> Vec<(St
     cwds
 }
 
+/// Rewrites Linux project folders parsed from a WSL log (`/home/a/x`) to their UNC
+/// spelling (`\\wsl.localhost\<distro>\home\a\x`) so they share the Windows project
+/// key normalization and can be resolved, launched and tagged (ADR 0060).
+fn map_wsl_projects(batch: &mut gnomcode_adapters::ParsedBatch, distro: &str) {
+    for project in &mut batch.projects {
+        let Some(unc) = gnomcode_core::wsl::linux_to_unc(distro, &project.repo_root) else {
+            continue;
+        };
+        let mapped = Project::from_origin(
+            project
+                .has_remote_key()
+                .then_some(project.canonical_key.as_str()),
+            &unc,
+            project.git_branch.as_deref(),
+        );
+        for session in batch
+            .sessions
+            .iter_mut()
+            .filter(|session| session.project_id == project.id)
+        {
+            session.project_id.clone_from(&mapped.id);
+        }
+        *project = mapped;
+    }
+}
+
 fn record_cwds(db: &Database, cwds: &[(String, String)]) {
     for (session, cwd) in cwds {
         if let Err(error) = db.record_session_cwd(session, cwd) {
@@ -434,6 +460,9 @@ fn ingest_files(
             for session in &mut batch.sessions {
                 session.surface = owner;
             }
+        }
+        if let Some(distro) = gnomcode_core::wsl::distro_of(&path_str) {
+            map_wsl_projects(&mut batch, distro);
         }
         let cwds = resolve_batch_projects(&mut batch);
         if repair_chat_format {

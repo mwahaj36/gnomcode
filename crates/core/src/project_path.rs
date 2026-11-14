@@ -35,7 +35,14 @@ pub(crate) fn from_path(raw: &str) -> PathProject {
         None => slashed,
     };
     let leading = slashed.len() - slashed.trim_start_matches('/').len();
-    let segments: Vec<&str> = slashed.split('/').filter(|s| !s.is_empty()).collect();
+    let mut segments: Vec<&str> = slashed.split('/').filter(|s| !s.is_empty()).collect();
+    // `wsl$` is the legacy name of the `wsl.localhost` share: one folder, one key.
+    if let Some(first) = segments
+        .first_mut()
+        .filter(|s| s.eq_ignore_ascii_case("wsl$"))
+    {
+        *first = "wsl.localhost";
+    }
     let wsl = segments
         .first()
         .is_some_and(|s| s.eq_ignore_ascii_case("wsl.localhost") || s.eq_ignore_ascii_case("wsl$"));
