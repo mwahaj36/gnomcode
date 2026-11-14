@@ -90,7 +90,7 @@ test.describe('launcher', () => {
     );
     await openConsole('#sessions');
     const launcher = page.locator('#local-workspace-root');
-    await launcher.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByRole('button', { name: 'New', exact: true }).click();
     const form = launcher.locator('.ide-launcher');
     await form.getByLabel('Agent').selectOption('claude');
     await expect(launcher.getByRole('button', { name: 'Launch Agent' })).toBeDisabled();
@@ -111,7 +111,7 @@ test.describe('launcher', () => {
     });
     await openConsole('#sessions');
     const root = page.locator('#local-workspace-root');
-    await root.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByRole('button', { name: 'New', exact: true }).click();
     const form = root.locator('.ide-launcher');
     await form.getByLabel('Workspace directory').fill('C:\\workspace\\picked');
     await form.getByLabel('Model (optional)').fill('o3');
@@ -129,7 +129,7 @@ test.describe('launcher', () => {
     );
     await openConsole('#sessions');
     const root = page.locator('#local-workspace-root');
-    await root.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByRole('button', { name: 'New', exact: true }).click();
     await root.getByLabel('Workspace directory').fill('C:\\workspace\\kept');
     await root.getByRole('button', { name: /Browse|Choose/ }).first().click();
     const dialog = root.locator('dialog[open], dialog.sp-dialog[open], [role="dialog"]').first();
