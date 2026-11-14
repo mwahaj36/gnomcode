@@ -27,6 +27,7 @@ pub mod vendor_limits;
 pub(crate) mod workspace_files;
 mod worktree_api;
 mod worktree_session;
+mod wsl_launch;
 
 use chrono::Utc;
 use gnomcode_ingest::ingest_all;

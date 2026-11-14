@@ -89,9 +89,17 @@ pub(super) async fn launch_session_handler(
             .unwrap_or(0)
     );
     let repo = std::path::Path::new(&payload.repo_path);
-    if !repo.is_dir() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    let starting = match crate::wsl_launch::preflight(&payload.agent, repo).await {
+        Ok(starting) => starting,
+        Err(crate::wsl_launch::Refusal::BadFolder) => return Err(StatusCode::BAD_REQUEST),
+        Err(crate::wsl_launch::Refusal::Missing(message)) => {
+            return Ok((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"ok":false,"message":message})),
+            )
+                .into_response());
+        }
+    };
     let isolated = match crate::worktree_api::prepare_launch(
         repo,
         &session_id,
@@ -134,6 +142,7 @@ pub(super) async fn launch_session_handler(
             {
                 fields.extend(extra);
             }
+            crate::wsl_launch::annotate(&mut body, repo, starting);
             Ok(Json(body).into_response())
         }
         Err(_) => {
