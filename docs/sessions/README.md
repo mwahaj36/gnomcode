@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-14 Wire ingest watcher into the daemon (D3)](2026-11-14-wire-ingest-watcher.md)
 - [2026-11-14 Handoff fold: Worker A](2026-11-14-handoff-worker-a.md)
 - [2026-11-14 Handoff fold: Worker B](2026-11-14-handoff-worker-b.md)
 - [2026-11-14 Handoff fold: codex-release](2026-11-14-handoff-codex-release.md)
