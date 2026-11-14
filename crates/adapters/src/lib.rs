@@ -416,6 +416,29 @@ mod tests {
     }
 
     #[test]
+    fn claude_subagent_sidecar_names_the_child_from_its_task_description() {
+        use super::claude::{subagent_label_from_meta, subagent_sidecar};
+        let described =
+            include_bytes!("../../../fixtures/claude-code/v2.1.321/desktop-subagent.meta.json");
+        let typed = include_bytes!(
+            "../../../fixtures/claude-code/v2.1.321/desktop-subagent-typeonly.meta.json"
+        );
+        assert_eq!(
+            subagent_label_from_meta(described).as_deref(),
+            Some("Audit sample project settings")
+        );
+        assert_eq!(subagent_label_from_meta(typed).as_deref(), Some("explorer"));
+        assert_eq!(subagent_label_from_meta(b"{not json"), None);
+        assert_eq!(subagent_label_from_meta(br#"{"description":"  "}"#), None);
+        let (sidecar, child) =
+            subagent_sidecar("/c/projects/p/id_0003/subagents/agent-id_0001.jsonl")
+                .expect("sidecar");
+        assert!(sidecar.ends_with("agent-id_0001.meta.json"));
+        assert_eq!(child, "claude-code:agent-id_0001");
+        assert!(subagent_sidecar("/c/projects/p/id_0003.jsonl").is_none());
+    }
+
+    #[test]
     fn claude_session_is_never_its_own_parent() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let log = br#"{"type":"api-request","sessionId":"s1","timestamp":"2026-11-12T13:14:40Z"}

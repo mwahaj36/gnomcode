@@ -310,6 +310,11 @@ const CHEVRON_RIGHT = '<svg class="sp-session-chevron" viewBox="0 0 24 24" aria-
 const shortAge = value => { const date = new Date(value); if (!Number.isFinite(date.getTime())) return ''; const age = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)); return age < 60 ? 'now' : age < 3600 ? Math.floor(age / 60) + 'm' : age < 86400 ? Math.floor(age / 3600) + 'h' : Math.floor(age / 86400) + 'd'; };
 
 const SUBAGENT_ROWS_MAX = 5;
+export const SUBAGENT_PREF_KEY = 'gnomcode.includeSubagents';
+// Display preference only: on by default so the collapsed group can expand; off leaves a count.
+export function subagentsIncluded() {
+  try { return typeof localStorage === 'undefined' || localStorage.getItem(SUBAGENT_PREF_KEY) !== 'false'; } catch { return true; }
+}
 const subagentOpen = new Set();
 let subagentToggleBound = false;
 // Re-rendered lists replace their markup, so remember which subagent groups the user expanded.
@@ -330,16 +335,18 @@ export function renderSubagents(session, action = 'load-chat') {
   bindSubagentToggle();
   const isLive = child => Boolean(child.is_ongoing ?? child.ongoing);
   const live = Number.isFinite(session.subagents_ongoing) ? session.subagents_ongoing : list.filter(isLive).length;
+  const summary = `${live ? `${live} running · ` : ''}${count} subagent${count === 1 ? '' : 's'}`;
+  if (!list.length || !subagentsIncluded()) return `<p class="sp-subagent-count">${summary}</p>`;
   const key = `sub:${session.id}`;
   const shown = list.slice(0, SUBAGENT_ROWS_MAX);
   const rows = shown.map(child => {
     const group = child.home_group || (isLive(child) ? 'running' : 'recent');
     const state = child.presence === 'recently_idle' ? 'Idle' : child.state === 'unknown' ? 'No recent activity' : sessionStateLabel(child.state);
     const meta = [state, child.model && child.model !== 'Unspecified' ? child.model : ''].filter(Boolean).join(' · ');
-    return `<li><button type="button" class="sp-subagent-row" data-action="${action}" data-arg="${escape(child.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(child.title && child.title.toLowerCase() !== 'unknown' ? child.title : 'Subagent')}</strong><span>${escape(meta)}</span></span><time class="sp-session-time" datetime="${escape(child.last_event_at || '')}">${escape(shortAge(child.last_event_at))}</time></button></li>`;
+    return `<li><button type="button" class="sp-subagent-row" data-action="${action}" data-arg="${escape(child.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(child.name || (child.title && child.title.toLowerCase() !== 'unknown' ? child.title : 'Subagent'))}</strong><span>${escape(meta)}</span></span><time class="sp-session-time" datetime="${escape(child.last_event_at || '')}">${escape(shortAge(child.last_event_at))}</time></button></li>`;
   }).join('');
   const more = count > shown.length ? `<li class="sp-subagent-more"><button type="button" class="sp-link sp-subagent-more-btn" data-action="open-all-chats">View ${count - shown.length} more in All chats &#8250;</button></li>` : '';
-  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${live ? `${live} running · ` : ''}${count} subagent${count === 1 ? '' : 's'}</summary><ul>${rows}${more}</ul></details>`;
+  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${summary}</summary><ul>${rows}${more}</ul></details>`;
 }
 
 function homeRow(session, group) {
@@ -736,7 +743,7 @@ export function renderSessionList(sessions, selected = '', query = '') {
     const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
     const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
     lastGroup = group;
-    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
+    return `${heading}<button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" aria-current="${session.id === selected}"><strong>${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span>${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button>${renderSubagents(session, 'load-chat')}`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
