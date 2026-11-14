@@ -63,6 +63,12 @@ const fresh = () => ({
 
 async function openSetup(page: Page, url: string) {
   await page.goto(`${url}#settings`);
+  const mobileCat = page.locator('#settings-mobile-category');
+  if (await mobileCat.isVisible()) {
+    await mobileCat.selectOption('settings-about');
+  } else {
+    await page.locator('.sp-settings-nav').getByRole('link', { name: 'About' }).click();
+  }
   await page.locator('#local-settings-root').getByRole('button', { name: 'Getting started' }).click();
   await expect(page.locator('#onboarding-dialog')).toBeVisible();
 }
@@ -212,9 +218,7 @@ test('blocked browser storage never breaks onboarding', async ({ page, daemon })
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await mockStatus(page, fresh());
-  await page.goto(`${daemon.consoleUrl}#settings`);
-  await page.locator('#local-settings-root').getByRole('button', { name: 'Getting started' }).click();
-  await expect(page.locator('#onboarding-dialog')).toBeVisible();
+  await openSetup(page, daemon.consoleUrl);
   await page.getByRole('button', { name: 'Close' }).first().click();
   await expect(page.locator('#onboarding-dialog')).not.toBeVisible();
   expect(errors).toEqual([]);

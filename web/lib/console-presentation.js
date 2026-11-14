@@ -557,7 +557,7 @@ function valueText(win) {
 }
 
 function detailText(win) {
-  const seen = seenText(win);
+  const seen = win.stale || win.source_issue || awaiting(win) ? seenText(win) : '';
   if (win.source_issue) return seen ? `${win.source_issue} · ${seen}` : win.source_issue;
   const state = stateOf(win);
   if (awaiting(win)) return seen ? `0% used · awaiting fresh reading · ${seen}` : '0% used · awaiting fresh reading';
@@ -915,14 +915,16 @@ export function bindChatInteractions(element) {
       event.stopPropagation();
       const label = copy.querySelector('.sp-copy-label');
       const resetText = label ? label.textContent : copy.textContent;
+      const resetAria = copy.getAttribute('aria-label');
       const setLabel = (next) => {
         if (label) label.textContent = next;
         else copy.textContent = next;
+        copy.setAttribute('aria-label', next);
       };
       copyTextToClipboard(copy.dataset.chatCopy ?? '')
-        .then(() => {
-          copy.dataset.copyState = 'copied';
-          setLabel('Copied');
+        .then((ok) => {
+          copy.dataset.copyState = ok ? 'copied' : 'error';
+          setLabel(ok ? 'Copied' : 'Copy failed');
         })
         .catch(() => {
           copy.dataset.copyState = 'error';
@@ -930,7 +932,10 @@ export function bindChatInteractions(element) {
         })
         .finally(() => setTimeout(() => {
           delete copy.dataset.copyState;
-          setLabel(resetText);
+          if (label) label.textContent = resetText;
+          else copy.textContent = resetText;
+          if (resetAria !== null) copy.setAttribute('aria-label', resetAria);
+          else copy.removeAttribute('aria-label');
         }, 1600));
       return;
     }
