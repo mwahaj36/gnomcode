@@ -37,7 +37,7 @@ test('agent replies render Markdown while user messages retain literal text', ()
   assert.match(markup, /<strong>Fixed<\/strong>/);
   assert.match(markup, /<code>cargo test<\/code>/);
   assert.match(markup, /<ul>\s*<li>First<\/li>\s*<li>Second<\/li>\s*<\/ul>/);
-  assert.match(markup, /<pre><code[^>]*>let x = &quot;&lt;script&gt;&quot;;/);
+  assert.match(markup, /<pre tabindex="0"><code><span class="sp-hl-keyword">let<\/span> x = <span class="sp-hl-string">&quot;&lt;script&gt;&quot;<\/span>;/);
   assert.match(markup, /<th>Check<\/th>/);
   assert.match(markup, /<td data-label="Result">Pass<\/td>/);
   assert.match(markup, /\*\*Keep this literal\*\*/);

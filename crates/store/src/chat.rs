@@ -218,7 +218,32 @@ impl Database {
             let status: Option<String> = row.get(6)?;
             let created_at_str: String = row.get(7)?;
 
-            let role = ChatRole::parse_role(&role_str).unwrap_or(ChatRole::System);
+            let mut role = ChatRole::parse_role(&role_str).unwrap_or(ChatRole::System);
+            let mut status = status;
+            let mut content = content;
+            // Rows stored before harness entries were classified are reclassified on read.
+            if role == ChatRole::User {
+                match gnomcode_core::chat_meta::classify_user_entry(&content, false, false) {
+                    gnomcode_core::chat_meta::UserEntry::User(text) => content = text,
+                    gnomcode_core::chat_meta::UserEntry::System {
+                        subtype,
+                        summary,
+                        detail,
+                    } => {
+                        role = ChatRole::System;
+                        status = Some(subtype.to_owned());
+                        content = if detail.is_empty() {
+                            summary
+                        } else {
+                            format!(
+                                "{summary}
+
+{detail}"
+                            )
+                        };
+                    }
+                }
+            }
             let content = if role == ChatRole::Tool {
                 String::new()
             } else {

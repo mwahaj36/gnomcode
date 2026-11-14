@@ -740,9 +740,134 @@ export function renderSessionList(sessions, selected = '', query = '') {
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
+
+const IMAGE_DATA_URL_RE = /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i;
+const CODE_KEYWORDS = new Set('as async await break case catch class const continue crate def default defer del do elif else enum export extends false fi final finally fn for from func function go if impl import in interface let loop match mod move mut new nil None null package pass pub raise return self Self static struct super switch then this throw trait true True False try type typeof undefined unsafe use var void where while with yield'.split(' '));
+const CODE_ALIASES = { js:'javascript', mjs:'javascript', jsx:'javascript', ts:'typescript', tsx:'typescript', py:'python', rs:'rust', sh:'shell', bash:'shell', zsh:'shell', ps1:'powershell', yml:'yaml', md:'markdown', patch:'diff' };
+const CODE_TOKEN_RE = /(\/\/[^\n]*|#(?![[!])[^\n]*|\/\*[\s\S]*?\*\/|--[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\b(\d[\d_.]*(?:e[+-]?\d+)?[a-z]*)\b|([A-Za-z_$][\w$]*)/gi;
+const HASH_COMMENT_LANGS = new Set(['python','shell','yaml','toml','ruby','powershell','perl','r','dockerfile','makefile','']);
+const DASH_COMMENT_LANGS = new Set(['sql','lua','haskell']);
+const DIFF_RE = /^(diff --git|@@ |--- a\/)/m;
+
+/** Display-only highlighter: comments, strings, numbers, keywords, and diff lines. */
+export function highlightCode(code, language = '') {
+  const lang = CODE_ALIASES[language.toLowerCase()] || language.toLowerCase();
+  if (lang === 'diff') {
+    return code.split('\n').map(line => {
+      const cls = /^(\+\+\+|---)/.test(line) || /^(diff |index )/.test(line) ? 'meta' : line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : line.startsWith('@@') ? 'hunk' : '';
+      return cls ? `<span class="sp-diff-${cls}">${escape(line)}</span>` : escape(line);
+    }).join('\n');
+  }
+  if (['text','plain','txt','markdown','csv','log'].includes(lang)) return escape(code);
+  let out = '', last = 0;
+  for (const match of code.matchAll(CODE_TOKEN_RE)) {
+    const [text, comment, string, number, word] = match;
+    let cls = '';
+    if (comment) {
+      const wrongHash = text.startsWith('#') && !HASH_COMMENT_LANGS.has(lang);
+      const wrongDash = text.startsWith('--') && !DASH_COMMENT_LANGS.has(lang);
+      if (wrongHash || wrongDash) continue;
+      cls = 'comment';
+    } else if (string) cls = 'string';
+    else if (number) cls = 'number';
+    else if (word && CODE_KEYWORDS.has(word)) cls = 'keyword';
+    if (!cls) continue;
+    out += escape(code.slice(last, match.index)) + `<span class="sp-hl-${cls}">${escape(text)}</span>`;
+    last = match.index + text.length;
+  }
+  return out + escape(code.slice(last));
+}
+
+/** Code block with a language label, Copy and Wrap controls; scrolls horizontally by default. */
+export function renderCodeBlock(code, language = '') {
+  const text = String(code ?? '').replace(/\n$/, '');
+  const label = language ? language.replace(/[^\w+#.-]/g, '').slice(0, 24) || 'text' : (DIFF_RE.test(text) ? 'diff' : 'text');
+  return `<div class="sp-code" data-wrap="false"><div class="sp-code-bar"><span class="sp-code-lang">${escape(label)}</span><button type="button" class="sp-code-btn" data-code-wrap aria-pressed="false">Wrap</button><button type="button" class="sp-code-btn" data-chat-copy="${escape(text)}">Copy</button></div><pre tabindex="0"><code>${highlightCode(text, label)}</code></pre></div>`;
+}
+
+const SYSTEM_EVENT_TYPES = new Set(['task_notification','reminder','command','subagent_report','compact_summary','interrupt']);
+
+function renderSystemEvent(evt) {
+  const [summary, ...rest] = String(evt.content).split('\n\n');
+  const detail = rest.join('\n\n').trim();
+  const attrs = `class="sp-chat-system" data-chat-id="${escape(evt.event_id || '')}" data-kind="${escape(evt.status)}"`;
+  const head = `<span class="sp-chat-system-mark" aria-hidden="true"></span><span class="sp-chat-system-text">${escape(summary)}</span>`;
+  if (!detail) return `<div ${attrs}>${head}</div>`;
+  const body = ['compact_summary','subagent_report'].includes(evt.status) ? chatMarkdown(detail) : `<pre>${escape(detail)}</pre>`;
+  return `<details ${attrs}><summary>${head}</summary><div class="sp-chat-body">${body}</div></details>`;
+}
+
+function renderToolEvent(evt) {
+  const label = `Tool: ${evt.tool_name}${evt.status ? ` (${evt.status})` : ''}`;
+  const body = evt.content?.trim() ? `<div class="sp-chat-body">${renderCodeBlock(evt.content, 'text')}</div>` : '<p class="sp-chat-system-note">Tool output is not stored.</p>';
+  return `<details class="sp-chat-system sp-chat-tool" data-chat-id="${escape(evt.event_id || '')}" data-kind="tool"><summary><span class="sp-chat-system-mark" aria-hidden="true"></span><span class="sp-chat-system-text">${escape(label)}</span></summary>${body}</details>`;
+}
+
+const ATTACHMENT_REF_RE = /^\[Attachment: ([^\]\n]+)\]$/gm;
+
+function renderUserBody(content) {
+  const refs = [...content.matchAll(ATTACHMENT_REF_RE)].map(m => m[1].trim());
+  const text = content.replace(ATTACHMENT_REF_RE, '').trim();
+  const thumbs = refs.map(path => {
+    const name = path.split('/').pop();
+    return `<button type="button" class="sp-chat-thumb sp-chat-thumb--pending" data-attachment-path="${escape(path)}" aria-label="Open attachment ${escape(name)}"><span>${escape(name)}</span></button>`;
+  }).join('');
+  return `${escape(text)}${thumbs ? `<div class="sp-chat-thumbs">${thumbs}</div>` : ''}`;
+}
+
+/** Binds copy, wrap and image-open controls inside rendered chat markup once per container. */
+export function bindChatInteractions(element) {
+  if (!element || element.dataset.chatBound) return;
+  element.dataset.chatBound = 'true';
+  element.addEventListener('click', event => {
+    const origin = event.target;
+    const copy = origin?.closest?.('[data-chat-copy]');
+    if (copy) {
+      event.stopPropagation();
+      const reset = copy.textContent;
+      Promise.resolve(navigator.clipboard?.writeText(copy.dataset.chatCopy ?? ''))
+        .then(() => { copy.textContent = 'Copied'; })
+        .catch(() => { copy.textContent = 'Select and copy'; })
+        .finally(() => setTimeout(() => { copy.textContent = reset; }, 1500));
+      return;
+    }
+    const wrap = origin?.closest?.('[data-code-wrap]');
+    if (wrap) {
+      const block = wrap.closest('.sp-code');
+      const next = block.dataset.wrap !== 'true';
+      block.dataset.wrap = String(next);
+      wrap.setAttribute('aria-pressed', String(next));
+      return;
+    }
+    const image = origin?.closest?.('[data-image-open]');
+    if (image) openImageViewer(image.dataset.imageOpen, image.querySelector('img')?.alt || 'Image');
+  });
+}
+
+/** Full-size image viewer in a modal dialog; only data: and blob: sources are shown. */
+export function openImageViewer(src, alt = 'Image') {
+  if (!/^(data:image\/|blob:)/i.test(String(src || ''))) return;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'sp-image-viewer';
+  dialog.innerHTML = `<form method="dialog"><button type="submit" class="sp-code-btn">Close</button></form><img alt="${escape(alt)}">`;
+  dialog.querySelector('img').src = src;
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 // Raw HTML and remote image fetching stay disabled for agent-supplied Markdown.
 const markdown = new MarkdownIt({html:false,breaks:true,linkify:false});
-markdown.renderer.rules.image = (tokens,index) => `<span class="sp-chat-attachment">Image: ${escape(tokens[index].content || 'attachment')} (preview unavailable)</span>`;
+// Raster data-URL images render as thumbnails; external images need a click that names the host.
+markdown.renderer.rules.image = (tokens,index) => {
+  const src=tokens[index].attrGet('src')||'',alt=tokens[index].content||'image';
+  if(IMAGE_DATA_URL_RE.test(src)) return `<button type="button" class="sp-chat-thumb" data-image-open="${escape(src)}" aria-label="Open ${escape(alt)} full size"><img src="${escape(src)}" alt="${escape(alt)}" loading="lazy"></button>`;
+  let host='';try{host=new URL(src).host;}catch{}
+  return host ? `<a class="sp-chat-attachment" href="${escape(src)}" target="_blank" rel="noopener noreferrer">External image not loaded: ${escape(alt)} (opens ${escape(host)})</a>` : `<span class="sp-chat-attachment">Image: ${escape(alt)}</span>`;
+};
+markdown.renderer.rules.fence = (tokens,index) => renderCodeBlock(tokens[index].content, tokens[index].info.trim().split(/\s+/)[0]);
+markdown.renderer.rules.code_block = (tokens,index) => renderCodeBlock(tokens[index].content, '');
 markdown.renderer.rules.table_open = (tokens,index,options,env) => {
   env.chatTableHeaders=[];
   for(let i=index+1;i<tokens.length && tokens[i].type!=='thead_close';i++) if(tokens[i].type==='inline') env.chatTableHeaders.push(tokens[i].children?.map(token=>token.content).join('') || tokens[i].content);
@@ -772,11 +897,13 @@ markdown.core.ruler.after('inline','chat-task-lists',state=>{
 const chatMarkdown = text => markdown.render(text,{});
 
 export function renderChatCards(events) {
-  events = events?.filter(evt => (evt.role === 'user' || evt.role === 'assistant' || (evt.role === 'system' && ['model_active','model_changed'].includes(evt.status))) && evt.content?.trim());
+  events = events?.filter(evt => (evt.role === 'tool' && evt.tool_name) || ((evt.role === 'user' || evt.role === 'assistant' || (evt.role === 'system' && (['model_active','model_changed'].includes(evt.status) || SYSTEM_EVENT_TYPES.has(evt.status)))) && evt.content?.trim()));
   if (!Array.isArray(events) || !events.length) {
     return '<div class="sp-chat-empty"><p>No conversation history recorded for this session.</p></div>';
   }
   return `<div class="sp-chat-stream">${events.map(evt => {
+    if (evt.role === 'system' && SYSTEM_EVENT_TYPES.has(evt.status)) return renderSystemEvent(evt);
+    if (evt.role === 'tool') return renderToolEvent(evt);
     if (evt.role === 'system') return `<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleString())}</time></div>`;
     const role = evt.role || 'system';
     const roleLabel = role === 'user' ? 'You' : 'Agent';
@@ -787,8 +914,9 @@ export function renderChatCards(events) {
         <strong>${escape(roleLabel)}</strong>
         ${statusBadge}
         <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
+        ${evt.waiting ? '' : `<button type="button" class="sp-code-btn sp-chat-copy" data-chat-copy="${escape(evt.content)}" aria-label="Copy message">Copy</button>`}
       </header>
-      <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : escape(evt.content)}</div>
+      <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : renderUserBody(evt.content)}</div>
       ${evt.delivery_note ? `<p class="sp-chat-delivery-note" role="status">${escape(evt.delivery_note)}</p>` : ''}
       ${approvalPrompt}
     </article>`;
@@ -827,6 +955,7 @@ export function updateChat(element, events) {
   const previousTop = element.scrollTop;
   const follow = previousHeight - previousTop - element.clientHeight < 80;
   const previous = new Set([...element.querySelectorAll('[data-chat-id]')].map(node => node.dataset.chatId));
+  bindChatInteractions(element);
   updateMarkup(element, renderChatCards(events));
   element.querySelectorAll('[data-chat-id]').forEach(node => {
     if (!previous.has(node.dataset.chatId) && (previous.size || events.some(event=>event.local_pending)) && !matchMedia('(prefers-reduced-motion: reduce)').matches) node.animate([{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.16,1,.3,1)'});
@@ -1015,7 +1144,6 @@ export function renderFileViewer(fileData) {
   const body = lines.map((line, index) => `<span class="sp-file-line"><span class="sp-file-ln">${index + 1}</span><span>${escape(line) || ' '}</span></span>`).join('');
   return `<div class="sp-changes-meta">${badges}</div><pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
 }
-const IMAGE_DATA_URL_RE = /^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i;
 const IMAGE_LOCAL_API_RE = /^\/api\/v1\/[^\s"'<>]+$/;
 
 export function classifyArtifactKind(item) {
