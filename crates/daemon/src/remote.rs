@@ -917,8 +917,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             };
             match crate::execute_switch(prepared).await {
                 Ok(record) => {
-                    let guard = db.lock().await;
-                    if record_model_change(&guard, session_id, &record).is_err() {
+                    if persist_model_change(db, session_id, &record).await.is_err() {
                         return json!({"type":"error","message":"Could not save the model change. Reload and try again."});
                     }
                     json!({"type":"switch_ack","session_id":session_id,"new_session_id":session_id})
@@ -931,13 +930,33 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
     }
 }
 
+pub(crate) async fn persist_model_change(
+    db: &tokio::sync::Mutex<Database>,
+    source: &str,
+    target: &gnomcode_pty::SessionRecord,
+) -> Result<(), gnomcode_store::Error> {
+    let result = {
+        let guard = db.lock().await;
+        record_model_change(&guard, source, target)
+    };
+    if result.is_err() && target.session_id != source {
+        // Never leave a newly launched target host orphaned if persistence fails.
+        let _ = gnomcode_pty::stop_session(&target.session_id).await;
+    }
+    result
+}
+
 pub(crate) fn record_model_change(
     db: &Database,
     source: &str,
     target: &gnomcode_pty::SessionRecord,
 ) -> Result<(), gnomcode_store::Error> {
     let sessions = db.list_active_sessions(usize::MAX)?;
-    sync_conversation_bindings(db, &sessions, &gnomcode_pty::list_active_sessions())?;
+    let hosted: Vec<_> = gnomcode_pty::list_active_sessions()
+        .into_iter()
+        .filter(|record| record.session_id != target.session_id)
+        .collect();
+    sync_conversation_bindings(db, &sessions, &hosted)?;
     let previous_native = db
         .conversation_target(source)?
         .and_then(|(_, native, _)| native);
@@ -2439,6 +2458,74 @@ mod tests {
             conversation_chat(&db, "new-host", "new-native", &[], Some(500), None)
                 .expect("reload after deletion")
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn record_model_change_attaches_preregistered_cross_provider_target() {
+        let mut db = Database::open_in_memory().expect("db");
+        let now = chrono::Utc::now();
+        let project = gnomcode_core::Project {
+            id: "proj-1".into(),
+            canonical_key: "fixture".into(),
+            repo_root: "fixture".into(),
+            name: "fixture".into(),
+            git_branch: None,
+        };
+        let source_session = Session {
+            id: "codex:source".into(),
+            agent: gnomcode_core::AgentId::Codex,
+            surface: gnomcode_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gpt-6.1-sol".into()),
+            title: None,
+            state: gnomcode_core::SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let cp = gnomcode_store::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(
+            &[project],
+            std::slice::from_ref(&source_session),
+            &[],
+            &[],
+            &[],
+            &cp,
+        )
+        .expect("source metadata");
+        db.bind_conversation_host("source-host", "codex:source")
+            .expect("bind source");
+        let target = gnomcode_pty::SessionRecord {
+            session_id: "switch-123".into(),
+            agent: "antigravity".into(),
+            repo_path: "fixture".into(),
+            model: Some("gemini-4-hydrogen-medium".into()),
+            host_pid: 1,
+            child_pid: 2,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        // Simulate a concurrent sync_conversation_bindings seeing the newly launched target host.
+        sync_conversation_bindings(&db, &[source_session], std::slice::from_ref(&target))
+            .expect("concurrent sync");
+        record_model_change(&db, "source-host", &target)
+            .expect("record cross-provider handoff despite pre-registered target");
+        assert_eq!(
+            db.conversation_id("switch-123").expect("shared root"),
+            "source-host"
+        );
+        assert_eq!(
+            db.conversation_target("source-host").expect("target"),
+            Some(("switch-123".into(), None, true))
         );
     }
 

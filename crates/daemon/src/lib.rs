@@ -267,7 +267,7 @@ pub async fn switch_session(
     let _control = CONVERSATION_CONTROL.lock().await;
     let prepared = prepare_model_change(db, session_id, target_model, requested_agent).await?;
     let record = execute_switch(prepared).await?;
-    remote::record_model_change(&*db.lock().await, session_id, &record)?;
+    remote::persist_model_change(db, session_id, &record).await?;
     Ok(record)
 }
 
