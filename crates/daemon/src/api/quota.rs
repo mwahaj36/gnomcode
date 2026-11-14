@@ -116,7 +116,7 @@ pub(crate) fn quota_views_at(
             .insert(snapshot.limit_id.clone());
     }
     kept.into_iter()
-        .map(|snapshot| {
+        .map(|mut snapshot| {
             let window = match snapshot.window {
                 gnomcode_core::QuotaWindow::FiveHour => "Session",
                 gnomcode_core::QuotaWindow::Weekly => "Weekly",
@@ -130,12 +130,19 @@ pub(crate) fn quota_views_at(
                 || window.to_owned(),
                 |name| format!("{name} \u{b7} {window}"),
             );
+            let remaining_pct = quota::remaining_pct(&snapshot, now);
+            let reset_passed = quota::reset_passed(&snapshot, now);
+            let state = quota::quota_state(&snapshot, now);
+            let pace = quota::quota_pace(&snapshot, now);
+            let stale = quota::is_stale(&snapshot, now);
+            snapshot.used_pct = quota::effective_used_pct(&snapshot, now);
+            snapshot.basis = quota::effective_basis(&snapshot, now);
             QuotaPoolView {
-                remaining_pct: quota::remaining_pct(&snapshot, now),
-                reset_passed: snapshot.resets_at.is_some_and(|reset| reset <= now),
-                state: quota::quota_state(&snapshot, now),
-                pace: quota::quota_pace(&snapshot, now),
-                stale: quota::is_stale(&snapshot, now),
+                remaining_pct,
+                reset_passed,
+                state,
+                pace,
+                stale,
                 label,
                 pool,
                 window_label: window.to_owned(),
@@ -160,9 +167,9 @@ pub(crate) fn conversation_quota(
     quota_views_at(snapshots.iter().filter(|snapshot|snapshot.provider==provider).cloned().collect(), now).into_iter().map(|pool| {
         let window = match pool.snapshot.window {gnomcode_core::QuotaWindow::FiveHour=>"5h",gnomcode_core::QuotaWindow::Weekly=>"Weekly",gnomcode_core::QuotaWindow::Monthly=>"Monthly"};
         let label = if pools.len()>1 {format!("{} {window}",pool.snapshot.limit_id.replace(['-','_']," "))}else{window.to_owned()};
-        let expired = pool.snapshot.resets_at.is_some_and(|reset|reset<=now);
-        let stale = expired || now.signed_duration_since(pool.snapshot.observed_at)>chrono::Duration::minutes(2);
-        json!({"label":label,"state":pool.state,"remaining_pct":if expired {None}else{pool.remaining_pct},"basis":pool.snapshot.basis,"observed_at":pool.snapshot.observed_at,"stale":stale,"window":pool.snapshot.window,"window_label":pool.window_label,"pool":pool.pool,"resets_at":pool.snapshot.resets_at,"reset_passed":pool.reset_passed,"pace":pool.pace})
+        let expired = pool.reset_passed;
+        let stale = expired || pool.stale;
+        json!({"label":label,"state":pool.state,"remaining_pct":pool.remaining_pct,"used_pct":pool.snapshot.used_pct,"basis":pool.snapshot.basis,"observed_at":pool.snapshot.observed_at,"stale":stale,"window":pool.snapshot.window,"window_label":pool.window_label,"pool":pool.pool,"resets_at":pool.snapshot.resets_at,"reset_passed":pool.reset_passed,"pace":pool.pace})
     }).collect()
 }
 
@@ -432,15 +439,45 @@ mod tests {
             )[0]["stale"],
             true
         );
-        assert!(
-            super::conversation_quota(
-                std::slice::from_ref(&snapshot),
-                "codex",
-                now + chrono::Duration::hours(2)
-            )[0]["remaining_pct"]
-                .is_null()
+        let after_reset = super::conversation_quota(
+            std::slice::from_ref(&snapshot),
+            "codex",
+            now + chrono::Duration::hours(2),
         );
+        assert_eq!(after_reset[0]["state"], "reset_unconfirmed");
+        assert_eq!(after_reset[0]["remaining_pct"], 100.0);
+        assert_eq!(after_reset[0]["used_pct"], 0.0);
+        assert_eq!(after_reset[0]["basis"], "estimated");
         snapshot.basis = gnomcode_core::TrustLevel::Unknown;
         assert!(super::conversation_quota(&[snapshot], "codex", now)[0]["remaining_pct"].is_null());
+    }
+
+    #[test]
+    fn quota_views_report_assumed_reset_and_omit_stale_runs_out() {
+        let now = chrono::Utc::now();
+        let mut stale_ahead = pool(
+            "codex",
+            "codex",
+            gnomcode_core::QuotaWindow::FiveHour,
+            99.0,
+            Some(now + chrono::Duration::minutes(66)),
+            gnomcode_core::TrustLevel::Exact,
+            now - chrono::Duration::hours(2),
+        );
+        let stale_views = super::quota_views_at(vec![stale_ahead.clone()], now);
+        assert!(stale_views[0].stale);
+        let pace = stale_views[0].pace.as_ref().expect("pace");
+        assert!(pace.stale);
+        assert!(pace.stale_reason.is_some());
+        assert_eq!(pace.runs_out_at, None);
+
+        stale_ahead.resets_at = Some(now - chrono::Duration::minutes(5));
+        let reset_views = super::quota_views_at(vec![stale_ahead], now);
+        let json = serde_json::to_value(&reset_views[0]).expect("json");
+        assert_eq!(json["state"], "reset_unconfirmed");
+        assert_eq!(json["used_pct"], 0.0);
+        assert_eq!(json["remaining_pct"], 100.0);
+        assert_eq!(json["basis"], "estimated");
+        assert_eq!(json["reset_passed"], true);
     }
 }
