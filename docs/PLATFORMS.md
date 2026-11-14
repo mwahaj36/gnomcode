@@ -57,3 +57,15 @@ Last updated: 2026-11-13 (CI packaging evidence from run `43464307883`).
 - Antigravity IDE 1.x and 2.0 app data/config directories on Linux (`~/.config/Antigravity` vs `~/.gemini`) are unverified on-device (`docs/SPEC.md` §3.5).
 - Linux `arm64` desktop Electron packaging and `linux-x64-musl` builds are not in the CI packaging matrix.
 - Unix-specific tests added in PR #256 and the CI `package-smoke` job (PR #257) have not yet executed on Linux runners due to the GitHub Actions account billing/spending limit hit on run `43475756520`.
+
+## WSL on Windows (ADR 0060)
+
+### Planned (not yet verified)
+- Discovery of running distros from `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss`; stopped distros are never booted.
+- Ingest of `\wsl.localhost\<distro>\home\<user>\` roots for `.claude`, `.codex` and `.gemini/antigravity*`, with slow-poll fallback when 9P delivers no events.
+- Launch and resume through `wsl.exe -d <distro> --cd <linux path> -- <agent>`.
+- Distro badge (`WSL: <distro>`) on sessions, provider sources and filters.
+
+### Known gaps
+- WSL 1 distros and distros without a `\wsl.localhost` share are unverified.
+- The Claude hook inside a distro requires `gnomcode integrate claude` run there; without it, sessions still ingest (fail open).
