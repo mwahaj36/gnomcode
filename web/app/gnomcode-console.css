@@ -2030,3 +2030,5 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-image-viewer::backdrop{background:rgb(0 0 0 / .7)}.sp-image-viewer form{display:flex;justify-content:flex-end;margin-bottom:8px}
 .sp-image-viewer img{display:block;max-width:100%;max-height:calc(92vh - 72px);margin:auto;object-fit:contain}
 @media(max-width:767px){.sp-code-btn{min-height:36px;padding:4px 12px}.sp-chat-system{max-width:96%}}
+.sp-subagent-count{margin:2px 0 6px 20px;font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
+.sp-native-console .conversation-filters .subagent-filter{min-height:44px}

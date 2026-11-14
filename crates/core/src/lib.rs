@@ -16,6 +16,7 @@ pub mod redact;
 pub mod remote_crypto;
 pub mod routing;
 pub mod rules;
+pub mod subagent;
 pub mod update;
 pub mod wsl;
 

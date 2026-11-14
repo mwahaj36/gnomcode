@@ -337,6 +337,32 @@ impl SourceAdapter for ClaudeAdapter {
     }
 }
 
+/// Sidecar path and child session id for a Claude subagent transcript
+/// (`.../subagents/agent-<id>.jsonl` has `agent-<id>.meta.json` beside it).
+#[must_use]
+pub fn subagent_sidecar(path: &str) -> Option<(std::path::PathBuf, String)> {
+    let (_, stem) = subagent_identity(path)?;
+    let sidecar = std::path::Path::new(path).with_file_name(format!("{stem}.meta.json"));
+    Some((sidecar, Session::compose_id(AgentId::ClaudeCode, &stem)))
+}
+
+/// Name for a subagent from its sidecar: the Task description, else the `subagent_type`.
+#[must_use]
+pub fn subagent_label_from_meta(bytes: &[u8]) -> Option<String> {
+    let meta: Value = serde_json::from_slice(bytes).ok()?;
+    ["description", "agentType", "subagent_type"]
+        .iter()
+        .filter_map(|key| meta.get(*key).and_then(Value::as_str))
+        .map(|text| {
+            gnomcode_core::redact::redact_chat_content(text)
+                .trim()
+                .chars()
+                .take(120)
+                .collect::<String>()
+        })
+        .find(|text| !text.is_empty())
+}
+
 /// Splits `.../<session-id>/subagents/agent-<id>.jsonl` into the parent id and the child file stem.
 fn subagent_identity(path: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = path
