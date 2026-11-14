@@ -88,7 +88,13 @@ export function HomeView() {
       const key = JSON.stringify(res) + Math.floor(Date.now() / 60000);
       if (key === lastQuotaKeyRef.current) return;
       if (limitsRef.current) {
-        updateProviderCards(limitsRef.current, res, { cost: false });
+        updateProviderCards(limitsRef.current, res, {
+          cost: false,
+          onResetBoundary: () => {
+            lastQuotaKeyRef.current = '';
+            void loadQuota();
+          },
+        });
       }
       lastQuotaKeyRef.current = key;
     } catch {
