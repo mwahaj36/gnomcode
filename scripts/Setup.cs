@@ -145,7 +145,7 @@ public class SetupForm : Form
         Controls.Add(browseButton);
         desktopShortcut = AddOption("desktopShortcut", "Create a desktop shortcut", 216, true);
         startMenuShortcut = AddOption("startMenuShortcut", "Add to the Start menu", 248, true);
-        startAtLogin = AddOption("startAtLogin", "Start gnomcode when I sign in to Windows", 280, false);
+        startAtLogin = AddOption("startAtLogin", "Start gnomcode when I sign in to Windows", 280, InstallerIntegration.IsAutostartEnabled(Registry.CurrentUser));
         explorerMenu = AddOption("explorerMenu", "Add Open with Gnomcode to Explorer folders", 312, true);
         Controls.Add(new Label { Text = "Windows 11: available under Show more options.", Location = new Point(58, 341), AutoSize = true });
         installButton = new Button { Name = "installButton", Text = "Install", Location = new Point(324, 398), Size = new Size(96, 32) };
@@ -353,13 +353,7 @@ public class SetupForm : Form
 
     private void ConfigureAutostart()
     {
-        using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
-            if (key != null) {
-                string vbs = Path.Combine(installDir, "run-tray.vbs");
-                if (startAtLogin.Checked) key.SetValue("Gnomcode", "wscript.exe \"" + vbs + "\"");
-                else key.DeleteValue("Gnomcode", false);
-            }
-        }
+        InstallerIntegration.ConfigureAutostart(Registry.CurrentUser, installDir, startAtLogin.Checked);
     }
 
     private void LaunchGnomcode()
@@ -482,6 +476,41 @@ public static class InstallerIntegration
             FileName = "powershell.exe", Arguments = "-NoProfile -EncodedCommand " + Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script)),
             UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden
         })) { if (cleanup != null) cleanup.WaitForExit(5000); }
+    }
+
+    public static string AutostartCommand(string installDir) {
+        string desktop = Path.Combine(installDir, "desktop", "gnomcode-desktop.exe");
+        if (File.Exists(desktop)) {
+            return "\"" + desktop + "\" --background";
+        }
+        return "wscript.exe \"" + Path.Combine(installDir, "run-tray.vbs") + "\"";
+    }
+
+    public static bool IsAutostartEnabled(RegistryKey user) {
+        using (RegistryKey key = user.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
+            object raw = key != null ? key.GetValue("Gnomcode") : null;
+            if (!(raw is string) || String.IsNullOrEmpty(((string)raw).Trim())) return false;
+        }
+        using (RegistryKey approved = user.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")) {
+            object raw = approved != null ? approved.GetValue("Gnomcode") : null;
+            byte[] state = raw as byte[];
+            if (state != null && state.Length > 0 && (state[0] & 1) == 1) return false;
+        }
+        return true;
+    }
+
+    public static void ConfigureAutostart(RegistryKey user, string installDir, bool enabled) {
+        using (RegistryKey key = user.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
+            if (key != null) {
+                if (enabled) key.SetValue("Gnomcode", AutostartCommand(installDir));
+                else key.DeleteValue("Gnomcode", false);
+            }
+        }
+        if (enabled) {
+            using (RegistryKey approved = user.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", true)) {
+                if (approved != null) approved.DeleteValue("Gnomcode", false);
+            }
+        }
     }
 
     public static void ConfigureExplorer(RegistryKey user, string installDir, bool enabled) {
@@ -673,10 +702,9 @@ public class UninstallForm : Form
     private void RemoveAutostartAndPath()
     {
         try {
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true)) {
-                if (key != null) {
-                    key.DeleteValue("Gnomcode", false);
-                }
+            InstallerIntegration.ConfigureAutostart(Registry.CurrentUser, installDir, false);
+            using (RegistryKey approved = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", true)) {
+                if (approved != null) approved.DeleteValue("Gnomcode", false);
             }
         } catch {}
 
@@ -781,7 +809,14 @@ public class Program
             }
             Application.Run(new UninstallForm(isQuiet));
         } else {
-            Application.Run(new SetupForm(isPreview));
+            SetupForm form = new SetupForm(isPreview);
+            if (isQuiet && !isPreview) {
+                form.Shown += (s, e) => {
+                    Control[] found = form.Controls.Find("installButton", true);
+                    if (found.Length == 1 && found[0] is Button) ((Button)found[0]).PerformClick();
+                };
+            }
+            Application.Run(form);
         }
     }
 }

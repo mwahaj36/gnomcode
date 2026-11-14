@@ -30,7 +30,7 @@ Set-ItemProperty -Path $AppModelKey -Name "IconUri" -Value (Join-Path $InstallDi
 $UninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Gnomcode"
 if (-not (Test-Path $UninstallKey)) { New-Item -Path $UninstallKey -Force | Out-Null }
 Set-ItemProperty -Path $UninstallKey -Name "DisplayName" -Value "gnomcode"
-Set-ItemProperty -Path $UninstallKey -Name "DisplayVersion" -Value "0.9.4"
+Set-ItemProperty -Path $UninstallKey -Name "DisplayVersion" -Value "1.0.0"
 Set-ItemProperty -Path $UninstallKey -Name "Publisher" -Value "gnomcode"
 Set-ItemProperty -Path $UninstallKey -Name "DisplayIcon" -Value ((Join-Path $InstallDir "gnomcode.ico") + ",0")
 Set-ItemProperty -Path $UninstallKey -Name "InstallLocation" -Value $InstallDir
@@ -71,4 +71,10 @@ if ($CurPath -notlike "*$InstallDir*") {
     [Environment]::SetEnvironmentVariable("Path", "$CurPath;$InstallDir", "User")
 }
 
-Write-Host "Gnomcode v0.9.4 installed successfully to $InstallDir!"
+# Preserve existing Run autostart entry if enabled, updating its target to the desktop app
+$RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+if ((Test-Path $RunKey) -and ($null -ne (Get-ItemProperty -Path $RunKey -Name "Gnomcode" -ErrorAction SilentlyContinue).Gnomcode)) {
+    Set-ItemProperty -Path $RunKey -Name "Gnomcode" -Value "`"$DesktopExe`" --background"
+}
+
+Write-Host "Gnomcode v1.0.0 installed successfully to $InstallDir!"

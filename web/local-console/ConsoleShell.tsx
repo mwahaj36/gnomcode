@@ -218,6 +218,12 @@ export function ConsoleShell() {
 
   useEffect(() => {
     const onHashChange = () => {
+      const nextFolder = takeExplorerFolder();
+      if (nextFolder) {
+        navigate('sessions', false);
+        workspaceAction({ type: 'new-session', folder: nextFolder });
+        return;
+      }
       normalizeHash();
       const next = resolveView(window.location.hash.slice(1) || 'overview');
       if (isView(next)) navigate(next, false);
@@ -446,6 +452,7 @@ export function ConsoleShell() {
             className={`view-content${CONSOLE_VIEWS.includes(view) ? ' active' : ''}`}
             role="tabpanel"
             tabIndex={0}
+            hidden={!CONSOLE_VIEWS.includes(view)}
             aria-labelledby={`tab-btn-${lastConsoleView.current}`}
           >
             <div id="local-usage-root" data-local-view="usage" hidden={view !== 'usage'}>
@@ -463,13 +470,14 @@ export function ConsoleShell() {
             className={`view-content${view === 'settings' ? ' active' : ''}`}
             role="tabpanel"
             tabIndex={0}
+            hidden={view !== 'settings'}
             aria-labelledby="tab-btn-settings"
           >
             <div id="local-settings-root">
               <SettingsView />
             </div>
           </main>
-          <main id="view-auth" className={`view-content${view === 'auth' ? ' active' : ''}`} tabIndex={0}>
+          <main id="view-auth" className={`view-content${view === 'auth' ? ' active' : ''}`} tabIndex={0} hidden={view !== 'auth'}>
             <div id="account-root">
               <AccountView />
             </div>

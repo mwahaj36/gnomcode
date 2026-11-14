@@ -89,6 +89,7 @@ impl Database {
                     title = CASE WHEN session.agent = 'antigravity' AND coalesce(session.title,'') NOT IN ('','Subagent') THEN session.title ELSE coalesce(excluded.title, session.title) END,
                     state = excluded.state,
                     pid = coalesce(excluded.pid, session.pid),
+                    started_at = CASE WHEN excluded.started_at < session.started_at THEN excluded.started_at ELSE session.started_at END,
                     last_event_at = excluded.last_event_at
                 "#)?;
             for s in sessions {

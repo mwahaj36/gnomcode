@@ -1,6 +1,7 @@
 //! Read-only per-session git status and diff for local API and E2EE Remote.
 
 use crate::api::{AppState, validate_auth};
+use crate::workspace_files::resolve_session_workspace;
 use axum::Json;
 use axum::extract::{Path as AxumPath, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -8,7 +9,7 @@ use axum::response::IntoResponse;
 use gnomcode_store::Database;
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -51,52 +52,14 @@ impl ChangesError {
     }
 }
 
-fn resolve_session_workspace(db: &Database, session_id: &str) -> Result<PathBuf, &'static str> {
-    if session_id.trim().is_empty() || session_id.len() > 128 {
-        return Err("Invalid session");
-    }
-    let hosted = gnomcode_pty::list_active_sessions();
-    if let Some(record) = hosted.iter().find(|r| r.session_id == session_id) {
-        let path = PathBuf::from(&record.repo_path);
-        if path.is_dir() {
-            return Ok(path);
-        }
-    }
-    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
-    let native_id = crate::remote::conversation_session_id(session_id, &sessions, &hosted);
-    if let Some(record) = hosted.iter().find(|r| {
-        sessions
-            .iter()
-            .find(|s| s.id == native_id)
-            .is_some_and(|s| Some(r.child_pid) == s.pid || r.session_id == s.id)
-    }) {
-        let path = PathBuf::from(&record.repo_path);
-        if path.is_dir() {
-            return Ok(path);
-        }
-    }
-    let target = db
-        .get_session_focus_target(&native_id)
-        .map_err(|_| "Session workspace is unavailable")?
-        .ok_or("Session not found")?;
-    let folder = target
-        .repo_root
-        .filter(|path| !path.trim().is_empty())
-        .ok_or("Session has no workspace folder")?;
-    let path = PathBuf::from(folder);
-    if path.is_dir() {
-        Ok(path)
-    } else {
-        Err("Session workspace folder is unavailable")
-    }
-}
-
 async fn run_git_readonly(repo: &Path, args: &[&str]) -> Result<(String, bool), ChangesError> {
     use tokio::io::AsyncReadExt as _;
     let mut command = tokio::process::Command::new("git");
     command
         .args([
             "--no-pager",
+            "-c",
+            "safe.directory=*",
             "-c",
             "core.quotepath=off",
             "-c",
@@ -298,5 +261,48 @@ mod tests {
         )
         .await;
         assert_eq!(response["type"], "error");
+    }
+
+    #[tokio::test]
+    async fn remote_changes_resolves_switched_conversation_root_id() {
+        let repo = tempfile::tempdir().expect("repo");
+        let git = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(repo.path())
+                    .status()
+                    .expect("git")
+                    .success()
+            );
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "test@example.com"]);
+        git(&["config", "user.name", "Test"]);
+        std::fs::write(repo.path().join("README.md"), "base\n").expect("write");
+        git(&["add", "README.md"]);
+        git(&["commit", "-m", "init"]);
+        std::fs::write(repo.path().join("README.md"), "edited\n").expect("edit");
+
+        let db = Database::open_in_memory().expect("in-memory db");
+        let repo_str = repo.path().to_string_lossy().into_owned();
+        db.save_conversation_launch("claude-root-1", "claude", &repo_str, Some("sonnet"))
+            .expect("launch");
+        db.continue_conversation("claude-root-1", "switch-target-1")
+            .expect("continue");
+        let db = Arc::new(Mutex::new(db));
+
+        let response = remote_command(
+            &db,
+            &json!({"type": "changes", "session_id": "claude-root-1"}),
+        )
+        .await;
+        assert_eq!(response["type"], "changes", "got {response}");
+        assert!(
+            response["status"]
+                .as_str()
+                .is_some_and(|s| s.contains("M README.md")),
+            "status={response}"
+        );
     }
 }

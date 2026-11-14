@@ -8,6 +8,8 @@ export interface DesktopApi {
   launchSession(agent: string, repoPath: string, model?: string): Promise<unknown>;
   stopSession(sessionId: string): Promise<unknown>;
   restartToUpdate(): Promise<boolean>;
+  getLoginItem(): Promise<boolean>;
+  setLoginItem(enabled: boolean): Promise<boolean>;
 }
 
 const desktop: DesktopApi = Object.freeze({
@@ -20,6 +22,8 @@ const desktop: DesktopApi = Object.freeze({
   stopSession: (sessionId: string): Promise<unknown> =>
     ipcRenderer.invoke('desktop:stop-session', sessionId),
   restartToUpdate: (): Promise<boolean> => ipcRenderer.invoke('desktop:restart-to-update'),
+  getLoginItem: (): Promise<boolean> => ipcRenderer.invoke('desktop:get-login-item'),
+  setLoginItem: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke('desktop:set-login-item', enabled),
 });
 contextBridge.exposeInMainWorld('gnomcodeDesktop', desktop);
 

@@ -677,6 +677,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         setAttachError(/Unsupported remote command/i.test(reply.message || '') ? 'Phone attachments require a newer Gnomcode desktop update.' : (reply.message || 'Attachment upload failed.'));
         return;
       }
+      if(reply.request_type==='interrupt' || (interruptInFlight.current && /Unsupported remote command/i.test(reply.message || ''))){
+        interruptInFlight.current=false;setInterrupting(false);
+        if(/Unsupported remote command/i.test(reply.message || '')){interruptAttempt.current=null;setNotice('Interrupt requires a newer Gnomcode desktop build.');return;}
+      }
+      if(reply.request_type && reply.request_type.startsWith('worktree_')){setWorktreeActionBusy(false);setWorktreeConfirm(null);}
+      if(reply.request_type==='continue_here'){setContinueHereBusy(false);}
+      if(reply.request_type==='session_changes'){setWorktreeDiffData({error: reply.message || 'Could not load worktree diff.'});return;}
       if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
       if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
       if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
@@ -694,20 +701,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       setInterrupting(false);
       setNotice(formatInterruptAckMessage({ sent: reply.sent }));
     }
-    else if (reply.type === 'error') {
-      if(reply.request_type==='interrupt' || (interruptInFlight.current && /Unsupported remote command/i.test(reply.message || ''))){
-        interruptInFlight.current=false;setInterrupting(false);
-        if(/Unsupported remote command/i.test(reply.message || '')){interruptAttempt.current=null;setNotice('Interrupt requires a newer Gnomcode desktop build.');return;}
-      }
-      if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
-      if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
-      if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
-      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
-      if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
-      if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
-      if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
-      setError(reply.message || 'Remote request failed. Reconnect and try again.');
-    }
     else if (reply.type === 'session_changes') {
       if (!reply.session_id || reply.session_id === selectedRef.current) {
         setWorktreeDiffData({
@@ -724,19 +717,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       setWorktreeConfirm(null);
       setNotice(reply.url ? `${reply.message || 'Pull request ready:'} ${reply.url}` : reply.message || 'Worktree action completed.');
       await requestSessions();
-    }
-    else if (reply.type === 'error') {
-      if(reply.request_type && reply.request_type.startsWith('worktree_')){setWorktreeActionBusy(false);setWorktreeConfirm(null);}
-      if(reply.request_type==='continue_here'){setContinueHereBusy(false);}
-      if(reply.request_type==='session_changes'){setWorktreeDiffData({error: reply.message || 'Could not load worktree diff.'});return;}
-      if(reply.request_type==='approval'){void send({type:'approvals'}).catch(()=>{});}
-      if(reply.request_type==='launch'){launchPending.current=false;setLaunching(false);}
-      if(reply.request_type==='schedule'){if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);setSchedulePending(false);setNotice('');}
-      if(reply.request_type==='models'){modelRequest.current=false;setModelsLoading(false);setModelsError('Your desktop could not provide a model list. Update Gnomcode on your desktop, then refresh.');return;}
-      if (!reply.request_type || reply.request_type === 'prompt') { const pending = pendingPrompt.current; if(pending) setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)})); pendingPrompt.current = null; setSending(false); }
-      if (!reply.request_type || reply.request_type === 'workspaces') setFoldersLoading(false);
-      if (!reply.request_type || reply.request_type === 'chat') { loadingHistory.current = false; setHistoryLoading(false); }
-      setError(reply.message || 'Remote request failed. Reconnect and try again.');
     }
   }
 
@@ -851,10 +831,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     setHasEarlier(false); historyAnchor.current = null;
     changesRequested.current = false; setChangesPanel(false); setChangesLoading(false); setChangesState(null);
     filesRequested.current = false; setFilesPanel(false); setFileListState(null); setFileData(null); setFilePathInput('');
-    selectedRef.current = id; setSchedules([]); setResetArmed(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
-    selectedRef.current = id; setSchedules([]); setResetArmed(false); setArtifactsPanel(false); setArtifacts([]); setSelectedArtifactId(''); setArtifactsError(''); setArtifactsChangesCount(null); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
-    selectedRef.current = id; setSchedules([]); setResetArmed(false); pendingUploadIds.current.clear(); setAttachments([]); setAttachError(''); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
-    selectedRef.current = id; setSchedules([]); setResetArmed(false); interruptAttempt.current = null; interruptInFlight.current = false; setInterrupting(false); setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
+    selectedRef.current = id; setSchedules([]); setResetArmed(false);
+    setArtifactsPanel(false); setArtifacts([]); setSelectedArtifactId(''); setArtifactsError(''); setArtifactsChangesCount(null);
+    pendingUploadIds.current.clear(); setAttachments([]); setAttachError('');
+    interruptAttempt.current = null; interruptInFlight.current = false; setInterrupting(false);
+    setSelected(id); setEvents([]); loadingHistory.current = true; setHistoryLoading(true);
     setWorktreePanelOpen(false); setWorktreeDiffData(null); setWorktreeConfirm(null); setWorktreeActionBusy(false);
     try {sessionStorage.setItem(`gnomcode-remote-selected:${link.room}`,id);}catch{}
     if(phase==='paired')loadChat(id);else{loadingHistory.current=false;setHistoryLoading(false);}

@@ -252,6 +252,81 @@ mod switch_tests {
         );
         assert_eq!(super::agent_for_model("@default", Some("terminal")), None);
     }
+
+    #[test]
+    fn fresh_session_before_ingest_supports_model_and_provider_switch() {
+        const CHILD: &str = "GNOMCODE_TEST_FRESH_SWITCH";
+        if std::env::var_os(CHILD).is_none() {
+            let root = tempfile::tempdir().expect("root");
+            let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "--exact",
+                    "switch_tests::fresh_session_before_ingest_supports_model_and_provider_switch",
+                ])
+                .env(CHILD, "1")
+                .env("GNOMCODE_HOME", root.path())
+                .status()
+                .expect("isolated test");
+            assert!(status.success());
+            return;
+        }
+        let repo = tempfile::tempdir().expect("repo");
+        let repo_str = repo.path().to_string_lossy().into_owned();
+        let now = chrono::Utc::now();
+        let pid = std::process::id();
+        let mut claude_record = gnomcode_pty::SessionRecord {
+            session_id: "claude-fresh-host".into(),
+            agent: "claude".into(),
+            repo_path: repo_str.clone(),
+            model: None,
+            host_pid: pid,
+            child_pid: pid,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        gnomcode_pty::save_session_record(&claude_record).expect("host fixture");
+
+        let db = gnomcode_store::Database::open_in_memory().expect("db");
+        db.save_conversation_launch(&claude_record.session_id, "claude", &repo_str, None)
+            .expect("launch");
+
+        let same_agent =
+            super::prepare_switch(&db, &claude_record.session_id, "sonnet", Some("claude"))
+                .expect("same-provider prepare before ingest");
+        assert!(same_agent.native.is_some());
+        assert_eq!(same_agent.repo, repo_str);
+
+        claude_record.model = Some("sonnet".into());
+        crate::remote::record_model_change(&db, &claude_record.session_id, &claude_record)
+            .expect("record same-provider model change without session row");
+
+        let cross =
+            super::prepare_switch(&db, &claude_record.session_id, "@default", Some("codex"))
+                .expect("cross-provider prepare before ingest");
+        assert!(cross.native.is_none());
+        assert_eq!(cross.agent, "codex");
+        assert_eq!(cross.repo, repo_str);
+
+        let codex_record = gnomcode_pty::SessionRecord {
+            session_id: "switch-fresh-codex".into(),
+            agent: "codex".into(),
+            repo_path: repo_str,
+            model: None,
+            host_pid: pid,
+            child_pid: pid,
+            port: 2,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        crate::remote::record_model_change(&db, &claude_record.session_id, &codex_record)
+            .expect("record cross-provider switch without session row");
+        let launch = db
+            .conversation_launch(&claude_record.session_id)
+            .expect("launch lookup")
+            .expect("launch present");
+        assert_eq!(launch.agent, "codex");
+    }
 }
 
 /// Changes an existing CLI model or attaches a target agent to the conversation.
@@ -571,10 +646,21 @@ pub(crate) fn prepare_switch(
     } else {
         &source_id
     };
-    let target = db
+    let repo = match db
         .get_session_focus_target(history_id)?
-        .ok_or(HandoffError::MissingSession)?;
-    let repo = target.repo_root.ok_or(HandoffError::MissingSession)?;
+        .and_then(|target| target.repo_root)
+        .or_else(|| current.map(|record| record.repo_path.clone()))
+    {
+        Some(repo) => repo,
+        None => match db.conversation_launch(session_id)? {
+            Some(launch) => launch.repo,
+            None => {
+                db.conversation_launch(&source_id)?
+                    .ok_or(HandoffError::MissingSession)?
+                    .repo
+            }
+        },
+    };
     let native = current
         .filter(|record| {
             agent_for_model("@default", Some(&record.agent)) == Some(agent)
@@ -601,8 +687,12 @@ pub(crate) async fn execute_switch(
     if let Some(mut record) = native {
         gnomcode_pty::switch_model(&record, &model)
             .await
-            .map_err(|error| HandoffError::Launch(error.to_string()))?;
+            .map_err(|error| match error {
+                gnomcode_pty::Error::NotReady => HandoffError::NotReady,
+                other => HandoffError::Launch(other.to_string()),
+            })?;
         record.model = Some(model);
+        let _ = gnomcode_pty::save_session_record(&record);
         return Ok(record);
     }
     let mut random = [0u8; 8];
@@ -696,15 +786,17 @@ pub fn read_daemon_info() -> Option<DaemonInfo> {
 pub struct DaemonLock {
     _file: File,
     info_path: PathBuf,
+    published: bool,
 }
 
 impl DaemonLock {
-    /// Attempts to acquire an exclusive lock on `~/.gnomcode/daemon.lock`
-    /// and persists `daemon.json` with the generated bearer token.
+    /// Acquires an exclusive lock on `~/.gnomcode/daemon.lock` without yet
+    /// writing `daemon.json`, so callers can open SQLite and bind the TCP
+    /// listener before advertising the port/token via [`Self::publish`].
     ///
     /// # Errors
     /// Returns [`Error::AlreadyRunning`] if another process holds the lock.
-    pub fn acquire(port: u16) -> Result<(Self, DaemonInfo), Error> {
+    pub fn hold(port: u16) -> Result<(Self, DaemonInfo), Error> {
         let home = gnomcode_home();
         fs::create_dir_all(&home)?;
 
@@ -724,23 +816,45 @@ impl DaemonLock {
             started_at: Utc::now().to_rfc3339(),
         };
 
-        let json_bytes = serde_json::to_vec_pretty(&info).map_err(std::io::Error::other)?;
-        gnomcode_platform::write_private_file(&info_path, &json_bytes)
-            .map_err(|error| std::io::Error::other(error.to_string()))?;
-
         Ok((
             Self {
                 _file: file,
                 info_path,
+                published: false,
             },
             info,
         ))
+    }
+
+    /// Writes `daemon.json` so local clients can connect once the listener is bound.
+    ///
+    /// # Errors
+    /// Returns an I/O error if serializing or securing `daemon.json` fails.
+    pub fn publish(&mut self, info: &DaemonInfo) -> Result<(), Error> {
+        let json_bytes = serde_json::to_vec_pretty(info).map_err(std::io::Error::other)?;
+        gnomcode_platform::write_private_file(&self.info_path, &json_bytes)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        self.published = true;
+        Ok(())
+    }
+
+    /// Attempts to acquire an exclusive lock on `~/.gnomcode/daemon.lock`
+    /// and persists `daemon.json` with the generated bearer token.
+    ///
+    /// # Errors
+    /// Returns [`Error::AlreadyRunning`] if another process holds the lock.
+    pub fn acquire(port: u16) -> Result<(Self, DaemonInfo), Error> {
+        let (mut lock, info) = Self::hold(port)?;
+        lock.publish(&info)?;
+        Ok((lock, info))
     }
 }
 
 impl Drop for DaemonLock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.info_path);
+        if self.published {
+            let _ = fs::remove_file(&self.info_path);
+        }
         // Keep the inode stable so another process cannot lock a replacement file.
     }
 }
