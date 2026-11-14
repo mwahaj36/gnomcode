@@ -1188,7 +1188,20 @@ function classifyDiffLine(line) {
   return 'sp-diff-line';
 }
 
-export function renderChangesView(data) {
+/** Splits a unified diff into per-file blocks keyed by the post-image path (`b/...`). Display only. */
+function diffBlocks(diffText) {
+  const blocks = new Map();
+  let path = '';
+  for (const line of diffText.split(/\r?\n/)) {
+    if (line.startsWith('diff --git ')) path = line.slice(line.lastIndexOf(' b/') + 3);
+    if (!path) continue;
+    if (!blocks.has(path)) blocks.set(path, []);
+    blocks.get(path).push(line);
+  }
+  return blocks;
+}
+
+export function renderChangesView(data, { selected = '' } = {}) {
   if (!data) return '<p class="sp-provider-empty">Select a conversation workspace to inspect uncommitted changes.</p>';
   if (data.loading) return '<p class="sp-provider-empty" role="status">Loading workspace changes...</p>';
   if (data.error) return `<p class="sp-field-note sp-tone-red" role="alert">${escape(data.error)}</p>`;
@@ -1202,15 +1215,19 @@ export function renderChangesView(data) {
   if (!files.length && !diffText.trim()) {
     return `<div class="sp-changes-meta">${badges}</div><p class="sp-provider-empty">Working tree clean: no modified or untracked files.</p>`;
   }
+  const fileButton = (path, label, text) => `<li><button type="button" class="sp-changes-file" data-change-file="${escape(path)}" aria-pressed="${selected === path}"><span class="sp-chip sp-chip--neutral">${escape(label)}</span><code>${escape(text)}</code></button></li>`;
   const fileMarkup = files.length
-    ? `<ul class="sp-changes-files" aria-label="Changed files">${files.map(file => `<li class="sp-changes-file"><span class="sp-chip sp-chip--neutral">${escape(file.label)}</span><code>${escape(file.path)}</code></li>`).join('')}</ul>`
+    ? `<ul class="sp-changes-files" aria-label="Changed files">${fileButton('', 'All', `All files (${files.length})`)}${files.map(file => fileButton(file.path, file.label, file.path)).join('')}</ul>`
     : '';
-  const diffLines = diffText.trim()
-    ? diffText.split(/\r?\n/).map(line => `<span class="${classifyDiffLine(line)}">${escape(line) || ' '}</span>`).join('')
+  const shown = selected ? (diffBlocks(diffText).get(selected) || []).join('\n') : diffText;
+  const diffLines = shown.trim()
+    ? shown.split(/\r?\n/).map(line => `<span class="${classifyDiffLine(line)}">${escape(line) || ' '}</span>`).join('')
     : '';
   const diffMarkup = diffLines
-    ? `<pre class="sp-diff-code" tabindex="0" aria-label="Unified git diff">${diffLines}</pre>`
-    : '<p class="sp-provider-empty">No modified tracked diff hunks (untracked files listed above).</p>';
+    ? `<pre class="sp-diff-code" tabindex="0" aria-label="${selected ? `Diff for ${escape(selected)}` : 'Unified git diff'}">${diffLines}</pre>`
+    : selected
+      ? `<p class="sp-provider-empty">No diff for ${escape(selected)}. Untracked files have no diff until git tracks them.</p>`
+      : '<p class="sp-provider-empty">No modified tracked diff hunks (untracked files listed above).</p>';
   return `<div class="sp-changes-meta">${badges}</div>${fileMarkup}${diffMarkup}`;
 }
 

@@ -2314,3 +2314,74 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 /* Copy on red user bubbles: keep the bubble's foreground in every state; the label carries Copied or Copy failed */
 .sp-remote-chat .sp-chat-user .sp-chat-copy,.sp-remote-chat .sp-chat-user .sp-chat-copy[data-copy-state]{color:var(--sp-on-primary);opacity:1}
 .sp-remote-chat .sp-chat-user .sp-chat-copy:is(:hover,:focus-visible){background:rgb(0 0 0 / .16);border-color:transparent;color:var(--sp-on-primary)}
+/* Changes: each file row is a button that shows only that file's diff */
+.sp-changes-files{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:2px}
+.sp-changes-files button.sp-changes-file{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;padding:2px 8px;border:0;border-radius:8px;background:transparent;color:var(--sp-text);text-align:left;cursor:pointer}
+.sp-changes-files button.sp-changes-file:hover,.sp-changes-files button.sp-changes-file[aria-pressed="true"]{background:var(--sp-surface-2)}
+.sp-changes-files button.sp-changes-file code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* One conversation column: everything under the header shares the transcript width */
+.sp-native-console{--thread-w:840px}
+.sp-native-console .sp-workspace-main-col>:not(.sp-chat-stream-box):not(.sp-chat-terminal-box):not(.sp-worktree-bar),
+.sp-native-console .sp-workspace-chat-panel>:not(.conversation-heading):not(.sp-workspace-body){width:100%;max-width:var(--thread-w);margin-inline:auto;box-sizing:border-box}
+.sp-native-console .sp-workspace-chat-panel>p,.sp-native-console .sp-workspace-main-col>p{font-size:var(--sp-fs-meta);color:var(--sp-text-3);margin-block:4px}
+.sp-native-console .sp-activity-inline{justify-content:space-between;padding:6px 0}
+.sp-native-console .sp-activity-inline .sp-activity-stop{min-height:30px;padding:0 12px;background:var(--sp-primary);border-color:transparent;color:var(--sp-on-primary);font-weight:600;border-radius:999px}
+.sp-native-console .sp-workspace-terminal{border:1px solid var(--sp-border);border-radius:12px;overflow:hidden;margin-block:8px}
+.sp-native-console .sp-workspace-terminal .workspace-terminal-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--sp-border);font:12px var(--sp-font-mono);color:var(--sp-text-2)}
+.sp-native-console .sp-workspace-terminal-screen{height:min(320px,40vh);padding:6px}
+/* Conversation column: only the list scrolls */
+.sp-chat-column .ide-sidebar{overflow:hidden!important;display:flex;flex-direction:column}
+.sp-chat-column .sp-workspace-list{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin}
+.sp-chat-column .ide-sidebar>:not(.sp-workspace-list){flex:none}
+/* Schedule and automation: labelled sections, one idea each */
+.sp-chat-automation>summary{font-size:var(--sp-fs-control);font-weight:500;color:var(--sp-text-2);padding:8px 0;cursor:pointer}
+.sp-auto{display:grid;gap:12px;padding:4px 0 12px}
+.sp-auto-section{border:1px solid var(--sp-border);border-radius:12px;padding:12px 14px;display:grid;gap:8px;background:var(--sp-surface)}
+.sp-auto-section h4{margin:0;font-size:var(--sp-fs-control);font-weight:600;color:var(--sp-text)}
+.sp-auto-help{margin:0;font-size:var(--sp-fs-meta);line-height:1.5;color:var(--sp-text-3)}
+.sp-auto-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sp-auto-row>.sp-auto-help{flex:1 1 220px}
+.sp-auto-field{display:grid;gap:4px;font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
+.sp-auto-field input{min-height:34px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-bg);color:var(--sp-text);padding:0 10px;font:inherit;font-size:var(--sp-fs-control)}
+.sp-auto-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.sp-auto-list li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:32px;padding:4px 8px;border-radius:8px;background:var(--sp-surface-2);font-size:var(--sp-fs-meta)}
+.sp-auto-when{font-variant-numeric:tabular-nums;color:var(--sp-text-2)}
+.sp-auto-text{flex:1 1 160px;min-width:0;color:var(--sp-text);overflow-wrap:anywhere}
+.sp-auto-choices{display:grid;gap:6px}
+.sp-auto-choice{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--sp-border);border-radius:10px;cursor:pointer}
+.sp-auto-choice:has(input:checked){border-color:var(--sp-text-2);background:var(--sp-surface-2)}
+.sp-auto-choice input{margin-top:3px;accent-color:var(--sp-text)}
+.sp-auto-choice span{display:grid;gap:2px}
+.sp-auto-choice b{font-weight:500;font-size:var(--sp-fs-control);color:var(--sp-text)}
+.sp-auto-choice small{font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
+/* Remote: live activity is an inline row, not a report section */
+.sp-activity[aria-label="Agent activity"]{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 2px;margin:4px 0;border:0;background:transparent;font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
+.sp-activity[aria-label="Agent activity"]>span{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.sp-activity[aria-label="Agent activity"] .sp-activity-stop{flex:none;width:auto;min-height:32px;padding:0 14px;border-radius:999px;border:0;background:var(--sp-primary);color:var(--sp-on-primary);font-weight:600}
+/* Remote composer: neutral primary action; red stays for stopping */
+.remote-composer-toolbar button[type="submit"]{background:var(--sp-cta-bg);color:var(--sp-cta-text);border-color:var(--sp-cta-bg)}
+.remote-composer-toolbar button[type="submit"]:disabled{background:var(--sp-surface-2);color:var(--sp-text-3);border-color:var(--sp-border)}
+/* Remote tools and quick prompts: compact chips, no visible scrollbar */
+.sp-remote-tools{display:flex;gap:6px;flex-wrap:wrap}
+.sp-remote-tools .sp-remote-tool-btn{min-height:32px;padding:0 12px;border-radius:999px;font-size:var(--sp-fs-control)}
+.sp-quick-actions{scrollbar-width:none}
+.sp-quick-actions::-webkit-scrollbar{display:none}
+.sp-quick-actions .sp-quick-action{min-height:32px;padding:0 12px;border-radius:999px;font-size:var(--sp-fs-control);white-space:nowrap}
+@media(max-width:760px){
+ .remote-heading .sp-limits-popover-trigger{background:transparent;border:0;padding:0;min-height:0}
+ .remote-heading :is(button,a).btn-control{min-width:40px;min-height:40px}
+}
+.sp-auto .sp-auto-field{display:grid!important;grid-template-columns:minmax(0,1fr);gap:4px;align-items:start}
+.sp-auto .sp-auto-row{align-items:flex-end}
+.sp-snapshot-note{margin:0 0 16px;padding:10px 14px;border:1px solid var(--sp-border);border-radius:10px;background:var(--sp-surface);font-size:var(--sp-fs-meta);line-height:1.5;color:var(--sp-text-2)}
+.sp-auto-field textarea{min-height:72px;resize:vertical;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-bg);color:var(--sp-text);padding:8px 10px;font:inherit;font-size:var(--sp-fs-control);line-height:1.5}
+.sp-auto-field textarea:focus-visible,.sp-auto-field input:focus-visible{outline:2px solid var(--sp-text-2);outline-offset:1px}
+.sp-auto-field textarea{min-height:72px;resize:vertical;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-bg);color:var(--sp-text);padding:8px 10px;font:inherit;font-size:var(--sp-fs-control);line-height:1.5}
+.sp-auto-field textarea:focus-visible,.sp-auto-field input:focus-visible{outline:2px solid var(--sp-text-2);outline-offset:1px}
+/* Composer: the model status repeats the select for assistive tech only; delivery messages get their own line */
+.sp-native-console .sp-chat-composer .composer-model>[role="status"]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.sp-native-console .sp-chat-composer .composer-model{position:relative;flex:0 1 auto;min-width:0}
+.sp-native-console .sp-chat-composer .composer-model select{max-width:260px;text-overflow:ellipsis}
+.sp-native-console .sp-chat-composer .sp-composer-status{order:10;flex:1 0 100%;font-size:var(--sp-fs-meta);color:var(--sp-text-3);line-height:1.4}
+/* One Stop: while the activity row shows, the header copy stays in the DOM (the row's Stop triggers it) but is hidden */
+.sp-native-console .sp-workspace-chat-panel:has(.sp-activity-inline) .conversation-heading .sp-interrupt-btn{display:none}

@@ -470,9 +470,9 @@ async fn probe_cli(
             #[cfg(windows)]
             command.creation_flags(0x0800_0000);
             let out = tokio::time::timeout(std::time::Duration::from_secs(4), command.output())
-            .await
-            .ok()?
-            .ok()?;
+                .await
+                .ok()?
+                .ok()?;
             let found = gnomcode_pty::wsl::probe_found(&String::from_utf8_lossy(&out.stdout));
             AgentCliStatus {
                 agent: exe.to_owned(),

@@ -278,6 +278,8 @@ export function SessionTools({
     [controlledPanel, onPanelChange],
   );
   const [changesHtml, setChangesHtml] = useState('');
+  // The last changes payload, so picking a file re-renders without another git call.
+  const changesData = useRef<unknown>(null);
   const [filesHtml, setFilesHtml] = useState('');
   const [fileBodyHtml, setFileBodyHtml] = useState('');
   const [filePath, setFilePath] = useState('');
@@ -307,7 +309,10 @@ export function SessionTools({
     setChangesHtml(renderChangesView({ loading: true }));
     try {
       const data = await fetchLocalJson<Record<string, unknown>>(`/api/v1/sessions/${encodeURIComponent(target)}/changes`);
-      if (sessionRef.current === target) setChangesHtml(renderChangesView(data as never));
+      if (sessionRef.current === target) {
+        changesData.current = data;
+        setChangesHtml(renderChangesView(data as never));
+      }
     } catch (err) {
       const text = httpStatusOf(err);
       const message = text.includes('413')
@@ -487,7 +492,14 @@ export function SessionTools({
               </button>
             </div>
           </div>
-          <div dangerouslySetInnerHTML={{ __html: changesHtml }} />
+          <div
+            dangerouslySetInnerHTML={{ __html: changesHtml }}
+            onClick={(event) => {
+              const button = (event.target as HTMLElement).closest<HTMLElement>('[data-change-file]');
+              if (!button || !changesData.current) return;
+              setChangesHtml(renderChangesView(changesData.current as never, { selected: button.dataset.changeFile || '' }));
+            }}
+          />
         </section>
       ) : null}
 
