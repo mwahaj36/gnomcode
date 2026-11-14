@@ -9,21 +9,22 @@ import { PlatformDownloads } from "./downloads/PlatformDownloads";
 import { landingFaq } from "../lib/landing-faq";
 import { ConsoleTourView } from "./components/ConsoleTourView";
 import HeroWorkflow from "./components/HeroWorkflow";
+import { ProviderLogo } from "./components/ProviderLogo";
 
 const agents = [
-  { name: "Claude Code", icons: ["claudecode"] },
-  { name: "Codex", icons: ["codex"] },
-  { name: "Antigravity", icons: ["antigravity"] },
-];
+  { name: "Claude Code", provider: "claude-code" },
+  { name: "Codex", provider: "codex" },
+  { name: "Antigravity", provider: "antigravity" },
+] as const;
 const tours = [
-  { name: "Overview", title: "Everything happening now.", detail: "See active sessions, spend and the limits that need attention.", kind: "overview" },
-  { name: "Sessions", title: "Every run, in one place.", detail: "Find the agent waiting for you and open its session.", kind: "sessions" },
-  { name: "Usage", title: "Know where the tokens went.", detail: "Sample seven-day usage and API-equivalent cost by agent.", kind: "usage" },
-  { name: "Limits", title: "See what is left.", detail: "Quota usage, remaining capacity and reset times at a glance.", kind: "limits" },
+  { name: "Overview", title: "Everything happening now.", detail: "Home puts limits first, then a year of activity, today's totals and the sessions that need you.", kind: "overview" },
+  { name: "Sessions", title: "Every run, in one place.", detail: "Sessions group by Needs you, Running and Recent, with subagents and WSL distros labelled.", kind: "sessions" },
+  { name: "Usage", title: "Know where the tokens went.", detail: "Recorded tokens, estimated API-equivalent spend and cache savings, plus the activity grid.", kind: "usage" },
+  { name: "Limits", title: "See what is left.", detail: "Session and weekly windows per provider, with Low and Out states, reset times and the source of each reading.", kind: "limits" },
 ];
 const features = [
   ["Hit a limit. Keep the task moving.", "Switch supported agents with a compact briefing of objectives and changed files. Keep the original history and continue with another model."],
-  ["Away from your desk. Still in control.", "Read the conversation, send the next instruction and approve Claude Code permission prompts from your phone over an end-to-end encrypted channel."],
+  ["Away from your desk. Still in control.", "Read the conversation, send the next instruction and answer approval prompts from your phone over an end-to-end encrypted channel. Claude Code approvals work through its hook; Codex and Antigravity approvals need protocol mode, which you turn on per agent."],
   ["One fleet. One view of usage.", "Compare recorded tokens, estimated API-equivalent spend and quota across agents. Every measurement carries its trust level."],
 ];
 const plans = [
@@ -36,9 +37,7 @@ function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="tr
 export default function LandingPage() {
   const [tab, setTab] = useState(0);
   const tourTabs = useRef<Array<HTMLButtonElement | null>>([]);
-  const [tourVisible, setTourVisible] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
-  const tourScreenRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -65,19 +64,6 @@ export default function LandingPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (tourVisible) return;
-    const screen = tourScreenRef.current;
-    if (!screen) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setTourVisible(true);
-        observer.disconnect();
-      }
-    }, { threshold: 0.35 });
-    observer.observe(screen);
-    return () => observer.disconnect();
-  }, [tab, tourVisible]);
 
 
   useEffect(() => {
@@ -123,7 +109,7 @@ export default function LandingPage() {
 
 
 
-      <section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><ul className="sp-agent-row">{agents.map((agent) => <li className="sp-agent-item" key={agent.name}><span className="sp-agent-icons" aria-hidden="true">{agent.icons.map((icon) => <span className="sp-agent-icon" style={{ maskImage: `url(/agents/${icon}.svg)`, WebkitMaskImage: `url(/agents/${icon}.svg)` }} key={icon} />)}</span><strong>{agent.name}</strong></li>)}</ul></div></section>
+      <section className="sp-marquee" id="agents" aria-label="Supported agents"><div className="sp-width"><span className="sp-label">WORKS WITH</span><ul className="sp-agent-row">{agents.map((agent) => <li className="sp-agent-item" key={agent.name}><ProviderLogo provider={agent.provider} size={24} /><strong>{agent.name}</strong></li>)}</ul></div></section>
 
       <section className="sp-features sp-width" id="features" data-reveal><div className="sp-section-head"><h2>Keep working across agents.</h2><span>LAUNCH / SWITCH / CONTINUE</span></div><div className="sp-feature-grid">{features.map(([title, copy]) => <article key={title}><h3>{title}</h3><p>{copy}</p><span className="sp-feature-line" aria-hidden="true" /></article>)}</div></section>
 
@@ -137,11 +123,10 @@ export default function LandingPage() {
         }}>{view.name}</button>)}</div>
         <div className="sp-tour-panel" role="tabpanel" id="tour-panel" aria-labelledby={`tour-tab-${tab}`} tabIndex={0} key={tab}>
           <div className="sp-tour-copy"><span className="sp-label">{tours[tab].name.toUpperCase()} / CONSOLE</span><h3>{tours[tab].title}</h3><p>{tours[tab].detail}</p><Link href="/auth">Open console <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link></div>
-          <div className="sp-tour-screen" ref={tourScreenRef}>
-            <div className="sp-tour-screen-head"><span><Mark /> gnomcode / {tours[tab].name.toLowerCase()}</span><span>RUN · LOCAL</span></div>
-            <div className={tourVisible ? "sp-tour-screen-body visible" : "sp-tour-screen-body"} key={`${tab}-${tourVisible}`}>
-              <small>{tours[tab].name.toUpperCase()} / ILLUSTRATIVE DATA</small><h4>{tours[tab].title}</h4>
-              <ConsoleTourView kind={tours[tab].kind} visible={tourVisible} />
+          <div className="sp-tour-screen">
+            <div className="sp-tour-screen-head"><span><Mark /> gnomcode / {tours[tab].name.toLowerCase()}</span><span>ILLUSTRATIVE</span></div>
+            <div className="sp-tour-screen-body sp-native-console">
+              <ConsoleTourView kind={tours[tab].kind} />
             </div>
           </div>
         </div>
