@@ -34,11 +34,9 @@ pub(super) async fn switch_session_handler(
         Ok(value) => value,
         Err(error) => return Ok(handoff_error_response(error)),
     };
-    {
-        let db = state.db.lock().await;
-        crate::remote::record_model_change(&db, &id, &record)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    }
+    crate::remote::persist_model_change(&state.db, &id, &record)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({
         "ok": true,
         "source_session_id": id,

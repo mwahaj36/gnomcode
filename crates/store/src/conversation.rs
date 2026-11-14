@@ -104,7 +104,26 @@ impl Database {
         let root = self.conversation_id(source)?;
         let tx = self.conn.unchecked_transaction()?;
         tx.execute("INSERT OR IGNORE INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?1,?1,0)", [&root])?;
-        tx.execute("INSERT INTO conversation_member(host_id,conversation_id,position,needs_context) SELECT ?1,?2,COALESCE(MAX(position),0)+1,1 FROM conversation_member WHERE conversation_id=?2",params![target_host,root])?;
+        let existing: Option<(String, Option<String>, i64)> = tx
+            .query_row(
+                "SELECT conversation_id, native_id, position FROM conversation_member WHERE host_id=?1",
+                [target_host],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        match existing {
+            Some((conv_id, _, _)) if conv_id == root => {}
+            Some((conv_id, None, 0)) if conv_id == target_host => {
+                // Re-parent an unattached standalone host (e.g. pre-registered by concurrent sync).
+                tx.execute(
+                    "UPDATE conversation_member SET conversation_id=?2, position=(SELECT COALESCE(MAX(position),0)+1 FROM conversation_member WHERE conversation_id=?2), needs_context=1 WHERE host_id=?1",
+                    params![target_host, root],
+                )?;
+            }
+            _ => {
+                tx.execute("INSERT INTO conversation_member(host_id,conversation_id,position,needs_context) SELECT ?1,?2,COALESCE(MAX(position),0)+1,1 FROM conversation_member WHERE conversation_id=?2",params![target_host,root])?;
+            }
+        }
         tx.commit()?;
         Ok(())
     }
@@ -729,5 +748,29 @@ mod tests {
         };
         assert_eq!(state("antigravity:a"), "ended");
         assert_eq!(state("antigravity:b"), "tool");
+    }
+
+    #[test]
+    fn continue_conversation_attaches_preregistered_unattached_host() {
+        let db = Database::open_in_memory().expect("db");
+        db.bind_conversation_host("source-host", "codex:first")
+            .expect("source");
+        db.save_conversation_launch(
+            "switch-target",
+            "antigravity",
+            "workspace",
+            Some("gemini-4-hydrogen-medium"),
+        )
+        .expect("pre-register unattached target");
+        db.continue_conversation("source-host", "switch-target")
+            .expect("attach pre-registered target");
+        assert_eq!(
+            db.conversation_id("switch-target").expect("root"),
+            "source-host"
+        );
+        assert_eq!(
+            db.conversation_target("source-host").expect("target"),
+            Some(("switch-target".into(), None, true))
+        );
     }
 }
