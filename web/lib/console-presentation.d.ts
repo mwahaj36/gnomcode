@@ -21,6 +21,10 @@ export function updateProviderCards(element: HTMLElement, list: ProviderOverview
 export type ProjectActivity = { id: string; name: string; sessions: number; last_active?: string | null; agents?: string[]; repo_root?: string };
 export type ProjectListOptions = { query?: string; expanded?: boolean; helper?: string; heading?: boolean };
 export function shortPath(path: unknown): string;
+export function wslDistro(path: unknown): string;
+export function wslFolder(distro: string, linuxPath: string): string;
+export function middleTruncate(text: unknown, max?: number): string;
+export function wslBadge(session: unknown): string;
 export function projectsFromSessions(sessions: unknown): ProjectActivity[];
 export function renderProjectRows(projects: unknown, options?: { query?: string; expanded?: boolean }): string;
 export function renderProjects(projects: unknown, options?: ProjectListOptions): string;

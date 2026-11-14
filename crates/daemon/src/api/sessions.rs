@@ -154,6 +154,31 @@ pub(super) async fn launch_session_handler(
     }
 }
 
+/// Registered WSL distros for the "Run in" picker (ADR 0060). Registry only plus the
+/// running list; never starts a distro. Empty off Windows or without WSL.
+pub(super) async fn wsl_distros_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let (registered, running) = tokio::task::spawn_blocking(|| {
+        (
+            gnomcode_platform::wsl::registered_distros(),
+            gnomcode_platform::wsl::running_distros(),
+        )
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let distros: Vec<Value> = registered
+        .into_iter()
+        .map(|name| {
+            let up = running.iter().any(|r| r.eq_ignore_ascii_case(&name));
+            json!({"name": name, "label": gnomcode_core::wsl::distro_label(&name), "running": up})
+        })
+        .collect();
+    Ok(Json(json!({ "distros": distros })))
+}
+
 pub(super) static WORKSPACE_TERMINAL_LAUNCH: tokio::sync::Mutex<()> =
     tokio::sync::Mutex::const_new(());
 

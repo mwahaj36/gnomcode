@@ -1883,3 +1883,37 @@ body.sp-native-console #account-root :is(button,.btn-control,.btn-primary){min-h
   body.sp-native-console #view-settings .sp-settings-root label:has(input[type="checkbox"]),
   body.sp-native-console #view-settings .sp-settings-root label:has(input[type="radio"]){min-height:44px;display:inline-flex;align-items:center;gap:var(--sp-2)}
 }
+
+/* WSL (ADR 0060): distro badge and middle-truncated share paths. */
+:is(.sp-native-console, .sp-console-app, .sp-remote) .sp-wsl-badge {
+  margin-right: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--sp-border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--sp-text-2, inherit);
+  background: var(--sp-surface-2);
+}
+:is(.sp-native-console, .sp-console-app, .sp-remote) .sp-path-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 6px;
+}
+:is(.sp-native-console, .sp-console-app, .sp-remote) .sp-path-line code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--sp-text-3, inherit);
+}
+:is(.sp-native-console, .sp-console-app, .sp-remote) .sp-path-copy {
+  flex: none;
+  min-height: 32px;
+}
+@media (max-width: 767px) {
+  :is(.sp-native-console, .sp-console-app, .sp-remote) .sp-path-copy { min-height: 44px; }
+}
