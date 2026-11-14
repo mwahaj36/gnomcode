@@ -28,7 +28,7 @@ test.describe('prompt composer', () => {
     await box.type('Then run tests');
     await box.press('Enter');
     await expect.poll(() => sent.length).toBe(1);
-    expect(sent[0]).toEqual({ text: 'Review auth\nThen run tests' });
+    expect(sent[0]).toMatchObject({ text: 'Review auth\nThen run tests', queue_if_busy: true });
     await expect(box).toHaveValue('');
   });
 

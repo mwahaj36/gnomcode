@@ -114,7 +114,8 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0].url).toMatch(/\/api\/v1\/sessions\/claude-code%3A[^/]+\/prompt$/);
     const payload = JSON.parse(sent[0].body ?? '{}');
-    expect(Object.keys(payload)).toEqual(['text']);
+    expect(payload).toMatchObject({ queue_if_busy: true });
+    expect(typeof payload.id).toBe('string');
     expect(String(payload.text)).toMatch(/test/i);
   });
 

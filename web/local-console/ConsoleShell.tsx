@@ -54,7 +54,7 @@ const RAIL: { view: ConsoleView; label: string; controls: string; icon: ReactEle
 
 const POLL_MS = 2000;
 const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
-const resolveView = (name: string): string => VIEW_ALIASES[name] ?? name;
+const resolveView = (name: string): string => (name.startsWith('settings-') ? 'settings' : (VIEW_ALIASES[name] ?? name));
 const isView = (name: string): name is ConsoleView => (VIEWS as string[]).includes(name);
 
 function viewUrl(view: string): string {
@@ -81,7 +81,11 @@ function storeFlag(key: string, value: string): void {
 
 // Rewrites an old #limits/#projects/#automations hash in place, so Back does not bounce through the old name.
 function normalizeHash(): void {
-  if (window.location.hash === '#settings/providers') requestProviderSetup();
+  if (window.location.hash === '#settings/providers') {
+    requestProviderSetup();
+    history.replaceState(null, '', viewUrl('settings-providers'));
+    return;
+  }
   const target = VIEW_ALIASES[window.location.hash.slice(1)];
   if (target) history.replaceState(null, '', viewUrl(target));
 }
