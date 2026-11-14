@@ -129,6 +129,56 @@ impl Database {
         Ok(self.conn.execute(obfstr::obfstr!("UPDATE scheduled_message SET status='cancelled',text='',finished_at=unixepoch() WHERE id=?1 AND conversation_id=?2 AND status='pending'"),params![id,root])? == 1)
     }
 
+    /// Updates the text of a pending queued message within its owning conversation.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn update_scheduled_message(
+        &self,
+        conversation: &str,
+        id: &str,
+        text: &str,
+    ) -> Result<bool, Error> {
+        let root = self.conversation_id(conversation)?;
+        let redacted = gnomcode_core::redact::redact_chat_content(text);
+        Ok(self.conn.execute(
+            obfstr::obfstr!(
+                "UPDATE scheduled_message SET text=?3 WHERE id=?1 AND conversation_id=?2 AND status='pending'"
+            ),
+            params![id, root, redacted],
+        )? == 1)
+    }
+
+    /// Looks up a single scheduled/queued message by id within its owning conversation.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite failure.
+    pub fn get_scheduled_message(
+        &self,
+        conversation: &str,
+        id: &str,
+    ) -> Result<Option<ScheduledMessage>, Error> {
+        let root = self.conversation_id(conversation)?;
+        self.conn
+            .query_row(
+                obfstr::obfstr!(
+                    "SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE id=?1 AND conversation_id=?2"
+                ),
+                params![id, root],
+                |r| {
+                    Ok(ScheduledMessage {
+                        id: r.get(0)?,
+                        conversation_id: r.get(1)?,
+                        text: r.get(2)?,
+                        due_at: r.get(3)?,
+                        status: r.get(4)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
     /// Cancels and erases pending messages when chat history is deleted.
     pub fn cancel_conversation_schedules(&self, conversation: &str) -> Result<(), Error> {
         let root = self.conversation_id(conversation)?;

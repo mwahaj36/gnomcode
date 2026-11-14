@@ -1,0 +1,2 @@
+{"type":"session_meta","timestamp":"2026-11-14T04:10:00Z","payload":{"id":"codex-bare-image-fixture","cwd":"/workspace/example"}}
+{"type":"response_item","timestamp":"2026-11-14T04:10:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<image name=[Image #1] path=\"C:\\Users\\example\\AppData\\Local\\Temp\\codex-clipboard-fixture.png\">\n</image>\nWhy is the header clipped?"}]}}

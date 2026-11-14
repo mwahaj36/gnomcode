@@ -173,6 +173,76 @@ pub(crate) fn conversation_quota(
     }).collect()
 }
 
+fn quota_window_rank(window: gnomcode_core::QuotaWindow) -> u8 {
+    match window {
+        gnomcode_core::QuotaWindow::FiveHour => 0,
+        gnomcode_core::QuotaWindow::Weekly => 1,
+        gnomcode_core::QuotaWindow::Monthly => 2,
+    }
+}
+
+/// Returns the single applicable short-window quota reading for a conversation's selected model
+/// pool without fabricating a `5h` window when none exists.
+pub(crate) fn conversation_headline_quota(
+    snapshots: &[gnomcode_core::QuotaSnapshot],
+    pool_id: Option<&str>,
+    agent: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<Value> {
+    let provider = crate::agent_for_model("@default", Some(agent)).unwrap_or(agent);
+    let mut matching: Vec<_> = snapshots
+        .iter()
+        .filter(|s| s.provider == provider)
+        .filter(|s| pool_id.is_none_or(|p| s.limit_id == p))
+        .cloned()
+        .collect();
+    if matching.is_empty() && pool_id.is_some() {
+        matching = snapshots
+            .iter()
+            .filter(|s| s.provider == provider)
+            .cloned()
+            .collect();
+    }
+    let mut views = quota_views_at(matching, now);
+    if views.is_empty() {
+        return None;
+    }
+    views.sort_by(|a, b| {
+        (
+            quota_window_rank(a.snapshot.window),
+            a.stale || a.reset_passed,
+            a.snapshot.limit_id.as_str(),
+        )
+            .cmp(&(
+                quota_window_rank(b.snapshot.window),
+                b.stale || b.reset_passed,
+                b.snapshot.limit_id.as_str(),
+            ))
+    });
+    let chosen = views.into_iter().next()?;
+    let window = match chosen.snapshot.window {
+        gnomcode_core::QuotaWindow::FiveHour => "5h",
+        gnomcode_core::QuotaWindow::Weekly => "Weekly",
+        gnomcode_core::QuotaWindow::Monthly => "Monthly",
+    };
+    let stale = chosen.reset_passed || chosen.stale;
+    Some(json!({
+        "label": window,
+        "state": chosen.state,
+        "remaining_pct": chosen.remaining_pct,
+        "used_pct": chosen.snapshot.used_pct,
+        "basis": chosen.snapshot.basis,
+        "observed_at": chosen.snapshot.observed_at,
+        "stale": stale,
+        "window": chosen.snapshot.window,
+        "window_label": chosen.window_label,
+        "pool": chosen.pool,
+        "resets_at": chosen.snapshot.resets_at,
+        "reset_passed": chosen.reset_passed,
+        "pace": chosen.pace
+    }))
+}
+
 /// Shared test fixture for quota and provider tests.
 #[cfg(test)]
 pub(super) fn pool(
@@ -479,5 +549,54 @@ mod tests {
         assert_eq!(json["remaining_pct"], 100.0);
         assert_eq!(json["basis"], "estimated");
         assert_eq!(json["reset_passed"], true);
+    }
+
+    #[test]
+    fn headline_quota_picks_selected_pool_short_window_without_fabricating_5h() {
+        let now = chrono::Utc::now();
+        let snapshots = vec![
+            pool(
+                "antigravity",
+                "claude_gpt",
+                gnomcode_core::QuotaWindow::FiveHour,
+                11.0,
+                Some(now + chrono::Duration::hours(4)),
+                gnomcode_core::TrustLevel::Exact,
+                now,
+            ),
+            pool(
+                "antigravity",
+                "claude_gpt",
+                gnomcode_core::QuotaWindow::Weekly,
+                3.0,
+                Some(now + chrono::Duration::days(5)),
+                gnomcode_core::TrustLevel::Exact,
+                now,
+            ),
+            pool(
+                "antigravity",
+                "gemini_argon",
+                gnomcode_core::QuotaWindow::Weekly,
+                0.0,
+                Some(now + chrono::Duration::days(6)),
+                gnomcode_core::TrustLevel::Exact,
+                now,
+            ),
+        ];
+        let claude_gpt =
+            super::conversation_headline_quota(&snapshots, Some("claude_gpt"), "antigravity", now)
+                .expect("headline");
+        assert_eq!(claude_gpt["label"], "5h");
+        assert_eq!(claude_gpt["remaining_pct"], 89.0);
+
+        let argon = super::conversation_headline_quota(
+            &snapshots,
+            Some("gemini_argon"),
+            "antigravity",
+            now,
+        )
+        .expect("argon headline");
+        assert_eq!(argon["label"], "Weekly");
+        assert_eq!(argon["remaining_pct"], 100.0);
     }
 }
