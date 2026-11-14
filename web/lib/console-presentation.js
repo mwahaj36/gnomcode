@@ -311,10 +311,12 @@ function homeRow(session, group) {
   const project = session.project_name && session.project_name.toLowerCase() !== 'unknown' ? session.project_name : 'Private project';
   const title = session.title && session.title.toLowerCase() !== 'unknown' ? session.title : project === 'Private project' ? 'Private session' : project;
   const fill = Number.isFinite(session.context_fill_pct) ? Math.round(session.context_fill_pct) : null;
+  const totalTok = Number.isFinite(session.total_tokens) ? session.total_tokens : (session.input_tokens ?? 0) + (session.output_tokens ?? 0);
   const subagentBadge = session.subagent_count > 0 ? `${session.subagent_count} subagent${session.subagent_count === 1 ? '' : 's'}` : '';
   const meta = [project, session.surface_label || agentLabel(session.agent), session.model && session.model !== 'Unspecified' ? session.model : '', subagentBadge].filter(Boolean).join(' · ');
+  const tokenBadge = totalTok > 0 ? `<span class="sp-session-tokens">${escape(tokens(totalTok))}</span>` : '';
   const context = fill === null ? '<span class="sp-session-context" aria-hidden="true"></span>' : `<span class="sp-session-context" title="Context ${fill}% full"><i style="--fill:${fill}%"></i></span>`;
-  return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${escape(meta)}</span></span>${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
+  return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${escape(meta)}</span></span>${tokenBadge}${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
 }
 
 export function renderHomeSessions(sessions) {
@@ -541,11 +543,13 @@ function summaryLine(p, windows) {
   const state = stateOf(head);
   const label = escape(windowLabel(head));
   const when = whenPart(head.resets_at, { short: true });
+  const exhaustedPools = windows.filter(win => stateOf(win) === 'exhausted').length;
+  const outNote = exhaustedPools > 0 && exhaustedPools < windows.length ? ` · ${exhaustedPools} pool${exhaustedPools === 1 ? '' : 's'} out` : '';
   const seen = seenText(head);
   const seenSuffix = (head.stale || awaiting(head)) && seen ? ` · <span class="sp-seen-inline">${escape(seen)}</span>` : '';
   const text = state === 'exhausted' ? `${label} <b>exhausted</b>${when ? ` · back ${escape(whenPart(head.resets_at))}` : ''}${seenSuffix}`
     : awaiting(head) ? `${label} <span class="sp-reset-muted">Reset, not confirmed</span> <span class="sp-trust-tag">EST</span>${seenSuffix}`
-      : `${label} <b>${escape(valueText(head))}</b>${when ? ` · resets ${escape(when)}` : ''}${seenSuffix}`;
+      : `${label} <b>${escape(valueText(head))}</b>${outNote}${when && !outNote ? ` · resets ${escape(when)}` : ''}${seenSuffix}`;
   return `<span class="sp-provider-line">${text}</span>`;
 }
 
