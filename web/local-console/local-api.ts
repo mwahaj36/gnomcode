@@ -4,6 +4,7 @@ export interface LocalSessionSummary {
   title?: string;
   model?: string;
   state?: string;
+  state_label?: string;
   source?: string;
   repo_path?: string;
   started_at?: string;

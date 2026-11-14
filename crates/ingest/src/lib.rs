@@ -504,6 +504,9 @@ fn ingest_files(
             record_cwds(db, &cwds);
         }
         import_native_titles(db, file.agent, &read_result.bytes[..parsed_len])?;
+        if file.agent == AgentId::ClaudeCode {
+            import_subagent_label(db, &path_str);
+        }
     }
 
     if repair_chat_format {
@@ -523,6 +526,23 @@ fn ingest_files(
     );
 
     Ok(total_records_ingested)
+}
+
+/// Names a Claude subagent from the `agent-<id>.meta.json` Claude Code writes beside its transcript.
+fn import_subagent_label(db: &Database, transcript: &str) {
+    let Some((sidecar, id)) = gnomcode_adapters::claude::subagent_sidecar(transcript) else {
+        return;
+    };
+    if !fs::metadata(&sidecar).is_ok_and(|metadata| metadata.len() <= 64 * 1024) {
+        return;
+    }
+    if let Some(label) = fs::read(&sidecar)
+        .ok()
+        .and_then(|bytes| gnomcode_adapters::claude::subagent_label_from_meta(&bytes))
+        && let Err(error) = db.update_native_session_title(&id, &label)
+    {
+        tracing::warn!("failed to name subagent: {error}");
+    }
 }
 
 fn import_native_titles(db: &Database, agent: AgentId, bytes: &[u8]) -> Result<(), Error> {

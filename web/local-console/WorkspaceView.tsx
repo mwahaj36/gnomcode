@@ -20,6 +20,8 @@ import {
   renderConversationLimits,
   renderProviderCards,
   renderSessionList,
+  SUBAGENT_PREF_KEY,
+  subagentsIncluded,
   updateChat,
   type ConversationLimit,
   type PendingChat,
@@ -170,7 +172,15 @@ export function WorkspaceView() {
 
   const [sourceFilter, setSourceFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [includeSubagents, setIncludeSubagents] = useState(false);
+  const [includeSubagents, setIncludeSubagentsState] = useState(() => subagentsIncluded());
+  const setIncludeSubagents = useCallback((value: boolean) => {
+    setIncludeSubagentsState(value);
+    try {
+      localStorage.setItem(SUBAGENT_PREF_KEY, String(value));
+    } catch {
+      // Preference stays in memory when storage is blocked
+    }
+  }, []);
   const [projectFilter, setProjectFilter] = useState('');
   const [agentFilter, setAgentFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -1499,7 +1509,7 @@ export function WorkspaceView() {
         <details className="conversation-filters">
           <summary>Filters</summary>
           <div className="filters">
-            <label className="subagent-filter">
+            <label className="subagent-filter sp-all-chats-toggle">
               <input
                 type="checkbox"
                 checked={includeSubagents}
@@ -1750,7 +1760,7 @@ export function WorkspaceView() {
                   const meta = [
                     item.project_name || item.agent,
                     item.model,
-                    item.state,
+                    item.state_label ?? item.state,
                     tokenText,
                     costText,
                   ]

@@ -32,6 +32,9 @@ pub struct SessionListItem {
     pub model: String,
     /// State (tool, thinking, awaiting_approval, idle, ended).
     pub state: String,
+    /// Rolled-up label while subagents run, for example `Working · 2 subagents running`.
+    #[serde(default)]
+    pub state_label: Option<String>,
     /// Whether execution or an approval wait is established by source observations.
     pub is_active: bool,
     /// Running, approval-waiting, or idle within the two-minute grace period.
@@ -96,6 +99,9 @@ pub struct SubagentItem {
     pub id: String,
     /// Subagent title if known.
     pub title: Option<String>,
+    /// Display name derived in Rust: the recorded description or `Subagent N`.
+    #[serde(default)]
+    pub name: String,
     /// Model name, or "Unspecified".
     pub model: String,
     /// Stored state, "unknown" when a stale open execution can no longer be trusted.
@@ -556,6 +562,7 @@ impl Database {
                 project_name,
                 model,
                 state,
+                state_label: None,
                 is_active,
                 is_ongoing,
                 presence,
@@ -633,6 +640,7 @@ impl Database {
                     SubagentItem {
                         id: row.get(1)?,
                         title: row.get(2)?,
+                        name: String::new(),
                         model: model
                             .filter(|m| !m.trim().is_empty() && !m.contains("MODEL_PLACEHOLDER"))
                             .unwrap_or_else(|| "Unspecified".to_owned()),
@@ -651,6 +659,8 @@ impl Database {
                 ))
             },
         )?;
+        let mut running_children: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
         for row in rows {
             let (parent, child) = row?;
             let Some(item) = items.iter_mut().find(|item| item.id == parent) else {
@@ -658,8 +668,31 @@ impl Database {
             };
             item.subagent_count += 1;
             item.subagents_ongoing += usize::from(child.is_ongoing);
+            running_children
+                .entry(item.id.clone())
+                .and_modify(|count| *count += usize::from(child.is_active))
+                .or_insert_with(|| usize::from(child.is_active));
             if item.subagents.len() < SUBAGENT_LIST_LIMIT {
                 item.subagents.push(child);
+            }
+        }
+        for item in items.iter_mut() {
+            // Names count from the oldest sibling so `Subagent N` stays stable as new ones start.
+            let mut order: Vec<usize> = (0..item.subagents.len()).collect();
+            order.sort_by(|a, b| {
+                item.subagents[*a]
+                    .started_at
+                    .cmp(&item.subagents[*b].started_at)
+                    .then_with(|| item.subagents[*a].id.cmp(&item.subagents[*b].id))
+            });
+            for (ordinal, index) in order.into_iter().enumerate() {
+                let child = &mut item.subagents[index];
+                child.name =
+                    gnomcode_core::subagent::subagent_name(child.title.as_deref(), ordinal + 1);
+            }
+            let running = running_children.get(&item.id).copied().unwrap_or(0);
+            if running > 0 && item.state != "awaiting_approval" {
+                item.state_label = Some(gnomcode_core::subagent::working_label(running));
             }
         }
         for item in items.iter_mut().filter(|item| !item.is_ongoing) {
@@ -853,6 +886,12 @@ mod tests {
         );
         assert_eq!((quiet.subagent_count, quiet.subagents_ongoing), (1, 1));
         assert_eq!(quiet.subagents[0].id, "claude-code:quiet-sub");
+        assert_eq!(quiet.subagents[0].name, "Subagent 1");
+        assert_eq!(
+            quiet.state_label.as_deref(),
+            Some("Working · 1 subagent running"),
+            "an idle parent reflects its running child"
+        );
         let (all, total) = db.list_sessions_paginated(None, None, 0, 10).expect("all");
         assert_eq!(total, 2, "subagents are nested, never top-level rows");
         let done = all
@@ -860,6 +899,7 @@ mod tests {
             .find(|row| row.id == "claude-code:done")
             .expect("done");
         assert!(!done.is_ongoing);
+        assert_eq!(done.state_label, None, "no running child, no rollup");
         assert_eq!((done.subagent_count, done.subagents_ongoing), (1, 0));
     }
 
