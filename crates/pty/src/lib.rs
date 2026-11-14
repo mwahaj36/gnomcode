@@ -348,6 +348,25 @@ impl Scrollback {
     pub fn bytes(&self) -> Vec<u8> {
         self.bytes.iter().copied().collect()
     }
+
+    /// Returns the rendered rows from the live VT100 screen at its current dimensions.
+    #[must_use]
+    pub fn screen_rows(&self) -> Vec<String> {
+        let (_, cols) = self.parser.screen().size();
+        self.parser.screen().rows(0, cols).collect()
+    }
+
+    /// Returns the number of buffered raw terminal bytes.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+
+    /// Returns true when no terminal bytes have been buffered yet.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
 }
 
 /// Query parameters for WebSocket connection.
@@ -670,6 +689,10 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
         .route("/stream", get(host_stream_handler))
         .route("/input", post(host_input_handler))
         .route("/retry-enter", post(host_retry_enter_handler))
+        .route(
+            "/confirm-model-switch",
+            post(host_confirm_model_switch_handler),
+        )
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .route("/stop", post(host_stop_handler))
         .with_state(state);
@@ -748,8 +771,8 @@ fn render_screen_rows(bytes: &[u8]) -> Vec<String> {
 }
 
 /// Lower-cased, whitespace-collapsed text of what the rendered VT100 screen shows now.
-fn screen_text(bytes: &[u8], _cut: bool) -> String {
-    let text = render_screen_rows(bytes)
+fn screen_text_from_rows(rows: &[String]) -> String {
+    let text = rows
         .join(" ")
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -790,7 +813,7 @@ fn last_composer(text: &str) -> Option<usize> {
 /// Matching is per agent on the recent rendered screen, and the latest marker wins. The
 /// strings for agy, Codex and Claude Code were seen live (Claude Code v2.1.322, see
 /// `fixtures/claude-code/`).
-fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
+fn startup_needs_setup_from_rows(agent: &str, rows: &[String], bytes_len: usize) -> bool {
     let (blockers, ready, require_ready): (&[&str], &[&str], bool) = match agent {
         "codex" => (&["hooks are new or changed"], &["? for shortcuts"], false),
         "claude" | "claude-code" => (
@@ -809,6 +832,9 @@ fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
                 "lsp plugin recommendation",
                 "would you like to install this",
                 "never for this plugin",
+                // Mid-session cache-rebuild confirmation dialog (seen live, Claude Code v2.1.325).
+                "switch model?",
+                "yes, switch to",
             ],
             &["? for shortcuts"],
             true,
@@ -824,12 +850,17 @@ fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
         let composer = if claude { last_composer(text) } else { None };
         last_of(text, ready).max(composer)
     };
-    let recent = screen_text(bytes, true);
+    let recent = screen_text_from_rows(rows);
     if let Some(blocked) = last_of(&recent, blockers) {
         return marks(&recent).is_none_or(|ready| ready < blocked);
     }
     // Once the ring wraps, the startup frames are gone and only blockers can be judged.
-    require_ready && bytes.len() < SCROLLBACK_BYTES && marks(&screen_text(bytes, false)).is_none()
+    require_ready && bytes_len < SCROLLBACK_BYTES && marks(&recent).is_none()
+}
+
+#[cfg(test)]
+fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
+    startup_needs_setup_from_rows(agent, &render_screen_rows(bytes), bytes.len())
 }
 
 async fn host_input_handler(
@@ -857,9 +888,9 @@ async fn host_input_handler(
         )
         && (body.starts_with(b"\x1b[200~") || body.starts_with(b"/model "))
         && state.scrollback.lock().map_or(true, |output| {
-            let bytes = output.bytes();
-            startup_needs_setup(&state.agent, &bytes)
-                || (state.agent == "codex" && !codex_prompt_ready(&bytes))
+            let rows = output.screen_rows();
+            startup_needs_setup_from_rows(&state.agent, &rows, output.len())
+                || (state.agent == "codex" && !codex_prompt_ready_with(&output.bytes(), &rows))
         })
     {
         return StatusCode::CONFLICT;
@@ -882,7 +913,7 @@ async fn host_input_handler(
     }
 }
 
-fn codex_prompt_ready(bytes: &[u8]) -> bool {
+fn codex_prompt_ready_with(bytes: &[u8], rows: &[String]) -> bool {
     let text = String::from_utf8_lossy(bytes);
     let idle = text
         .rfind("state=idle:app=codex")
@@ -893,12 +924,12 @@ fn codex_prompt_ready(bytes: &[u8]) -> bool {
     if let Some(idle) = idle {
         return working.is_none_or(|working| idle > working);
     }
-    let rows = render_screen_rows(bytes);
     let tail = rows
-        .into_iter()
+        .iter()
         .filter(|row| !row.trim().is_empty())
         .rev()
         .take(8)
+        .cloned()
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
@@ -911,11 +942,30 @@ fn codex_prompt_ready(bytes: &[u8]) -> bool {
     tail.contains("? for shortcuts") && !tail.ends_with("loading")
 }
 
+#[cfg(test)]
+fn codex_prompt_ready(bytes: &[u8]) -> bool {
+    codex_prompt_ready_with(bytes, &render_screen_rows(bytes))
+}
+
 /// True only when the rendered VT100 screen proves the composer still holds `prompt`
 /// and no startup/confirmation dialog is blocking input.
 #[must_use]
 pub fn composer_has_unsubmitted_prompt(agent: &str, bytes: &[u8], prompt: &str) -> bool {
-    if startup_needs_setup(agent, bytes) {
+    composer_has_unsubmitted_prompt_from_rows(
+        agent,
+        &render_screen_rows(bytes),
+        bytes.len(),
+        prompt,
+    )
+}
+
+fn composer_has_unsubmitted_prompt_from_rows(
+    agent: &str,
+    rows: &[String],
+    bytes_len: usize,
+    prompt: &str,
+) -> bool {
+    if startup_needs_setup_from_rows(agent, rows, bytes_len) {
         return false;
     }
     let normalized_prompt = prompt
@@ -927,12 +977,12 @@ pub fn composer_has_unsubmitted_prompt(agent: &str, bytes: &[u8], prompt: &str) 
         return false;
     }
     let needle: String = normalized_prompt.chars().take(48).collect();
-    let rows = render_screen_rows(bytes);
     let bottom = rows
-        .into_iter()
+        .iter()
         .filter(|row| !row.trim().is_empty())
         .rev()
         .take(10)
+        .cloned()
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
@@ -957,29 +1007,21 @@ struct RetryEnterRequest {
     prompt: String,
 }
 
-async fn host_retry_enter_handler(
-    headers: HeaderMap,
-    State(state): State<Arc<HostState>>,
-    Json(payload): Json<RetryEnterRequest>,
-) -> StatusCode {
-    if !valid_loopback_headers(&headers) {
-        return StatusCode::FORBIDDEN;
+fn authorize_loopback(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {
+    if !valid_loopback_headers(headers) {
+        return Err(StatusCode::FORBIDDEN);
     }
     let authenticated = headers
         .get("authorization")
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.strip_prefix("Bearer ") == Some(state.token.as_str()));
+        .is_some_and(|value| value.strip_prefix("Bearer ") == Some(expected_token));
     if !authenticated {
-        return StatusCode::UNAUTHORIZED;
+        return Err(StatusCode::UNAUTHORIZED);
     }
-    let confirmed = !state.protocol
-        && state.scrollback.lock().is_ok_and(|output| {
-            let bytes = output.bytes();
-            composer_has_unsubmitted_prompt(&state.agent, &bytes, &payload.prompt)
-        });
-    if !confirmed {
-        return StatusCode::CONFLICT;
-    }
+    Ok(())
+}
+
+async fn send_enter_with_ack(state: &HostState) -> StatusCode {
     let (written, acknowledged) = tokio::sync::oneshot::channel();
     if state
         .input_tx
@@ -996,6 +1038,62 @@ async fn host_retry_enter_handler(
         Ok(_) => StatusCode::GONE,
         Err(_) => StatusCode::GATEWAY_TIMEOUT,
     }
+}
+
+/// True while Claude Code displays the mid-session `Switch model?` cache-rebuild confirmation
+/// modal (`> 1. Yes, switch to ...` / `2. No, go back`) after the last composer/confirmation.
+fn claude_model_switch_needs_confirm(rows: &[String]) -> bool {
+    let recent = screen_text_from_rows(rows);
+    let Some(dialog) = last_of(&recent, &["switch model?"]) else {
+        return false;
+    };
+    recent[dialog..].contains("yes, switch to")
+        && recent[dialog..].contains("no, go back")
+        && last_composer(&recent).is_none_or(|comp| comp < dialog)
+        && last_of(&recent, &["set model to"]).is_none_or(|done| done < dialog)
+}
+
+async fn host_retry_enter_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+    Json(payload): Json<RetryEnterRequest>,
+) -> StatusCode {
+    if let Err(status) = authorize_loopback(&headers, &state.token) {
+        return status;
+    }
+    let confirmed = !state.protocol
+        && state.scrollback.lock().is_ok_and(|output| {
+            let rows = output.screen_rows();
+            composer_has_unsubmitted_prompt_from_rows(
+                &state.agent,
+                &rows,
+                output.len(),
+                &payload.prompt,
+            )
+        });
+    if !confirmed {
+        return StatusCode::CONFLICT;
+    }
+    send_enter_with_ack(&state).await
+}
+
+async fn host_confirm_model_switch_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+) -> StatusCode {
+    if let Err(status) = authorize_loopback(&headers, &state.token) {
+        return status;
+    }
+    let needs_confirm = !state.protocol
+        && matches!(state.agent.as_str(), "claude" | "claude-code")
+        && state
+            .scrollback
+            .lock()
+            .is_ok_and(|output| claude_model_switch_needs_confirm(&output.screen_rows()));
+    if !needs_confirm {
+        return StatusCode::NO_CONTENT;
+    }
+    send_enter_with_ack(&state).await
 }
 
 async fn host_stop_handler(
@@ -1286,7 +1384,34 @@ pub async fn switch_model(record: &SessionRecord, model: &str) -> Result<(), Err
     };
     send_input(record, command.as_bytes()).await?;
     tokio::time::sleep(Duration::from_millis(150)).await;
-    send_input(record, b"\r").await
+    send_input(record, b"\r").await?;
+    if matches!(record.agent.as_str(), "claude" | "claude-code") {
+        confirm_claude_model_switch(record).await;
+    }
+    Ok(())
+}
+
+async fn confirm_claude_model_switch(record: &SessionRecord) {
+    let Ok(client) = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+    else {
+        return;
+    };
+    let url = format!("http://127.0.0.1:{}/confirm-model-switch", record.port);
+    for _ in 0..8 {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        match client.post(&url).bearer_auth(&record.token).send().await {
+            Ok(resp) if resp.status() == StatusCode::OK => {
+                // Allow Claude to dismiss the confirmation modal and redraw its ready composer.
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                break;
+            }
+            Ok(resp) if resp.status() == StatusCode::NO_CONTENT => continue,
+            _ => break,
+        }
+    }
 }
 
 /// Queues terminal input through an authenticated endpoint independently of terminal output.
@@ -2017,6 +2142,25 @@ mod tests {
     }
 
     #[test]
+    fn resized_scrollback_preserves_claude_composer_below_row_24() {
+        let mut sb = Scrollback::new(SCROLLBACK_BYTES);
+        sb.resize(36, 120);
+        let frame = concat!(
+            "\x1b[32;1H────────────────────",
+            "\x1b[33;1H> ",
+            "\x1b[34;1H────────────────────",
+            "\x1b[36;1Hauto mode on (shift+tab to cycle)"
+        );
+        sb.append(frame.as_bytes());
+        assert!(startup_needs_setup("claude", &sb.bytes()));
+        assert!(!startup_needs_setup_from_rows(
+            "claude",
+            &sb.screen_rows(),
+            sb.len()
+        ));
+    }
+
+    #[test]
     fn composer_has_unsubmitted_prompt_requires_prompt_in_composer_without_dialog() {
         let mut ready_with_prompt = CLAUDE_READY.to_vec();
         ready_with_prompt.extend_from_slice(b" fix the build");
@@ -2102,5 +2246,44 @@ mod tests {
             let _ = ack.send(true);
         }
         assert_eq!(call.await.expect("handler"), StatusCode::OK);
+    }
+
+    #[test]
+    fn claude_switch_model_confirmation_dialog_is_detected_and_blocks_until_confirmed() {
+        let mut sb = Scrollback::new(SCROLLBACK_BYTES);
+        sb.resize(30, 120);
+        // Live ConPTY screen captured from Claude Code v2.1.325 after `/model haiku` on a cached session.
+        let modal_frame = concat!(
+            "\x1b[12;1H> /model haiku",
+            "\x1b[14;1H────────────────────────────────────────────────────────────────────────────────",
+            "\x1b[15;3HSwitch model?",
+            "\x1b[16;3HYour next response will be slower and use more tokens",
+            "\x1b[17;3HThis conversation is cached for the current model. Switching to Haiku 5.5 means the full history gets re-read.",
+            "\x1b[20;3H> 1. Yes, switch to Haiku 5.5",
+            "\x1b[21;5H2. No, go back"
+        );
+        sb.append(modal_frame.as_bytes());
+        let rows = sb.screen_rows();
+        assert!(claude_model_switch_needs_confirm(&rows));
+        assert!(startup_needs_setup_from_rows("claude", &rows, sb.len()));
+
+        // Once confirmed, Claude clears the modal and redraws the composer + footer.
+        sb.append(
+            concat!(
+                "\x1b[2J\x1b[1;1HSet model to Haiku 5.5",
+                "\x1b[27;1H────────────────────",
+                "\x1b[28;1H> ",
+                "\x1b[29;1H────────────────────",
+                "\x1b[30;1H? for shortcuts"
+            )
+            .as_bytes(),
+        );
+        let ready_rows = sb.screen_rows();
+        assert!(!claude_model_switch_needs_confirm(&ready_rows));
+        assert!(!startup_needs_setup_from_rows(
+            "claude",
+            &ready_rows,
+            sb.len()
+        ));
     }
 }

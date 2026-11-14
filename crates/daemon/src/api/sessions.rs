@@ -293,9 +293,34 @@ pub(super) async fn stop_session_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    match gnomcode_pty::stop_session(&id).await {
-        Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id }))),
-        Err(_) => Err(StatusCode::NOT_FOUND),
+    let target_ids = {
+        let db = state.db.lock().await;
+        let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
+        let hosted = gnomcode_pty::list_active_sessions();
+        let mut ids = Vec::new();
+        if let Ok(Some(record)) = crate::remote::conversation_host(&db, &id, &sessions, &hosted) {
+            ids.push(record.session_id.clone());
+        }
+        if let Ok(Some((host, _, _))) = db.conversation_target(&id)
+            && !ids.iter().any(|existing| existing == &host)
+        {
+            ids.push(host);
+        }
+        if !ids.iter().any(|existing| existing == &id) {
+            ids.push(id.clone());
+        }
+        ids
+    };
+    let mut stopped_any = false;
+    for target in &target_ids {
+        if gnomcode_pty::stop_session(target).await.is_ok() {
+            stopped_any = true;
+        }
+    }
+    if stopped_any {
+        Ok(Json(json!({ "ok": true, "session_id": id })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
 }
 

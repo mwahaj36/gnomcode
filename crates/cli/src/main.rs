@@ -210,7 +210,12 @@ enum LicenseCommands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    attach_parent_console();
+    if !matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("daemon" | "pty-host" | "hook" | "statusline")
+    ) {
+        attach_parent_console();
+    }
 
     let exe_is_installer = std::env::current_exe()
         .ok()
@@ -1219,6 +1224,7 @@ fn open_browser(url: &str) {
         if !opened {
             let _ = std::process::Command::new("cmd")
                 .args(["/C", "start", url])
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn();
         }
     }

@@ -55,7 +55,8 @@ function spawnDaemonBinary(): { child: ChildProcess; exitedEarly: () => boolean 
     : path.resolve(__dirname, '../../../target/debug', `gnomcode${extension}`);
   let exited = false;
   const child = spawn(binary, ['daemon'], {
-    detached: true,
+    // On Windows libuv skips CREATE_NO_WINDOW when detached is true, which causes console flashes.
+    detached: process.platform !== 'win32',
     stdio: 'ignore',
     windowsHide: true,
     env: daemonEnvironment(process.env),
