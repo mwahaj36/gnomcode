@@ -805,6 +805,10 @@ fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
                 "detected a custom api key",
                 "enter to confirm",
                 "esc to cancel",
+                // Plugin recommendation menu (seen live, Claude Code 2.1.x): "1. Yes, install".
+                "lsp plugin recommendation",
+                "would you like to install this",
+                "never for this plugin",
             ],
             &["? for shortcuts"],
             true,
@@ -1457,6 +1461,22 @@ mod tests {
         ] {
             assert!(startup_needs_setup("claude", screen));
         }
+    }
+
+    #[test]
+    fn claude_plugin_recommendation_after_a_ready_composer_holds_chat() {
+        // A pasted prompt plus Enter would pick "Yes, install"; the menu must be left to the person.
+        let mut ring = b"\r\n\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\r\n> \r\n? for shortcuts".to_vec();
+        assert!(!startup_needs_setup("claude", &ring));
+        ring.extend_from_slice(
+            b"\r\nLSP plugin recommendation\r\nWould you like to install this LSP plugin?\r\n> 1. Yes, install\r\n  2. No, not now\r\n  3. Never for this plugin",
+        );
+        assert!(startup_needs_setup("claude", &ring));
+        ring.extend_from_slice(b"\r\n\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\r\n> \r\n? for shortcuts");
+        assert!(
+            !startup_needs_setup("claude", &ring),
+            "a composer after the menu means it was answered"
+        );
     }
 
     #[test]
