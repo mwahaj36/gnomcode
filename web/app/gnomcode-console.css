@@ -2032,3 +2032,33 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 @media(max-width:767px){.sp-code-btn{min-height:36px;padding:4px 12px}.sp-chat-system{max-width:96%}}
 .sp-subagent-count{margin:2px 0 6px 20px;font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
 .sp-native-console .conversation-filters .subagent-filter{min-height:44px}
+
+/* Settings information architecture: section list, search, rows, danger zone, command palette. */
+.sp-settings-layout { display:grid; gap:var(--sp-4); min-width:0; }
+.sp-settings-nav { display:grid; gap:12px; min-width:0; }
+.sp-settings-search, #command-palette input { width:100%; box-sizing:border-box; min-height:var(--sp-control-height); padding:0 12px; color:var(--sp-text); background:var(--sp-surface-2); border:1px solid var(--sp-border); border-radius:var(--sp-r-control); font:inherit; }
+.sp-settings-nav ul { list-style:none; margin:0; padding:0; display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; }
+.sp-settings-nav a { display:flex; align-items:center; min-height:36px; padding:0 12px; border-radius:var(--sp-r-pill); color:var(--sp-text-2); text-decoration:none; white-space:nowrap; font-size:var(--sp-fs-control); }
+.sp-settings-nav a:hover { background:var(--sp-surface-raised); color:var(--sp-text); }
+@media (min-width:1024px) {
+  .sp-settings-layout { grid-template-columns:200px minmax(0,1fr); align-items:start; gap:32px; }
+  .sp-settings-nav { position:sticky; top:16px; }
+  .sp-settings-nav ul { flex-direction:column; overflow:visible; gap:2px; }
+  .sp-settings-nav a { border-radius:var(--sp-r-control); }
+}
+@media (max-width:767px) { .sp-settings-nav a, .sp-settings-search { min-height:44px; } }
+.sp-native-console #view-settings .sp-settings-root .sp-setting-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; }
+.sp-native-console #view-settings .sp-settings-root .sp-setting-row + .sp-setting-row { border-top:1px solid var(--sp-border); }
+.sp-native-console #view-settings .sp-settings-root .sp-setting-row p { margin:0; }
+.sp-native-console #view-settings .sp-settings-root .sp-setting-label { color:var(--sp-text); font-weight:600; overflow-wrap:anywhere; }
+.sp-native-console #view-settings .sp-settings-root .sp-setting-desc { font-size:var(--sp-fs-meta); }
+.sp-btn-danger { color:var(--sp-danger); }
+.sp-btn-danger:hover { background:var(--sp-danger-soft); }
+.sp-palette { margin:12vh auto auto; width:min(560px, calc(100vw - 32px)); padding:8px; color:var(--sp-text); background:var(--sp-surface-overlay); border:1px solid var(--sp-border); border-radius:var(--sp-r-popover); box-shadow:var(--sp-shadow-popover); }
+.sp-palette::backdrop { background:rgb(0 0 0 / .45); }
+.sp-palette ul { list-style:none; margin:8px 0 0; padding:0; max-height:50vh; overflow-y:auto; }
+.sp-palette li { min-height:40px; display:flex; align-items:center; padding:0 12px; border-radius:var(--sp-r-control); cursor:pointer; }
+.sp-palette li.is-active, .sp-palette li:hover { background:var(--sp-surface-raised); }
+.sp-native-console #view-settings .sp-settings-root .sp-setting-row > button { flex:none; white-space:nowrap; }
+.sp-native-console #view-settings .sp-settings-root .sp-btn-danger { color:var(--sp-danger); border-color:var(--sp-danger-soft); }
+.sp-native-console #view-settings .sp-settings-root .sp-btn-danger:hover { background:var(--sp-danger-soft); }

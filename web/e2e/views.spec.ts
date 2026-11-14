@@ -144,7 +144,7 @@ test.describe('Settings', () => {
   test('lists providers, appearance, devices, automations, notifications, updates and guide', async ({ page, openConsole }) => {
     await openConsole('#settings');
     const root = page.locator('#local-settings-root');
-    for (const heading of ['Providers', 'Appearance', 'Devices and Remote', 'Automations', 'Notifications', 'Desktop updates', 'Guide', 'Account', 'Data']) {
+    for (const heading of ['Account', 'Providers', 'Notifications', 'Remote and devices', 'Automations', 'Privacy and data', 'Appearance', 'Updates', 'About']) {
       await expect(root.getByRole('heading', { name: heading })).toBeVisible();
     }
     await expect(root.getByText('Sign in to your account to make this desktop available.')).toBeVisible();
