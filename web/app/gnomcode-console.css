@@ -1143,7 +1143,7 @@ details.sp-provider-card { padding: 0; gap: 0; container-type: inline-size; }
 .sp-strip i.is-plain { background: var(--sp-accent); }
 .sp-strip i.is-low { background: var(--sp-low); }
 .sp-strip i.is-exhausted { background: var(--sp-exhausted); }
-.sp-strip i.is-unknown, .sp-strip i.is-reset_awaiting { background: var(--sp-unknown); }
+.sp-strip i.is-unknown, .sp-strip i.is-reset_unconfirmed, .sp-strip i.is-reset_awaiting { background: var(--sp-unknown); }
 .sp-chevron { width: 16px; height: 16px; fill: none; stroke: var(--sp-text-3); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--sp-dur) var(--sp-ease); }
 details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-provider-body { display: grid; gap: var(--sp-5); padding: var(--sp-2) var(--sp-5) var(--sp-5); }
@@ -1180,8 +1180,11 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-meter-row--low .sp-meter-fill, .sp-mini--low .sp-meter-fill { background: var(--sp-low); }
 .sp-meter-row--exhausted .sp-meter-fill, .sp-mini--exhausted .sp-meter-fill { background: var(--sp-exhausted); }
 .sp-meter-row--exhausted .sp-meter-value, .sp-mini--exhausted .sp-mini-value b { color: var(--sp-exhausted); }
-.sp-meter-row--reset_awaiting .sp-meter-fill, .sp-meter-row--unknown .sp-meter-fill, .sp-mini--reset_awaiting .sp-meter-fill, .sp-mini--unknown .sp-meter-fill { background: var(--sp-unknown); }
-.sp-meter-row--reset_awaiting .sp-meter-value { color: var(--sp-text-3); font-weight: 500; }
+.sp-meter-row--reset_unconfirmed .sp-meter-fill, .sp-meter-row--reset_awaiting .sp-meter-fill, .sp-meter-row--unknown .sp-meter-fill, .sp-mini--reset_unconfirmed .sp-meter-fill, .sp-mini--reset_awaiting .sp-meter-fill, .sp-mini--unknown .sp-meter-fill { background: var(--sp-unknown); }
+.sp-meter-row--reset_unconfirmed .sp-meter-value, .sp-meter-row--reset_awaiting .sp-meter-value, .sp-reset-muted { color: var(--sp-text-3); font-weight: 500; }
+.sp-pace-stale, .sp-seen-inline { color: var(--sp-text-3); font-weight: 400; font-size: var(--sp-fs-meta); }
+.sp-trust-tag { display: inline-flex; align-items: center; padding: 0 5px; border-radius: 4px; border: 1px solid var(--sp-border); font-size: 11px; font-weight: 500; color: var(--sp-text-3); vertical-align: middle; white-space: nowrap; }
+.sp-meter-row--stale .sp-meter-fill, .sp-mini--stale .sp-meter-fill { opacity: .65; }
 .sp-meter-row--issue .sp-meter-bottom > span:first-child { color: var(--sp-text-2); }
 @keyframes sp-meter-in { from { width: 0; } }
 

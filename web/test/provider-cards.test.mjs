@@ -24,10 +24,26 @@ test('an exhausted window reads Exhausted and says when it comes back', () => {
   assert.match(html, /Back in/);
 });
 
-test('a window whose reset passed awaits the next reading', () => {
-  const html = renderMeterRow(win({ state: 'reset_awaiting', remaining_pct: null }));
-  assert.match(html, /Awaiting next reading/);
-  assert.match(html, /sp-meter-row--reset_awaiting/);
+test('a window whose reset passed shows Reset, not confirmed with EST', () => {
+  const html = renderMeterRow(win({ state: 'reset_unconfirmed', remaining_pct: 100, basis: 'estimated' }));
+  assert.match(html, /Reset, not confirmed/);
+  assert.match(html, /EST/);
+  assert.match(html, /0% used/);
+  assert.match(html, /sp-meter-row--reset_unconfirmed/);
+});
+
+test('a stale pace omits Runs out in X and shows muted staleness note', () => {
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600000).toISOString();
+  const html = renderMeterRow(win({
+    stale: true,
+    observed_at: twoHoursAgo,
+    remaining_pct: 1,
+    pace: { pace_remaining_pct: 50, delta_pct: -49, verdict: 'ahead', runs_out_at: null, stale: true, stale_reason: 'Observation is older than 2 minutes.' },
+  }));
+  assert.doesNotMatch(html, /Runs out in/);
+  assert.match(html, /sp-pace-stale/);
+  assert.match(html, /Based on data from 2h ago/);
+  assert.match(html, /Last seen 2h ago/);
 });
 
 test('the pace tick only exists when Rust sent a pace', () => {
@@ -80,7 +96,7 @@ test('a source issue replaces the reset line in the summary and the affected met
   const summary = html.match(/<summary>[\s\S]*<\/summary>/)[0];
   assert.match(summary, /sp-provider-line--issue[^>]*>Claude sign-in expired/);
   assert.match(html, /sp-meter-row--issue/);
-  assert.match(html, /<div class="sp-meter-bottom"><span>Claude sign-in expired[^<]*last seen 9h ago/);
+  assert.match(html, /<div class="sp-meter-bottom"><span>Claude sign-in expired[^<]*Last seen 9h ago/);
 });
 
 test('an empty provider offers the enable command, or only the hint when there is none', () => {

@@ -7,7 +7,7 @@ const win = (over) => ({ label: 'Weekly', pool: null, window_label: 'Weekly', st
 
 // Mockup sample: Claude Code ok, Codex out, Antigravity with one pool out.
 const claude = { provider: 'claude-code', display_name: 'Claude Code', headline_window: 1, updated_at: '2026-11-12T09:59:00Z', windows: [
-  win({ label: 'Session', window_label: 'Session', state: 'reset_awaiting', remaining_pct: null, resets_at: '2026-11-12T09:00:00Z', reset_passed: true }),
+  win({ label: 'Session', window_label: 'Session', state: 'reset_unconfirmed', remaining_pct: 100, resets_at: '2026-11-12T09:00:00Z', reset_passed: true }),
   win({ resets_at: '2026-11-19T08:00:00Z' }),
 ] };
 const codex = { provider: 'codex', display_name: 'Codex', headline_window: 0, updated_at: '2026-11-12T09:58:00Z', windows: [
@@ -36,7 +36,7 @@ test('menu text for the mockup sample data', () => {
 
 test('submenu lists windows disabled and ends with Open limits', () => {
   const [, , , claudeItem, codexItem] = formatTrayMenu([claude, codex], [running], NOW, OPTIONS);
-  assert.deepEqual(labels(claudeItem.submenu), ['Session: reset, awaiting reading', 'Weekly: 98% left, resets Thu 8:00 AM', '---', 'Open limits']);
+  assert.deepEqual(labels(claudeItem.submenu), ['Session: Reset, not confirmed (EST)', 'Weekly: 98% left, resets Thu 8:00 AM', '---', 'Open limits']);
   assert.ok(claudeItem.submenu.slice(0, 2).every(item => item.enabled === false));
   assert.deepEqual(codexItem.submenu[0].label, 'Weekly: exhausted, back Mon 1:20 PM');
   assert.deepEqual(claudeItem.submenu.at(-1).action, { kind: 'open-view', view: 'usage' });
