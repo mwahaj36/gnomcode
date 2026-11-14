@@ -847,7 +847,7 @@ export function bindChatInteractions(element) {
       return;
     }
     const image = origin?.closest?.('[data-image-open]');
-    if (image) openImageViewer(image.dataset.imageOpen, image.querySelector('img')?.alt || 'Image');
+    if (image) { event.stopPropagation(); openImageViewer(image.dataset.imageOpen, image.querySelector('img')?.alt || 'Image'); }
   });
 }
 
@@ -1136,20 +1136,141 @@ export function renderFileEntries(listing) {
   return `<div class="sp-file-crumb">Folder: <code>${cwd}</code></div>${listing.note ? `<p class="sp-field-note">${escape(listing.note)}</p>` : ''}<div class="sp-file-entries">${up}${items || '<p class="sp-provider-empty">No files listed here. Enter a relative path above to open a file.</p>'}</div>`;
 }
 
+const CSV_PREVIEW_ROWS = 200;
+
+function parseCsvRows(text, limit) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < text.length && rows.length < limit; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); rows.push(row); row = []; field = '';
+    } else field += ch;
+  }
+  if ((field || row.length) && rows.length < limit) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function previewSize(size) {
+  return Number.isFinite(size) ? formatAttachmentBytes(size) : 'Unknown size';
+}
+
+function downloadHref(fileData) {
+  if (fileData.data_url) return fileData.data_url;
+  if (typeof fileData.content === 'string' && !fileData.truncated) return `data:${fileData.mime_type || 'text/plain'};charset=utf-8,${encodeURIComponent(fileData.content)}`;
+  return '';
+}
+
+function previewBody(fileData, content) {
+  const kind = fileData.kind || 'text';
+  const name = fileData.name || fileData.path || 'file';
+  if ((kind === 'image' || kind === 'svg') && isSafeArtifactImageSrc(fileData.data_url)) {
+    // SVG is shown only through <img>, which never runs its scripts or loads its external references.
+    return `<button type="button" class="sp-preview-image" data-image-open="${escape(fileData.data_url)}" aria-label="Open ${escape(name)} full size"><img src="${escape(fileData.data_url)}" alt="${escape(name)}"></button>`;
+  }
+  if (kind === 'pdf' && /^data:application\/pdf;base64,/.test(fileData.data_url || '')) {
+    return `<div class="sp-preview-binary"><p>PDF document. It opens in a new tab with the browser's viewer.</p><button type="button" class="sp-code-btn" data-pdf-open="${escape(fileData.data_url)}">Open PDF</button></div>`;
+  }
+  if (kind === 'markdown') return `<div class="sp-chat-body sp-preview-markdown">${chatMarkdown(content)}</div>`;
+  if (kind === 'csv') {
+    const rows = parseCsvRows(content, CSV_PREVIEW_ROWS + 1);
+    const [head = [], ...body] = rows;
+    const more = body.length > CSV_PREVIEW_ROWS ? `<p class="sp-field-note">Showing the first ${CSV_PREVIEW_ROWS} rows.</p>` : '';
+    return `<div class="sp-chat-table sp-preview-csv"><table><thead><tr>${head.map(cell => `<th>${escape(cell)}</th>`).join('')}</tr></thead><tbody>${body.slice(0, CSV_PREVIEW_ROWS).map(r => `<tr>${r.map(cell => `<td>${escape(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>${more}`;
+  }
+  if (kind === 'json') {
+    let pretty = content;
+    if (!fileData.truncated) { try { pretty = JSON.stringify(JSON.parse(content), null, 2); } catch { /* show as stored */ } }
+    return `<div class="sp-chat-body">${renderCodeBlock(pretty, 'json')}</div>`;
+  }
+  if (kind === 'binary' || kind === 'image' || kind === 'svg' || kind === 'pdf') {
+    return `<div class="sp-preview-binary"><p>${fileData.truncated ? 'Too large to preview here.' : 'No preview for this file type.'}</p></div>`;
+  }
+  const language = kind === 'code' ? fileData.language || '' : '';
+  const lines = content.split(/\r?\n/);
+  const body = lines.map((line, index) => `<span class="sp-file-line"><span class="sp-file-ln">${index + 1}</span><span>${(language ? highlightCode(line, language) : escape(line)) || ' '}</span></span>`).join('');
+  return `<pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
+}
+
 export function renderFileViewer(fileData) {
   if (!fileData) return '<p class="sp-provider-empty">Select a file or enter a workspace-relative path to inspect it read-only.</p>';
   if (fileData.loading) return '<p class="sp-provider-empty" role="status">Reading file...</p>';
   if (fileData.error) return `<p class="sp-field-note sp-tone-red" role="alert">${escape(fileData.error)}</p>`;
   const content = typeof fileData.content === 'string' ? fileData.content : '';
+  const name = fileData.name || String(fileData.path || '').split('/').pop() || 'file';
+  const href = downloadHref(fileData);
   const badges = [
     '<span class="sp-chip sp-chip--neutral">Read-only</span>',
     fileData.lossy ? '<span class="sp-chip sp-chip--low">Lossy UTF-8 decoding</span>' : '',
-    fileData.truncated ? '<span class="sp-chip sp-chip--low">Truncated at 512 KiB</span>' : '',
+    fileData.truncated ? `<span class="sp-chip sp-chip--low">${typeof fileData.content === 'string' ? 'Preview truncated at 512 KiB' : 'Over the 1 MiB preview limit'}</span>` : '',
+    Number.isFinite(fileData.size) ? `<span class="sp-chip sp-chip--neutral">${escape(previewSize(fileData.size))}</span>` : '',
     fileData.path ? `<code class="sp-file-path">${escape(fileData.path)}</code>` : '',
+    href ? `<a class="sp-code-btn sp-file-download" href="${escape(href)}" download="${escape(name)}">Download</a>` : '',
   ].filter(Boolean).join('');
-  const lines = content.split(/\r?\n/);
-  const body = lines.map((line, index) => `<span class="sp-file-line"><span class="sp-file-ln">${index + 1}</span><span>${escape(line) || ' '}</span></span>`).join('');
-  return `<div class="sp-changes-meta">${badges}</div><pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
+  return `<div class="sp-changes-meta">${badges}</div><div class="sp-file-preview" data-kind="${escape(fileData.kind || 'text')}">${previewBody(fileData, content)}</div>`;
+}
+
+/** Opens a PDF data URL in a new tab through a blob URL, so no network request is made. */
+export function openPdfPreview(dataUrl) {
+  const match = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!match) return;
+  const bytes = Uint8Array.from(atob(match[1]), ch => ch.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Binds image-open and PDF-open controls in a file preview container once. */
+export function bindPreviewInteractions(element) {
+  if (!element || element.dataset.previewBound) return;
+  element.dataset.previewBound = 'true';
+  element.addEventListener('click', event => {
+    const image = event.target?.closest?.('[data-image-open]');
+    if (image) { openImageViewer(image.dataset.imageOpen, image.querySelector('img')?.alt || 'Image'); return; }
+    const pdf = event.target?.closest?.('[data-pdf-open]');
+    if (pdf) openPdfPreview(pdf.dataset.pdfOpen);
+  });
+}
+
+const thumbCache = new Map();
+
+/**
+ * Lazily fills attachment thumbnails in a chat container. `fetchPreview(path)` resolves to a
+ * file preview from the daemon (local API or E2EE Remote); only image previews become thumbnails.
+ */
+export function hydrateAttachmentThumbs(element, fetchPreview) {
+  if (!element || typeof fetchPreview !== 'function') return;
+  const load = async node => {
+    if (node.dataset.thumbState) return;
+    node.dataset.thumbState = 'loading';
+    const path = node.dataset.attachmentPath;
+    if (!thumbCache.has(path)) thumbCache.set(path, Promise.resolve().then(() => fetchPreview(path)));
+    try {
+      const preview = await thumbCache.get(path);
+      if ((preview?.kind === 'image' || preview?.kind === 'svg') && isSafeArtifactImageSrc(preview.data_url)) {
+        const img = document.createElement('img');
+        img.alt = preview.name || 'attachment';
+        img.src = preview.data_url;
+        node.replaceChildren(img);
+        node.dataset.imageOpen = preview.data_url;
+        node.classList.remove('sp-chat-thumb--pending');
+      }
+      node.dataset.thumbState = 'done';
+    } catch { node.dataset.thumbState = 'failed'; }
+  };
+  const nodes = [...element.querySelectorAll('[data-attachment-path]:not([data-thumb-state])')];
+  if (typeof IntersectionObserver !== 'function') { nodes.forEach(load); return; }
+  const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (entry.isIntersecting) { observer.unobserve(entry.target); void load(entry.target); }
+  }), { rootMargin: '200px' });
+  nodes.forEach(node => observer.observe(node));
 }
 const IMAGE_LOCAL_API_RE = /^\/api\/v1\/[^\s"'<>]+$/;
 
@@ -1208,9 +1329,9 @@ export function renderArtifactPreview(artifact) {
     if (!isSafeArtifactImageSrc(src)) {
       return '<p class="sp-empty">Image preview unavailable for untrusted or empty source.</p>';
     }
-    return `<div class="sp-artifact-image-wrap"><img class="sp-artifact-image" src="${escape(src)}" alt="${escape(title)}" /></div>`;
+    return `<div class="sp-artifact-image-wrap"><button type="button" class="sp-preview-image" data-image-open="${escape(src)}" aria-label="Open ${escape(title)} full size"><img class="sp-artifact-image" src="${escape(src)}" alt="${escape(title)}" /></button></div>`;
   }
-  return `<pre class="sp-artifact-code"><code>${escape(String(artifact.content || 'Preview unavailable.'))}</code></pre>`;
+  return `<div class="sp-chat-body">${renderCodeBlock(String(artifact.content || 'Preview unavailable.'), artifact.language || 'text')}</div>`;
 }
 export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.md', '.log', '.json', '.csv', '.pdf']);

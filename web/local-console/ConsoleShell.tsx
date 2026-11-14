@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type MouseEvent, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { bindPreviewInteractions } from '../lib/console-presentation';
 import { AccountView } from './AccountView';
 import { ApprovalsCard } from './ApprovalsCard';
 import { CommandPalette } from './CommandPalette';
@@ -227,6 +228,7 @@ export function ConsoleShell() {
   }, [folder, poll]);
 
   // Presenter markup inside the views carries data-action and data-copy instead of handlers.
+  useEffect(() => bindPreviewInteractions(document.body), []);
   useEffect(() => {
     const onClick = (event: Event) => {
       const origin = event.target as Element | null;

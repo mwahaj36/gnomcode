@@ -5,6 +5,7 @@
 pub mod approval;
 pub mod branding;
 pub mod chat_meta;
+pub mod file_preview;
 pub mod handoff_eval;
 pub mod license;
 pub mod notifications;

@@ -26,35 +26,13 @@ struct ArtifactItem {
     path: String,
     kind: &'static str,
     mime_type: &'static str,
+    /// Highlighter language for code artifacts, from `core::file_preview`.
+    language: &'static str,
     status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     data_url: Option<String>,
-}
-
-fn encode_base64(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
-        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        out.push(TABLE[((n >> 18) & 63) as usize] as char);
-        out.push(TABLE[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 {
-            TABLE[((n >> 6) & 63) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            TABLE[(n & 63) as usize] as char
-        } else {
-            '='
-        });
-    }
-    out
 }
 
 fn classify_path(rel_path: &str) -> (&'static str, &'static str) {
@@ -190,6 +168,7 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
             continue;
         };
         let (kind, mime_type) = classify_path(&rel_path);
+        let language = gnomcode_core::file_preview::classify(&rel_path, b"").language;
         let title = Path::new(&rel_path)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -200,13 +179,14 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
                 continue;
             }
             if let Ok(bytes) = std::fs::read(&canonical_file) {
-                let encoded = encode_base64(&bytes);
+                let encoded = gnomcode_core::file_preview::encode_base64(&bytes);
                 artifacts.push(ArtifactItem {
                     id: rel_path.clone(),
                     title,
                     path: rel_path,
                     kind,
                     mime_type,
+                    language,
                     status: status_label,
                     content: None,
                     data_url: Some(format!("data:{mime_type};base64,{encoded}")),
@@ -221,6 +201,7 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
                 path: rel_path,
                 kind,
                 mime_type,
+                language,
                 status: status_label,
                 content: Some(content),
                 data_url: None,
