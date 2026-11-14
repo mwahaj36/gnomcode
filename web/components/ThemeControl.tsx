@@ -6,7 +6,25 @@ import { applyThemeMode, nextThemeMode, readThemeMode, type ThemeMode } from "..
 export default function ThemeControl({ className = "" }: { className?: string }) {
   const [theme, setTheme] = useState<ThemeMode>("system");
 
-  useEffect(() => setTheme(readThemeMode()), []);
+  // Label, applied theme and stored preference stay one value: re-read and re-apply when another tab
+  // changes the preference or this tab regains focus.
+  useEffect(() => {
+    const sync = () => {
+      const mode = readThemeMode();
+      applyThemeMode(mode);
+      setTheme(mode);
+    };
+    sync();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === "gnomcode-theme") sync();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", sync);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", sync);
+    };
+  }, []);
 
   function cycleTheme() {
     const next = nextThemeMode(theme);
