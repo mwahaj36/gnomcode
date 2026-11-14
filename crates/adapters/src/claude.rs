@@ -225,6 +225,35 @@ impl SourceAdapter for ClaudeAdapter {
                         .join("\n"),
                     _ => String::new(),
                 };
+                let (role, text, status) = if role == ChatRole::User && !text.is_empty() {
+                    let flag = |key: &str| obj.get(key).and_then(Value::as_bool) == Some(true);
+                    match gnomcode_core::chat_meta::classify_user_entry(
+                        &text,
+                        flag("isMeta"),
+                        flag("isCompactSummary"),
+                    ) {
+                        gnomcode_core::chat_meta::UserEntry::User(text) => (role, text, None),
+                        gnomcode_core::chat_meta::UserEntry::System {
+                            subtype,
+                            summary,
+                            detail,
+                        } => (
+                            ChatRole::System,
+                            if detail.is_empty() {
+                                summary
+                            } else {
+                                format!(
+                                    "{summary}
+
+{detail}"
+                                )
+                            },
+                            Some(subtype.to_owned()),
+                        ),
+                    }
+                } else {
+                    (role, text, None)
+                };
                 if !text.is_empty() {
                     let event_key = obj
                         .get("uuid")
@@ -237,7 +266,7 @@ impl SourceAdapter for ClaudeAdapter {
                         role,
                         content: redact_chat_content(&text),
                         tool_name: None,
-                        status: None,
+                        status,
                         created_at: ts,
                     });
                 }

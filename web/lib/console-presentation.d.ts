@@ -99,3 +99,7 @@ export function formatPromptWithAttachments(promptText: string, attachments?: At
 export function isSessionRunningState(state: string | null | undefined): boolean;
 export function createInterruptRequestId(): string;
 export function formatInterruptAckMessage(ack?: { sent?: boolean } | null): string;
+export function highlightCode(code: string, language?: string): string;
+export function renderCodeBlock(code: string, language?: string): string;
+export function bindChatInteractions(element: HTMLElement): void;
+export function openImageViewer(src: string, alt?: string): void;

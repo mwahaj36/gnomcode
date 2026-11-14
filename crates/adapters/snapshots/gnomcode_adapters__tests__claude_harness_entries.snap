@@ -1,0 +1,67 @@
+---
+source: /gnomcode/crates/adapters/src/lib.rs
+expression: rows
+---
+[
+    (
+        "system",
+        Some(
+            "task_notification",
+        ),
+        "Background task finished: Sample background task\n\nAll checks passed",
+    ),
+    (
+        "system",
+        Some(
+            "reminder",
+        ),
+        "System context",
+    ),
+    (
+        "system",
+        Some(
+            "command",
+        ),
+        "Ran /compact",
+    ),
+    (
+        "system",
+        Some(
+            "command",
+        ),
+        "Command output\n\nCompacted",
+    ),
+    (
+        "system",
+        Some(
+            "compact_summary",
+        ),
+        "Conversation compacted\n\nThis session is being continued from a previous conversation. Summary: sample.",
+    ),
+    (
+        "system",
+        Some(
+            "reminder",
+        ),
+        "System context",
+    ),
+    (
+        "system",
+        Some(
+            "subagent_report",
+        ),
+        "Subagent report\n\nSample subagent report",
+    ),
+    (
+        "system",
+        Some(
+            "interrupt",
+        ),
+        "Interrupted by you",
+    ),
+    (
+        "user",
+        None,
+        "Please add tests",
+    ),
+]
