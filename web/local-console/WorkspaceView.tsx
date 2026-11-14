@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   formatPromptWithAttachments,
   isSessionRunningState,
@@ -1328,9 +1329,20 @@ export function WorkspaceView() {
       ? 'Google Antigravity'
       : activeSession?.agent || 'your agent application';
 
-  return (
-    <section className="ide-layout" aria-label="Agent workspace">
-      <aside className="ide-sidebar" aria-label="Session history">
+  const [desktopNavSlot, setDesktopNavSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(min-width: 768px)');
+    const syncSlot = () => {
+      setDesktopNavSlot(mq.matches ? document.getElementById('console-nav-sessions') : null);
+    };
+    syncSlot();
+    mq.addEventListener('change', syncSlot);
+    return () => mq.removeEventListener('change', syncSlot);
+  }, []);
+
+  const sidebarNode = (
+    <aside id="ide-session-sidebar" className="ide-sidebar" aria-label="Session history">
         <div className="ide-sidebar-title">
           <h2>Conversations</h2>
           <button
@@ -1477,6 +1489,11 @@ export function WorkspaceView() {
           ) : null}
         </div>
       </aside>
+  );
+
+  return (
+    <section className="ide-layout" aria-label="Agent workspace">
+      {desktopNavSlot ? createPortal(sidebarNode, desktopNavSlot) : sidebarNode}
 
       <div className="ide-main">
         <button
