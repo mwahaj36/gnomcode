@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -419,20 +421,37 @@ public static class InstallerIntegration
 
     public static void ValidateInstallDirectory(string installDir) {
         if (installDir.StartsWith(@"\\") || installDir == Path.GetPathRoot(installDir)) throw new IOException("Choose a dedicated folder on a local drive.");
-        if (!Directory.Exists(installDir) || Directory.GetFileSystemEntries(installDir).Length == 0) return;
+        if (!Directory.Exists(installDir) || Directory.GetFiles(installDir, "*", SearchOption.AllDirectories).Length == 0) return;
         bool native = File.Exists(Path.Combine(installDir, "gnomcode.exe")) &&
             (File.Exists(Path.Combine(installDir, "Gnomcode-Uninstall.exe")) || File.Exists(Path.Combine(installDir, "open-console.vbs")));
         bool desktop = File.Exists(Path.Combine(installDir, "gnomcode-desktop.exe")) && File.Exists(Path.Combine(installDir, "Update.exe"));
         if (!native && !desktop) throw new IOException("Choose an empty folder or an existing gnomcode installation.");
     }
 
+    private static void PruneEmptyAncestors(string startDir, string stopDir) {
+        string root = Path.GetFullPath(stopDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string dir = Path.GetFullPath(startDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        while (dir.Length > root.Length && dir.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
+            if (!Directory.Exists(dir) || Directory.GetFileSystemEntries(dir).Length > 0) break;
+            Directory.Delete(dir, false);
+            dir = Path.GetDirectoryName(dir);
+            if (string.IsNullOrEmpty(dir)) break;
+        }
+    }
+
     public static void RemovePayloadFiles(Assembly payload, string installDir) {
+        var parentDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using(Stream stream=payload.GetManifestResourceStream("desktop.zip")) {
             if(stream!=null)using(var archive=new ZipArchive(stream,ZipArchiveMode.Read)) {
                 foreach(var entry in archive.Entries) {
-                    if(entry.Name.Length==0)continue;
                     string dest=DesktopPayloadPath(installDir,entry.FullName);
+                    if(entry.Name.Length==0){
+                        parentDirs.Add(dest);
+                        continue;
+                    }
                     if(File.Exists(dest))File.Delete(dest);
+                    string parent = Path.GetDirectoryName(dest);
+                    if (!string.IsNullOrEmpty(parent)) parentDirs.Add(parent);
                 }
             }
         }
@@ -441,6 +460,9 @@ public static class InstallerIntegration
             if (Path.GetFileName(name) != name) continue;
             string file = Path.Combine(installDir, name);
             if (File.Exists(file)) File.Delete(file);
+        }
+        foreach (string dir in parentDirs.OrderByDescending(d => d.Length)) {
+            PruneEmptyAncestors(dir, installDir);
         }
     }
 
