@@ -442,7 +442,7 @@ fn check_limit_sources(inputs: &DoctorInputs<'_>) -> DoctorCheck {
     }
 }
 
-fn check_claude_integration(claude_dir: &Path) -> DoctorCheck {
+pub(crate) fn check_claude_integration(claude_dir: &Path) -> DoctorCheck {
     let path = claude_dir.join("settings.json");
     if !path.exists() {
         return DoctorCheck {
@@ -754,7 +754,7 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-async fn probe_one_cli(agent: &'static str) -> AgentCliStatus {
+pub(crate) async fn probe_one_cli(agent: &'static str) -> AgentCliStatus {
     let Some((program, args)) = gnomcode_platform::executables::resolve_agent_executable(agent)
     else {
         return AgentCliStatus {
