@@ -305,6 +305,15 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/sessions/{id}/continue",
             post(continue_session_handler),
         )
+        .route("/api/v1/sessions/{id}/queue", get(queue_get_handler))
+        .route(
+            "/api/v1/sessions/{id}/queue/{msg_id}",
+            axum::routing::patch(queue_patch_handler).delete(queue_delete_handler),
+        )
+        .route(
+            "/api/v1/conversations/{id}/images/{event_id}/{index}",
+            get(conversation_image_handler),
+        )
         .route(
             "/api/v1/sessions/{id}/attachments",
             post(crate::attachments::post_handler)

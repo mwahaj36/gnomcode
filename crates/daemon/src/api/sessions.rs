@@ -371,6 +371,45 @@ pub(super) async fn list_hosted_sessions_handler(
 pub struct PromptSessionRequest {
     /// Prompt text to submit.
     pub text: String,
+    /// Optional client-generated idempotency key for deduplicated immediate or queued delivery.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// When true, queue the prompt for the next confirmed safe turn boundary if the session is busy or not ready.
+    #[serde(default)]
+    pub queue_if_busy: Option<bool>,
+}
+
+/// Request payload to update a pending queued prompt.
+#[derive(Debug, Deserialize)]
+pub struct UpdateQueuedPromptRequest {
+    /// Updated prompt text.
+    pub text: String,
+}
+
+fn validate_prompt_text(raw: &str) -> Result<&str, &'static str> {
+    let text = raw.trim();
+    if text.is_empty()
+        || text.encode_utf16().count() > 4000
+        || text
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
+        || text.starts_with('/')
+    {
+        return Err(
+            "Use a nonempty message up to 4000 characters without native slash commands or control characters.",
+        );
+    }
+    Ok(text)
+}
+
+fn valid_message_id(raw: &str) -> Option<&str> {
+    let trimmed = raw.trim();
+    (!trimmed.is_empty()
+        && trimmed.len() <= 96
+        && trimmed
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b':')))
+    .then_some(trimmed)
 }
 
 pub(super) async fn prompt_session_handler(
@@ -380,21 +419,175 @@ pub(super) async fn prompt_session_handler(
     Json(payload): Json<PromptSessionRequest>,
 ) -> Result<axum::response::Response, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let text = payload.text.trim();
-    if text.is_empty()
-        || text.encode_utf16().count() > 4000
-        || text
-            .chars()
-            .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
-        || text.starts_with('/')
-    {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"message":"Use a nonempty message up to 4000 characters without native slash commands or control characters."}))).into_response());
+    let text = match validate_prompt_text(&payload.text) {
+        Ok(text) => text,
+        Err(msg) => {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({ "message": msg }))).into_response());
+        }
+    };
+
+    if let Some(raw_id) = payload.id.as_deref() {
+        let Some(msg_id) = valid_message_id(raw_id) else {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "message": "Invalid prompt delivery id" })),
+            )
+                .into_response());
+        };
+        let existing = {
+            let db = state.db.lock().await;
+            db.get_scheduled_message(&id, msg_id)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        };
+        if let Some(item) = existing {
+            let status = match item.status.as_str() {
+                "pending" => "queued",
+                "delivering" => "sending",
+                "delivered" => "sent",
+                other => other,
+            };
+            return Ok(Json(json!({
+                "ok": matches!(status, "queued" | "sending" | "sent"),
+                "status": status,
+                "id": item.id,
+                "session_id": id,
+                "deduplicated": true,
+            }))
+            .into_response());
+        }
+    }
+
+    // Observed external sessions without a managed launch must never silently become managed.
+    let (exists, is_managed) = {
+        let db = state.db.lock().await;
+        let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
+        let hosted = gnomcode_pty::list_active_sessions();
+        let exists = sessions.iter().any(|s| s.id == id)
+            || crate::remote::conversation_host(&db, &id, &sessions, &hosted)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .is_some();
+        let managed = db
+            .conversation_launch(&id)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .is_some()
+            || crate::remote::conversation_host(&db, &id, &sessions, &hosted)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .is_some();
+        (exists, managed)
+    };
+    if exists && !is_managed {
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({
+                "status": "observed_read_only",
+                "message": "Observed external session is read-only. Use Continue here in Actions to start a managed session."
+            })),
+        )
+            .into_response());
     }
 
     match crate::deliver_conversation_prompt(&state.db, &id, text).await {
-        Ok(()) => Ok(Json(json!({ "ok": true, "session_id": id })).into_response()),
+        Ok(()) => Ok(Json(json!({
+            "ok": true,
+            "status": "sent",
+            "id": payload.id,
+            "session_id": id
+        }))
+        .into_response()),
+        Err(error @ (crate::HandoffError::Busy | crate::HandoffError::NotReady))
+            if payload.queue_if_busy == Some(true) =>
+        {
+            let msg_id = payload
+                .id
+                .as_deref()
+                .and_then(valid_message_id)
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| format!("q-{}", uuid_like_id()));
+            let db = state.db.lock().await;
+            match db.schedule_message(&msg_id, &id, text, 0) {
+                Ok(_) => Ok(Json(json!({
+                    "ok": true,
+                    "status": "queued",
+                    "id": msg_id,
+                    "session_id": id,
+                    "reason": match error {
+                        crate::HandoffError::Busy => "Agent is busy; queued for next safe turn boundary.",
+                        _ => "Agent is not at prompt yet; queued for next safe turn boundary.",
+                    }
+                }))
+                .into_response()),
+                Err(_) => Ok(handoff_error_response(error)),
+            }
+        }
         Err(error) => Ok(handoff_error_response(error)),
     }
+}
+
+fn uuid_like_id() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!("{nanos:x}-{}", std::process::id())
+}
+
+pub(super) async fn queue_get_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let items = db
+        .scheduled_messages(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "session_id": id, "items": items })))
+}
+
+pub(super) async fn queue_patch_handler(
+    headers: HeaderMap,
+    Path((id, msg_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateQueuedPromptRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let text = match validate_prompt_text(&payload.text) {
+        Ok(text) => text,
+        Err(msg) => {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({ "message": msg }))).into_response());
+        }
+    };
+    let db = state.db.lock().await;
+    let updated = db
+        .update_scheduled_message(&id, &msg_id, text)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !updated {
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({ "message": "Queued prompt can no longer be edited." })),
+        )
+            .into_response());
+    }
+    Ok(Json(json!({ "ok": true, "id": msg_id, "status": "queued" })).into_response())
+}
+
+pub(super) async fn queue_delete_handler(
+    headers: HeaderMap,
+    Path((id, msg_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = state.db.lock().await;
+    let cancelled = db
+        .cancel_message(&id, &msg_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !cancelled {
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({ "message": "Queued prompt can no longer be cancelled." })),
+        )
+            .into_response());
+    }
+    Ok(Json(json!({ "ok": true, "id": msg_id, "status": "cancelled" })).into_response())
 }
 
 /// Query parameters for PTY streaming WebSocket.

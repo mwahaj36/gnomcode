@@ -9,37 +9,93 @@
 pub const MAX_SUMMARY_CHARS: usize = 120;
 
 /// Hides imported attachment transport metadata while preserving the user's request.
+/// Extracts `(label, path)` pairs from `<image name=... path="...">...</image>` tags outside
+/// Markdown backtick spans, returning the cleaned text and extracted image metadata.
+#[must_use]
+pub fn strip_image_tags(text: &str) -> (String, Vec<(String, String)>) {
+    let mut out = String::with_capacity(text.len());
+    let mut found = Vec::new();
+    let mut i = 0;
+    let bytes = text.as_bytes();
+    while i < bytes.len() {
+        // Preserve backtick code spans verbatim.
+        if bytes[i] == b'`' {
+            let ticks = bytes[i..].iter().take_while(|&&b| b == b'`').count();
+            let close_pat = "`".repeat(ticks);
+            let search_from = i + ticks;
+            if let Some(rel_end) = text[search_from..].find(&close_pat) {
+                let end = search_from + rel_end + ticks;
+                out.push_str(&text[i..end]);
+                i = end;
+                continue;
+            }
+        }
+        if text[i..].starts_with("<image ")
+            && let Some(tag_end_rel) = text[i..].find('>')
+        {
+            let attrs = &text[i + "<image ".len()..i + tag_end_rel];
+            if attrs.contains("name=")
+                && attrs.contains("path=")
+                && let Some(close_rel) = text[i + tag_end_rel + 1..].find("</image>")
+            {
+                let close_end = i + tag_end_rel + 1 + close_rel + "</image>".len();
+                let label = extract_attr_value(attrs, "name").unwrap_or_else(|| "Image".to_owned());
+                let path = extract_attr_value(attrs, "path").unwrap_or_default();
+                found.push((label, path));
+                i = close_end;
+                continue;
+            }
+        }
+        let ch = text[i..].chars().next().unwrap_or('\0');
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    (out.trim().to_owned(), found)
+}
+
+fn extract_attr_value(attrs: &str, key: &str) -> Option<String> {
+    let needle = format!("{key}=");
+    let start = attrs.find(&needle)? + needle.len();
+    let rest = attrs[start..].trim_start();
+    if let Some(after_quote) = rest.strip_prefix('"') {
+        let end = after_quote.find('"')?;
+        return Some(after_quote[..end].to_owned());
+    }
+    if let Some(after_quote) = rest.strip_prefix('\'') {
+        let end = after_quote.find('\'')?;
+        return Some(after_quote[..end].to_owned());
+    }
+    if rest.starts_with('[')
+        && let Some(end) = rest.find(']')
+    {
+        return Some(rest[..=end].to_owned());
+    }
+    let end = rest.find([' ', '\t', '\r', '\n']).unwrap_or(rest.len());
+    Some(rest[..end].to_owned())
+}
+
+/// Removes imported attachment transport wrappers and inline `<image name=... path="...">` tags
+/// while keeping the user's request intact.
 #[must_use]
 pub fn clean_user_message(text: &str) -> String {
     let text = clean_user_text(text);
-    if !text
+    let body = if (text
         .trim_start()
         .starts_with("# Files mentioned by the user:")
-        && !text.trim_start().starts_with("# Files pasted by the user:")
+        || text.trim_start().starts_with("# Files pasted by the user:"))
+        && let Some((metadata, message)) = text.split_once("## My request:")
+        && metadata.contains("Image attachment: true")
     {
-        return text.to_owned();
-    }
-    let Some((metadata, message)) = text.split_once("## My request:") else {
-        return text.to_owned();
+        message.trim()
+    } else {
+        text
     };
-    if !metadata.contains("Image attachment: true") {
-        return text.to_owned();
-    }
-    let mut remaining = message.trim();
-    let mut images = 0;
-    while remaining.ends_with("</image>") {
-        let Some((before, image)) = remaining.rsplit_once("<image name=") else {
-            break;
-        };
-        if !image.contains(" path=") {
-            break;
+    let (mut output, images) = strip_image_tags(body);
+    for _ in 0..images.len() {
+        if !output.is_empty() {
+            output.push_str("\n\n");
         }
-        remaining = before.trim_end();
-        images += 1;
-    }
-    let mut output = remaining.trim().to_owned();
-    for _ in 0..images {
-        output.push_str("\n\n[Image attachment: preview unavailable in imported history]");
+        output.push_str("[Image attachment: preview unavailable in imported history]");
     }
     output
 }
@@ -254,6 +310,21 @@ mod tests {
         let code = "# Files mentioned by the user:\nImage attachment: true\n## My request:\nExplain `<image name=example path=example></image>` syntax.\n<image name=[Image #1] path=\"C:/example/image.png\"> </image>";
         assert!(
             super::clean_user_message(code).contains("`<image name=example path=example></image>`")
+        );
+        let bare = "<image name=[Image #1] path=\"C:\\Users\\example\\AppData\\Local\\Temp\\codex-clipboard-123.png\">\n</image>\nWhy is this failing?";
+        let cleaned_bare = super::clean_user_message(bare);
+        assert_eq!(
+            cleaned_bare,
+            "Why is this failing?\n\n[Image attachment: preview unavailable in imported history]"
+        );
+        assert!(!cleaned_bare.contains("codex-clipboard"));
+        let (_, extracted) = super::strip_image_tags(bare);
+        assert_eq!(
+            extracted,
+            vec![(
+                "[Image #1]".to_owned(),
+                "C:\\Users\\example\\AppData\\Local\\Temp\\codex-clipboard-123.png".to_owned()
+            )]
         );
     }
     #[test]
