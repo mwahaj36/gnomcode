@@ -23,6 +23,7 @@ import {
   SUBAGENT_PREF_KEY,
   subagentsIncluded,
   updateChat,
+  hydrateAttachmentThumbs,
   type ConversationLimit,
   type PendingChat,
   type ProjectActivity,
@@ -616,7 +617,13 @@ export function WorkspaceView() {
     const sessionPending = pendingBySession[activeSessionId] || [];
     const result = reconcileChat(chatEvents, sessionPending, activeSession?.state || '');
     updateChat(chatStreamRef.current, result.events);
-  }, [activeSessionId, chatEvents, pendingBySession, activeSession?.state]);
+    const repo = activeSession?.repo_path;
+    if (repo) {
+      hydrateAttachmentThumbs(chatStreamRef.current, (path) =>
+        fetchLocalJson(`/api/v1/repos/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`),
+      );
+    }
+  }, [activeSessionId, chatEvents, pendingBySession, activeSession?.state, activeSession?.repo_path]);
 
   // Keep model switcher value aligned with active session/hosted model
   const allCatalogModels = useMemo(
