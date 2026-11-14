@@ -16,7 +16,7 @@ const parent = over => ({
 test('home row shows a subagent count badge and an expandable nested list', () => {
   const html = renderHomeSessions([parent()]);
   assert.match(html, /fleethud · Claude Code · opus-5 · 3 subagents/);
-  assert.match(html, /<details class="sp-subagents" data-key="sub:claude-code:p"><summary>3 subagents · 1 active<\/summary>/);
+  assert.match(html, /<details class="sp-subagents" data-key="sub:claude-code:p"><summary>1 running · 3 subagents<\/summary>/);
   assert.match(html, /data-action="open-home-session" data-arg="claude-code:agent-a"/);
   assert.match(html, /View 1 more in All chats/);
   assert.equal((html.match(/class="sp-session-row"/g) || []).length, 1, 'subagents are not top-level rows');

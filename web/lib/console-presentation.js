@@ -304,7 +304,7 @@ export function renderSubagents(session, action = 'load-chat') {
     return `<li><button type="button" class="sp-subagent-row" data-action="${action}" data-arg="${escape(child.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(child.title && child.title.toLowerCase() !== 'unknown' ? child.title : 'Subagent')}</strong><span>${escape(meta)}</span></span><time class="sp-session-time" datetime="${escape(child.last_event_at || '')}">${escape(shortAge(child.last_event_at))}</time></button></li>`;
   }).join('');
   const more = count > shown.length ? `<li class="sp-subagent-more"><button type="button" class="sp-link sp-subagent-more-btn" data-action="open-all-chats">View ${count - shown.length} more in All chats &#8250;</button></li>` : '';
-  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${count} subagent${count === 1 ? '' : 's'}${live ? ` · ${live} active` : ''}</summary><ul>${rows}${more}</ul></details>`;
+  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${live ? `${live} running · ` : ''}${count} subagent${count === 1 ? '' : 's'}</summary><ul>${rows}${more}</ul></details>`;
 }
 
 function homeRow(session, group) {

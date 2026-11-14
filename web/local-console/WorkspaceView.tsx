@@ -153,6 +153,14 @@ export function WorkspaceView() {
   const [providerOverviews, setProviderOverviews] = useState<ProviderOverview[]>([]);
   const [usagePopoverOpen, setUsagePopoverOpen] = useState(false);
   const [allChatsOpen, setAllChatsOpen] = useState(false);
+  useEffect(() => {
+    if (!usagePopoverOpen) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setUsagePopoverOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [usagePopoverOpen]);
   const [catalogError, setCatalogError] = useState(false);
 
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -1651,7 +1659,9 @@ export function WorkspaceView() {
                     item.cost_basis &&
                     item.cost_basis !== 'unknown' &&
                     typeof item.total_cost_usd === 'number'
-                      ? `$${item.total_cost_usd.toFixed(2)}`
+                      ? `$${item.total_cost_usd.toFixed(2)} ${
+                          { estimated: 'EST', exact: 'EXACT', api: 'API' }[item.cost_basis] ?? 'EST'
+                        }`
                       : '';
                   const meta = [
                     item.project_name || item.agent,
