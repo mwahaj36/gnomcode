@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, middleTruncate, wslFolder } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, hydrateAttachmentThumbs, bindPreviewInteractions, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, middleTruncate, wslFolder } from '../lib/console-presentation';
 import { formatWorktreeBadge, renderWorktreeDiffMarkup, type WorktreeDiffData } from '../lib/worktree-presentation.mjs';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
@@ -18,7 +18,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -37,6 +37,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [fileListState, setFileListState] = useState<RepoFileListing | null>(null);
   const [fileData, setFileData] = useState<RepoFileData | null>(null);
   const filesRequested = useRef(false);
+  const thumbRequests = useRef(new Map<string, (preview: RepoFileData) => void>());
   const [artifactsPanel, setArtifactsPanel] = useState(false);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [selectedArtifactId, setSelectedArtifactId] = useState('');
@@ -278,9 +279,16 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     const result = reconcileChat(events, optimistic[selected] || [], sessions.find(session=>session.id === selected)?.state);
     if (result.pending.length !== (optimistic[selected] || []).length) setOptimistic(current=>({...current,[selected]:result.pending}));
     updateChat(element, result.events);
+    const thumbSession = selected;
+    hydrateAttachmentThumbs(element, path => new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => { thumbRequests.current.delete(path); reject(new Error('timeout')); }, 20000);
+      thumbRequests.current.set(path, preview => { window.clearTimeout(timer); resolve(preview); });
+      send({ type: 'repo_file', session_id: thumbSession, path }).catch(reject);
+    }));
     if (historyAnchor.current) { element.scrollTop = historyAnchor.current.top + element.scrollHeight - historyAnchor.current.height; historyAnchor.current = null; }
   }, [events, selected, optimistic, sessions]);
 
+  useEffect(() => bindPreviewInteractions(document.body), []);
   useEffect(() => { if (autoConnect.current && link.room) {autoConnect.current = false; void connect();} });
 
   useEffect(() => {
@@ -562,9 +570,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       }
     }
     else if (reply.type === 'repo_file') {
-      filesRequested.current = false;
-      if (!reply.session_id || reply.session_id === selectedRef.current) {
-        setFileData({ path: reply.path || '', content: reply.content || '', lossy: Boolean(reply.lossy), truncated: Boolean(reply.truncated) });
+      const thumb = thumbRequests.current.get(reply.path || '');
+      if (thumb) { thumbRequests.current.delete(reply.path || ''); thumb(reply); }
+      else if (!reply.session_id || reply.session_id === selectedRef.current) {
+        filesRequested.current = false;
+        setFileData({ path: reply.path || '', name: reply.name, size: reply.size, kind: reply.kind, mime_type: reply.mime_type, language: reply.language, content: reply.content, data_url: reply.data_url, lossy: Boolean(reply.lossy), truncated: Boolean(reply.truncated) });
       }
     }
     else if (reply.type === 'continue_here_ack') {

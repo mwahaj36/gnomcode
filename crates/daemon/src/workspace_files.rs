@@ -12,7 +12,6 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-const MAX_FILE_BYTES: u64 = 512 * 1024;
 const MAX_LIST_ENTRIES: usize = 200;
 
 /// Query parameters for listing a directory inside a workspace.
@@ -41,21 +40,17 @@ struct WorkspaceListing {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum FileAccessError {
+pub(crate) enum FileAccessError {
     BadPath(&'static str),
     NotFound,
-    TooLarge,
-    BinaryOrInvalidUtf8,
     Io,
 }
 
 impl FileAccessError {
-    fn status_code(&self) -> StatusCode {
+    pub(crate) fn status_code(&self) -> StatusCode {
         match self {
             Self::BadPath(_) => StatusCode::BAD_REQUEST,
             Self::NotFound => StatusCode::NOT_FOUND,
-            Self::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::BinaryOrInvalidUtf8 => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Io => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -64,8 +59,6 @@ impl FileAccessError {
         match self {
             Self::BadPath(msg) => msg,
             Self::NotFound => "Path not found in workspace",
-            Self::TooLarge => "File exceeds 512 KiB read limit",
-            Self::BinaryOrInvalidUtf8 => "File is binary or not valid UTF-8",
             Self::Io => "Could not read workspace path",
         }
     }
@@ -187,37 +180,69 @@ fn list_workspace_dir(root: &Path, rel_raw: &str) -> Result<WorkspaceListing, Fi
     })
 }
 
-fn read_workspace_file(
-    root: &Path,
-    rel_raw: &str,
-) -> Result<(String, String, u64), FileAccessError> {
+/// Reads a confined workspace file for preview using the `core::file_preview` policy.
+///
+/// Text is capped and flagged `truncated`; images, PDFs and other binaries are inlined as a
+/// `data_url` only up to the inline cap, otherwise only name and size are returned.
+pub(crate) fn preview_workspace_file(root: &Path, rel_raw: &str) -> Result<Value, FileAccessError> {
+    use gnomcode_core::file_preview::{PreviewKind, classify, encode_base64, read_budget};
     let rel = validate_relative_path(rel_raw, false)?;
     let (_, canonical_file) = canonical_confined_path(root, &rel)?;
     if !canonical_file.is_file() {
         return Err(FileAccessError::BadPath("Target is not a file"));
     }
-    let metadata = std::fs::metadata(&canonical_file).map_err(|_| FileAccessError::Io)?;
-    if metadata.len() > MAX_FILE_BYTES {
-        return Err(FileAccessError::TooLarge);
+    let size = std::fs::metadata(&canonical_file)
+        .map_err(|_| FileAccessError::Io)?
+        .len();
+    let rel_display = rel.to_string_lossy().replace('\\', "/");
+    let name = rel
+        .file_name()
+        .map_or_else(|| rel_display.clone(), |n| n.to_string_lossy().into_owned());
+    let read = |limit: u64| -> Result<Vec<u8>, FileAccessError> {
+        let mut bytes = Vec::new();
+        std::fs::File::open(&canonical_file)
+            .and_then(|file| {
+                std::io::Read::read_to_end(&mut std::io::Read::take(file, limit), &mut bytes)
+            })
+            .map_err(|_| FileAccessError::Io)?;
+        Ok(bytes)
+    };
+    let head = read(8 * 1024)?;
+    let policy = classify(&name, &head);
+    let (budget, truncated) = read_budget(&policy, size);
+    let mut out = json!({
+        "path": rel_display,
+        "name": name,
+        "size": size,
+        "kind": policy.kind,
+        "mime_type": policy.mime_type,
+        "language": policy.language,
+        "truncated": truncated,
+    });
+    if policy.is_inline_binary() {
+        if budget > 0 || size == 0 {
+            let bytes = read(budget)?;
+            out["data_url"] = json!(format!(
+                "data:{};base64,{}",
+                policy.mime_type,
+                encode_base64(&bytes)
+            ));
+        }
+    } else {
+        let mut bytes = read(budget)?;
+        if truncated {
+            // Cut back to a character boundary so the preview stays valid UTF-8.
+            while !bytes.is_empty()
+                && std::str::from_utf8(&bytes).is_err_and(|e| e.error_len().is_none())
+            {
+                bytes.pop();
+            }
+        }
+        let lossy = std::str::from_utf8(&bytes).is_err();
+        out["content"] = json!(String::from_utf8_lossy(&bytes));
+        out["lossy"] = json!(lossy || policy.kind == PreviewKind::Binary);
     }
-    let mut bytes = Vec::new();
-    std::fs::File::open(&canonical_file)
-        .and_then(|file| {
-            std::io::Read::read_to_end(
-                &mut std::io::Read::take(file, MAX_FILE_BYTES + 1),
-                &mut bytes,
-            )
-        })
-        .map_err(|_| FileAccessError::Io)?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err(FileAccessError::TooLarge);
-    }
-    let content = String::from_utf8(bytes).map_err(|_| FileAccessError::BinaryOrInvalidUtf8)?;
-    Ok((
-        rel.to_string_lossy().replace('\\', "/"),
-        content,
-        metadata.len(),
-    ))
+    Ok(out)
 }
 
 pub(crate) fn resolve_session_workspace(
@@ -323,16 +348,14 @@ pub(crate) async fn remote_command(db: &Arc<Mutex<Database>>, request: &Value) -
             }
         }
         "repo_file" => {
-            match tokio::task::spawn_blocking(move || read_workspace_file(&workspace, &rel_path))
+            match tokio::task::spawn_blocking(move || preview_workspace_file(&workspace, &rel_path))
                 .await
             {
-                Ok(Ok((path, content, size))) => json!({
-                    "type": "repo_file",
-                    "session_id": session_owned,
-                    "path": path,
-                    "content": content,
-                    "size": size,
-                }),
+                Ok(Ok(mut preview)) => {
+                    preview["type"] = json!("repo_file");
+                    preview["session_id"] = json!(session_owned);
+                    preview
+                }
                 Ok(Err(err)) => json!({"type": "error", "message": err.message()}),
                 Err(_) => json!({"type": "error", "message": "Could not read workspace file"}),
             }
@@ -384,7 +407,7 @@ mod tests {
         std::fs::create_dir_all(root.path().join("src")).expect("src");
         std::fs::write(root.path().join("src").join("lib.rs"), "pub fn ok() {}\n").expect("lib");
         std::fs::write(outside.path().join("secret.txt"), "top-secret").expect("secret");
-        let huge = vec![b'a'; (MAX_FILE_BYTES as usize) + 1];
+        let huge = vec![b'a'; (gnomcode_core::file_preview::TEXT_PREVIEW_CAP as usize) + 1];
         std::fs::write(root.path().join("huge.txt"), huge).expect("huge");
 
         let db = seeded_db_with_session("codex:files-test", root.path());
@@ -431,7 +454,61 @@ mod tests {
             &json!({"type": "repo_file", "session_id": "codex:files-test", "path": "huge.txt"}),
         )
         .await;
-        assert_eq!(too_big["type"], "error");
+        assert_eq!(too_big["type"], "repo_file");
+        assert_eq!(too_big["truncated"], true);
+        assert_eq!(
+            too_big["content"].as_str().map(str::len),
+            Some(gnomcode_core::file_preview::TEXT_PREVIEW_CAP as usize)
+        );
+
+        std::fs::write(root.path().join("pixel.png"), [0x89, b'P', b'N', b'G']).expect("png");
+        let image = remote_command(
+            &db,
+            &json!({"type": "repo_file", "session_id": "codex:files-test", "path": "pixel.png"}),
+        )
+        .await;
+        assert_eq!(image["kind"], "image");
+        assert_eq!(image["data_url"], "data:image/png;base64,iVBORw==");
+        assert!(image.get("content").is_none());
+
+        let big_image = vec![0_u8; (gnomcode_core::file_preview::INLINE_BYTES_CAP as usize) + 1];
+        std::fs::write(root.path().join("big.png"), big_image).expect("big png");
+        let big = remote_command(
+            &db,
+            &json!({"type": "repo_file", "session_id": "codex:files-test", "path": "big.png"}),
+        )
+        .await;
+        assert_eq!(big["truncated"], true);
+        assert!(
+            big.get("data_url").is_none(),
+            "over-cap bytes are never sent"
+        );
+
+        std::fs::write(root.path().join("blob.bin"), [1_u8, 0, 2, 3]).expect("bin");
+        let binary = remote_command(
+            &db,
+            &json!({"type": "repo_file", "session_id": "codex:files-test", "path": "blob.bin"}),
+        )
+        .await;
+        assert_eq!(binary["kind"], "binary");
+        assert_eq!(binary["size"], 4);
+        assert!(binary.get("content").is_none());
+
+        std::fs::write(
+            root.path().join("evil.svg"),
+            "<svg><script>x</script></svg>",
+        )
+        .expect("svg");
+        let svg = remote_command(
+            &db,
+            &json!({"type": "repo_file", "session_id": "codex:files-test", "path": "evil.svg"}),
+        )
+        .await;
+        assert_eq!(svg["kind"], "svg");
+        assert!(
+            svg.get("content").is_none(),
+            "SVG is only sent as image data"
+        );
     }
 
     #[cfg(unix)]

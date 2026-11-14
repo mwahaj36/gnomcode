@@ -21,53 +21,16 @@ pub(super) async fn repo_file_get_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let relative = std::path::Path::new(&query.path);
-    if relative.components().any(|c| {
-        matches!(
-            c,
-            std::path::Component::ParentDir
-                | std::path::Component::RootDir
-                | std::path::Component::Prefix(_)
-        )
-    }) {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let repo_path = std::path::Path::new(&query.repo);
-    let Ok(canonical_repo) = repo_path.canonicalize() else {
-        return Err(StatusCode::BAD_REQUEST);
-    };
-
-    if !canonical_repo.is_dir() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let target_path = canonical_repo.join(&query.path);
-    let Ok(canonical_target) = target_path.canonicalize() else {
-        return Err(StatusCode::NOT_FOUND);
-    };
-
-    // Strict containment inside repo root (path-traversal and symlink escape defense)
-    if !canonical_target.starts_with(&canonical_repo) {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    if !canonical_target.is_file() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let metadata =
-        std::fs::metadata(&canonical_target).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if metadata.len() > 512 * 1024 {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
-    }
-
-    let content = std::fs::read_to_string(&canonical_target)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({
-        "path": query.path,
-        "content": content
-    })))
+    // Same confinement and preview policy as Remote: no traversal, no `.git`, no symlink escape.
+    let root = std::path::PathBuf::from(&query.repo);
+    let path = query.path.clone();
+    let preview = tokio::task::spawn_blocking(move || {
+        crate::workspace_files::preview_workspace_file(&root, &path)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|err| err.status_code())?;
+    Ok(Json(preview))
 }
 
 /// Query parameters for inspecting git workspace diffs.
