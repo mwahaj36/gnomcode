@@ -1,6 +1,0 @@
-## 2026-10-28 — spawnt local console destinations
-
-- Goal: align the daemon-served local console navigation and refresh states with the signed-in console while keeping its local API and bearer-token boundary.
-- Outcome: regrouped existing report, session, quota, account, settings, and Pro guardrail/relay features into Overview, Sessions, Usage, Limits, Projects, Automations, and Settings. Project rollups are explicitly unavailable because the local console API has no rollup view. Added focus and touch-target styling, local trust badges, connection/error states, and successful-update reporting. Reload now reflects failed data requests; Resync retains its authenticated reconcile call and reports an existing operation as in progress. Fixed a duplicate `url` declaration that prevented the embedded JavaScript from parsing.
-- Decision: keep the local HTML renderer and existing Rust data path; no new API or aggregation logic was needed. This PR stacks on the signed-in-console PR.
-- Verification: embedded JavaScript syntax and `git diff --check` passed. Rust quality gate, browser keyboard/reduced-motion review, and desktop/narrow two-theme visual review are pending. Native tray, icon assets, and installer redesign are outside this phase and remain required before the rollout is complete.

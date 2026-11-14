@@ -34,13 +34,11 @@ Install and authenticate the official CLI separately. Select a folder and agent 
 - **Cost tracking:** recorded tokens, estimated API-equivalent spend, cache savings and subscription comparisons.
 - **Quota monitoring:** observed windows, estimates or unknown values, plus free local routing, guardrails and resume controls. Native behavior needs provider/version acceptance.
 
-All local features are free. Remote is a paid category; commercial terms are not finalized. Optional account metadata sync is separate from E2EE Remote and needs a prelaunch minimization review.
+Gnomcode is free and open source under Apache-2.0, including Remote. Optional account metadata sync is separate from E2EE Remote and needs a prelaunch minimization review.
 
 ## Product and status
 
 - [Product brief](PRODUCT.md): what Gnomcode is and questions for discussion.
-- [Launch checklist](docs/LAUNCH_CHECKLIST.md): blockers, causes, closure steps and evidence.
-- [Engineering sessions](docs/sessions/README.md): individual dated records.
 
 [![npm version](https://img.shields.io/npm/v/gnomcode.svg)](https://www.npmjs.com/package/gnomcode)
 
@@ -48,9 +46,7 @@ All local features are free. Remote is a paid category; commercial terms are not
 
 ## Single Source of Truth
 
-- **[`docs/SPEC.md`](./docs/SPEC.md)** — Product specification, system architecture, per-model quota engine, Resume Queue, roadmap, deliverables, and deployment plan.
 - **[`AGENTS.md`](./AGENTS.md)** — Engineering rules, Rust standards, non-negotiable invariants, and testing requirements.
-- **[`docs/adr/`](./docs/adr/)** — Architecture Decision Records.
 - **[`.agents/skills/`](./.agents/skills/)** — Project runbooks (`rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`).
 
 ## Development
