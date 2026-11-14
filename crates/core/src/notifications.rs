@@ -871,7 +871,7 @@ mod tests {
                 .is_none()
         );
 
-        // Now reset_at passes -> QuotaState::ResetAwaiting observed.
+        // Now reset_at passes -> QuotaState::ResetUnconfirmed observed.
         let awaiting = make_quota("codex", 95.0, t0 + Duration::minutes(2), Some(reset_at));
         assert!(
             engine

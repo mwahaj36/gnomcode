@@ -27,20 +27,20 @@ pub enum QuotaState {
     /// Nothing left until the window resets.
     Exhausted,
     /// The recorded reset time has passed and no newer reading exists yet.
-    ResetAwaiting,
+    ResetUnconfirmed,
     /// The reading cannot describe capacity.
     Unknown,
 }
 
 impl QuotaState {
-    /// Ordering used to pick the worst window: `Exhausted > Low > Unknown > ResetAwaiting > Ok`.
+    /// Ordering used to pick the worst window: `Exhausted > Low > Unknown > ResetUnconfirmed > Ok`.
     #[must_use]
     pub const fn severity(self) -> u8 {
         match self {
             Self::Exhausted => 4,
             Self::Low => 3,
             Self::Unknown => 2,
-            Self::ResetAwaiting => 1,
+            Self::ResetUnconfirmed => 1,
             Self::Ok => 0,
         }
     }
@@ -67,8 +67,13 @@ pub struct QuotaPace {
     pub delta_pct: f64,
     /// Verdict derived from `delta_pct`.
     pub verdict: PaceVerdict,
-    /// When the window would run out at the current rate, if before the reset.
+    /// When the window would run out at the current rate, if before the reset and the observation is fresh.
     pub runs_out_at: Option<DateTime<Utc>>,
+    /// Whether the underlying observation is older than [`STALE_AFTER`].
+    pub stale: bool,
+    /// Why `runs_out_at` was withheld when `stale` is true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<String>,
 }
 
 /// Length of a quota window.
@@ -87,11 +92,34 @@ pub fn reset_passed(s: &QuotaSnapshot, now: DateTime<Utc>) -> bool {
     s.resets_at.is_some_and(|reset| reset <= now)
 }
 
+/// Effective trust basis for a snapshot; assumed resets are always [`TrustLevel::Estimated`].
+#[must_use]
+pub fn effective_basis(s: &QuotaSnapshot, now: DateTime<Utc>) -> TrustLevel {
+    if reset_passed(s, now) && s.basis != TrustLevel::Unknown && s.used_pct.is_finite() {
+        TrustLevel::Estimated
+    } else {
+        s.basis
+    }
+}
+
+/// Effective used percentage for a snapshot; assumed resets report `0.0` until confirmed.
+#[must_use]
+pub fn effective_used_pct(s: &QuotaSnapshot, now: DateTime<Utc>) -> f64 {
+    if reset_passed(s, now) && s.basis != TrustLevel::Unknown && s.used_pct.is_finite() {
+        0.0
+    } else {
+        s.used_pct
+    }
+}
+
 /// Remaining percentage, or `None` when the reading cannot describe capacity.
 #[must_use]
 pub fn remaining_pct(s: &QuotaSnapshot, now: DateTime<Utc>) -> Option<f64> {
-    if reset_passed(s, now) || s.basis == TrustLevel::Unknown || !s.used_pct.is_finite() {
+    if s.basis == TrustLevel::Unknown || !s.used_pct.is_finite() {
         return None;
+    }
+    if reset_passed(s, now) {
+        return Some(100.0);
     }
     Some((100.0 - s.used_pct).clamp(0.0, 100.0))
 }
@@ -99,8 +127,8 @@ pub fn remaining_pct(s: &QuotaSnapshot, now: DateTime<Utc>) -> Option<f64> {
 /// Display state for a snapshot.
 #[must_use]
 pub fn quota_state(s: &QuotaSnapshot, now: DateTime<Utc>) -> QuotaState {
-    if reset_passed(s, now) {
-        return QuotaState::ResetAwaiting;
+    if reset_passed(s, now) && s.basis != TrustLevel::Unknown && s.used_pct.is_finite() {
+        return QuotaState::ResetUnconfirmed;
     }
     match remaining_pct(s, now) {
         None => QuotaState::Unknown,
@@ -135,7 +163,9 @@ pub fn quota_pace(s: &QuotaSnapshot, now: DateTime<Utc>) -> Option<QuotaPace> {
     } else {
         PaceVerdict::OnPace
     };
-    let runs_out_at = (verdict == PaceVerdict::Ahead && s.used_pct > 0.0)
+    let stale = is_stale(s, now);
+    let stale_reason = stale.then(|| "Observation is older than 2 minutes.".to_owned());
+    let runs_out_at = (!stale && verdict == PaceVerdict::Ahead && s.used_pct > 0.0)
         .then(|| {
             let rate = s.used_pct / (now - start).num_seconds() as f64;
             now + Duration::seconds((remaining / rate) as i64)
@@ -146,6 +176,8 @@ pub fn quota_pace(s: &QuotaSnapshot, now: DateTime<Utc>) -> Option<QuotaPace> {
         delta_pct,
         verdict,
         runs_out_at,
+        stale,
+        stale_reason,
     })
 }
 
@@ -255,15 +287,30 @@ mod tests {
     }
 
     #[test]
-    fn state_reset_awaiting_after_reset_time() {
+    fn state_reset_unconfirmed_after_reset_time() {
         let s = snap(
             QuotaWindow::FiveHour,
             50.0,
             -Duration::minutes(1),
             TrustLevel::Exact,
         );
-        assert_eq!(quota_state(&s, now()), QuotaState::ResetAwaiting);
-        assert_eq!(remaining_pct(&s, now()), None);
+        assert_eq!(quota_state(&s, now()), QuotaState::ResetUnconfirmed);
+        assert_eq!(remaining_pct(&s, now()), Some(100.0));
+        assert!((effective_used_pct(&s, now()) - 0.0).abs() < 1e-9);
+        assert_eq!(effective_basis(&s, now()), TrustLevel::Estimated);
+    }
+
+    #[test]
+    fn state_reset_unconfirmed_at_exact_reset_boundary() {
+        let s = snap(
+            QuotaWindow::FiveHour,
+            99.0,
+            Duration::zero(),
+            TrustLevel::Api,
+        );
+        assert_eq!(quota_state(&s, now()), QuotaState::ResetUnconfirmed);
+        assert_eq!(remaining_pct(&s, now()), Some(100.0));
+        assert_eq!(effective_basis(&s, now()), TrustLevel::Estimated);
     }
 
     #[test]
@@ -390,12 +437,27 @@ mod tests {
     }
 
     #[test]
+    fn pace_stale_omits_runs_out_projection_with_reason() {
+        let mut s = snap(
+            QuotaWindow::FiveHour,
+            99.0,
+            Duration::minutes(66),
+            TrustLevel::Exact,
+        );
+        s.observed_at = now() - Duration::hours(2);
+        let pace = quota_pace(&s, now()).expect("pace");
+        assert!(pace.stale);
+        assert!(pace.stale_reason.is_some());
+        assert_eq!(pace.runs_out_at, None);
+    }
+
+    #[test]
     fn severity_orders_exhausted_first() {
         let order = [
             QuotaState::Exhausted,
             QuotaState::Low,
             QuotaState::Unknown,
-            QuotaState::ResetAwaiting,
+            QuotaState::ResetUnconfirmed,
             QuotaState::Ok,
         ];
         let severities: Vec<u8> = order.iter().map(|s| s.severity()).collect();
