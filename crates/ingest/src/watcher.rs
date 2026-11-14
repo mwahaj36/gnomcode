@@ -70,10 +70,21 @@ impl IngestWatcher {
             .map(|r| r.path)
             .collect();
         let home = gnomcode_home();
-        if home.exists() {
-            paths.push(home);
+        let mut watched: Vec<(PathBuf, RecursiveMode)> = paths
+            .drain(..)
+            .map(|p| (p, RecursiveMode::Recursive))
+            .collect();
+        // Only top-level files (status-line limits) matter in the Gnomcode home; recursive
+        // watching would pick up worktrees and our own SQLite writes.
+        // `sessions/` holds launched PTY records the daemon binds to conversations.
+        let pty_sessions = home.join("sessions");
+        if pty_sessions.exists() {
+            watched.push((pty_sessions, RecursiveMode::NonRecursive));
         }
-        Self::with_paths(&paths, base_interval, max_idle_interval)
+        if home.exists() {
+            watched.push((home, RecursiveMode::NonRecursive));
+        }
+        Self::watch(&watched, base_interval, max_idle_interval)
     }
 
     /// Starts watching an explicit list of directories/files.
@@ -83,25 +94,40 @@ impl IngestWatcher {
         base_interval: Duration,
         max_idle_interval: Duration,
     ) -> Self {
+        let watched: Vec<(PathBuf, RecursiveMode)> = paths
+            .iter()
+            .map(|p| (p.clone(), RecursiveMode::Recursive))
+            .collect();
+        Self::watch(&watched, base_interval, max_idle_interval)
+    }
+
+    fn watch(
+        paths: &[(PathBuf, RecursiveMode)],
+        base_interval: Duration,
+        max_idle_interval: Duration,
+    ) -> Self {
         let dirty = Arc::new(AtomicBool::new(true));
         let wakeup = Arc::new(Notify::new());
         let dirty_cb = Arc::clone(&dirty);
         let wakeup_cb = Arc::clone(&wakeup);
 
         let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            if res.is_ok() {
-                dirty_cb.store(true, Ordering::Release);
-                wakeup_cb.notify_one();
+            // Fail open: a watcher error marks dirty so the next tick rescans.
+            if res.as_ref().is_ok_and(is_own_db_write) {
+                return;
             }
+            dirty_cb.store(true, Ordering::Release);
+            wakeup_cb.notify_one();
         })
         .ok()
-        .map(|mut w| {
-            for path in paths {
-                if path.exists() {
-                    let _ = w.watch(path, RecursiveMode::Recursive);
+        .and_then(|mut w| {
+            let mut watching = 0;
+            for (path, mode) in paths {
+                if path.exists() && w.watch(path, *mode).is_ok() {
+                    watching += 1;
                 }
             }
-            w
+            (watching > 0).then_some(w)
         });
 
         Self {
@@ -117,6 +143,33 @@ impl IngestWatcher {
     pub fn trigger(&self) {
         self.dirty.store(true, Ordering::Release);
         self.wakeup.notify_one();
+    }
+
+    /// Whether an OS watcher is active on at least one path. When `false`, callers
+    /// should fall back to plain polling.
+    #[must_use]
+    pub fn is_watching(&self) -> bool {
+        self._watcher.is_some()
+    }
+
+    /// Returns `Some(was_dirty)` when a scan is due (filesystem event or back-off
+    /// elapsed) and clears the dirty flag; `None` while idle.
+    pub fn take_due(&mut self) -> Option<bool> {
+        let was_dirty = self.dirty.swap(false, Ordering::AcqRel);
+        let elapsed = self
+            .last_scan
+            .is_none_or(|t| t.elapsed() >= self.backoff.current());
+        (was_dirty || elapsed).then_some(was_dirty)
+    }
+
+    /// Records a finished scan: `activity` resets the back-off, otherwise it doubles.
+    pub fn record_scan(&mut self, activity: bool) {
+        self.last_scan = Some(Instant::now());
+        if activity {
+            self.backoff.on_activity();
+        } else {
+            self.backoff.on_idle();
+        }
     }
 
     /// Current idle back-off interval.
@@ -143,22 +196,23 @@ impl IngestWatcher {
     /// # Errors
     /// Returns [`Error`] if [`ingest_all`] fails.
     pub fn poll_if_needed(&mut self, db: &mut Database) -> Result<Option<u64>, Error> {
-        let was_dirty = self.dirty.swap(false, Ordering::AcqRel);
-        let elapsed = self
-            .last_scan
-            .is_none_or(|t| t.elapsed() >= self.backoff.current());
-        if !was_dirty && !elapsed {
+        let Some(was_dirty) = self.take_due() else {
             return Ok(None);
-        }
+        };
         let ingested = ingest_all(db)?;
-        self.last_scan = Some(Instant::now());
-        if ingested > 0 || was_dirty {
-            self.backoff.on_activity();
-        } else {
-            self.backoff.on_idle();
-        }
+        self.record_scan(ingested > 0 || was_dirty);
         Ok(Some(ingested))
     }
+}
+
+/// SQLite files written by Gnomcode itself must not wake ingestion (feedback loop).
+fn is_own_db_write(event: &Event) -> bool {
+    !event.paths.is_empty()
+        && event.paths.iter().all(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.contains(".db"))
+        })
 }
 
 #[cfg(test)]
