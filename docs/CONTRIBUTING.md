@@ -1,6 +1,6 @@
 # Contributing to Gnomcode
 
-Gnomcode is licensed under the Apache License 2.0. Read `AGENTS.md` first: it holds the invariants (no telemetry, fail open, loopback only, trust labels on every number, business logic in Rust).
+Gnomcode is licensed under the Apache License 2.0. Read [`AGENTS.md`](../AGENTS.md) first: it holds the invariants (no telemetry, fail open, loopback only, trust labels on every number, business logic in Rust).
 
 ## Workflow
 
@@ -20,6 +20,6 @@ Sign off every commit with `git commit -s`. This certifies the [DCO](https://dev
 
 ## Style
 
-No emojis anywhere (code, docs, UI, commits). Fixtures must be anonymized with the script named in `AGENTS.md`; never commit raw personal logs.
+No emojis anywhere (code, docs, UI, commits). Fixtures must be anonymized with the script named in [`AGENTS.md`](../AGENTS.md); never commit raw personal logs.
 
-By contributing you agree to follow `CODE_OF_CONDUCT.md`.
+By contributing you agree to follow [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md).
