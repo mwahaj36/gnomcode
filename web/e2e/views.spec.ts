@@ -59,7 +59,7 @@ test.describe('Workspace', () => {
   test('New opens the launcher with the agent, folder and model fields', async ({ page, openConsole }) => {
     await openConsole('#sessions');
     const root = page.locator('#local-workspace-root');
-    await root.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByRole('button', { name: 'New', exact: true }).click();
     await expect(root.getByRole('heading', { name: 'New agent session' })).toBeVisible();
     await expect(root.locator('.ide-launcher').getByLabel('Agent')).toBeVisible();
     await expect(root.getByLabel('Workspace directory')).toBeVisible();

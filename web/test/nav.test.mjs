@@ -10,7 +10,7 @@ test('local rail never expands on hover or focus', () => {
   const rules = css.split('\n').filter(line => line.includes('sp-native-console') && line.includes('sp-console-nav'));
   assert.ok(rules.length > 0);
   for (const line of rules.filter(rule => /:hover|focus-within|:has\(/.test(rule))) assert.doesNotMatch(line, /width|padding-left|rail-w|display/, line.slice(0, 120));
-  assert.match(css, /body\.sp-native-console\[data-rail="expanded"\]\{--rail-w:208px\}/);
+  assert.match(css, /body\.sp-native-console\[data-rail="expanded"\]\{--rail-w:268px\}/);
 });
 
 test('provider sources show the Rust label and enable command', () => {

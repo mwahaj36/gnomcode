@@ -45,7 +45,7 @@ const RAIL: { view: ConsoleView; label: string; controls: string; icon: ReactEle
 ];
 
 const POLL_MS = 2000;
-const isPhone = () => window.matchMedia('(max-width: 760px)').matches;
+const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
 const resolveView = (name: string): string => VIEW_ALIASES[name] ?? name;
 const isView = (name: string): name is ConsoleView => (VIEWS as string[]).includes(name);
 
@@ -115,7 +115,7 @@ export function ConsoleShell() {
   const [folder] = useState(consumeExplorerFolder);
   const [view, setView] = useState<ConsoleView>(() => (folder ? 'sessions' : initialView()));
   const [navTick, setNavTick] = useState(0);
-  const [railExpanded, setRailExpanded] = useState(() => storedFlag('gnomcode-rail-expanded') === '1');
+  const [railExpanded, setRailExpanded] = useState(() => storedFlag('gnomcode-rail-expanded') !== '0');
   const [paired, setPaired] = useState(false);
   const [sync, setSync] = useState<{ text: string; failed: boolean }>({ text: 'Connecting', failed: false });
   const chatListCollapsed = useChatListCollapsed();
@@ -327,35 +327,42 @@ export function ConsoleShell() {
               );
             })}
           </div>
-          <button
-            type="button"
-            className="tab-btn"
-            id="account-entry"
-            aria-label="Sign in to Gnomcode"
-            title="Sign in to Gnomcode"
-            hidden={paired}
-            onClick={(event) => onRailClick(event, 'auth')}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
-            </svg>
-            <span className="rail-label" id="account-entry-label">
-              Sign in
-            </span>
-          </button>
-          <button
-            type="button"
-            id="navigation-toggle"
-            aria-label={railLabel}
-            title={railLabel}
-            aria-expanded={railExpanded}
-            onClick={toggleRail}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 4h18v16H3z M9 4v16" />
-            </svg>
-            <span className="rail-label">{railLabel}</span>
-          </button>
+          <div
+            id="console-nav-sessions"
+            className="sp-nav-sessions"
+            hidden={view !== 'sessions' || !railExpanded || chatListCollapsed}
+          />
+          <div className="sp-nav-footer">
+            <button
+              type="button"
+              className="tab-btn"
+              id="account-entry"
+              aria-label="Sign in to Gnomcode"
+              title="Sign in to Gnomcode"
+              hidden={paired}
+              onClick={(event) => onRailClick(event, 'auth')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+              </svg>
+              <span className="rail-label" id="account-entry-label">
+                Sign in
+              </span>
+            </button>
+            <button
+              type="button"
+              id="navigation-toggle"
+              aria-label={railLabel}
+              title={railLabel}
+              aria-expanded={railExpanded}
+              onClick={toggleRail}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 4h18v16H3z M9 4v16" />
+              </svg>
+              <span className="rail-label">{railLabel}</span>
+            </button>
+          </div>
         </nav>
         <div className="sp-console-content">
           <div className="console-context">
