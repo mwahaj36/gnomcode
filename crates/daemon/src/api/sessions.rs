@@ -161,22 +161,87 @@ pub(super) async fn wsl_distros_handler(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let (registered, running) = tokio::task::spawn_blocking(|| {
-        (
-            gnomcode_platform::wsl::registered_distros(),
-            gnomcode_platform::wsl::running_distros(),
-        )
+    let distros = tokio::task::spawn_blocking(|| {
+        let running = gnomcode_platform::wsl::running_distros();
+        gnomcode_platform::wsl::registered_distros()
+            .into_iter()
+            .map(|name| {
+                let up = running.iter().any(|r| r.eq_ignore_ascii_case(&name));
+                // Only a running distro is read; a stopped one stays "unknown".
+                let states = if up {
+                    gnomcode_platform::wsl::claude_hook_states(&name)
+                } else {
+                    Vec::new()
+                };
+                let hook = if states.is_empty() {
+                    "unknown"
+                } else if states.iter().all(|(_, hooked)| *hooked) {
+                    "integrated"
+                } else {
+                    "missing"
+                };
+                json!({"name": name, "label": gnomcode_core::wsl::distro_label(&name), "running": up, "claude_hook": hook})
+            })
+            .collect::<Vec<Value>>()
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let distros: Vec<Value> = registered
-        .into_iter()
-        .map(|name| {
-            let up = running.iter().any(|r| r.eq_ignore_ascii_case(&name));
-            json!({"name": name, "label": gnomcode_core::wsl::distro_label(&name), "running": up})
-        })
-        .collect();
     Ok(Json(json!({ "distros": distros })))
+}
+
+/// Body of `POST /api/v1/wsl/integrate`.
+#[derive(Debug, Deserialize)]
+pub struct WslIntegrateRequest {
+    /// Registered distro name.
+    pub distro: String,
+}
+
+/// "Integrate in WSL": runs `gnomcode integrate claude` (which backs up first) for every
+/// `~/.claude` of a running distro that lacks the hook, writing the interop path of this
+/// binary. Never boots a distro; sessions keep working without the hook (fail open).
+pub(super) async fn wsl_integrate_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<WslIntegrateRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let distro = payload.distro;
+    let result = tokio::task::spawn_blocking(move || {
+        let exe = std::env::current_exe().map_err(|_| "Gnomcode path unavailable".to_owned())?;
+        let interop = gnomcode_platform::wsl::windows_to_wsl_path(&exe.to_string_lossy())
+            .ok_or_else(|| "Gnomcode is not on a drive WSL can reach".to_owned())?;
+        let states = gnomcode_platform::wsl::claude_hook_states(&distro);
+        if states.is_empty() {
+            return Err(format!("{distro} is not running or has no Claude settings yet. Start Claude there once, then retry."));
+        }
+        let mut done = 0;
+        for (dir, _) in states.into_iter().filter(|(_, hooked)| !hooked) {
+            let mut command = std::process::Command::new(&exe);
+            command
+                .args(["integrate", "claude"])
+                .env("CLAUDE_CONFIG_DIR", &dir)
+                .env("GNOMCODE_HOOK_EXE", &interop)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt as _;
+                command.creation_flags(0x0800_0000);
+            }
+            if !command.status().is_ok_and(|s| s.success()) {
+                return Err(format!("Integration failed in {distro}. Run `{interop} integrate claude` there."));
+            }
+            done += 1;
+        }
+        Ok(format!("Claude hook installed in {distro} ({done} profile(s))."))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(match result {
+        Ok(message) => Json(json!({"ok": true, "message": message})),
+        Err(message) => Json(json!({"ok": false, "message": message})),
+    })
 }
 
 pub(super) static WORKSPACE_TERMINAL_LAUNCH: tokio::sync::Mutex<()> =

@@ -156,6 +156,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/sessions/hosted", get(list_hosted_sessions_handler))
         .route("/api/v1/sessions/launch", post(launch_session_handler))
         .route("/api/v1/wsl/distros", get(wsl_distros_handler))
+        .route("/api/v1/wsl/integrate", post(wsl_integrate_handler))
         .route(
             "/api/v1/sessions/{id}/worktree/merge",
             post(crate::worktree_api::merge_handler),

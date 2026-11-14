@@ -731,7 +731,11 @@ fn cmd_integrate(agent: &str, remove: bool, approvals: bool) -> Result<()> {
         settings.is_object(),
         "Claude settings must be a JSON object"
     );
-    let exe = std::env::current_exe()?.to_string_lossy().into_owned();
+    // Integrating a WSL distro from Windows writes the interop path the distro can run.
+    let exe = match std::env::var("GNOMCODE_HOOK_EXE") {
+        Ok(path) if !path.trim().is_empty() => path,
+        _ => std::env::current_exe()?.to_string_lossy().into_owned(),
+    };
     integrate::apply_hooks(&mut settings, &exe, remove, approvals)?;
     let status_line = if remove {
         if is_gnomcode_status_line(&settings) {

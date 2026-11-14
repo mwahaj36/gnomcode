@@ -156,6 +156,8 @@ export function WorkspaceView() {
   const [providerOverviews, setProviderOverviews] = useState<ProviderOverview[]>([]);
   const [usagePopoverOpen, setUsagePopoverOpen] = useState(false);
   const [allChatsOpen, setAllChatsOpen] = useState(false);
+  // All chats "Runs in" filter (ADR 0060): 'all', 'windows' or a distro name. Filters the loaded page.
+  const [placeFilter, setPlaceFilter] = useState('all');
   useEffect(() => {
     if (!usagePopoverOpen) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -187,8 +189,9 @@ export function WorkspaceView() {
   const [launchRepo, setLaunchRepo] = useState('');
   // "Run in" picker (ADR 0060): '' is Windows, otherwise a WSL distro name.
   const [runIn, setRunIn] = useState('');
-  const [wslDistros, setWslDistros] = useState<{ name: string; label: string; running: boolean }[]>([]);
+  const [wslDistros, setWslDistros] = useState<{ name: string; label: string; running: boolean; claude_hook?: string }[]>([]);
   const [pathCopied, setPathCopied] = useState(false);
+  const [integrateStatus, setIntegrateStatus] = useState('');
   const [launchModel, setLaunchModel] = useState('');
   const [launchWorktree, setLaunchWorktree] = useState(false);
   const [launchWorktreeBranch, setLaunchWorktreeBranch] = useState('');
@@ -934,7 +937,7 @@ export function WorkspaceView() {
   useEffect(() => {
     if (!launcherOpen) return;
     let live = true;
-    fetchLocalJson<{ distros?: { name: string; label: string; running: boolean }[] }>('/api/v1/wsl/distros')
+    fetchLocalJson<{ distros?: { name: string; label: string; running: boolean; claude_hook?: string }[] }>('/api/v1/wsl/distros')
       .then((data) => {
         if (live) setWslDistros(Array.isArray(data?.distros) ? data.distros : []);
       })
@@ -955,6 +958,22 @@ export function WorkspaceView() {
       window.setTimeout(() => setPathCopied(false), 1500);
     } catch {
       setPathCopied(false);
+    }
+  };
+
+  const integrateInWsl = async (distro: string) => {
+    setIntegrateStatus(`Installing the Claude hook in ${distro}...`);
+    try {
+      const result = await fetchLocalMutation<{ ok?: boolean; message?: string }>('/api/v1/wsl/integrate', {
+        method: 'POST',
+        body: { distro },
+      });
+      setIntegrateStatus(result?.message || 'Done.');
+      if (result?.ok) {
+        setWslDistros((list) => list.map((d) => (d.name === distro ? { ...d, claude_hook: 'integrated' } : d)));
+      }
+    } catch (error) {
+      setIntegrateStatus(`Could not integrate: ${error instanceof Error ? error.message : 'request failed'}`);
     }
   };
 
@@ -1681,6 +1700,21 @@ export function WorkspaceView() {
                   Running
                 </button>
               </div>
+              {placeChips(sessions).length > 1 ? (
+                <div className="sp-all-chats-chips" role="group" aria-label="Filter by where it runs">
+                  {[{ id: 'all', label: 'Anywhere' }, ...placeChips(sessions)].map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      className={`sp-chip sp-filter-chip${placeFilter === chip.id ? ' is-active' : ''}`}
+                      aria-pressed={placeFilter === chip.id}
+                      onClick={() => setPlaceFilter(chip.id)}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <label className="sp-all-chats-toggle">
                 <input
                   type="checkbox"
@@ -1695,7 +1729,8 @@ export function WorkspaceView() {
             </div>
             <div className="sp-all-chats-list">
               {sessions.length ? (
-                sessions.map((item) => {
+                sessions.filter((item) => matchesPlace(item.repo_path, placeFilter)).map((item) => {
+                  const distro = wslDistro(item.repo_path);
                   const tokens =
                     item.total_tokens ?? (item.input_tokens ?? 0) + (item.output_tokens ?? 0);
                   const tokenText =
@@ -1734,7 +1769,12 @@ export function WorkspaceView() {
                     >
                       <span className="sp-session-main">
                         <strong>{item.title || item.project_name || 'Untitled session'}</strong>
-                        <span>{meta}</span>
+                        <span>
+                          {distro ? (
+                            <span className="sp-badge sp-wsl-badge" title={item.repo_path}>{`WSL: ${distro}`}</span>
+                          ) : null}
+                          {meta}
+                        </span>
                       </span>
                     </button>
                   );
@@ -1844,6 +1884,21 @@ export function WorkspaceView() {
                     )}
                   </div>
                 </label>
+                {runIn && launchAgent === 'claude' && wslDistros.find((d) => d.name === runIn)?.claude_hook === 'missing' ? (
+                  <div className="sp-field-note sp-wsl-hook" role="note">
+                    <span>
+                      Approvals and limits from Claude in {runIn} need the Gnomcode hook there. Sessions work without it.
+                    </span>
+                    <button type="button" className="btn-control" onClick={() => void integrateInWsl(runIn)}>
+                      Integrate in WSL
+                    </button>
+                  </div>
+                ) : null}
+                {runIn && integrateStatus ? (
+                  <p className="sp-field-note" role="status">
+                    {integrateStatus}
+                  </p>
+                ) : null}
                 {runIn ? (
                   <datalist id="sp-wsl-recent">
                     {recentWslFolders([...sessions, ...projects.map((p) => ({ repo_path: (p as { repo_root?: string }).repo_root }))], runIn).map((path) => (
@@ -2110,8 +2165,11 @@ export function WorkspaceView() {
                     {formatWorktreeBadge(activeSession || activeHosted)}
                   </span>
                   {activeSession?.worktree_path || activeHosted?.worktree_path ? (
-                    <code className="sp-worktree-path">
-                      {activeSession?.worktree_path || activeHosted?.worktree_path}
+                    <code
+                      className="sp-worktree-path"
+                      title={activeSession?.worktree_path || activeHosted?.worktree_path}
+                    >
+                      {middleTruncate(activeSession?.worktree_path || activeHosted?.worktree_path, 56)}
                     </code>
                   ) : null}
                 </div>
@@ -2549,4 +2607,16 @@ function recentWslFolders(sessions: { repo_path?: string }[], distro: string): s
     if (out.length >= 8) break;
   }
   return out;
+}
+
+/** Where-it-runs chips for the loaded sessions: Windows plus each distro seen. */
+function placeChips(sessions: { repo_path?: string }[]): { id: string; label: string }[] {
+  const distros = [...new Set(sessions.map((s) => wslDistro(s.repo_path)).filter(Boolean))];
+  return distros.length ? [{ id: 'windows', label: 'Windows' }, ...distros.map((d) => ({ id: d, label: `WSL: ${d}` }))] : [];
+}
+
+function matchesPlace(repoPath: string | undefined, place: string): boolean {
+  if (place === 'all') return true;
+  const distro = wslDistro(repoPath);
+  return place === 'windows' ? !distro : distro === place;
 }

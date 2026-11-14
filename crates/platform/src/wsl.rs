@@ -210,6 +210,49 @@ pub fn registered_distros() -> Vec<String> {
     Vec::new()
 }
 
+/// Whether Claude `settings.json` text already carries a Gnomcode hook.
+#[must_use]
+pub fn settings_has_gnomcode_hook(settings: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(settings)
+        .ok()
+        .and_then(|v| v.get("hooks").map(ToString::to_string))
+        .is_some_and(|hooks| hooks.contains("gnomcode"))
+}
+
+/// `C:\Program Files\G\gnomcode.exe` as seen from inside a distro: `/mnt/c/Program Files/G/gnomcode.exe`.
+#[must_use]
+pub fn windows_to_wsl_path(path: &str) -> Option<String> {
+    let mut chars = path.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?;
+    if chars.next() != Some(':') {
+        return None;
+    }
+    let rest = chars.as_str().replace('\\', "/");
+    Some(format!("/mnt/{}{rest}", drive.to_ascii_lowercase()))
+}
+
+/// Claude config folders (`~/.claude`) of a running distro, with whether each has the
+/// Gnomcode hook. Reads only; empty for a stopped distro (never boots it).
+#[must_use]
+pub fn claude_hook_states(distro: &str) -> Vec<(PathBuf, bool)> {
+    if !running_distros()
+        .iter()
+        .any(|d| d.eq_ignore_ascii_case(distro))
+    {
+        return Vec::new();
+    }
+    distro_homes(&distro_share(distro))
+        .into_iter()
+        .map(|home| home.join(".claude"))
+        .filter(|dir| dir.is_dir())
+        .map(|dir| {
+            let hooked = std::fs::read_to_string(dir.join("settings.json"))
+                .is_ok_and(|text| settings_has_gnomcode_hook(&text));
+            (dir, hooked)
+        })
+        .collect()
+}
+
 #[cfg(windows)]
 fn hidden(program: &str) -> std::process::Command {
     use std::os::windows::process::CommandExt;
@@ -282,6 +325,21 @@ mod tests {
         assert_eq!(parse_running_list(b"Debian\n"), vec!["Debian"]);
         // The "nothing running" message is a sentence, not a distro.
         assert!(parse_running_list(b"There are no running distributions.\n").is_empty());
+    }
+
+    #[test]
+    fn hook_detection_and_interop_paths() {
+        assert!(settings_has_gnomcode_hook(
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"command":"/mnt/c/x/gnomcode.exe hook"}]}]}}"#
+        ));
+        assert!(!settings_has_gnomcode_hook(r#"{"hooks":{}}"#));
+        assert!(!settings_has_gnomcode_hook("not json"));
+        assert_eq!(
+            windows_to_wsl_path(r"C:\Program Files\G\gnomcode.exe").as_deref(),
+            Some("/mnt/c/Program Files/G/gnomcode.exe")
+        );
+        assert_eq!(windows_to_wsl_path("/usr/bin/x"), None);
+        assert!(claude_hook_states("NoSuchDistro").is_empty());
     }
 
     #[test]
