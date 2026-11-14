@@ -152,7 +152,7 @@ Local rules, alerts and loop/budget controls are free. Hard-stop rules attempt t
 
 ### 3.11 Local API and shell security
 
-Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electron uses context isolation, sandboxing, no Node integration, strict CSP and sender-validated narrow preload. Navigation stays within the authenticated daemon. Allow only its exact PTY WS resources. Remote web never receives a shell or arbitrary process/window control. `gnomcode doctor` and authenticated `GET /api/v1/doctor` report environment diagnostics (detected agent CLIs and versions, Claude sign-in expiry metadata without printing tokens, limit sources and reading ages, Claude hook/status-line integration, daemon reachability, disk free space at `GNOMCODE_HOME` and the repository drive, and keep-awake state) with `ok`, `warn`, or `fail` status and a one-line fix, exiting non-zero on `fail`.
+Bind `127.0.0.1` only; validate bearer token and Host/Origin for HTTP/WS. Electron uses context isolation, sandboxing, no Node integration, strict CSP and sender-validated narrow preload. Navigation stays within the authenticated daemon. Allow only its exact PTY WS resources. Remote web never receives a shell or arbitrary process/window control. `gnomcode doctor` and authenticated `GET /api/v1/doctor` report environment diagnostics (detected agent CLIs and versions, Claude sign-in expiry metadata without printing tokens, limit sources and reading ages, Claude hook/status-line integration, daemon reachability, disk free space at `GNOMCODE_HOME` and the repository drive, and keep-awake state) with `ok`, `warn`, or `fail` status and a one-line fix, exiting non-zero on `fail`. Authenticated `GET /api/v1/onboarding/status?provider=&distro=` returns each provider's setup checklist (installed and version, signed in plus the Claude account email, Claude integration or Codex/Antigravity protocol approvals, Claude exact limits and first reading, first session seen), each step with state, trust and the official command to run; it never reads token values and never runs login commands, and with `distro` targets a running WSL distro without booting it (ADR 0061). The doctor points to Settings > Providers, which uses the same checklist.
 
 ### 3.12 Platform scope
 
@@ -374,6 +374,7 @@ Provider log/CLI drift, incomplete quota visibility, handoff context loss, sensi
 | [0034](./adr/0034-pwa-app-lock.md) | Client-side PWA passkey / PBKDF2 PIN app lock without altering E2EE keys | Accepted |
 | [0059](./adr/0059-embedded-update-signing-key.md) | Build-pinned update verification key and offline owner-key artifact signing | Accepted |
 | [0060](./adr/0060-wsl-support.md) | WSL support: registry discovery without booting, 9P slow poll, `wsl.exe` launch, distro tags | Accepted |
+| [0061](./adr/0061-verified-onboarding.md) | Verified provider onboarding: per-provider status endpoint in Rust, one checklist UI | Accepted |
 
 ## 10. Open decisions
 
