@@ -55,6 +55,7 @@ test('filters and rule fields are touch sized, stacked under their labels and 16
   expect(checkbox?.height ?? 99).toBeLessThanOrEqual(20);
 
   await page.getByRole('tab', { name: 'Settings' }).tap();
+  await page.locator('#settings-mobile-category').selectOption('settings-automations');
   const form = page.locator('#local-settings-root .sp-rule-form');
   await form.scrollIntoViewIfNeeded();
   for (const field of await form.locator('select, input').all()) {

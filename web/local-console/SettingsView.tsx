@@ -101,6 +101,7 @@ export function SettingsView() {
   const [selectedId, setSelectedId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const hashId = window.location.hash.replace(/^#/, '');
+      if (hashId === 'settings/providers') return 'settings-providers';
       if (SETTINGS_SECTIONS.some((section) => section.id === hashId)) return hashId;
     }
     return SETTINGS_SECTIONS[0]?.id ?? 'settings-account';
