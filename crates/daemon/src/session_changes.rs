@@ -98,6 +98,8 @@ async fn run_git_readonly(repo: &Path, args: &[&str]) -> Result<(String, bool), 
         .args([
             "--no-pager",
             "-c",
+            "safe.directory=*",
+            "-c",
             "core.quotepath=off",
             "-c",
             "core.fsmonitor=false",

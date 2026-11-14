@@ -66,7 +66,7 @@ export default function AppLauncherClient() {
     <div className="sp-app-workspace min-h-screen flex flex-col bg-bg text-[var(--sp-text)] font-sans">
       <AppNavbar />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 md:p-8 space-y-6">
+      <div className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 md:p-8 space-y-6">
         <header className="border-b border-[var(--sp-border)] pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -198,7 +198,7 @@ export default function AppLauncherClient() {
             Enable and test background alerts on this device while signed in. Your laptop must stay awake with account Remote access enabled. On iPhone, open Gnomcode from the Home Screen.
           </p>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

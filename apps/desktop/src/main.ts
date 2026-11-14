@@ -8,6 +8,7 @@ import { dataHome, readDaemon, daemonRequest } from './daemon-client';
 import { formatTrayMenu, formatTrayTooltip, type TrayAction, type TrayItem, type TrayProvider, type TraySession } from './tray-menu';
 import {retainNotification,repairNotificationShortcut} from './notifications';
 import { launchVerifiedInstaller, parseUpdateStatus, verifyStagedInstaller, type DesktopUpdateStatus } from './updater';
+import { getLoginItemEnabled, setLoginItemEnabled } from './autostart';
 
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -44,19 +45,45 @@ function notify(args: string[]): boolean {
   return true;
 }
 
+const DAEMON_CONNECT_ATTEMPTS = 160;
+const DAEMON_CONNECT_INTERVAL_MS = 250;
+
+function spawnDaemonBinary(): { child: ChildProcess; exitedEarly: () => boolean } {
+  const extension = process.platform === 'win32' ? '.exe' : '';
+  const binary = app.isPackaged
+    ? path.join(process.resourcesPath, 'bin', `gnomcode${extension}`)
+    : path.resolve(__dirname, '../../../target/debug', `gnomcode${extension}`);
+  let exited = false;
+  const child = spawn(binary, ['daemon'], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    env: daemonEnvironment(process.env),
+  });
+  child.on('error', () => { exited = true; });
+  child.once('exit', () => { exited = true; });
+  spawnedDaemon = child;
+  child.unref();
+  return { child, exitedEarly: () => exited };
+}
+
 async function connectDaemon(): Promise<string> {
   const running = await readDaemon(dataHome());
   if (running) return running;
-  const extension = process.platform === 'win32' ? '.exe' : '';
-  const binary = app.isPackaged ? path.join(process.resourcesPath, 'bin', `gnomcode${extension}`) : path.resolve(__dirname, '../../../target/debug', `gnomcode${extension}`);
-  const child = spawn(binary, ['daemon'], { detached: true, stdio: 'ignore', windowsHide: true, env: daemonEnvironment(process.env) });
-  child.on('error', () => {});
-  spawnedDaemon = child;
-  child.unref();
-  for (let attempt = 0; attempt < 40; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, 250));
+  let spawned = spawnDaemonBinary();
+  let retried = false;
+  for (let attempt = 0; attempt < DAEMON_CONNECT_ATTEMPTS; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, DAEMON_CONNECT_INTERVAL_MS));
     const url = await readDaemon(dataHome());
     if (url) return url;
+    // Retry spawning once if the first boot spawn exited prematurely during AV/login contention.
+    if (spawned.exitedEarly() && !retried) {
+      retried = true;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const raceUrl = await readDaemon(dataHome());
+      if (raceUrl) return raceUrl;
+      spawned = spawnDaemonBinary();
+    }
   }
   throw new Error('The local daemon could not be started. Check the installation and try again.');
 }
@@ -198,6 +225,7 @@ async function start(): Promise<void> {
     repairNotificationShortcut(path.join(app.getPath('appData'),'Microsoft','Windows','Start Menu','Programs','gnomcode.lnk'),process.execPath,shell,appIconPath);
   }
   const baseUrl=await connectDaemon();
+  let connectedUrl = baseUrl;
   const initial=new URL(baseUrl);initial.hash=workspaceLaunchHash(process.argv) || '';
   const url=initial.href;
   daemonPort = Number(new URL(url).port || '80');
@@ -245,6 +273,14 @@ async function start(): Promise<void> {
   ipcMain.handle('desktop:restart-to-update', (event, ...args: unknown[]) => {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
     return restartToUpdate();
+  });
+  ipcMain.handle('desktop:get-login-item', (event, ...args: unknown[]) => {
+    if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
+    return getLoginItemEnabled(app);
+  });
+  ipcMain.handle('desktop:set-login-item', (event, enabled: unknown, ...extra: unknown[]) => {
+    if (extra.length !== 0 || typeof enabled !== 'boolean' || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender or login item state');
+    return setLoginItemEnabled(enabled, app, process.execPath);
   });
   ipcMain.handle('desktop:choose-workspace', async (event, ...args: unknown[]) => {
     if (args.length !== 0 || event.sender !== current.webContents || event.senderFrame !== current.webContents.mainFrame || !isDaemonNavigation(event.senderFrame.url, daemonPort)) throw new Error('Invalid IPC sender');
@@ -322,7 +358,6 @@ async function start(): Promise<void> {
   if (!tray) {
     void dialog.showMessageBox(current, { type: 'info', message: 'System tray unavailable', detail: 'Keep this window open to use Gnomcode. Closing it quits the desktop shell; the daemon keeps running.' });
   }
-  let connectedUrl = baseUrl;
   let checking = false;
   const checkDaemon = async (): Promise<void> => {
     if (checking) return;

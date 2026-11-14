@@ -696,15 +696,17 @@ pub fn read_daemon_info() -> Option<DaemonInfo> {
 pub struct DaemonLock {
     _file: File,
     info_path: PathBuf,
+    published: bool,
 }
 
 impl DaemonLock {
-    /// Attempts to acquire an exclusive lock on `~/.gnomcode/daemon.lock`
-    /// and persists `daemon.json` with the generated bearer token.
+    /// Acquires an exclusive lock on `~/.gnomcode/daemon.lock` without yet
+    /// writing `daemon.json`, so callers can open SQLite and bind the TCP
+    /// listener before advertising the port/token via [`Self::publish`].
     ///
     /// # Errors
     /// Returns [`Error::AlreadyRunning`] if another process holds the lock.
-    pub fn acquire(port: u16) -> Result<(Self, DaemonInfo), Error> {
+    pub fn hold(port: u16) -> Result<(Self, DaemonInfo), Error> {
         let home = gnomcode_home();
         fs::create_dir_all(&home)?;
 
@@ -724,23 +726,45 @@ impl DaemonLock {
             started_at: Utc::now().to_rfc3339(),
         };
 
-        let json_bytes = serde_json::to_vec_pretty(&info).map_err(std::io::Error::other)?;
-        gnomcode_platform::write_private_file(&info_path, &json_bytes)
-            .map_err(|error| std::io::Error::other(error.to_string()))?;
-
         Ok((
             Self {
                 _file: file,
                 info_path,
+                published: false,
             },
             info,
         ))
+    }
+
+    /// Writes `daemon.json` so local clients can connect once the listener is bound.
+    ///
+    /// # Errors
+    /// Returns an I/O error if serializing or securing `daemon.json` fails.
+    pub fn publish(&mut self, info: &DaemonInfo) -> Result<(), Error> {
+        let json_bytes = serde_json::to_vec_pretty(info).map_err(std::io::Error::other)?;
+        gnomcode_platform::write_private_file(&self.info_path, &json_bytes)
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
+        self.published = true;
+        Ok(())
+    }
+
+    /// Attempts to acquire an exclusive lock on `~/.gnomcode/daemon.lock`
+    /// and persists `daemon.json` with the generated bearer token.
+    ///
+    /// # Errors
+    /// Returns [`Error::AlreadyRunning`] if another process holds the lock.
+    pub fn acquire(port: u16) -> Result<(Self, DaemonInfo), Error> {
+        let (mut lock, info) = Self::hold(port)?;
+        lock.publish(&info)?;
+        Ok((lock, info))
     }
 }
 
 impl Drop for DaemonLock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.info_path);
+        if self.published {
+            let _ = fs::remove_file(&self.info_path);
+        }
         // Keep the inode stable so another process cannot lock a replacement file.
     }
 }

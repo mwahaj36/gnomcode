@@ -1120,12 +1120,29 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt as _;
-            let output = std::process::Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:GNOMCODE_PRIVATE_FILE,$acl)"])
-                .env("GNOMCODE_PRIVATE_FILE", &pending)
-                .creation_flags(0x0800_0000).output()?;
-            if !output.status.success() {
-                return Err(io::Error::other("Cannot restrict credential file access"));
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let account = match (env::var("USERDOMAIN"), env::var("USERNAME")) {
+                (Ok(domain), Ok(user)) if !domain.is_empty() && !user.is_empty() => {
+                    format!(r"{domain}\{user}:(F)")
+                }
+                (_, Ok(user)) if !user.is_empty() => format!("{user}:(F)"),
+                _ => String::new(),
+            };
+            let fast_ok = !account.is_empty()
+                && std::process::Command::new("icacls.exe")
+                    .arg(&pending)
+                    .args(["/inheritance:r", "/grant:r", &account, "/Q"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+                    .is_ok_and(|out| out.status.success());
+            if !fast_ok {
+                let output = std::process::Command::new("powershell.exe")
+                    .args(["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; $acl=New-Object System.Security.AccessControl.FileSecurity; $sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid,'FullControl','Allow'))); [IO.File]::SetAccessControl($env:GNOMCODE_PRIVATE_FILE,$acl)"])
+                    .env("GNOMCODE_PRIVATE_FILE", &pending)
+                    .creation_flags(CREATE_NO_WINDOW).output()?;
+                if !output.status.success() {
+                    return Err(io::Error::other("Cannot restrict credential file access"));
+                }
             }
         }
         file.write_all(bytes)?;
@@ -1139,30 +1156,80 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     result.map_err(Error::from)
 }
 
+#[cfg(target_os = "windows")]
+mod disk_free {
+    #![allow(unsafe_code)]
+
+    use std::os::windows::ffi::OsStrExt as _;
+    use std::path::Path;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetDiskFreeSpaceExW(
+            directory_name: *const u16,
+            free_bytes_available_to_caller: *mut u64,
+            total_number_of_bytes: *mut u64,
+            total_number_of_free_bytes: *mut u64,
+        ) -> i32;
+    }
+
+    pub(super) fn available_bytes(existing: &Path) -> Option<u64> {
+        let wide: Vec<u16> = existing
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut available = 0u64;
+        // SAFETY: `wide` is NUL-terminated UTF-16 for an existing path and `available` is a valid out-pointer.
+        let ok = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut available,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        (ok != 0).then_some(available)
+    }
+}
+
+#[cfg(unix)]
+mod disk_free {
+    #![allow(unsafe_code)]
+
+    use std::ffi::CString;
+    use std::mem::MaybeUninit;
+    use std::os::unix::ffi::OsStrExt as _;
+    use std::path::Path;
+
+    pub(super) fn available_bytes(existing: &Path) -> Option<u64> {
+        let c_path = CString::new(existing.as_os_str().as_bytes()).ok()?;
+        let mut stats = MaybeUninit::<libc::statvfs>::uninit();
+        // SAFETY: `c_path` is a NUL-terminated path and `stats` is valid uninitialized `statvfs` storage.
+        let rc = unsafe { libc::statvfs(c_path.as_ptr(), stats.as_mut_ptr()) };
+        if rc != 0 {
+            return None;
+        }
+        // SAFETY: `statvfs` returned 0, so `stats` is initialized.
+        let stats = unsafe { stats.assume_init() };
+        let unit = if stats.f_frsize > 0 {
+            stats.f_frsize
+        } else {
+            stats.f_bsize
+        };
+        u64::try_from(stats.f_bavail)
+            .ok()
+            .zip(u64::try_from(unit).ok())
+            .and_then(|(blocks, size)| blocks.checked_mul(size))
+    }
+}
+
 /// Returns available free bytes on the filesystem containing `path` (or its nearest existing ancestor).
 #[must_use]
 pub fn disk_free_bytes(path: &Path) -> Option<u64> {
+    // Query only the target volume directly; enumerating all volumes hangs on virtual/cloud mounts.
     let existing = path.ancestors().find(|candidate| candidate.exists())?;
-    let canonical = fs::canonicalize(existing).ok()?;
-    let target = {
-        #[cfg(windows)]
-        {
-            let text = canonical.to_string_lossy();
-            text.strip_prefix(r"\\?\")
-                .map_or_else(|| canonical.clone(), PathBuf::from)
-        }
-        #[cfg(not(windows))]
-        {
-            canonical
-        }
-    };
-    let disks = sysinfo::Disks::new_with_refreshed_list();
-    disks
-        .list()
-        .iter()
-        .filter(|disk| target.starts_with(disk.mount_point()))
-        .max_by_key(|disk| disk.mount_point().as_os_str().len())
-        .map(sysinfo::Disk::available_space)
+    disk_free::available_bytes(existing)
 }
 
 /// Opens an OS-held exclusive file lock, released when the returned file closes.

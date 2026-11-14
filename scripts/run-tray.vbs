@@ -1,6 +1,7 @@
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+WshShell.CurrentDirectory = scriptDir
 
 desktop = fso.BuildPath(scriptDir, "desktop\gnomcode-desktop.exe")
 If fso.FileExists(desktop) Then

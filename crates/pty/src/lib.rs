@@ -1193,6 +1193,13 @@ async fn launch_session_with_resume(
 pub async fn stop_session(session_id: &str) -> Result<(), Error> {
     let record = load_session_record(session_id)?;
     send_stop(&record).await?;
+    remove_session_record(session_id);
+    for _ in 0..40 {
+        if !is_pid_alive(record.child_pid) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
     Ok(())
 }
 
