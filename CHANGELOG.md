@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Relicense Gnomcode under the Apache License 2.0: free and open source with no paid tier, Remote included. Remove the closed-source string obfuscation, the Pro/Remote license gate and the EULA; add CONTRIBUTING (DCO), TRADEMARKS, CODE_OF_CONDUCT.
+- Route the Remote relay and Supabase defaults through the single branding constant; swap the personal email contact for GitHub Issues.
+- Let the quota-triggered context relay hand off to Antigravity, not just Claude Code and Codex.
 - Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
 
 ## 0.9.4 — 2026-11-12
@@ -132,7 +135,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Sem
 
 ### Added
 - Initial Rust Cargo workspace (`gnomcode-core`, `gnomcode-adapters`, `gnomcode-store`, `gnomcode-platform`, `gnomcode-ingest`, `gnomcode-daemon`, `gnomcode` CLI).
-- Single source of truth specification (`docs/SPEC.md`), engineering rules (`AGENTS.md`), and Architecture Decision Records (`docs/adr/0001`–`0003`).
+- Single source of truth specification (`docs/SPEC.md`), and engineering rules (`AGENTS.md`).
 - Workspace engineering skills (`.agents/skills/`): `ponytail`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `rust-best-practices`, `tauri-v2`, `supabase-postgres-best-practices`, `rust-quality-gate`, `add-agent-adapter`, `cross-platform-review`, `cut-release`.
 - Binary and UI anti-reverse-engineering hardening (`Cargo.toml` release profile, `.cargo/config.toml` path remapping).
 - GitHub Actions CI pipeline across Linux, Windows, and macOS (`.github/workflows/ci.yml`).
