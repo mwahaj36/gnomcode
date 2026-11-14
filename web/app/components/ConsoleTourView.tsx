@@ -29,7 +29,7 @@ const sampleHeatmap: ActivityHeatmap = {
   to: day(0),
   first_recorded: day(364),
   days: heatDays,
-  stats: { total_tokens: 18_400_000, active_days: 214, current_streak: 9, longest_streak: 31, busiest: null },
+  stats: { total_tokens: 18_400_000, active_days: 214, current_streak: 9, longest_streak: 31, busiest: { date: day(23), total_tokens: 412_000 } },
 };
 
 const sampleProviders: ProviderOverview[] = [
@@ -81,14 +81,14 @@ function Html({ html, className }: { html: string; className?: string }) {
   return <div className={className} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-/** The console Home: full-width Limits, then Activity and Sessions (2fr) beside Today (1fr). */
-export function TourHome({ compact = false }: { compact?: boolean }) {
+/** The console Home: full-width Limits, then Activity (with the year highlights) and Sessions (2fr) beside Today (1fr). */
+export function TourHome({ compact = false, sessions = true }: { compact?: boolean; sessions?: boolean }) {
   return <div className="sp-home-react sp-tour-home">
     <Html html={renderProviderCards(sampleProviders, { cost: false })} />
     <div className="sp-home-grid">
-      {!compact && <Html className="sp-tour-activity" html={renderHeatmap(sampleHeatmap, { weeks: 53, stats: false, legend: true, months: true })} />}
+      {!compact && <Html className="sp-tour-activity" html={renderHeatmap(sampleHeatmap, { weeks: 53, stats: true, legend: true, months: true })} />}
       <Html className="sp-tour-today" html={renderTodayTiles({ report: today, activeCount: 2 })} />
-      <Html className="sp-tour-sessions" html={renderHomeSessions(sampleSessions())} />
+      {sessions && <Html className="sp-tour-sessions" html={renderHomeSessions(sampleSessions())} />}
     </div>
   </div>;
 }
@@ -97,11 +97,34 @@ export function ConsoleTourView({ kind }: { kind: string }) {
   const root = useRef<HTMLDivElement>(null);
   // Like the console, the activity grid opens on the most recent weeks.
   useEffect(() => { root.current?.querySelectorAll<HTMLElement>(".sp-heatmap-scroll").forEach(grid => { grid.scrollLeft = grid.scrollWidth; }); }, [kind]);
+  // On wide screens the tabs and the whole panel fit the window height: scale the view down (never up)
+  // so no tab needs a vertical scroll.
+  useEffect(() => {
+    const element = root.current;
+    const panel = element?.closest<HTMLElement>(".sp-tour-panel");
+    const tabs = panel?.parentElement?.querySelector<HTMLElement>(".sp-tour-tabs");
+    if (!element || !panel) return;
+    const fit = () => {
+      if (window.innerWidth < 900) { element.style.zoom = ""; return; }
+      const current = Number(element.style.zoom) || 1;
+      const view = element.getBoundingClientRect().height / current;
+      const chrome = panel.getBoundingClientRect().height - element.getBoundingClientRect().height + (tabs?.offsetHeight ?? 0);
+      const available = window.innerHeight - 96 - chrome;
+      const scale = Math.max(0.55, Math.min(1, available / view));
+      const next = String(Math.floor(scale * 100) / 100);
+      if (element.style.zoom !== next) element.style.zoom = next;
+    };
+    fit();
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(panel);
+    window.addEventListener("resize", fit);
+    return () => { observer.disconnect(); window.removeEventListener("resize", fit); };
+  }, [kind]);
   return <div ref={root}><TourView kind={kind} /></div>;
 }
 
 function TourView({ kind }: { kind: string }) {
-  if (kind === "overview") return <TourHome />;
+  if (kind === "overview") return <TourHome sessions={false} />;
   if (kind === "sessions") return <Html html={openFirst(renderHomeSessions(sampleSessions()), "sp-subagents")} />;
   if (kind === "usage") return <div className="sp-home-react">
     <Html html={renderPeriodTiles(week)} />
