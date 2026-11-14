@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-14 WSL support: ADR and SPEC](2026-11-14-wsl-support-adr.md)
 - [2026-11-14 Watch agent roots created after daemon start](2026-11-14-watch-late-roots.md)
 - [2026-11-14 Wire ingest watcher into the daemon (D3)](2026-11-14-wire-ingest-watcher.md)
 - [2026-11-14 Handoff fold: Worker A](2026-11-14-handoff-worker-a.md)
