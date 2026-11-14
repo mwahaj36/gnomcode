@@ -1205,8 +1205,8 @@ export function SettingsView() {
         </div>
       </section>
 
-      <details className="profile-disclosure sp-settings-section">
-        <summary>Pricing</summary>
+      <section id="settings-pricing" className="sp-settings-section" hidden={!shown('settings-pricing')}>
+        <h2>Pricing and subscription costs</h2>
         <div className="settings-grid">
           <div className="card">
             <div className="section-title sp-title-gap">Local profile and subscriptions</div>
@@ -1348,97 +1348,7 @@ export function SettingsView() {
             </div>
           </div>
         </div>
-      </details>
-
-      <details className="profile-disclosure">
-        <summary>Offline license</summary>
-        <div className="card">
-          <div className="card-title">Legacy Offline License</div>
-          <div className="sp-license-tier">
-            <span className="sp-field-note">Active Tier:</span>
-            <span className="badge sp-tier-badge">{licenseTier}</span>
-          </div>
-          <div className="sp-license-details">{licenseDetails}</div>
-          {showLicenseEntry ? (
-            <div className="sp-license-actions">
-              <input
-                type="text"
-                className="sp-license-input"
-                placeholder="Paste your signed Remote license"
-                value={licenseKey}
-                onChange={(event) => setLicenseKey(event.target.value)}
-              />
-              <button
-                type="button"
-                className="btn-control"
-                onClick={() => {
-                  const key = licenseKey.trim();
-                  if (!key) return;
-                  void fetchLocalMutation('/api/v1/license', {
-                    method: 'POST',
-                    body: { license_key: key },
-                  })
-                    .then(() => {
-                      setLicenseFeedback('License activated successfully!');
-                      setLicenseKey('');
-                      return loadProData();
-                    })
-                    .catch(() => setLicenseFeedback('Activation failed. Invalid or expired signature.'));
-                }}
-              >
-                Activate license
-              </button>
-            </div>
-          ) : null}
-          {licensed ? (
-            <div className="sp-license-actions">
-              {!showLicenseEntry ? (
-                <button
-                  type="button"
-                  className="btn-control"
-                  onClick={() => setShowLicenseEntry(true)}
-                >
-                  Replace license
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="btn-control"
-                onClick={() => setConfirmRemoveLicense(true)}
-              >
-                Remove license
-              </button>
-            </div>
-          ) : null}
-          {confirmRemoveLicense ? (
-            <div className="sp-confirm-inline">
-              <p>Remove the saved offline license? Local features remain free.</p>
-              <div className="dialog-actions">
-                <button
-                  type="button"
-                  className="btn-control"
-                  onClick={() => setConfirmRemoveLicense(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => {
-                    setConfirmRemoveLicense(false);
-                    void fetchLocalMutation('/api/v1/license', { method: 'DELETE' }).then(() =>
-                      loadProData(),
-                    );
-                  }}
-                >
-                  Remove license
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {licenseFeedback ? <div className="sp-license-feedback">{licenseFeedback}</div> : null}
-        </div>
-      </details>
+      </section>
 
       <section id="settings-privacy" className="profile-data sp-settings-section" hidden={!shown('settings-privacy')}>
         <h2>Privacy and data</h2>

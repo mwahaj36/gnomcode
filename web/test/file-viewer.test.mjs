@@ -85,3 +85,21 @@ test('Remote has one composer toolbar, durable drafts, queue_if_busy, and onboar
   const setup = read('../../scripts/Setup.cs');
   assert.match(setup, /ClearGnomcodeOwnedCredentialsAndUiState/);
 });
+
+test('UI overhaul fixes Antigravity mark, Home full-width sessions, Settings isolation, and mobile Remote nav (#328 #322 #330 #331 #323)', async () => {
+  const { PROVIDER_LOGOS } = await import('../lib/provider-logos.js');
+  assert.ok(PROVIDER_LOGOS.antigravity.startsWith('M21.751'), 'Antigravity should use its own mark');
+
+  const css = read('../app/gnomcode-console.css');
+  assert.match(css, /#home-sessions\{grid-column:1 \/ -1/);
+  assert.match(css, /\.sp-heatmap-legend \.sp-heat/);
+  assert.match(css, /@container \(max-width: 600px\)/);
+  assert.match(css, /\.sp-workspace-modal/);
+
+  const globals = read('../app/globals.css');
+  assert.match(globals, /:not\(\[hidden\]\) > \.sp-remote:is\(\.is-paired,\.is-reconnecting\)/);
+
+  const settings = read('../local-console/SettingsView.tsx');
+  assert.match(settings, /id="settings-pricing"[^>]*hidden=\{!shown\('settings-pricing'\)\}/);
+  assert.doesNotMatch(settings, /Offline license/);
+});
