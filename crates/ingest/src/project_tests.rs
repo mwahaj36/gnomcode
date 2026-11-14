@@ -250,3 +250,25 @@ fn a_remote_keyed_project_keeps_its_key_when_the_folder_is_gone() {
     )]);
     assert_eq!(counts, BTreeMap::from([("devsplain".to_owned(), 1)]));
 }
+
+#[test]
+fn wsl_logs_map_linux_folders_to_the_distro_share() {
+    use super::{map_wsl_projects, resolve_batch_projects};
+    use gnomcode_adapters::{FileCtx, SourceAdapter, codex::CodexAdapter};
+    let meta = serde_json::json!({"type":"session_meta","timestamp":"2026-11-02T00:00:00Z","payload":{"id":"w1","cwd":"/home/wahaj/proj"}});
+    let log = format!("{meta}\n");
+    let mut batch = CodexAdapter::new().parse(&FileCtx::default(), log.as_bytes());
+    map_wsl_projects(&mut batch, "Ubuntu-22.04");
+    let cwds = resolve_batch_projects(&mut batch);
+    let project = &batch.projects[0];
+    assert_eq!(project.name, "proj");
+    assert_eq!(
+        gnomcode_core::wsl::distro_of(&project.repo_root),
+        Some("Ubuntu-22.04")
+    );
+    assert_eq!(batch.sessions[0].project_id, project.id);
+    assert_eq!(cwds[0].1, r"\\wsl.localhost\Ubuntu-22.04\home\wahaj\proj");
+    // Same folder spelled through wsl$ is the same project key.
+    let other = Project::from_origin(None, r"\\wsl$\Ubuntu-22.04\home\wahaj\proj", None);
+    assert_eq!(other.canonical_key, project.canonical_key);
+}
