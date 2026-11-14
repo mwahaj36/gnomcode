@@ -245,3 +245,13 @@
 .sp-workflow-task .sp-chip{font-size:11px}
 .sp-workflow-message strong,.sp-handoff-agents strong,.sp-workflow-composer>span:last-child{display:flex;align-items:center;gap:6px}
 @media(max-width:600px){.sp-hero-console{grid-template-columns:minmax(0,1fr)}.sp-hero-side{display:none}}
+/* Wide windows: the tour copy sits beside the screen so each tab fits the window height without scrolling. */
+@media(min-width:1100px){
+ .sp-tour-panel{grid-template-columns:minmax(220px,3fr) minmax(0,9fr)}
+ .sp-tour-copy{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:32px 0 32px 32px}
+ .sp-tour-copy h3{margin-top:4px}
+ .sp-tour-copy>a{margin-top:8px}
+ .sp-tour-screen{margin:24px 24px 24px 32px}
+ .sp-tour-screen-body{padding:20px}
+}
+@media(min-width:1100px){.sp-tour-screen-body .sp-tour-home>div:first-child .sp-card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
