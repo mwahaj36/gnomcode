@@ -564,6 +564,8 @@ fn refresh_native_titles(db: &Database, roots: &[AgentRoot]) -> Result<(), Error
 #[cfg(test)]
 mod antigravity_tests;
 #[cfg(test)]
+mod antigravity_title_tests;
+#[cfg(test)]
 mod project_tests;
 
 #[cfg(test)]
