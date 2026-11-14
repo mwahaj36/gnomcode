@@ -62,6 +62,14 @@ public static class CheckInstallerOptions {
             Assert(!File.Exists(Path.Combine(files, "gnomcode.exe")), "Uninstall must remove shipped files");
             Assert(File.ReadAllText(Path.Combine(files, "user-notes.txt")) == "keep", "Uninstall must preserve unrelated files");
             Assert(File.Exists(Path.Combine(files, "workspace", "code.txt")), "Uninstall must preserve subdirectories");
+
+            string emptyLeftover = Path.Combine(Path.GetTempPath(), "gnomcode-installer-empty-" + Guid.NewGuid().ToString("N"));
+            try {
+                Directory.CreateDirectory(Path.Combine(emptyLeftover, "desktop", "resources", "bin"));
+                validate.Invoke(null, new object[] { emptyLeftover });
+            } finally {
+                if (Directory.Exists(emptyLeftover)) Directory.Delete(emptyLeftover, true);
+            }
         } finally { Directory.Delete(files, true); }
         string testKey = @"Software\GnomcodeInstallerTests\" + Guid.NewGuid().ToString("N");
         try {

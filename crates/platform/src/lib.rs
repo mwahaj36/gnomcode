@@ -134,11 +134,20 @@ pub fn stop_owned_process(pid: u32) -> Result<(), Error> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt as _;
+        let pid_arg = pid.to_string();
         let status = std::process::Command::new("taskkill")
-            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .args(["/F", "/T", "/PID", &pid_arg])
             .creation_flags(0x0800_0000)
             .status()?;
-        if status.success() {
+        if status.success() || !process_is_alive(pid) {
+            return Ok(());
+        }
+        // Fallback without `/T` in case a child process exited mid-tree-kill.
+        let direct = std::process::Command::new("taskkill")
+            .args(["/F", "/PID", &pid_arg])
+            .creation_flags(0x0800_0000)
+            .status()?;
+        if direct.success() || !process_is_alive(pid) {
             Ok(())
         } else {
             Err(io::Error::other("process termination failed").into())
@@ -897,6 +906,19 @@ mod tests {
         super::stop_owned_process(pid).expect("stop owned process group");
         let _ = child.wait();
         assert!(!super::process_is_alive(pid));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_stop_succeeds_for_already_exited_process() {
+        let mut child = std::process::Command::new("cmd.exe")
+            .args(["/c", "exit 0"])
+            .spawn()
+            .expect("spawn cmd");
+        let pid = child.id();
+        let _ = child.wait().expect("wait exited");
+        assert!(!super::process_is_alive(pid));
+        super::stop_owned_process(pid).expect("stopping already-exited process should succeed");
     }
     #[test]
     fn handoff_files_include_modified_and_untracked_paths() {
