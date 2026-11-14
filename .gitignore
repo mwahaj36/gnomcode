@@ -64,3 +64,6 @@ web/public/downloads/latest.json
 
 # Vercel CLI project link (local only).
 .vercel
+
+# Internal documentation, ADRs and session records (kept local, not published)
+/docs/

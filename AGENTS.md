@@ -6,7 +6,7 @@ Rules for any AI agent (or human) working in this repo. Read this first, every s
 
 Gnomcode is a free, open source (Apache-2.0) local-first runtime and orchestrator for AI coding agents on Windows, macOS and Linux. It launches supported official CLIs, stores redacted local history for continuity, compiles model handoffs and offers paired encrypted Remote alongside usage/quota reporting. 1.0 supports exactly Claude Code, Codex and Antigravity (ADR 0058); control capabilities vary. The Rust daemon owns product logic. See PRODUCT.md for the product brief and docs/LAUNCH_CHECKLIST.md for release gates.
 
-**Single source of truth: [`docs/SPEC.md`](docs/SPEC.md).** Before working on a feature, read the relevant SPEC section. If your change alters scope, architecture, the roadmap or deliverables, update SPEC.md **in the same change**. Never let code and SPEC drift apart.
+**Single source of truth: `docs/SPEC.md` (local only, not tracked in git; ignored via `.gitignore`).** Before working on a feature, read the relevant SPEC section. If your change alters scope, architecture, the roadmap or deliverables, update SPEC.md **in the same change**. Never let code and SPEC drift apart.
 
 Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/0000-template.md`](docs/adr/0000-template.md)) and get a row in SPEC §9.
 
@@ -37,7 +37,7 @@ Architectural decisions go in `docs/adr/NNNN-title.md` (template: [`docs/adr/000
 | `web/` | React dashboard (M2). |
 | `npm/` | npm shim and per-platform binary packages. |
 | `fixtures/` | Anonymized real agent logs, organized as `fixtures/<agent>/<version-or-date>/`. |
-| `docs/` | `SPEC.md`, `adr/`. |
+| `docs/` | Local, untracked: `SPEC.md`, `adr/`, `sessions/`. |
 
 **Dependency direction** (enforced in review): `core` ← `adapters`, `store`, `platform` ← `ingest` ← `daemon` ← `cli`. `core` depends on no internal crate. No cycles.
 
@@ -90,7 +90,7 @@ When Wahaj authorizes a product phase, keep working until that phase is complete
 
 - **Conventional Commits:** `feat(adapters): …`, `fix(ingest): …`, `docs(spec): …`, `chore(ci): …`. Scope = crate or area.
 - **Branch & PR workflow:** Never commit directly to `main`. Create a focused feature branch (`feat/...`, `fix/...`, `docs/...`), keep each commit small and atomic, verify locally with `.agents/skills/rust-quality-gate/scripts/check.ps1` (`check.sh` on Unix), and merge to `main` via a GitHub Pull Request (`gh pr create` + `gh pr merge`).
-- **Session records (`docs/sessions/`):** Create a separate dated Markdown file in every phase/PR with goals, outcomes, problems encountered, root-cause fixes, decisions and verification. Add it to [`docs/sessions/README.md`](docs/sessions/README.md). Keep `docs/SESSION_LOG.md` as a navigation link, not a growing log.
+- **Session records (`docs/sessions/`, local only, untracked):** Create a separate dated Markdown file in every phase/PR with goals, outcomes, problems encountered, root-cause fixes, decisions and verification. Add it to [`docs/sessions/README.md`](docs/sessions/README.md). Keep `docs/SESSION_LOG.md` as a navigation link, not a growing log.
 - Keep each change small and focused. When a roadmap item finishes, update its status in SPEC §5.
 - New agent support → the `add-agent-adapter` skill. Releases → the `cut-release` skill.
 - **Installed engineering skills (`.agents/skills/`):**
