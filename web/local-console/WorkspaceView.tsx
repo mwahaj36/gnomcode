@@ -1627,6 +1627,26 @@ export function WorkspaceView() {
     return () => mq.removeEventListener('change', syncSlot);
   }, []);
 
+  const usageTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (sidePanel) {
+        event.preventDefault();
+        setSidePanel(null);
+        toolsTriggerRef.current?.focus();
+      } else if (usagePopoverOpen) {
+        event.preventDefault();
+        setUsagePopoverOpen(false);
+        usageTriggerRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sidePanel, usagePopoverOpen]);
+
   const sidebarNode = (
     <aside id="ide-session-sidebar" className="ide-sidebar" aria-label="Session history">
         <div className="ide-sidebar-title">
@@ -2331,6 +2351,7 @@ export function WorkspaceView() {
               </div>
               <div className="sp-limits-popover-wrap">
                 <button
+                  ref={usageTriggerRef}
                   type="button"
                   className="sp-limits-popover-trigger"
                   aria-expanded={usagePopoverOpen}
@@ -2381,6 +2402,7 @@ export function WorkspaceView() {
               ) : null}
                 <div className="sp-header-panel-toggles" role="toolbar" aria-label="Conversation tools">
                   <button
+                    ref={toolsTriggerRef}
                     type="button"
                     className={`btn-control${sidePanel === 'files' ? ' is-active' : ''}`}
                     aria-expanded={sidePanel === 'files'}
@@ -2933,16 +2955,61 @@ export function WorkspaceView() {
                 </details>
               </div>
               {sidePanel ? (
-                <aside className="sp-workspace-side-panel" aria-label="Workspace tools panel">
-                  <SessionTools
-                    sessionId={activeSessionId}
-                    repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
-                    canInterrupt={canInterruptActive}
-                    panel={sidePanel}
-                    onPanelChange={setSidePanel}
-                    hideToolbar
-                  />
-                </aside>
+                <div
+                  className="sp-workspace-modal-backdrop"
+                  role="presentation"
+                  onClick={(event) => {
+                    if (event.target === event.currentTarget) {
+                      setSidePanel(null);
+                      toolsTriggerRef.current?.focus();
+                    }
+                  }}
+                >
+                  <div
+                    className="sp-workspace-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Workspace files, changes, and artifacts"
+                  >
+                    <div className="sp-workspace-modal-head">
+                      <div className="sp-header-panel-toggles" role="tablist" aria-label="Inspector views">
+                        {(['files', 'changes', 'artifacts'] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            role="tab"
+                            aria-selected={sidePanel === tab}
+                            className={`btn-control${sidePanel === tab ? ' is-active' : ''}`}
+                            onClick={() => setSidePanel(tab)}
+                          >
+                            {tab === 'files' ? 'Files' : tab === 'changes' ? 'Changes' : 'Artifacts'}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-control sp-workspace-modal-close"
+                        aria-label="Close workspace inspector"
+                        onClick={() => {
+                          setSidePanel(null);
+                          toolsTriggerRef.current?.focus();
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="sp-workspace-modal-body">
+                      <SessionTools
+                        sessionId={activeSessionId}
+                        repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
+                        canInterrupt={canInterruptActive}
+                        panel={sidePanel}
+                        onPanelChange={setSidePanel}
+                        hideToolbar
+                      />
+                    </div>
+                  </div>
+                </div>
               ) : null}
             </div>
 
