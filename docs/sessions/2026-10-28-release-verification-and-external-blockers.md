@@ -1,6 +1,0 @@
-## 2026-10-28 — release verification and external blockers
-
-- Rebuilt Windows x64 setup/zip and Linux x64/ARM64 archives from final shared-console sources. Linux ARM64 executes under QEMU; Linux x64 clippy and workspace tests pass. Windows Rust gate includes installed cargo-deny; Rust 1.87 workspace check and production Next build pass. Windows setup dark render inspected without installation.
-- Native GitHub CI run 40635697474 never started any job: account payments/spending limits blocked execution. Browser inventory still reports local browser use disabled after the user's enable attempt. Live desktop pairing renewal is rejected; the user chose to reconnect later.
-- Prepared v1.4.0 as a draft only. Merge/publication remain held because macOS artifacts and final visual parity cannot be verified. Existing distribution paths and user data stay compatible; no public repository or new domain was created.
-- Packaging now works with Ubuntu 22.04 Python 3.10 using the standard library. Regression checks cover architecture headers, executable launcher permissions, canonical app icons, bundled font notices and combined checksum preservation. Generated Python bytecode is ignored rather than committed.

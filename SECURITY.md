@@ -11,7 +11,7 @@ We aim to respond within 7 days.
 
 ## Security & Privacy Guarantees
 
-Gnomcode enforces strict architectural security invariants (`docs/SPEC.md` §3.1, §3.11):
+Gnomcode enforces strict architectural security invariants (see `AGENTS.md`):
 
 1. **Zero content persistence:** Prompts, source code, file contents, and raw tool outputs are never written to SQLite or sent over the network.
 2. **Loopback-only API:** The local HTTP/WebSocket server binds strictly to `127.0.0.1` (never `0.0.0.0`), requires a per-install bearer token (`0600` / user-only ACL), and validates `Host` and `Origin` headers against DNS-rebinding attacks.

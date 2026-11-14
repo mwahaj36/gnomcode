@@ -1,10 +1,10 @@
 # Contributing to Gnomcode
 
-Gnomcode is licensed under the Apache License 2.0. Read `AGENTS.md` and `docs/SPEC.md` first: they hold the invariants (no telemetry, fail open, loopback only, trust labels on every number, business logic in Rust).
+Gnomcode is licensed under the Apache License 2.0. Read `AGENTS.md` first: it holds the invariants (no telemetry, fail open, loopback only, trust labels on every number, business logic in Rust).
 
 ## Workflow
 
-1. Open an issue for anything beyond a small fix. Features must exist in `docs/SPEC.md` first.
+1. Open an issue for anything beyond a small fix.
 2. Branch from `main` (`feat/...`, `fix/...`, `docs/...`). Never commit to `main`.
 3. Keep commits small. Use Conventional Commits: `feat(adapters): ...`.
 4. Run the local gate before opening a pull request:
@@ -13,7 +13,6 @@ Gnomcode is licensed under the Apache License 2.0. Read `AGENTS.md` and `docs/SP
    - `cargo test --workspace`
    - `cargo deny check`
    - For `web/` and `apps/desktop/` changes: `npm ci`, typecheck, lint, test, build.
-5. Add a dated entry under `docs/sessions/` and link it in `docs/sessions/README.md`.
 
 ## Developer Certificate of Origin
 
