@@ -162,6 +162,11 @@ impl IngestWatcher {
         let mut desired: HashMap<PathBuf, RecursiveMode> = HashMap::new();
         let mut next = Shared::default();
         for (root, mode) in &self.roots {
+            // 9P shares deliver no reliable change events and an open watch would hold a
+            // handle on the distro; WSL roots rely on the back-off poll (ADR 0060).
+            if gnomcode_platform::wsl::is_wsl_path(root) {
+                continue;
+            }
             if root.is_dir() {
                 next.active.push(root.clone());
                 merge_mode(&mut desired, root.clone(), *mode);
@@ -410,5 +415,17 @@ mod tests {
             .await
             .expect("watcher should wake on file write");
         assert!(watcher.poll_if_needed(&mut db).expect("dirty").is_some());
+    }
+
+    #[test]
+    fn wsl_roots_are_polled_not_watched() {
+        // Skipped before any `is_dir` probe, so a stopped distro's share is never opened.
+        let root = PathBuf::from(r"\\wsl.localhost\NoSuchDistro\home\a\.claude\projects");
+        let mut watcher = IngestWatcher::with_paths(&[root], Duration::ZERO, Duration::ZERO);
+        assert!(!watcher.is_watching(), "9P roots get no OS watch");
+        assert_eq!(watcher.take_due(), Some(true));
+        watcher.record_scan(false);
+        // No events will ever arrive; the back-off poll still makes a scan due.
+        assert_eq!(watcher.take_due(), Some(false));
     }
 }

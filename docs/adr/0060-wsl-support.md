@@ -27,6 +27,6 @@ Approved by the owner on 2026-11-14.
 
 ## Alternatives considered
 
-- `wsl.exe -l -v` for discovery: can start the WSL service and its output is UTF-16; rejected for discovery, kept only for explicit launch.
+- `wsl.exe -l -v` as the only source: lists stopped distros too. Discovery reads the registry first and calls `wsl.exe -l --running -q` (which never starts a distro) only when a distro is registered, at most once a minute.
 - Running a Gnomcode daemon inside each distro: doubles installs and accounts; rejected.
 - Watching 9P with events only: misses changes silently; rejected.
