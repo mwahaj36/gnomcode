@@ -2311,3 +2311,6 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 /* Meter labels and footers wrap instead of clipping in narrow cards */
 .sp-meter-top,.sp-meter-bottom{flex-wrap:wrap;row-gap:2px}
 .sp-meter-top>*,.sp-meter-bottom>*{min-width:0;overflow-wrap:anywhere}
+/* Copy on red user bubbles: keep the bubble's foreground in every state; the label carries Copied or Copy failed */
+.sp-remote-chat .sp-chat-user .sp-chat-copy,.sp-remote-chat .sp-chat-user .sp-chat-copy[data-copy-state]{color:var(--sp-on-primary);opacity:1}
+.sp-remote-chat .sp-chat-user .sp-chat-copy:is(:hover,:focus-visible){background:rgb(0 0 0 / .16);border-color:transparent;color:var(--sp-on-primary)}
