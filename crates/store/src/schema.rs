@@ -327,6 +327,29 @@ impl Database {
                 COMMIT;"#
             ))?;
         }
+        let v16_exists: bool = self.conn.query_row(
+            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=16)"),
+            [],
+            |row| row.get(0),
+        )?;
+        if !v16_exists {
+            // Antigravity titles drifted to the latest prompt; restore the first user prompt.
+            self.conn.execute_batch(obfstr::obfstr!(
+                r#"BEGIN;
+                UPDATE session SET title = (
+                    SELECT substr(trim(CASE WHEN instr(t.c, char(10)) > 0
+                        THEN substr(t.c, 1, instr(t.c, char(10)) - 1) ELSE t.c END), 1, 80)
+                    FROM (SELECT ltrim(content, char(9,10,13,32)) AS c FROM chat_event
+                        WHERE session_id = session.id AND role = 'user'
+                          AND trim(content) <> '' AND content NOT LIKE '<%'
+                        ORDER BY turn_index LIMIT 1) t)
+                WHERE agent = 'antigravity' AND parent_session_id IS NULL
+                  AND EXISTS (SELECT 1 FROM chat_event e WHERE e.session_id = session.id
+                      AND e.role = 'user' AND trim(e.content) <> '' AND e.content NOT LIKE '<%');
+                INSERT INTO schema_migrations(version,applied_at) VALUES (16,datetime('now'));
+                COMMIT;"#
+            ))?;
+        }
         self.conn.execute_batch(obfstr::obfstr!(
             "CREATE TABLE IF NOT EXISTS desktop_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
         ))?;

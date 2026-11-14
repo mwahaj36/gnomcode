@@ -87,7 +87,7 @@ impl Database {
                     project_id = CASE WHEN (SELECT name FROM project WHERE id=session.project_id)='unknown' AND (SELECT name FROM project WHERE id=excluded.project_id)!='unknown' THEN excluded.project_id ELSE session.project_id END,
                     surface = CASE WHEN excluded.surface <> 'cli' THEN excluded.surface ELSE session.surface END,
                     model = coalesce(excluded.model, session.model),
-                    title = coalesce(excluded.title, session.title),
+                    title = CASE WHEN session.agent = 'antigravity' AND coalesce(session.title,'') NOT IN ('','Subagent') THEN session.title ELSE coalesce(excluded.title, session.title) END,
                     state = excluded.state,
                     pid = coalesce(excluded.pid, session.pid),
                     last_event_at = excluded.last_event_at
