@@ -3,6 +3,7 @@
 pub mod acp_approvals;
 pub mod codex_app_server;
 pub mod protocol_host;
+pub mod wsl;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -74,7 +75,8 @@ pub fn launch_command(
     repo: &Path,
     model: Option<&str>,
 ) -> Result<LaunchCommand, Error> {
-    if !repo.is_dir() {
+    // A WSL folder is checked by `wsl.exe --cd`; probing the share here could boot the distro.
+    if wsl::target(repo).is_none() && !repo.is_dir() {
         return Err(Error::WorkspaceNotFound(repo.display().to_string()));
     }
     let executable = match agent {
@@ -425,15 +427,23 @@ pub async fn run_pty_host_resuming(
                 Some(id) => resume_command(agent, repo, id)?,
                 None => launch_command(agent, repo, model)?,
             };
-            let (executable, mut arguments) =
-                gnomcode_platform::executables::agent_command(&launch.executable);
-            arguments.extend(launch.arguments);
-            (executable, arguments)
+            if let Some((distro, cwd)) = wsl::target(repo) {
+                let wrapped = wsl::wrap(&distro, &cwd, &launch)?;
+                (wrapped.executable, wrapped.arguments)
+            } else {
+                let (executable, mut arguments) =
+                    gnomcode_platform::executables::agent_command(&launch.executable);
+                arguments.extend(launch.arguments);
+                (executable, arguments)
+            }
         };
 
         let mut command = conpty_oxide::blocking::Command::new(cmd);
         command.args(&args);
-        command.current_dir(repo);
+        // `wsl.exe --cd` sets the Linux folder; a UNC working directory is not valid here.
+        if wsl::target(repo).is_none() {
+            command.current_dir(repo);
+        }
         if matches!(agent, "claude" | "claude-code") {
             for key in gnomcode_platform::executables::CLAUDE_PARENT_ENV_VARS {
                 command.env_remove(key);

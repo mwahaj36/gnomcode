@@ -712,9 +712,15 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             };
             let model = request.get("model").and_then(Value::as_str);
             let repo = Path::new(repo_path);
-            if !repo.is_dir() {
-                return json!({"type":"error","message":"Invalid workspace directory"});
-            }
+            let starting = match crate::wsl_launch::preflight(agent, repo).await {
+                Ok(starting) => starting,
+                Err(crate::wsl_launch::Refusal::BadFolder) => {
+                    return json!({"type":"error","message":"Invalid workspace directory"});
+                }
+                Err(crate::wsl_launch::Refusal::Missing(message)) => {
+                    return json!({"type":"error","message":message});
+                }
+            };
             let session_id = format!(
                 "{}-{}",
                 agent,
@@ -753,6 +759,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                         return json!({"type":"error","message":"Agent started but its conversation could not be saved. Check your laptop before retrying."});
                     }
                     let mut ack = json!({"type":"launch_ack","session_id":record.session_id,"agent":record.agent});
+                    crate::wsl_launch::annotate(&mut ack, repo, starting);
                     if let (Some(isolated), Some(fields)) = (&isolated, ack.as_object_mut())
                         && let Value::Object(extra) = crate::worktree_api::fields(isolated)
                     {

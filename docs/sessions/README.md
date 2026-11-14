@@ -1,5 +1,6 @@
 # Engineering sessions
 
+- [2026-11-14 WSL launch and resume](2026-11-14-wsl-launch.md)
 - [2026-11-14 WSL discovery and ingest roots](2026-11-14-wsl-platform-ingest.md)
 - [2026-11-14 WSL support: ADR and SPEC](2026-11-14-wsl-support-adr.md)
 - [2026-11-14 Watch agent roots created after daemon start](2026-11-14-watch-late-roots.md)
