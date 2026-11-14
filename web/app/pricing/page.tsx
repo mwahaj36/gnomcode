@@ -13,7 +13,7 @@ const tiers = [
   {
     name: "Remote", note: "PROTOTYPE", price: "Remote", cadence: "pricing not finalized",
     description: "Access your own sessions from your phone.",
-    features: ["End-to-end encrypted access", "Link and revoke devices", "View sessions, respond to requests and approve Claude Code prompts"],
+    features: ["End-to-end encrypted access", "Link and revoke devices", "View sessions, send prompts and answer approvals (Codex and Antigravity need opt-in protocol mode)"],
     action: "Explore Remote", href: "/docs/remote-access",
   },
 ];
