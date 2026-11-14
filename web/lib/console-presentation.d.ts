@@ -79,7 +79,7 @@ export function renderQuickActionsStrip(actions?: QuickAction[], options?: { dis
 export type GitStatusRow = { code: string; label: string; path: string };
 export type ChangesViewInput = { loading?: boolean; error?: string; repo?: string; status?: string; diff?: string; lossy?: boolean } | null | undefined;
 export function parseGitStatusLines(statusText?: string): GitStatusRow[];
-export function renderChangesView(data: ChangesViewInput): string;
+export function renderChangesView(data: ChangesViewInput, options?: { selected?: string }): string;
 export type RepoFileEntry = { name: string; path: string; kind: 'dir' | 'file'; size?: number };
 export type RepoFileListing = { loading?: boolean; error?: string; note?: string; path?: string; parent?: string | null; entries?: RepoFileEntry[]; truncated?: boolean } | null | undefined;
 export type FilePreviewKind = 'image' | 'svg' | 'pdf' | 'markdown' | 'json' | 'csv' | 'code' | 'text' | 'binary';
