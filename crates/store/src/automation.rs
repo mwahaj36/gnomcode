@@ -136,9 +136,7 @@ impl Database {
         let root = self.conversation_id(conversation)?;
         let redacted = gnomcode_core::redact::redact_chat_content(text);
         Ok(self.conn.execute(
-            obfstr::obfstr!(
-                "UPDATE scheduled_message SET text=?3 WHERE id=?1 AND conversation_id=?2 AND status='pending'"
-            ),
+            "UPDATE scheduled_message SET text=?3 WHERE id=?1 AND conversation_id=?2 AND status='pending'",
             params![id, root, redacted],
         )? == 1)
     }
@@ -155,9 +153,7 @@ impl Database {
         let root = self.conversation_id(conversation)?;
         self.conn
             .query_row(
-                obfstr::obfstr!(
-                    "SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE id=?1 AND conversation_id=?2"
-                ),
+                "SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE id=?1 AND conversation_id=?2",
                 params![id, root],
                 |r| {
                     Ok(ScheduledMessage {

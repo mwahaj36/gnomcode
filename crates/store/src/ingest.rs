@@ -250,9 +250,7 @@ impl Database {
         let pattern = format!("%{needle}%");
         self.conn
             .query_row(
-                obfstr::obfstr!(
-                    "SELECT file_path FROM source_file WHERE file_path LIKE ?1 ORDER BY last_ingested_at DESC LIMIT 1"
-                ),
+                "SELECT file_path FROM source_file WHERE file_path LIKE ?1 ORDER BY last_ingested_at DESC LIMIT 1",
                 params![pattern],
                 |row| row.get(0),
             )
