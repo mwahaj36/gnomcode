@@ -4,6 +4,7 @@
 pub mod executables;
 pub mod keepawake;
 pub mod workspaces;
+pub mod wsl;
 
 use gnomcode_core::AgentId;
 use std::env;
@@ -315,7 +316,7 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
         .join(obfstr::obfstr!("antigravity-cli"))
         .join("brain");
 
-    vec![
+    let mut roots = vec![
         AgentRoot {
             agent: AgentId::ClaudeCode,
             exists: claude_root.exists(),
@@ -346,7 +347,10 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
             exists: antigravity_cli_root.exists(),
             path: antigravity_cli_root,
         },
-    ]
+    ];
+    // Running WSL distros only (ADR 0060); stopped ones are never touched.
+    roots.extend(wsl::discover_wsl_roots());
+    wsl::dedupe_roots(roots)
 }
 
 /// Resolves user application configuration / roaming directory across operating systems.
