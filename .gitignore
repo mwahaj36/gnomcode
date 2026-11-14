@@ -66,4 +66,4 @@ web/public/downloads/latest.json
 .vercel
 
 # Internal documentation, ADRs and session records (kept local, not published)
-/docs/
+/localdocs/
