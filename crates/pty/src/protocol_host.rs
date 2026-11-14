@@ -7,7 +7,10 @@
 
 use crate::acp_approvals::{self, AcpApprovalOutcome};
 use crate::codex_app_server::{self, ApprovalOutcome};
-use crate::{Error, HostParts, PtyInput, Scrollback, launch_command, serve_host, valid_session_id};
+use crate::{
+    Error, HostParts, LaunchCommand, PtyInput, Scrollback, launch_command, serve_host,
+    valid_session_id,
+};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -174,6 +177,34 @@ fn kind_for(agent: &str) -> Result<Kind, Error> {
 /// Runs a protocol-mode host for a new Codex or Antigravity session.
 ///
 /// # Errors
+/// The protocol command for a WSL workspace: the same `wsl.exe` wrapper as the terminal
+/// launch (ADR 0060), with no working directory and no skip-permission flags.
+fn wsl_protocol_command(
+    repo: &Path,
+    name: &str,
+    subcommand: &str,
+) -> Result<Option<std::process::Command>, Error> {
+    let Some((distro, cwd)) = crate::wsl::target(repo) else {
+        return Ok(None);
+    };
+    let wrapped = crate::wsl::wrap(
+        &distro,
+        &cwd,
+        &LaunchCommand {
+            executable: name.to_owned(),
+            arguments: vec![subcommand.to_owned()],
+        },
+    )?;
+    let mut command = std::process::Command::new(wrapped.executable);
+    command.args(wrapped.arguments);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        command.creation_flags(0x0800_0000);
+    }
+    Ok(Some(command))
+}
+
 /// Returns an error if validation, process creation or host startup fails.
 pub async fn run_protocol_host(
     session_id: &str,
@@ -192,12 +223,16 @@ pub async fn run_protocol_host(
         Kind::Acp => ("agy", "acp"),
     };
     debug_assert_eq!(launch.executable, name);
-    let mut command = tokio::process::Command::from(
-        gnomcode_platform::executables::background_agent_command(name),
-    );
+    let mut command = if let Some(std_command) = wsl_protocol_command(repo, name, subcommand)? {
+        tokio::process::Command::from(std_command)
+    } else {
+        let mut command = tokio::process::Command::from(
+            gnomcode_platform::executables::background_agent_command(name),
+        );
+        command.arg(subcommand).current_dir(repo);
+        command
+    };
     command
-        .arg(subcommand)
-        .current_dir(repo)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -684,6 +719,40 @@ async fn answer_server_request<W: AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wsl_protocol_hosts_use_the_wsl_wrapper() {
+        let repo = Path::new(r"\\wsl.localhost\Ubuntu-22.04\home\a\p");
+        for (name, sub) in [("codex", "app-server"), ("agy", "acp")] {
+            let command = super::wsl_protocol_command(repo, name, sub)
+                .expect("valid")
+                .expect("wsl");
+            assert_eq!(command.get_program(), "wsl.exe");
+            let args: Vec<String> = command
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                args,
+                [
+                    "-d",
+                    "Ubuntu-22.04",
+                    "--cd",
+                    "/home/a/p",
+                    "--exec",
+                    name,
+                    sub
+                ]
+            );
+            assert!(!args.join(" ").contains("dangerously") && !args.join(" ").contains("yolo"));
+            assert!(command.get_current_dir().is_none());
+        }
+        assert!(
+            super::wsl_protocol_command(Path::new("relative"), "codex", "app-server")
+                .expect("ok")
+                .is_none()
+        );
+    }
+
     use super::*;
     use tokio::io::{AsyncBufReadExt, BufReader, duplex};
 

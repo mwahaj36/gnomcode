@@ -15,7 +15,7 @@ Approved by the owner on 2026-11-14.
 2. **Explicit launch may start a distro.** Launching a new session in a distro the user picked may start it; the UI shows `Starting <distro>...` until it answers.
 3. **Tagging and dedupe.** Sessions and sources carry their distro (`WSL: Ubuntu`). Project keys reuse the `wsl.localhost` normalization in `crates/core/src/project_path.rs`. A file reachable through two paths (`wsl.localhost` and `wsl$`) is read once. Account limits are per account: a Claude account used in Windows and in WSL is counted once.
 4. **Watching.** WSL roots (`\wsl.localhost\<distro>\home\<user>\.claude`, `.codex`, `.gemini/antigravity*`) fall back to the slow poll when 9P delivers no change events. Windows roots keep events. Idle CPU stays within the D3 budget. Files are never held open.
-5. **Launch and resume** run `wsl.exe -d <distro> --cd <linux path> -- <agent>` with `claude`, `codex` or `agy`. Skip-permission flags are never added (invariant 7). The daemon checks `command -v <agent>` first and gives an install hint when missing.
+5. **Launch and resume** run `wsl.exe -d <distro> --cd <linux path> --exec <agent>` (`--exec` passes arguments verbatim, without the default shell re-joining them) with `claude`, `codex` or `agy`. Skip-permission flags are never added (invariant 7). The daemon checks `command -v <agent>` first and gives an install hint when missing.
 6. **Hook.** The Claude hook inside WSL needs `gnomcode integrate claude` run in the distro. The console detects a missing hook and offers `Integrate in WSL` (the Windows binary via interop, or instructions). Sessions work without it (fail open).
 
 ## Consequences

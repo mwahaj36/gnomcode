@@ -79,6 +79,13 @@ export function wslBadge(session) {
 }
 
 export function shortPath(path) {
+  // A WSL share folder reads as `WSL: Ubuntu · ~/src` instead of share segments.
+  const distro = wslDistro(path);
+  if (distro) {
+    const inner = '/' + String(path).replace(/\\/g, '/').split('/').filter(Boolean).slice(2).join('/');
+    const rest = shortPath(inner);
+    return `WSL: ${distro}${rest ? ` · ${rest}` : ''}`;
+  }
   const parts = String(path ?? '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').split('/').filter(Boolean);
   if (parts.length < 2) return '';
   parts.pop();
@@ -602,7 +609,8 @@ export function renderProviderCard(p, { compact = false, cost = true } = {}) {
   const body = multiPool ? renderPoolGroup(windows) : `<div class="sp-windows">${windows.map(win => renderMeterRow(win, { detail: !compact })).join('')}</div>`;
   const issue = multiPool && p.source_issue ? `<p class="sp-provider-issue">${escape(p.source_issue)}</p>` : '';
   const spend = cost && !compact ? costLine(p) : '';
-  const source = p.source_label ? `${escape(p.source_label)}${Number.isFinite(Date.parse(p.updated_at)) ? ` · Seen ${escape(relativeActivity(p.updated_at))}` : ''}` : '';
+  const wslNote = Array.isArray(p.wsl_sources) && p.wsl_sources.length ? p.wsl_sources.map(label => `<span class="sp-badge sp-wsl-badge" title="Also reads this agent's logs from ${escape(label)}; limits count once per account">${escape(label)}</span>`).join('') : '';
+  const source = p.source_label ? `${wslNote}${escape(p.source_label)}${Number.isFinite(Date.parse(p.updated_at)) ? ` · Seen ${escape(relativeActivity(p.updated_at))}` : ''}` : '';
   const foot = !compact && (spend || source) ? `<footer class="sp-provider-foot"${p.source_label ? ` title="Limit source: ${escape(p.source_label)}"` : ''}>${spend}<span>${source}</span></footer>` : '';
   const slug = escape(p.provider);
   return `<details class="sp-card sp-provider-card${compact ? ' sp-provider-card--compact' : ''}" data-key="provider:${slug}" data-provider="${slug}"><summary>${providerMark(p)}<span class="sp-provider-sum"><span class="sp-provider-name">${escape(providerName(p))}${p.plan ? `<span class="sp-provider-plan">${escape(p.plan)}</span>` : ''}</span>${summaryLine(p, windows)}</span><span class="sp-sum-right"><span class="sp-strip" aria-hidden="true">${strip}</span>${chip(state)}</span>${CHEVRON}</summary><div class="sp-provider-body">${issue}${body}${foot}</div></details>`;
@@ -939,7 +947,7 @@ export function renderChangesView(data) {
   const badges = [
     '<span class="sp-chip sp-chip--neutral">Read-only</span>',
     data.lossy ? '<span class="sp-chip sp-chip--low" title="Non-UTF-8 bytes were replaced with U+FFFD by Rust">Lossy UTF-8 decoding</span>' : '',
-    data.repo ? `<span class="sp-changes-repo" title="${escape(data.repo)}">${escape(shortPath(data.repo))}</span>` : '',
+    data.repo ? `<span class="sp-changes-repo" title="${escape(data.repo)}">${escape(wslDistro(data.repo) ? middleTruncate(data.repo, 48) : shortPath(data.repo))}</span>` : '',
   ].filter(Boolean).join('');
   if (!files.length && !diffText.trim()) {
     return `<div class="sp-changes-meta">${badges}</div><p class="sp-provider-empty">Working tree clean: no modified or untracked files.</p>`;

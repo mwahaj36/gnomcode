@@ -27,6 +27,8 @@ export interface TraySession {
   id?: string;
   title?: string | null;
   project_name?: string;
+  /** Folder the session runs in; a `wsl.localhost` share marks a WSL session (ADR 0060). */
+  repo_path?: string;
   agent?: string;
   home_group?: string | null;
   last_event_at?: string;
@@ -218,7 +220,15 @@ function sessionLabel(session: TraySession, providers: TrayProvider[]): string {
   const agent = String(session.agent ?? '');
   const known = providers.find(provider => provider.provider === agent);
   const name = known?.display_name || AGENT_NAMES[agent] || agent;
-  return name ? `${title} ${MIDDLE_DOT} ${plain(name, 24)}` : title;
+  const distro = wslDistroOf(session.repo_path);
+  const place = distro ? ` ${MIDDLE_DOT} ${plain(`WSL: ${distro}`, 24)}` : '';
+  return name ? `${title} ${MIDDLE_DOT} ${plain(name, 24)}${place}` : `${title}${place}`;
+}
+
+/** Distro of a WSL share folder (wsl.localhost or wsl$), else ''. Formatting only. */
+export function wslDistroOf(path: string | undefined): string {
+  const match = /^[\\/]{2}(?:\?[\\/]UNC[\\/])?(?:wsl\.localhost|wsl\$)[\\/]+([^\\/]+)/i.exec(path ?? '');
+  return match ? match[1] : '';
 }
 
 const AGENT_NAMES: Record<string, string> = {

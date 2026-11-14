@@ -1,5 +1,5 @@
 //! WSL launch and resume commands (ADR 0060). A workspace spelled
-//! `\\wsl.localhost\<distro>\...` runs as `wsl.exe -d <distro> --cd <linux path> -- <agent>`.
+//! `\\wsl.localhost\<distro>\...` runs as `wsl.exe -d <distro> --cd <linux path> --exec <agent>`.
 //! Everything here is pure; skip-permission flags are never added.
 
 use crate::{Error, LaunchCommand};
@@ -32,7 +32,7 @@ pub fn wrap(distro: &str, linux_cwd: &str, inner: &LaunchCommand) -> Result<Laun
         distro.to_owned(),
         "--cd".to_owned(),
         linux_cwd.to_owned(),
-        "--".to_owned(),
+        "--exec".to_owned(),
         inner.executable.clone(),
     ];
     arguments.extend(inner.arguments.iter().cloned());
@@ -42,7 +42,7 @@ pub fn wrap(distro: &str, linux_cwd: &str, inner: &LaunchCommand) -> Result<Laun
     })
 }
 
-/// `wsl.exe -d <distro> -- sh -c 'command -v "$1"' sh <agent>`: the same non-login
+/// `wsl.exe -d <distro> --exec sh -c 'command -v "$1"' sh <agent>`: the same non-login
 /// environment the launch uses.
 ///
 /// # Errors
@@ -56,7 +56,7 @@ pub fn probe(distro: &str, executable: &str) -> Result<LaunchCommand, Error> {
         arguments: [
             "-d",
             distro,
-            "--",
+            "--exec",
             "sh",
             "-c",
             "command -v \"$1\"",
@@ -122,7 +122,7 @@ mod tests {
                 "Ubuntu-22.04",
                 "--cd",
                 "/home/a/proj",
-                "--",
+                "--exec",
                 "claude",
                 "--resume",
                 "abc"
