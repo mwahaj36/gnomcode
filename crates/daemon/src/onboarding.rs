@@ -461,14 +461,15 @@ async fn probe_cli(
         Some(_) if !reachable => return None,
         Some(distro) => {
             let probe = gnomcode_pty::wsl::probe(distro, exe).ok()?;
-            let out = tokio::time::timeout(
-                std::time::Duration::from_secs(4),
-                tokio::process::Command::new(&probe.executable)
-                    .args(&probe.arguments)
-                    .stdin(std::process::Stdio::null())
-                    .kill_on_drop(true)
-                    .output(),
-            )
+            let mut command = tokio::process::Command::new(&probe.executable);
+            command
+                .args(&probe.arguments)
+                .stdin(std::process::Stdio::null())
+                .kill_on_drop(true);
+            // The daemon has no console: without this flag Windows flashes a console window for wsl.exe.
+            #[cfg(windows)]
+            command.creation_flags(0x0800_0000);
+            let out = tokio::time::timeout(std::time::Duration::from_secs(4), command.output())
             .await
             .ok()?
             .ok()?;
