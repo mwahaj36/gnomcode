@@ -342,7 +342,7 @@ function homeRow(session, group) {
   const totalTok = Number.isFinite(session.total_tokens) ? session.total_tokens : (session.input_tokens ?? 0) + (session.output_tokens ?? 0);
   const subagentBadge = session.subagent_count > 0 ? `${session.subagent_count} subagent${session.subagent_count === 1 ? '' : 's'}` : '';
   const meta = [project, session.surface_label || agentLabel(session.agent), session.model && session.model !== 'Unspecified' ? session.model : '', subagentBadge].filter(Boolean).join(' · ');
-  const tokenBadge = totalTok > 0 ? `<span class="sp-session-tokens">${escape(tokens(totalTok))}</span>` : '';
+  const tokenBadge = `<span class="sp-session-tokens">${totalTok > 0 ? escape(tokens(totalTok)) : ''}</span>`;
   const context = fill === null ? '<span class="sp-session-context" aria-hidden="true"></span>' : `<span class="sp-session-context" title="Context ${fill}% full"><i style="--fill:${fill}%"></i></span>`;
   return `<button type="button" class="sp-session-row" data-action="open-home-session" data-arg="${escape(session.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(title)}</strong><span>${wslBadge(session)}${escape(meta)}</span></span>${tokenBadge}${context}<time class="sp-session-time" datetime="${escape(session.last_event_at || '')}" title="${escape(new Date(session.last_event_at).toLocaleString())}">${escape(shortAge(session.last_event_at))}</time>${CHEVRON_RIGHT}</button>`;
 }
