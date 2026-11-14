@@ -629,6 +629,22 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
         Some("models") => {
             json!({"type":"models","providers":crate::model_catalog::discover().await})
         }
+        // "Run in" picker on the phone (ADR 0060): registry plus running list, never boots.
+        Some("wsl_distros") => {
+            let distros = tokio::task::spawn_blocking(|| {
+                let running = gnomcode_platform::wsl::running_distros();
+                gnomcode_platform::wsl::registered_distros()
+                    .into_iter()
+                    .map(|name| {
+                        let up = running.iter().any(|r| r.eq_ignore_ascii_case(&name));
+                        json!({"name": name, "label": gnomcode_core::wsl::distro_label(&name), "running": up})
+                    })
+                    .collect::<Vec<Value>>()
+            })
+            .await
+            .unwrap_or_default();
+            json!({"type":"wsl_distros","distros":distros})
+        }
         Some("workspaces") => {
             let path = request
                 .get("path")

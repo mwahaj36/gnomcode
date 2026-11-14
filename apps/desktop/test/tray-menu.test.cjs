@@ -133,3 +133,12 @@ test('update available adds Settings item and ready update adds Restart to updat
   assert.ok(readyItem && restartItem);
   assert.deepEqual(restartItem.action, { kind: 'restart-to-update' });
 });
+
+test('WSL sessions name their distro in the tray label', () => {
+  const { wslDistroOf } = require('../dist/tray-menu');
+  assert.equal(wslDistroOf('\\\\wsl.localhost\\Ubuntu-22.04\\home\\a'), 'Ubuntu-22.04');
+  assert.equal(wslDistroOf('C:\\work'), '');
+  const wsl = { id: 'claude-code:w', title: 'proj', agent: 'claude-code', home_group: 'running', repo_path: '\\\\wsl.localhost\\Ubuntu-22.04\\home\\a\\proj' };
+  const labels = JSON.stringify(formatTrayMenu([], [wsl], NOW, OPTIONS));
+  assert.match(labels, /WSL: Ubuntu-22\.04/);
+});

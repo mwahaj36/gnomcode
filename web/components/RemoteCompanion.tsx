@@ -7,7 +7,7 @@ import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState } from '../lib/console-presentation';
+import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, middleTruncate, wslFolder } from '../lib/console-presentation';
 import { formatWorktreeBadge, renderWorktreeDiffMarkup, type WorktreeDiffData } from '../lib/worktree-presentation.mjs';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
@@ -18,7 +18,7 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -80,6 +80,9 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const modelDeadline=useRef(0);
   const [launchAgent, setLaunchAgent] = useState('claude');
   const [launchRepo, setLaunchRepo] = useState('');
+  // "Run in" (ADR 0060): '' is Windows, otherwise a WSL distro; the folder is then a Linux path.
+  const [runIn, setRunIn] = useState('');
+  const [wslDistros, setWslDistros] = useState<{name:string;label:string;running:boolean}[]>([]);
   const [launchModel, setLaunchModel] = useState('');
   const [launchWorktree, setLaunchWorktree] = useState(false);
   const [launchWorktreeBranch, setLaunchWorktreeBranch] = useState('');
@@ -240,6 +243,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     void loadModels();
     const timer=setInterval(()=>{if(modelRequest.current && Date.now()>=modelDeadline.current){modelRequest.current=false;setModelsLoading(false);setModelsError('The desktop did not return its model list. Refresh or update Gnomcode on your desktop.');}},500);
     return()=>clearInterval(timer);
+    // loadModels reads refs only; re-running on its identity would refetch on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[modelPanel,phase]);
 
   async function loadModels(){
@@ -528,7 +533,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     } else if(reply.type==='trusted' && reply.secret){const key=await rememberDevice(link,reply.secret,()=>epoch===connectionEpoch.current && !manualDisconnect.current);if(epoch!==connectionEpoch.current)return;proofKey.current=key;await beginPaired();}
     else if(reply.type==='resumed'){await beginPaired();}
     else if(reply.type==='resume_rejected'){manualDisconnect.current=true;proofKey.current=null;await forgetDevice(accountOwner.current,connectedDesktop.current);socket.current?.close();setPhase('ready');setError('Access was revoked or this browser credential is no longer recognized. Open Devices to reconnect through your account.');}
-    else if (reply.type === 'launch_ack') { launchPending.current=false;setLaunching(false);setNotice('Agent started. Send its first message below.');setNewSession(false); await requestSessions(); if (reply.session_id) selectSession(reply.session_id); }
+    else if (reply.type === 'wsl_distros') { setWslDistros(Array.isArray(reply.distros) ? reply.distros : []); }
+    else if (reply.type === 'launch_ack') { launchPending.current=false;setLaunching(false);setNotice(reply.starting ? `${reply.starting} Agent is starting.` : 'Agent started. Send its first message below.');setNewSession(false); await requestSessions(); if (reply.session_id) selectSession(reply.session_id); }
     else if (reply.type === 'prompt_ack') {
       const pending = pendingPrompt.current;
       if (pending && (!reply.session_id || reply.session_id === pending.session)) {
@@ -599,6 +605,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         else setFileListState({ error: msg });
         return;
       }
+      // Older desktops have no WSL picker; the form stays Windows-only.
+      if(reply.request_type==='wsl_distros'){setWslDistros([]);return;}
       if(reply.request_type==='artifacts' || (artifactsRequest.current && /Unsupported remote command/i.test(reply.message || ''))){
         artifactsRequest.current=false;setArtifactsLoading(false);
         setArtifactsError(/Unsupported remote command/i.test(reply.message || '') ? 'Artifacts view requires a newer Gnomcode desktop update.' : (reply.message || 'Could not load artifacts.'));
@@ -813,7 +821,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const readOnly=active?.hosted === false;
   const connected=phase==='paired';
   const workspace=connected || ((phase==='reconnecting'||phase==='unavailable') && sessions.length>0);
-  const startNew=()=>{setNewSession(true);setShowSessions(true);};
+  const startNew=()=>{setNewSession(true);setShowSessions(true);void send({type:'wsl_distros'}).catch(()=>setWslDistros([]));};
   const Heading = embedded ? 'h2' : 'h1';
   return <section ref={remoteRoot} className={`sp-remote ${embedded?'is-embedded':''} ${phase === 'paired' ? 'is-paired' : (phase==='reconnecting'||(phase==='unavailable'&&workspace))?'is-reconnecting':''}`} aria-label="Encrypted Remote conversation">
     <header className="remote-heading">
@@ -869,9 +877,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     {workspace && <div className={`remote-workspace ${showSessions ? 'show-sessions' : ''}`}>
       <aside className="remote-session-sidebar" id="remote-session-sidebar" aria-label="Conversations"><div className="remote-drawer-heading"><h2>Conversations</h2><button ref={sidebarClose} type="button" aria-label="Close conversations" onClick={()=>{setShowSessions(false);sidebarToggle.current?.focus();}}>Close</button></div>
       <details open={newSession} onToggle={event=>setNewSession(event.currentTarget.open)}><summary>New conversation</summary>
-      <form onSubmit={event => { event.preventDefault(); if(!connected || launchPending.current)return; launchPending.current=true;launchDeadline.current=Date.now()+15000;setLaunching(true);setNotice('Starting agent on your desktop...'); void send({ type:'launch', agent:launchAgent, repo_path:launchRepo.trim(), model:launchModel.trim() || undefined, worktree: launchWorktree || undefined, worktree_branch: launchWorktree && launchWorktreeBranch.trim() ? launchWorktreeBranch.trim() : undefined }).catch(() => {launchPending.current=false;setLaunching(false);setError('Agent could not be launched. Check the desktop connection.');}); }}>
+      <form onSubmit={event => { event.preventDefault(); if(!connected || launchPending.current)return; launchPending.current=true;launchDeadline.current=Date.now()+15000;setLaunching(true);setNotice('Starting agent on your desktop...'); void send({ type:'launch', agent:launchAgent, repo_path:runIn ? wslFolder(runIn, launchRepo) : launchRepo.trim(), model:launchModel.trim() || undefined, worktree: launchWorktree || undefined, worktree_branch: launchWorktree && launchWorktreeBranch.trim() ? launchWorktreeBranch.trim() : undefined }).catch(() => {launchPending.current=false;setLaunching(false);setError('Agent could not be launched. Check the desktop connection.');}); }}>
         <label htmlFor="remote-launch-agent">Agent</label><select id="remote-launch-agent" value={launchAgent} onChange={event => setLaunchAgent(event.target.value)}><option value="claude">Claude Code</option><option value="codex">OpenAI Codex</option><option value="antigravity">Antigravity CLI</option></select>
-        <label htmlFor="remote-launch-repo">Workspace directory on desktop</label><input id="remote-launch-repo" value={launchRepo} onChange={event => setLaunchRepo(event.target.value)} required />
+        {wslDistros.length>0 && <><label htmlFor="remote-launch-run-in">Run in</label><select id="remote-launch-run-in" value={runIn} onChange={event => {setRunIn(event.target.value);setLaunchRepo('');}}><option value="">Windows</option>{wslDistros.map(d => <option key={d.name} value={d.name}>{d.label}{d.running?'':' (starts on launch)'}</option>)}</select></>}
+        <label htmlFor="remote-launch-repo">{runIn ? `Linux folder in ${runIn}` : 'Workspace directory on desktop'}</label><input id="remote-launch-repo" value={launchRepo} placeholder={runIn ? '/home/you/project' : undefined} onChange={event => setLaunchRepo(event.target.value)} required />
+        {runIn && wslFolder(runIn, launchRepo) && <p className="sp-path-line"><code title={wslFolder(runIn, launchRepo)}>{middleTruncate(wslFolder(runIn, launchRepo), 40)}</code></p>}
         <button type="button" disabled={foldersLoading} onClick={() => void browseFolders()}>Browse desktop folders</button>
         {foldersLoading && <p role="status">Loading desktop folders...</p>}
         {folderBrowser && <dialog ref={folderDialog} className="remote-folder-modal" aria-labelledby="remote-folder-heading" onClose={()=>setFolderBrowser(null)}>

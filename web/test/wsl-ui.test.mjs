@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { middleTruncate, wslBadge, wslDistro, wslFolder } from '../lib/console-presentation.js';
+import { middleTruncate, renderProviderCards, shortPath, wslBadge, wslDistro, wslFolder } from '../lib/console-presentation.js';
 
 const BS = String.fromCharCode(92);
 const unc = [BS + BS + 'wsl.localhost', 'Ubuntu-22.04', 'home', 'a', 'proj'].join(BS);
@@ -27,4 +27,14 @@ test('middle truncation keeps both ends', () => {
 test('rows get a distro badge only for WSL sessions', () => {
   assert.match(wslBadge({ repo_path: unc }), /WSL: Ubuntu-22\.04/);
   assert.equal(wslBadge({ repo_path: 'C:' + BS + 'p' }), '');
+});
+
+test('short paths name the distro instead of share segments', () => {
+  assert.equal(shortPath(unc), 'WSL: Ubuntu-22.04 · ~');
+  assert.equal(shortPath('C:\\Users\\W\\Documents\\GitHub\\x'), '~/Documents/GitHub');
+});
+
+test('provider cards list WSL sources on the source line', () => {
+  const html = renderProviderCards([{ provider: 'claude-code', display_name: 'Claude Code', windows: [{ window: 'session', label: 'Session', used_pct: 40, remaining_pct: 60, basis: 'exact', state: 'ok' }], headline_window: 0, source_label: 'Status line', wsl_sources: ['WSL: Ubuntu-22.04'] }]);
+  assert.match(html, /sp-wsl-badge[^>]*>WSL: Ubuntu-22\.04/);
 });

@@ -1917,3 +1917,10 @@ body.sp-native-console #account-root :is(button,.btn-control,.btn-primary){min-h
 @media (max-width: 767px) {
   :is(.sp-native-console, .sp-console-app, .sp-remote) .sp-path-copy { min-height: 44px; }
 }
+:is(.sp-native-console, .sp-console-app, .sp-remote) .sp-wsl-hook {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
