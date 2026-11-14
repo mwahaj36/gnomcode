@@ -3,10 +3,12 @@
 use crate::{Error, ingest_all};
 use gnomcode_platform::{discover_agent_roots, gnomcode_home};
 use gnomcode_store::Database;
-use notify::{Event, RecursiveMode, Watcher};
+use notify::event::ModifyKind;
+use notify::{Event, EventKind, RecursiveMode, Watcher};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
@@ -50,93 +52,158 @@ impl IdleBackoff {
     }
 }
 
+/// Roots shared with the watcher callback so it can classify events.
+#[derive(Default)]
+struct Shared {
+    /// Roots that exist and are watched directly.
+    active: Vec<PathBuf>,
+    /// Roots that do not exist yet; their nearest existing ancestor is watched.
+    pending: Vec<PathBuf>,
+}
+
 /// File watcher + idle back-off coordinator for [`ingest_all`].
 pub struct IngestWatcher {
     dirty: Arc<AtomicBool>,
+    roots_changed: Arc<AtomicBool>,
     wakeup: Arc<Notify>,
     backoff: IdleBackoff,
     last_scan: Option<Instant>,
-    _watcher: Option<notify::RecommendedWatcher>,
+    roots: Vec<(PathBuf, RecursiveMode)>,
+    shared: Arc<Mutex<Shared>>,
+    watched: HashMap<PathBuf, RecursiveMode>,
+    watcher: Option<notify::RecommendedWatcher>,
 }
 
 impl IngestWatcher {
     /// Starts watching discovered agent log directories and `GNOMCODE_HOME`.
-    /// Falls back to periodic back-off scans if the OS file watcher cannot be created.
+    /// Missing roots are picked up when created; falls back to periodic back-off
+    /// scans if the OS file watcher cannot be created.
     #[must_use]
     pub fn new(base_interval: Duration, max_idle_interval: Duration) -> Self {
-        let mut paths: Vec<PathBuf> = discover_agent_roots()
+        let mut roots: Vec<(PathBuf, RecursiveMode)> = discover_agent_roots()
             .into_iter()
-            .filter(|r| r.exists)
-            .map(|r| r.path)
+            .map(|r| (r.path, RecursiveMode::Recursive))
             .collect();
         let home = gnomcode_home();
-        let mut watched: Vec<(PathBuf, RecursiveMode)> = paths
-            .drain(..)
-            .map(|p| (p, RecursiveMode::Recursive))
-            .collect();
         // Only top-level files (status-line limits) matter in the Gnomcode home; recursive
         // watching would pick up worktrees and our own SQLite writes.
         // `sessions/` holds launched PTY records the daemon binds to conversations.
-        let pty_sessions = home.join("sessions");
-        if pty_sessions.exists() {
-            watched.push((pty_sessions, RecursiveMode::NonRecursive));
-        }
-        if home.exists() {
-            watched.push((home, RecursiveMode::NonRecursive));
-        }
-        Self::watch(&watched, base_interval, max_idle_interval)
+        roots.push((home.join("sessions"), RecursiveMode::NonRecursive));
+        roots.push((home, RecursiveMode::NonRecursive));
+        Self::watch(roots, base_interval, max_idle_interval)
     }
 
-    /// Starts watching an explicit list of directories/files.
+    /// Starts watching an explicit list of directories (recursive). Missing ones are
+    /// watched through their nearest existing ancestor until they appear.
     #[must_use]
     pub fn with_paths(
         paths: &[PathBuf],
         base_interval: Duration,
         max_idle_interval: Duration,
     ) -> Self {
-        let watched: Vec<(PathBuf, RecursiveMode)> = paths
+        let roots = paths
             .iter()
             .map(|p| (p.clone(), RecursiveMode::Recursive))
             .collect();
-        Self::watch(&watched, base_interval, max_idle_interval)
+        Self::watch(roots, base_interval, max_idle_interval)
     }
 
     fn watch(
-        paths: &[(PathBuf, RecursiveMode)],
+        roots: Vec<(PathBuf, RecursiveMode)>,
         base_interval: Duration,
         max_idle_interval: Duration,
     ) -> Self {
         let dirty = Arc::new(AtomicBool::new(true));
+        let roots_changed = Arc::new(AtomicBool::new(false));
         let wakeup = Arc::new(Notify::new());
+        let shared = Arc::new(Mutex::new(Shared::default()));
         let dirty_cb = Arc::clone(&dirty);
+        let changed_cb = Arc::clone(&roots_changed);
         let wakeup_cb = Arc::clone(&wakeup);
+        let shared_cb = Arc::clone(&shared);
 
         let watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-            // Fail open: a watcher error marks dirty so the next tick rescans.
-            if res.as_ref().is_ok_and(is_own_db_write) {
-                return;
+            // Fail open: errors or a poisoned lock mark everything for a recheck.
+            let (data, layout) = match (&res, shared_cb.lock()) {
+                (Ok(event), Ok(roots)) => classify(event, &roots),
+                _ => (true, true),
+            };
+            if layout {
+                changed_cb.store(true, Ordering::Release);
             }
-            dirty_cb.store(true, Ordering::Release);
-            wakeup_cb.notify_one();
+            if data || layout {
+                dirty_cb.store(true, Ordering::Release);
+                wakeup_cb.notify_one();
+            }
         })
-        .ok()
-        .and_then(|mut w| {
-            let mut watching = 0;
-            for (path, mode) in paths {
-                if path.exists() && w.watch(path, *mode).is_ok() {
-                    watching += 1;
-                }
-            }
-            (watching > 0).then_some(w)
-        });
+        .ok();
 
-        Self {
+        let mut this = Self {
             dirty,
+            roots_changed,
             wakeup,
             backoff: IdleBackoff::new(base_interval, max_idle_interval),
             last_scan: None,
-            _watcher: watcher,
+            roots,
+            shared,
+            watched: HashMap::new(),
+            watcher,
+        };
+        this.refresh_watches();
+        this
+    }
+
+    /// Re-derives the watch set: existing roots directly, missing roots through their
+    /// nearest existing ancestor (non-recursive). Returns whether a missing root appeared.
+    fn refresh_watches(&mut self) -> bool {
+        let Some(w) = self.watcher.as_mut() else {
+            return false;
+        };
+        let mut desired: HashMap<PathBuf, RecursiveMode> = HashMap::new();
+        let mut next = Shared::default();
+        for (root, mode) in &self.roots {
+            if root.is_dir() {
+                next.active.push(root.clone());
+                merge_mode(&mut desired, root.clone(), *mode);
+                // A watch cannot report its own directory's deletion on every OS; the
+                // parent sees it, so delete-and-recreate is caught. Other parent
+                // entries are classified as unrelated and never wake ingestion.
+                if let Some(parent) = root.parent().filter(|p| p.is_dir()) {
+                    merge_mode(
+                        &mut desired,
+                        parent.to_path_buf(),
+                        RecursiveMode::NonRecursive,
+                    );
+                }
+            } else if let Some(ancestor) = root.ancestors().skip(1).find(|a| a.is_dir()) {
+                next.pending.push(root.clone());
+                merge_mode(
+                    &mut desired,
+                    ancestor.to_path_buf(),
+                    RecursiveMode::NonRecursive,
+                );
+            }
         }
+        let appeared = match self.shared.lock() {
+            Ok(mut current) => {
+                let appeared = next.active.iter().any(|r| current.pending.contains(r));
+                *current = next;
+                appeared
+            }
+            Err(_) => true,
+        };
+        // Re-add every watch so a deleted and recreated root gets a fresh OS handle and
+        // ancestor watches no longer needed are dropped.
+        for path in self.watched.keys() {
+            let _ = w.unwatch(path);
+        }
+        self.watched.clear();
+        for (path, mode) in desired {
+            if w.watch(&path, mode).is_ok() {
+                self.watched.insert(path, mode);
+            }
+        }
+        appeared
     }
 
     /// Marks the watcher dirty and wakes the loop immediately.
@@ -149,16 +216,21 @@ impl IngestWatcher {
     /// should fall back to plain polling.
     #[must_use]
     pub fn is_watching(&self) -> bool {
-        self._watcher.is_some()
+        self.watcher.is_some() && !self.watched.is_empty()
     }
 
-    /// Returns `Some(was_dirty)` when a scan is due (filesystem event or back-off
-    /// elapsed) and clears the dirty flag; `None` while idle.
+    /// Returns `Some(was_dirty)` when a scan is due (filesystem event, a root
+    /// appearing, or back-off elapsed) and clears the dirty flag; `None` while idle.
     pub fn take_due(&mut self) -> Option<bool> {
-        let was_dirty = self.dirty.swap(false, Ordering::AcqRel);
         let elapsed = self
             .last_scan
             .is_none_or(|t| t.elapsed() >= self.backoff.current());
+        // Root create/delete events and the slow fallback both recheck the roots.
+        let recheck = self.roots_changed.swap(false, Ordering::AcqRel) || elapsed;
+        if recheck && self.refresh_watches() {
+            self.dirty.store(true, Ordering::Release);
+        }
+        let was_dirty = self.dirty.swap(false, Ordering::AcqRel);
         (was_dirty || elapsed).then_some(was_dirty)
     }
 
@@ -203,6 +275,52 @@ impl IngestWatcher {
         self.record_scan(ingested > 0 || was_dirty);
         Ok(Some(ingested))
     }
+}
+
+fn merge_mode(map: &mut HashMap<PathBuf, RecursiveMode>, path: PathBuf, mode: RecursiveMode) {
+    let entry = map.entry(path).or_insert(mode);
+    if mode == RecursiveMode::Recursive {
+        *entry = mode;
+    }
+}
+
+/// Classifies an event as `(data, layout)`: `data` when it touches a watched root's
+/// contents, `layout` when it creates or removes a root or one of its ancestors.
+/// Unrelated churn in an ancestor (e.g. the home dir) is neither.
+fn classify(event: &Event, roots: &Shared) -> (bool, bool) {
+    if is_own_db_write(event) {
+        return (false, false);
+    }
+    // Parents report content changes of a root as `Modify` on the root itself;
+    // only creates, removes and renames change which roots exist.
+    let structural = matches!(
+        event.kind,
+        EventKind::Create(_)
+            | EventKind::Remove(_)
+            | EventKind::Modify(ModifyKind::Name(_))
+            | EventKind::Any
+            | EventKind::Other
+    );
+    let mut data = false;
+    let mut layout = false;
+    for path in &event.paths {
+        if structural
+            && roots
+                .active
+                .iter()
+                .chain(&roots.pending)
+                .any(|r| r.starts_with(path))
+        {
+            layout = true;
+        } else if roots
+            .active
+            .iter()
+            .any(|r| path.starts_with(r) && path != r)
+        {
+            data = true;
+        }
+    }
+    (data, layout)
 }
 
 /// SQLite files written by Gnomcode itself must not wake ingestion (feedback loop).
