@@ -274,7 +274,7 @@ const HOME_RECENT_MAX = 6;
 const CHEVRON_RIGHT = '<svg class="sp-session-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 const shortAge = value => { const date = new Date(value); if (!Number.isFinite(date.getTime())) return ''; const age = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)); return age < 60 ? 'now' : age < 3600 ? Math.floor(age / 60) + 'm' : age < 86400 ? Math.floor(age / 3600) + 'h' : Math.floor(age / 86400) + 'd'; };
 
-const SUBAGENT_ROWS_MAX = 10;
+const SUBAGENT_ROWS_MAX = 5;
 const subagentOpen = new Set();
 let subagentToggleBound = false;
 // Re-rendered lists replace their markup, so remember which subagent groups the user expanded.
@@ -303,8 +303,8 @@ export function renderSubagents(session, action = 'load-chat') {
     const meta = [state, child.model && child.model !== 'Unspecified' ? child.model : ''].filter(Boolean).join(' · ');
     return `<li><button type="button" class="sp-subagent-row" data-action="${action}" data-arg="${escape(child.id)}"><span class="sp-session-dot sp-session-dot--${group}" aria-hidden="true"></span><span class="sp-session-main"><strong>${escape(child.title && child.title.toLowerCase() !== 'unknown' ? child.title : 'Subagent')}</strong><span>${escape(meta)}</span></span><time class="sp-session-time" datetime="${escape(child.last_event_at || '')}">${escape(shortAge(child.last_event_at))}</time></button></li>`;
   }).join('');
-  const more = count > shown.length ? `<li class="sp-subagent-more">${count - shown.length} older not shown</li>` : '';
-  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${count} subagent${count === 1 ? '' : 's'}${live ? ` · ${live} active` : ''}</summary><ul>${rows}${more}</ul></details>`;
+  const more = count > shown.length ? `<li class="sp-subagent-more"><button type="button" class="sp-link sp-subagent-more-btn" data-action="open-all-chats">View ${count - shown.length} more in All chats &#8250;</button></li>` : '';
+  return `<details class="sp-subagents" data-key="${escape(key)}"${subagentOpen.has(key) ? ' open' : ''}><summary>${live ? `${live} running · ` : ''}${count} subagent${count === 1 ? '' : 's'}</summary><ul>${rows}${more}</ul></details>`;
 }
 
 function homeRow(session, group) {

@@ -59,7 +59,7 @@ test.describe('Workspace', () => {
   test('New opens the launcher with the agent, folder and model fields', async ({ page, openConsole }) => {
     await openConsole('#sessions');
     const root = page.locator('#local-workspace-root');
-    await page.getByRole('button', { name: 'New', exact: true }).click();
+    await page.locator('#ide-session-sidebar').getByRole('button', { name: 'New', exact: true }).click();
     await expect(root.getByRole('heading', { name: 'New agent session' })).toBeVisible();
     await expect(root.locator('.ide-launcher').getByLabel('Agent')).toBeVisible();
     await expect(root.getByLabel('Workspace directory')).toBeVisible();
@@ -79,6 +79,21 @@ test.describe('Workspace', () => {
     await expect(page.locator('body')).toHaveClass(/chat-list-collapsed/);
     await page.locator('#chat-list-toggle').click();
     await expect(page.locator('body')).not.toHaveClass(/chat-list-collapsed/);
+  });
+
+  test('All chats pane opens with filters and Usage popover opens from header limits', async ({ page, openConsole }) => {
+    await openConsole('#sessions');
+    await page.locator('#ide-session-sidebar').getByRole('button', { name: /All chats/ }).click();
+    const pane = page.locator('.sp-all-chats-pane');
+    await expect(pane).toBeVisible();
+    await expect(pane.getByLabel('Search all chats')).toBeVisible();
+    await expect(pane.getByLabel('Include subagents')).toBeVisible();
+    await pane.locator('.sp-all-chat-row').first().click();
+    await expect(pane).toBeHidden();
+    await page.locator('.sp-limits-popover-trigger').click();
+    await expect(page.locator('.sp-usage-popover')).toBeVisible();
+    await page.locator('.sp-usage-popover').getByRole('button', { name: /View Usage/ }).click();
+    await expect(page.locator('#console-title')).toHaveText('Usage');
   });
 });
 
