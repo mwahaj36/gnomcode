@@ -367,12 +367,12 @@ export function UsageView() {
         </header>
         <div ref={projectsRef}>Loading project usage...</div>
       </section>
-      <section className="sp-section sp-eval-report" aria-label="Handoff quality evals">
-        <header className="sp-section-head">
+      <details className="sp-section sp-eval-report" aria-label="Handoff quality evals">
+        <summary className="sp-section-head">
           <h2>Handoff quality evals</h2>
-        </header>
+        </summary>
         <div ref={evalsRef}>Loading handoff quality evals...</div>
-      </section>
+      </details>
     </div>
   );
 }

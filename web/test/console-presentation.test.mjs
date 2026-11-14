@@ -109,7 +109,7 @@ test('session rows name the product surface from Rust and fall back to the agent
   const row = { id: 'a', agent: 'antigravity', title: 'T', project_name: 'p', model: 'm', state: 'idle', home_group: 'recent', last_event_at: '2026-10-28T00:00:00Z' };
   assert.match(renderHomeSessions([{ ...row, surface_label: 'Antigravity IDE' }]), /p · Antigravity IDE · m/);
   assert.match(renderHomeSessions([row]), /p · Antigravity · m/);
-  assert.match(renderSessionList([{ ...row, agent: 'claude-code', surface_label: 'Claude desktop app' }]), /<span>Claude desktop app · /);
-  assert.match(renderSessionList([{ ...row, agent: 'claude-code' }]), /<span>claude-code · /);
+  assert.match(renderSessionList([{ ...row, agent: 'claude-code', surface_label: 'Claude desktop app' }]), /<span class="ide-session-meta">Claude desktop app · /);
+  assert.match(renderSessionList([{ ...row, agent: 'claude-code' }]), /<span class="ide-session-meta">claude-code · /);
   assert.doesNotMatch(renderSessionList([{ ...row, surface_label: '<img src=x>' }]), /<img/);
 });

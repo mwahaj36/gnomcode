@@ -24,7 +24,7 @@ test('home row shows a subagent count badge and an expandable nested list', () =
 
 test('workspace list nests subagents under the parent and opens them as chats', () => {
   const html = renderSessionList([parent({ subagent_count: 2 })], 'claude-code:p');
-  assert.match(html, /<\/button><details class="sp-subagents"/);
+  assert.match(html, /<\/div><details class="sp-subagents"/);
   assert.match(html, /data-action="load-chat" data-arg="claude-code:agent-b"/);
   assert.doesNotMatch(html, /more in All chats/);
 });
