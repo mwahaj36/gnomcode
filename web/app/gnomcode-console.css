@@ -1866,3 +1866,20 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
   #home-today .sp-tiles{grid-template-columns:minmax(0,1fr)}
 }
 .sp-session-tokens{font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;flex:none}
+
+/* ---- PR 5: Settings & Account single-column grouped cards + unified 44px mobile controls ---- */
+body.sp-native-console #view-settings,body.sp-native-console #view-auth{max-width:720px;margin-inline:auto;width:100%}
+body.sp-native-console #view-settings .sp-settings-root,body.sp-native-console #account-root{display:grid;gap:var(--sp-4)}
+body.sp-native-console #view-settings .sp-settings-root > section,
+body.sp-native-console #view-settings .sp-settings-root > .profile-disclosure,
+body.sp-native-console #account-root > section{background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:var(--sp-r-lg);padding:var(--sp-4);margin:0}
+body.sp-native-console #view-settings .sp-settings-root :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea),
+body.sp-native-console #account-root :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){min-height:40px;padding:8px var(--sp-3);border:1px solid var(--sp-border);border-radius:var(--sp-r-md);background:var(--sp-bg);color:var(--sp-text)}
+body.sp-native-console #view-settings .sp-settings-root :is(button,.btn-control,.btn-primary),
+body.sp-native-console #account-root :is(button,.btn-control,.btn-primary){min-height:40px;border-radius:var(--sp-r-md)}
+@media (max-width:767px){
+  body.sp-native-console #view-settings .sp-settings-root :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea,button,.btn-control,.btn-primary),
+  body.sp-native-console #account-root :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea,button,.btn-control,.btn-primary){min-height:44px;font-size:16px}
+  body.sp-native-console #view-settings .sp-settings-root label:has(input[type="checkbox"]),
+  body.sp-native-console #view-settings .sp-settings-root label:has(input[type="radio"]){min-height:44px;display:inline-flex;align-items:center;gap:var(--sp-2)}
+}

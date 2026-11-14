@@ -382,3 +382,18 @@ test.describe('Owner decision: brand-red activity heatmap', () => {
     });
   }
 });
+
+test('Settings form controls are at least 44px tall on a phone (owner decision)', async ({ page, openConsole }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openConsole('#settings');
+  await expect(page.locator('#console-title')).toHaveText('Settings');
+  const heights = await page
+    .locator('#view-settings .sp-settings-root :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, button)')
+    .evaluateAll((nodes) =>
+      nodes
+        .filter((node) => (node as HTMLElement).offsetParent !== null)
+        .map((node) => [node.tagName + (node.id ? `#${node.id}` : ''), node.getBoundingClientRect().height] as const),
+    );
+  expect(heights.length).toBeGreaterThan(0);
+  for (const [name, height] of heights) expect(height, name).toBeGreaterThanOrEqual(43.5);
+});
