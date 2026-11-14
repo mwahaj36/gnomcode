@@ -1851,3 +1851,18 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-usage-popover-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);margin-bottom:var(--sp-2)}
 .sp-usage-popover-body .sp-card-grid{grid-template-columns:minmax(0,1fr)}
 .sp-subagent-more-btn{padding:2px 0;min-height:28px;font-size:var(--sp-fs-meta)}
+
+/* ---- PR 4: Home 2fr/1fr desktop grid, mobile stack, session tokens ---- */
+.sp-home-react{display:grid;gap:var(--sp-6)}
+.sp-home-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-6);align-items:start}
+#home-activity{order:1;min-width:0}
+#home-today{order:2;min-width:0}
+#home-sessions{order:3;min-width:0}
+@media (min-width:1024px){
+  .sp-home-grid{grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}
+  #home-activity{grid-column:1;grid-row:1;order:0}
+  #home-sessions{grid-column:1;grid-row:2;order:0}
+  #home-today{grid-column:2;grid-row:1 / span 2;order:0}
+  #home-today .sp-tiles{grid-template-columns:minmax(0,1fr)}
+}
+.sp-session-tokens{font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;flex:none}
