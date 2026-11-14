@@ -38,6 +38,8 @@ export function updateHomeSessions(element: HTMLElement, sessions: unknown): voi
 export function renderTodayTiles(data?: { report?: unknown; activeCount?: number | null }): string;
 export function updateTodayTiles(element: HTMLElement, data?: { report?: unknown; activeCount?: number | null }): void;
 export function renderOngoing(sessions: unknown): string;
+export const SUBAGENT_PREF_KEY: string;
+export function subagentsIncluded(): boolean;
 export function renderSubagents(session: unknown, action?: string): string;
 
 export function updateQuota(element: HTMLElement, pools: unknown, publishedAt?: string | null): void;

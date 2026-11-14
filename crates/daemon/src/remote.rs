@@ -706,6 +706,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
                             row["title"] = json!(title);
                         }
                     }
+                    nest_subagents(&mut visible);
                     let mut page = conversation_page(visible, &request);
                     page["type"] = json!("sessions");
                     page
@@ -1120,6 +1121,8 @@ const NESTED_SUBAGENT_LIMIT: usize = 50;
 
 /// Nests each subagent row under its parent as `subagents`, `subagent_count` and
 /// `subagents_ongoing`. A subagent is ongoing while its displayed state is a running one.
+/// Each child gets a Rust-derived `name`, and a parent that is not itself busy reports
+/// `state: "thinking"` with a `state_label` such as `Working · 5 subagents running`.
 pub(crate) fn nest_subagents(rows: &mut [Value]) {
     let mut children: std::collections::HashMap<String, Vec<Value>> =
         std::collections::HashMap::new();
@@ -1133,25 +1136,41 @@ pub(crate) fn nest_subagents(rows: &mut [Value]) {
         );
         children.entry(parent.to_owned()).or_default().push(json!({
             "id": row["id"], "title": row["title"], "model": row["model"], "state": row["state"],
-            "ongoing": ongoing, "last_event_at": row["last_event_at"],
+            "ongoing": ongoing, "started_at": row["started_at"], "last_event_at": row["last_event_at"],
         }));
     }
     for row in rows.iter_mut() {
         let Some(mut nested) = row["id"].as_str().and_then(|id| children.remove(id)) else {
             continue;
         };
+        // Ordinals follow start order so `Subagent N` stays stable as new children appear.
+        nested.sort_by(|a, b| {
+            a["started_at"]
+                .as_str()
+                .cmp(&b["started_at"].as_str())
+                .then_with(|| a["id"].as_str().cmp(&b["id"].as_str()))
+        });
+        for (index, child) in nested.iter_mut().enumerate() {
+            child["name"] = json!(gnomcode_core::subagent::subagent_name(
+                child["title"].as_str(),
+                index + 1
+            ));
+        }
         nested.sort_by(|a, b| {
             b["last_event_at"]
                 .as_str()
                 .cmp(&a["last_event_at"].as_str())
         });
+        let running = nested
+            .iter()
+            .filter(|child| child["ongoing"] == true)
+            .count();
         row["subagent_count"] = json!(nested.len());
-        row["subagents_ongoing"] = json!(
-            nested
-                .iter()
-                .filter(|child| child["ongoing"] == true)
-                .count()
-        );
+        row["subagents_ongoing"] = json!(running);
+        if running > 0 && row["state"] != "awaiting_approval" {
+            row["state"] = json!("thinking");
+            row["state_label"] = json!(gnomcode_core::subagent::working_label(running));
+        }
         nested.truncate(NESTED_SUBAGENT_LIMIT);
         row["subagents"] = json!(nested);
     }
@@ -1160,8 +1179,17 @@ pub(crate) fn nest_subagents(rows: &mut [Value]) {
 pub(crate) fn conversation_page(mut rows: Vec<Value>, query: &Value) -> Value {
     let search = query["search"].as_str().unwrap_or("").trim().to_lowercase();
     let include_subagents = query["include_subagents"].as_bool().unwrap_or(false);
+    // A child already nested under a listed parent is not repeated as its own top-level row.
+    let listed: std::collections::HashSet<String> = rows
+        .iter()
+        .filter_map(|row| row["id"].as_str().map(str::to_owned))
+        .collect();
     rows.retain(|row| {
-        (include_subagents || row["parent_session_id"].is_null())
+        (row["parent_session_id"].is_null()
+            || (include_subagents
+                && row["parent_session_id"]
+                    .as_str()
+                    .is_none_or(|parent| !listed.contains(parent))))
             && query["source"]
                 .as_str()
                 .filter(|value| !value.is_empty() && *value != "all")
@@ -1205,6 +1233,14 @@ pub(crate) fn conversation_page(mut rows: Vec<Value>, query: &Value) -> Value {
                 .to_lowercase()
                 .contains(&search))
     });
+    if !include_subagents {
+        // Unchecked hides subagent rows everywhere; a parent keeps only its count.
+        for row in &mut rows {
+            if let Some(fields) = row.as_object_mut() {
+                fields.remove("subagents");
+            }
+        }
+    }
     rows.sort_by(|a, b| {
         b["last_event_at"]
             .as_str()
@@ -1225,7 +1261,7 @@ pub(crate) fn conversation_page(mut rows: Vec<Value>, query: &Value) -> Value {
 
 fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord]) -> Vec<Value> {
     let mut visible = sessions.iter().filter(|session| !legacy_tool_session(&session.id)).map(|session| {
-        json!({"id":session.id,"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"last_event_at":session.last_event_at,"parent_session_id":session.parent_session_id,"project_id":session.project_id})
+        json!({"id":session.id,"title":session.title,"agent":session.agent,"model":session.model,"state":session.state,"started_at":session.started_at,"last_event_at":session.last_event_at,"parent_session_id":session.parent_session_id,"project_id":session.project_id})
     }).collect::<Vec<_>>();
     for record in hosted {
         if !matches!(
@@ -2378,6 +2414,60 @@ mod tests {
             response["message"],
             "Could not prepare model switch. Check the selected agent and workspace on your desktop."
         );
+    }
+
+    #[test]
+    fn subagents_get_real_names_and_a_working_parent_and_hide_when_unchecked() {
+        let mut rows = vec![
+            json!({"id":"p","state":"idle","title":"Parent","parent_session_id":null,"started_at":"2026-11-13T04:00:00Z","last_event_at":"2026-11-13T05:00:00Z"}),
+            json!({"id":"a","state":"tool","title":"Wire watcher into daemon","parent_session_id":"p","started_at":"2026-11-13T04:10:00Z","last_event_at":"2026-11-13T05:10:00Z"}),
+            json!({"id":"b","state":"thinking","title":"Subagent","parent_session_id":"p","started_at":"2026-11-13T04:05:00Z","last_event_at":"2026-11-13T05:05:00Z"}),
+            json!({"id":"c","state":"idle","title":null,"parent_session_id":"p","started_at":"2026-11-13T04:20:00Z","last_event_at":"2026-11-13T05:01:00Z"}),
+            json!({"id":"q","state":"idle","title":"Quiet","parent_session_id":null,"started_at":"2026-11-13T03:00:00Z","last_event_at":"2026-11-13T04:00:00Z"}),
+            json!({"id":"o","state":"idle","title":"Orphan","parent_session_id":"gone","started_at":"2026-11-13T02:00:00Z","last_event_at":"2026-11-13T03:00:00Z"}),
+        ];
+        nest_subagents(&mut rows);
+        assert_eq!(rows[0]["state"], "thinking");
+        assert_eq!(rows[0]["state_label"], "Working · 2 subagents running");
+        let names: Vec<_> = rows[0]["subagents"]
+            .as_array()
+            .expect("nested")
+            .iter()
+            .map(|child| {
+                (
+                    child["id"].as_str().expect("id"),
+                    child["name"].as_str().expect("name"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("a", "Wire watcher into daemon"),
+                ("b", "Subagent 1"),
+                ("c", "Subagent 3")
+            ],
+            "newest first, ordinals follow start order"
+        );
+        assert!(rows[4]["state_label"].is_null(), "no children, no rollup");
+        let hidden = conversation_page(rows.clone(), &json!({}));
+        let sessions = hidden["sessions"].as_array().expect("sessions");
+        assert_eq!(sessions.len(), 2, "child rows leave the top level");
+        assert!(sessions[0]["subagents"].is_null());
+        assert_eq!(sessions[0]["subagent_count"], 3);
+        let shown = conversation_page(rows, &json!({"include_subagents":true}));
+        assert_eq!(
+            shown["sessions"].as_array().expect("sessions").len(),
+            3,
+            "children stay nested while their parent is listed; orphans surface"
+        );
+        let parent = shown["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .find(|row| row["id"] == "p")
+            .expect("parent");
+        assert!(parent["subagents"].is_array());
     }
 
     #[test]
