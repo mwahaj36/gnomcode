@@ -5,9 +5,9 @@
 If you discover a security or privacy issue in Gnomcode (such as local API authentication bypass, DNS-rebinding exposure, or unredacted sensitive data in local storage), please report it privately rather than opening a public issue:
 
 - **GitHub Private Vulnerability Reporting:** Use the **Report a vulnerability** button under the Security tab of this repository.
-- **Email:** `security@gnomcode.vercel.app`
+- **No public email yet.** Use the private report above.
 
-We respond to all reports within 48 hours.
+We aim to respond within 7 days.
 
 ## Security & Privacy Guarantees
 

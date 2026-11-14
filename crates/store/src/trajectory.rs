@@ -24,12 +24,8 @@ fn open_trajectory(path: &Path) -> Result<Connection, Error> {
 /// Returns [`Error`] if the database cannot be opened or lacks the table.
 pub fn trajectory_max_generation(path: &Path) -> Result<Option<i64>, Error> {
     let conn = open_trajectory(path)?;
-    conn.query_row(
-        obfstr::obfstr!("SELECT MAX(idx) FROM gen_metadata"),
-        [],
-        |row| row.get(0),
-    )
-    .map_err(Error::from)
+    conn.query_row("SELECT MAX(idx) FROM gen_metadata", [], |row| row.get(0))
+        .map_err(Error::from)
 }
 
 /// Reads the model calls after `after` (exclusive) and the step metadata that dates them.
@@ -40,16 +36,15 @@ pub fn trajectory_max_generation(path: &Path) -> Result<Option<i64>, Error> {
 pub fn read_trajectory(path: &Path, after: i64) -> Result<TrajectoryRows, Error> {
     let conn = open_trajectory(path)?;
     let mut rows = TrajectoryRows::default();
-    let mut statement = conn.prepare(obfstr::obfstr!(
-        "SELECT idx, data FROM gen_metadata WHERE idx > ?1 AND data IS NOT NULL ORDER BY idx"
-    ))?;
+    let mut statement = conn.prepare(
+        "SELECT idx, data FROM gen_metadata WHERE idx > ?1 AND data IS NOT NULL ORDER BY idx",
+    )?;
     for row in statement.query_map([after], |row| Ok((row.get(0)?, row.get(1)?)))? {
         rows.generations.push(row?);
     }
     if !rows.generations.is_empty() {
-        let mut statement = conn.prepare(obfstr::obfstr!(
-            "SELECT metadata FROM steps WHERE metadata IS NOT NULL"
-        ))?;
+        let mut statement =
+            conn.prepare("SELECT metadata FROM steps WHERE metadata IS NOT NULL")?;
         for row in statement.query_map([], |row| row.get(0))? {
             rows.step_metadata.push(row?);
         }
@@ -64,11 +59,7 @@ impl Database {
     /// Returns [`Error`] if the query fails.
     pub fn session_exists(&self, id: &str) -> Result<bool, Error> {
         self.conn
-            .query_row(
-                obfstr::obfstr!("SELECT 1 FROM session WHERE id=?1"),
-                [id],
-                |_| Ok(()),
-            )
+            .query_row("SELECT 1 FROM session WHERE id=?1", [id], |_| Ok(()))
             .optional()
             .map(|row| row.is_some())
             .map_err(Error::from)
@@ -126,9 +117,7 @@ impl Database {
         }
         if !usage.is_empty() {
             tx.execute(
-                obfstr::obfstr!(
-                    "DELETE FROM usage_record WHERE session_id=?1 AND substr(dedup_key,1,length(?2)) <> ?2"
-                ),
+                "DELETE FROM usage_record WHERE session_id=?1 AND substr(dedup_key,1,length(?2)) <> ?2",
                 params![session_id, replaces_prefix],
             )?;
         }
@@ -163,9 +152,8 @@ impl Database {
         let tx = self.conn.transaction()?;
         let mut changed = 0;
         {
-            let mut update = tx.prepare_cached(obfstr::obfstr!(
-                "UPDATE session SET surface=?2 WHERE id=?1 AND surface<>?2"
-            ))?;
+            let mut update =
+                tx.prepare_cached("UPDATE session SET surface=?2 WHERE id=?1 AND surface<>?2")?;
             for (id, surface) in surfaces {
                 changed += update.execute(params![id, surface.as_str()])?;
             }

@@ -86,15 +86,11 @@ pub fn home_roots(home: &Path) -> Vec<(AgentId, PathBuf)> {
         ),
         (
             AgentId::Antigravity,
-            gemini
-                .join(obfstr::obfstr!("antigravity-ide"))
-                .join("brain"),
+            gemini.join("antigravity-ide").join("brain"),
         ),
         (
             AgentId::Antigravity,
-            gemini
-                .join(obfstr::obfstr!("antigravity-cli"))
-                .join("brain"),
+            gemini.join("antigravity-cli").join("brain"),
         ),
     ]
 }
@@ -266,7 +262,7 @@ fn registry_distros() -> Vec<String> {
     hidden("reg.exe")
         .args([
             "query",
-            obfstr::obfstr!(r"HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss"),
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss",
             "/s",
         ])
         .output()

@@ -71,9 +71,7 @@ impl Database {
         let val: Option<String> = self
             .conn
             .query_row(
-                obfstr::obfstr!(
-                    "SELECT value FROM desktop_preferences WHERE key = 'auto_update_enabled'"
-                ),
+                "SELECT value FROM desktop_preferences WHERE key = 'auto_update_enabled'",
                 [],
                 |row| row.get(0),
             )
@@ -87,10 +85,8 @@ impl Database {
     /// Returns [`Error`] on SQLite write failure.
     pub fn set_auto_update_enabled(&self, enabled: bool) -> Result<(), Error> {
         self.conn.execute(
-            obfstr::obfstr!(
-                "INSERT INTO desktop_preferences(key, value) VALUES ('auto_update_enabled', ?1)
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-            ),
+            "INSERT INTO desktop_preferences(key, value) VALUES ('auto_update_enabled', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [if enabled { "1" } else { "0" }],
         )?;
         Ok(())
@@ -104,9 +100,7 @@ impl Database {
         let val: Option<String> = self
             .conn
             .query_row(
-                obfstr::obfstr!(
-                    "SELECT value FROM desktop_preferences WHERE key = 'feature_toggles'"
-                ),
+                "SELECT value FROM desktop_preferences WHERE key = 'feature_toggles'",
                 [],
                 |row| row.get(0),
             )
@@ -126,10 +120,8 @@ impl Database {
     ) -> Result<(), Error> {
         let json = serde_json::to_string(toggles)?;
         self.conn.execute(
-            obfstr::obfstr!(
-                "INSERT INTO desktop_preferences(key, value) VALUES ('feature_toggles', ?1)
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-            ),
+            "INSERT INTO desktop_preferences(key, value) VALUES ('feature_toggles', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [json],
         )?;
         Ok(())

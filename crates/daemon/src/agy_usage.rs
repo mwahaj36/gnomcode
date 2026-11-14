@@ -67,18 +67,14 @@ async fn fallback_with(
     tokio::time::timeout(deadline, async {
         let cwd = tempfile::tempdir()
             .map_err(|_| "Cannot create isolated Antigravity probe workspace")?;
-        let version = output(command(), &[obfstr::obfstr!("--version")], cwd.path()).await?;
+        let version = output(command(), &["--version"], cwd.path()).await?;
         // Other versions must be verified before a slash command can be treated as no-inference metadata.
         if std::str::from_utf8(&version).ok().map(str::trim) != Some("1.5.7") {
             return Err("Antigravity usage fallback is verified only for agy 1.5.7");
         }
         let bytes = output(
             command(),
-            &[
-                obfstr::obfstr!("--output-format"),
-                "text",
-                obfstr::obfstr!("-p=/usage"),
-            ],
+            &["--output-format", "text", "-p=/usage"],
             cwd.path(),
         )
         .await?;

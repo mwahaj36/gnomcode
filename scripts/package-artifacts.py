@@ -25,7 +25,7 @@ out = root / 'web/public/downloads'
 notices = out / 'THIRD_PARTY_NOTICES.html'
 if not notices.is_file() or notices.stat().st_size < 1000:
     raise SystemExit('Generate complete third-party notices before packaging')
-shutil.copyfile(root / 'docs/legal/EULA.txt', out / 'LICENSE')
+shutil.copyfile(root / 'LICENSE', out / 'LICENSE')
 assets = []
 if bool(args.windows_exe) != bool(args.windows_setup):
     raise SystemExit('Supply both the Windows binary and matching compiled installer')
@@ -62,7 +62,7 @@ for os_name, arch, source in [
         stage = Path(temp)
         shutil.copyfile(source, stage / 'gnomcode')
         (stage / 'gnomcode').chmod(0o755)
-        shutil.copyfile(root / 'docs/legal/EULA.txt', stage / 'LICENSE')
+        shutil.copyfile(root / 'LICENSE', stage / 'LICENSE')
         shutil.copyfile(notices, stage / 'THIRD_PARTY_NOTICES.html')
         shutil.copytree(root / 'web/public/fonts', stage / 'fonts')
         shutil.copyfile(root / 'web/public/icons/gnomcode-256.png', stage / 'gnomcode.png')

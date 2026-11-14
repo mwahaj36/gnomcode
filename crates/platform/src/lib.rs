@@ -318,12 +318,8 @@ pub fn discover_agent_roots() -> Vec<AgentRoot> {
 
     let antigravity_root = gemini_base.join("antigravity").join("brain");
     // Older Antigravity IDE builds kept history in a separate home.
-    let antigravity_ide_root = gemini_base
-        .join(obfstr::obfstr!("antigravity-ide"))
-        .join("brain");
-    let antigravity_cli_root = gemini_base
-        .join(obfstr::obfstr!("antigravity-cli"))
-        .join("brain");
+    let antigravity_ide_root = gemini_base.join("antigravity-ide").join("brain");
+    let antigravity_cli_root = gemini_base.join("antigravity-cli").join("brain");
 
     let mut roots = vec![
         AgentRoot {

@@ -24,16 +24,16 @@ jobs:
       - name: Require approved release legal files
         shell: bash
         run: |
-          test -s EULA.txt
+          test -s LICENSE
           test -s web/public/downloads/THIRD_PARTY_NOTICES.html
-          if grep -qi '\bdraft\b' EULA.txt; then exit 1; fi
+          if grep -qi '\bdraft\b' LICENSE; then exit 1; fi
       - name: Stage host platform and shim
         shell: bash
         run: |
           target=$(node -p 'process.platform + "-" + process.arch')
           extension=$(node -p 'process.platform === "win32" ? ".exe" : ""')
-          node apps/desktop/stage-release.cjs "$target" "target/release/gnomcode${extension}" EULA.txt web/public/downloads/THIRD_PARTY_NOTICES.html
-          cp EULA.txt npm/gnomcode/EULA.txt
+          node apps/desktop/stage-release.cjs "$target" "target/release/gnomcode${extension}" LICENSE web/public/downloads/THIRD_PARTY_NOTICES.html
+          cp LICENSE npm/gnomcode/LICENSE
           cp web/public/downloads/THIRD_PARTY_NOTICES.html npm/gnomcode/THIRD_PARTY_NOTICES.html
       - name: Install tarballs and run standalone commands offline
         run: node npm/smoke-release.cjs

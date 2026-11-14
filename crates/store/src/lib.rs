@@ -73,9 +73,8 @@ fn mark_deleted<P: rusqlite::Params>(
 ) -> Result<(), Error> {
     let mut statement = tx.prepare(query)?;
     let ids = statement.query_map(params, |row| row.get::<_, String>(0))?;
-    let mut insert = tx.prepare_cached(obfstr::obfstr!(
-        "INSERT OR IGNORE INTO deleted_chat_event(event_id) VALUES (?1)"
-    ))?;
+    let mut insert =
+        tx.prepare_cached("INSERT OR IGNORE INTO deleted_chat_event(event_id) VALUES (?1)")?;
     for id in ids {
         insert.execute([event_marker(&id?)])?;
     }
