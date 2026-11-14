@@ -18,7 +18,31 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+
+const REMOTE_DRAFTS_KEY = 'gnomcode-remote-drafts';
+function loadRemoteDrafts(): Map<string, string> {
+  const out = new Map<string, string>();
+  try {
+    const raw = sessionStorage.getItem(REMOTE_DRAFTS_KEY);
+    if (!raw) return out;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') return out;
+    for (const [k, v] of Object.entries(parsed).slice(-32)) {
+      if (typeof k === 'string' && typeof v === 'string' && v.length <= 4000 && v) {
+        out.set(k, v);
+      }
+    }
+  } catch {}
+  return out;
+}
+function persistRemoteDrafts(map: Map<string, string>) {
+  try {
+    const entries = [...map.entries()].filter(([, v]) => Boolean(v)).slice(-32);
+    if (entries.length === 0) sessionStorage.removeItem(REMOTE_DRAFTS_KEY);
+    else sessionStorage.setItem(REMOTE_DRAFTS_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {}
+}
 
 export default function RemoteCompanion({ embedded = false, visible = true }: { embedded?: boolean; visible?:boolean }) {
   const [link, setLink] = useState<DeviceOffer>({ room: '', key: '', relay: '' });
@@ -126,7 +150,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const promptInput = useRef<HTMLTextAreaElement | null>(null);
   const chatContainer = useRef<HTMLDivElement | null>(null);
   const historyAnchor = useRef<{top:number; height:number} | null>(null);
-  const drafts = useRef(new Map<string,string>());
+  const drafts = useRef(loadRemoteDrafts());
   const promptRef = useRef('');
   const pendingPrompt = useRef<{session:string; text:string; id:string; fromComposer:boolean} | null>(null);
   const socket = useRef<WebSocket | null>(null);
@@ -305,19 +329,28 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     input.style.height = `${Math.min(160, Math.max(36, input.scrollHeight))}px`;
   }, [prompt, phase, selected]);
 
-  function changePrompt(text: string) { promptRef.current = text; setPrompt(text); }
+  function changePrompt(text: string) {
+    promptRef.current = text;
+    setPrompt(text);
+    if (selectedRef.current) {
+      if (text) drafts.current.set(selectedRef.current, text);
+      else drafts.current.delete(selectedRef.current);
+      persistRemoteDrafts(drafts.current);
+    }
+  }
 
   async function submitPromptText(rawText: string, fromComposer: boolean) {
     const ready = fromComposer ? attachmentsRef.current.filter(item => item.status === 'saved' && item.workspace_path) : [];
     const composed = formatPromptWithAttachments(rawText, ready);
-    if (!authenticated.current || !sessions.find(session => session.id === selectedRef.current)?.can_prompt || pendingPrompt.current || !composed) return;
+    const activeSession = sessions.find(session => session.id === selectedRef.current);
+    if (!authenticated.current || !activeSession || activeSession.source === 'imported' || pendingPrompt.current || !composed) return;
     const id = crypto.randomUUID();
     const sourceSession = selectedRef.current;
     pendingPrompt.current = {session:sourceSession,text:rawText,id,fromComposer};
     const pending:PendingChat = {id,text:composed,created_at:new Date().toISOString(),baseline:events.map(event=>event.event_id),delivered:false};
     setOptimistic(current=>({...current,[selectedRef.current]:[...(current[selectedRef.current] || []),pending]}));
     setSending(true); setError(''); setNotice('');
-    try { await send({type:'prompt',session_id:selectedRef.current,text:composed}); }
+    try { await send({type:'prompt',session_id:selectedRef.current,text:composed,id,queue_if_busy:true}); }
     catch { setOptimistic(current=>({...current,[sourceSession]:(current[sourceSession] || []).filter(item=>item.id !== id)})); pendingPrompt.current = null; setSending(false); setError('Prompt could not be sent. Your draft is kept.'); }
   }
   async function pickPhoneAttachment(file: File | null | undefined) {
@@ -516,7 +549,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         if(scheduleTimeout.current)clearTimeout(scheduleTimeout.current);
         setSchedulePending(false);pendingSchedule.current=null;
         if(pending.session===selectedRef.current && promptRef.current.trim()===pending.text)changePrompt('');
-        if(drafts.current.get(pending.session)?.trim()===pending.text)drafts.current.delete(pending.session);
+        if(drafts.current.get(pending.session)?.trim()===pending.text){drafts.current.delete(pending.session);persistRemoteDrafts(drafts.current);}
         setNotice('Schedule confirmed on your laptop. You can close your phone.');
         requestAutomation({type:'schedules',session_id:selectedRef.current});
       }
@@ -554,11 +587,19 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       const pending = pendingPrompt.current;
       if (pending && (!reply.session_id || reply.session_id === pending.session)) {
         if (pending.fromComposer) {
-          if (drafts.current.get(pending.session) === pending.text) drafts.current.delete(pending.session);
+          if (drafts.current.get(pending.session) === pending.text) { drafts.current.delete(pending.session); persistRemoteDrafts(drafts.current); }
           if (pending.session === selectedRef.current && promptRef.current === pending.text) changePrompt('');
           setAttachments(current => current.filter(item => item.status !== 'saved')); setAttachError('');
         }
-        pendingPrompt.current = null; setSending(false); setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).map(item=>item.id === pending.id ? {...item,delivered:true} : item)})); setNotice('');
+        pendingPrompt.current = null; setSending(false);
+        if (reply.status === 'queued') {
+          setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).filter(item=>item.id !== pending.id)}));
+          setNotice(reply.reason || 'Agent is busy; queued for next safe turn boundary.');
+          requestAutomation({type:'schedules',session_id:pending.session});
+        } else {
+          setOptimistic(current=>({...current,[pending.session]:(current[pending.session] || []).map(item=>item.id === pending.id ? {...item,delivered:true} : item)}));
+          setNotice('');
+        }
       }
     }
     else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await requestSessions(); if(reply.session_id) loadChat(reply.session_id); }
@@ -730,7 +771,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(connectedDesktop.current && connectedDesktop.current!==link.desktop_id){proofKey.current=null;}
       if(!proofKey.current){selectedRef.current = ''; setSelected(''); setSessions([]); setEvents([]);}
       pendingPrompt.current = null; setSending(false); loadingHistory.current = false; setHistoryLoading(false);
-      setFolderBrowser(null); setFoldersLoading(false); if(!proofKey.current){changePrompt('');drafts.current.clear();}
+      setFolderBrowser(null); setFoldersLoading(false); if(!proofKey.current){promptRef.current='';setPrompt('');}
       setPhase(proofKey.current ? 'reconnecting' : 'connecting');
       chunks.current='';outgoing.current=Promise.resolve();incoming.current=Promise.resolve();
       const {data:{session}}=await supabase.auth.getSession();
@@ -972,9 +1013,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           <label htmlFor="remote-prompt">Message the agent</label>
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
           <input ref={attachInput} type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void pickPhoneAttachment(file); }} />
-          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="sp-attach-trigger" disabled={!connected} onClick={()=>attachInput.current?.click()} aria-label="Attach file">Attach</button><button type="submit" disabled={!connected || sending || (!prompt.trim() && !hasSavedAttachments) || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
-          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button>{active && isSessionRunningState(active.state) && <button type="button" className="sp-interrupt-btn" disabled={!connected || interrupting} aria-label="Interrupt running turn" title="Sends Esc to interrupt the active turn without closing the session" onClick={()=>void requestInterrupt()}>{interrupting ? 'Interrupting...' : 'Interrupt'}</button>}<button type="submit" disabled={!connected || sending || !prompt.trim() || !active?.can_prompt}>{sending ? 'Sending...' : 'Send'}</button></div>
-          {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'The agent is busy or waiting for approval. Prompting becomes available when it is idle.'}</p>}
+          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="sp-attach-trigger" disabled={!connected} onClick={()=>attachInput.current?.click()} aria-label="Attach file">Attach</button>{active && isSessionRunningState(active.state) && <button type="button" className="sp-interrupt-btn" disabled={!connected || interrupting} aria-label="Interrupt running turn" title="Sends Esc to interrupt the active turn without closing the session" onClick={()=>void requestInterrupt()}>{interrupting ? 'Interrupting...' : 'Interrupt'}</button>}<button type="submit" disabled={!connected || sending || (!prompt.trim() && !hasSavedAttachments) || readOnly}>{active?.can_prompt ? (sending ? 'Sending...' : 'Send') : (sending ? 'Queueing...' : 'Queue')}</button></div>
+          {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'The agent is busy or waiting for approval. Messages you send now are queued for the next safe turn boundary.'}</p>}
         </form></>}
       </> : <div className="remote-empty"><h2>Your conversations</h2><p>Choose a conversation or start an agent to begin.</p><button type="button" className="sp-primary-action" onClick={startNew}>New conversation</button><button type="button" onClick={() => setShowSessions(true)}>Browse history</button></div>}</div>
     </div>}
