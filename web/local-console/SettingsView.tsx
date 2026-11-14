@@ -98,6 +98,13 @@ function formatAgeLabel(isoStr?: string): string {
 export function SettingsView() {
   const providerListRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState(() => takeSettingsQuery());
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const hashId = window.location.hash.replace(/^#/, '');
+      if (SETTINGS_SECTIONS.some((section) => section.id === hashId)) return hashId;
+    }
+    return SETTINGS_SECTIONS[0]?.id ?? 'settings-account';
+  });
   const [accountState, setAccountState] = useState<{ paired: boolean; email?: string | null } | null>(null);
   useEffect(() => {
     void fetchAccount().then(setAccountState, () => setAccountState(null));
@@ -106,11 +113,32 @@ export function SettingsView() {
       else void fetchAccount().then(setAccountState, () => undefined);
     };
     const onQuery = () => setQuery(takeSettingsQuery());
+    const onReveal = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+      if (id && SETTINGS_SECTIONS.some((section) => section.id === id)) {
+        setSelectedId(id);
+        setQuery('');
+      }
+    };
+    const onHash = () => {
+      const hashId = window.location.hash.replace(/^#/, '');
+      if (SETTINGS_SECTIONS.some((section) => section.id === hashId)) setSelectedId(hashId);
+    };
+    const onProviderSetup = () => {
+      setSelectedId('settings-providers');
+      setQuery('');
+    };
     window.addEventListener('gnomcode:account-state', onState);
     window.addEventListener('gnomcode:settings-query', onQuery);
+    window.addEventListener('gnomcode:reveal-section', onReveal);
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener('gnomcode:provider-setup', onProviderSetup);
     return () => {
       window.removeEventListener('gnomcode:account-state', onState);
       window.removeEventListener('gnomcode:settings-query', onQuery);
+      window.removeEventListener('gnomcode:reveal-section', onReveal);
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('gnomcode:provider-setup', onProviderSetup);
     };
   }, []);
   const baseUrl = getConsoleBaseUrl();
@@ -577,8 +605,17 @@ export function SettingsView() {
     }
   };
 
+  const trimmedQuery = query.trim();
   const visible = SETTINGS_SECTIONS.filter((section) => sectionMatches(section, query));
-  const shown = (id: string) => visible.some((section) => section.id === id);
+  const activeId = visible.some((section) => section.id === selectedId) ? selectedId : (visible[0]?.id ?? selectedId);
+  const selectCategory = (id: string) => {
+    setSelectedId(id);
+    if (typeof window !== 'undefined' && window.location.hash !== `#${id}`) {
+      window.history.replaceState(null, '', `#${id}`);
+    }
+    revealSection(id);
+  };
+  const shown = (id: string) => (trimmedQuery ? visible.some((section) => section.id === id) : id === activeId);
 
   return (
     <div className="sp-settings-layout">
@@ -592,20 +629,42 @@ export function SettingsView() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <ul>
-          {visible.map((section) => (
-            <li key={section.id}>
-              <a
-                href={`#${section.id}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  revealSection(section.id);
-                }}
-              >
+        <div className="sp-settings-mobile-bar">
+          <label htmlFor="settings-mobile-category" className="sr-only">
+            Settings category
+          </label>
+          <select
+            id="settings-mobile-category"
+            className="sp-settings-mobile-select"
+            value={activeId}
+            onChange={(event) => selectCategory(event.target.value)}
+          >
+            {visible.map((section) => (
+              <option key={section.id} value={section.id}>
                 {section.title}
-              </a>
-            </li>
-          ))}
+              </option>
+            ))}
+          </select>
+        </div>
+        <ul>
+          {visible.map((section) => {
+            const isActive = !trimmedQuery && section.id === activeId;
+            return (
+              <li key={section.id}>
+                <a
+                  href={`#${section.id}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={isActive ? 'is-active' : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    selectCategory(section.id);
+                  }}
+                >
+                  {section.title}
+                </a>
+              </li>
+            );
+          })}
         </ul>
         {visible.length === 0 ? <p role="status">No settings match.</p> : null}
       </nav>

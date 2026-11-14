@@ -1,5 +1,5 @@
 import { type KeyboardEvent, type MouseEvent, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
-import { bindPreviewInteractions } from '../lib/console-presentation';
+import { bindPreviewInteractions, copyTextToClipboard } from '../lib/console-presentation';
 import { AccountView } from './AccountView';
 import { ApprovalsCard } from './ApprovalsCard';
 import { CommandPalette } from './CommandPalette';
@@ -234,12 +234,16 @@ export function ConsoleShell() {
       const origin = event.target as Element | null;
       const copy = origin?.closest<HTMLElement>('[data-copy]');
       if (copy) {
-        const label = copy.querySelector('span');
-        navigator.clipboard
-          .writeText(copy.dataset.copy ?? '')
-          .then(() => label && (label.textContent = 'Copied'))
-          .catch(() => label && (label.textContent = 'Select and copy'))
-          .finally(() => setTimeout(() => label && (label.textContent = 'Copy'), 1500));
+        const label = copy.querySelector<HTMLElement>('.sp-copy-label') ?? copy.querySelector('span');
+        const original = label?.textContent || 'Copy';
+        void copyTextToClipboard(copy.dataset.copy ?? '').then((ok) => {
+          if (label) label.textContent = ok ? 'Copied' : 'Copy failed';
+          copy.dataset.copyState = ok ? 'copied' : 'failed';
+          window.setTimeout(() => {
+            if (label) label.textContent = original;
+            delete copy.dataset.copyState;
+          }, 1600);
+        });
         return;
       }
       if (origin?.closest('[data-project-id]')) {

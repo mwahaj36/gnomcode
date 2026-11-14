@@ -659,9 +659,9 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console #chat-status{font-size:var(--sp-fs-meta);color:var(--sp-text-3);margin-top:8px}
 .sp-native-console #chat-send-btn{border-radius:10px;min-width:64px;font:600 var(--sp-fs-body)/1.4 var(--sp-font-sans)}
 .sp-native-console .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
-.sp-chat-user{background:var(--sp-primary);color:var(--sp-on-primary);border:0;border-radius:16px 16px 4px 16px}
-.sp-chat-user header,.sp-chat-user header strong,.sp-chat-user time{color:var(--sp-on-primary)}
-.sp-chat-assistant{background:var(--sp-surface-2);border:0;border-radius:16px 16px 16px 4px}
+.sp-chat-user{background:var(--sp-surface-2);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:14px 14px 4px 14px;width:fit-content;max-width:min(76ch,85%);margin-left:auto}
+.sp-chat-user header,.sp-chat-user header strong,.sp-chat-user time{color:var(--sp-text-2)}
+.sp-chat-assistant{background:transparent;border:0;border-radius:0;padding:4px 0}
 
 .sp-native-console .conversation-filters{margin:0 0 12px;font-size:12px;color:var(--sp-text-2)}
 .sp-native-console .conversation-filters summary{cursor:pointer;padding:10px 4px}
@@ -1132,7 +1132,7 @@ details.sp-provider-card { padding: 0; gap: 0; container-type: inline-size; }
 .sp-provider-name { font-size: var(--sp-fs-strong); font-weight: 600; line-height: 1.25; color: var(--sp-text); }
 .sp-provider-name .sp-provider-plan { margin-left: var(--sp-2); }
 .sp-provider-plan { font-size: var(--sp-fs-meta); font-weight: 400; color: var(--sp-text-3); text-transform: capitalize; }
-.sp-provider-line { font-size: var(--sp-fs-meta); color: var(--sp-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-provider-line { font-size: var(--sp-fs-meta); color: var(--sp-text-3); white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
 .sp-provider-line b { font-weight: 600; color: var(--sp-text-2); }
 .sp-provider-line--issue { color: var(--sp-text-2); }
 .sp-provider-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--sp-surface-2); color: var(--sp-text); font-weight: 600; flex: none; }
@@ -1248,14 +1248,14 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-heatmap-stats div { display: grid; }
 .sp-heatmap-stats strong { font-size: var(--sp-fs-title); font-weight: 600; color: var(--sp-text); font-variant-numeric: tabular-nums; }
 .sp-heatmap-stats span { font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
-.sp-heatmap-scroll { overflow-x: auto; padding-bottom: var(--sp-2); }
+.sp-heatmap-scroll { overflow: visible; padding-bottom: var(--sp-2); }
 .sp-heatmap-scroll:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; border-radius: var(--sp-1); }
 .sp-heatmap-months { position: relative; height: 18px; margin-left: 32px; font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
-.sp-heatmap-months span { position: absolute; top: 0; left: calc(var(--col) * 14px); white-space: nowrap; }
-.sp-heatmap-body { display: flex; gap: var(--sp-2); width: max-content; }
-.sp-heatmap-days { display: grid; grid-template-rows: repeat(7, 11px); row-gap: 3px; width: 24px; font-size: 10px; line-height: 11px; color: var(--sp-text-3); }
-.sp-heatmap-grid { display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column; grid-auto-columns: 11px; gap: 3px; }
-.sp-heat { display: block; width: 11px; height: 11px; border-radius: 2px; background: var(--sp-heat-0); outline: 1px solid rgb(255 255 255 / .03); outline-offset: -1px; }
+.sp-heatmap-months span { position: absolute; top: 0; left: calc(var(--col) / var(--cols, 53) * 100%); white-space: nowrap; }
+.sp-heatmap-body { display: flex; gap: var(--sp-2); width: 100%; align-items: stretch; }
+.sp-heatmap-days { display: grid; grid-template-rows: repeat(7, 1fr); row-gap: 3px; width: 24px; flex: none; font-size: 10px; line-height: 1; align-items: center; color: var(--sp-text-3); }
+.sp-heatmap-grid { display: grid; flex: 1 1 auto; min-width: 0; width: 100%; grid-template-rows: repeat(7, minmax(8px, 11px)); grid-template-columns: repeat(var(--cols, 53), minmax(0, 1fr)); grid-auto-flow: column; gap: 2px; }
+.sp-heat { display: block; width: 100%; height: 100%; min-height: 8px; aspect-ratio: 1; border-radius: 2px; background: var(--sp-heat-0); outline: 1px solid rgb(255 255 255 / .03); outline-offset: -1px; }
 .sp-heat[data-level="1"] { background: var(--sp-heat-1); }
 .sp-heat[data-level="2"] { background: var(--sp-heat-2); }
 .sp-heat[data-level="3"] { background: var(--sp-heat-3); }
@@ -1277,10 +1277,10 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 @media (max-width: 480px) { .sp-heatmap-card { padding: var(--sp-4); } .sp-heatmap-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-5); } }
 
 /* Unified collapsible 268px left sidebar on desktop (>= 768px) and bottom 4-tab bar on mobile (< 768px). */
-html,body.sp-native-console{overflow-x:hidden;max-width:100%}
+html,body.sp-native-console{overflow-x:clip;max-width:100%}
 body.sp-native-console{--rail-w:64px;--rail-h:56px}
 body.sp-native-console[data-rail="expanded"]{--rail-w:268px}
-body.sp-native-console .sp-console-workspace{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);gap:0;padding-left:0;align-items:start;min-height:100dvh;max-width:100%;overflow-x:hidden}
+body.sp-native-console .sp-console-workspace{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);gap:0;padding-left:0;align-items:start;min-height:100dvh;max-width:100%;overflow-x:clip}
 body.sp-native-console .sp-console-workspace>.sp-console-nav{position:sticky;inset:auto;top:0;z-index:30;display:flex;flex-direction:column;width:auto;height:100dvh;padding:var(--sp-3) var(--sp-2);gap:var(--sp-1);overflow:hidden;transition:none;align-self:start;border-right:1px solid var(--sp-border);background:var(--sp-surface)}
 body.sp-native-console .sp-rail-tabs{display:flex;flex-direction:column;gap:var(--sp-1);flex:none}
 body.sp-native-console .sp-nav-sessions{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;margin-top:var(--sp-1);padding-top:var(--sp-2);border-top:1px solid var(--sp-border)}
@@ -1868,7 +1868,8 @@ body.sp-native-console .sp-usage-providers { align-items: start; }
 .sp-session-tokens{font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;flex:none}
 
 /* ---- PR 5: Settings & Account single-column grouped cards + unified 44px mobile controls ---- */
-body.sp-native-console #view-settings,body.sp-native-console #view-auth{max-width:720px;margin-inline:auto;width:100%}
+body.sp-native-console #view-settings{max-width:none;margin-inline:0;width:100%}
+body.sp-native-console #view-auth{max-width:720px;margin-inline:auto;width:100%}
 body.sp-native-console #view-settings .sp-settings-root,body.sp-native-console #account-root{display:grid;gap:var(--sp-4)}
 body.sp-native-console #view-settings .sp-settings-root > section,
 body.sp-native-console #view-settings .sp-settings-root > .profile-disclosure,
@@ -2083,11 +2084,91 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-live[data-live="waiting_for_you"] .sp-live-label{color:var(--sp-text);font-weight:600}
 .sp-live-basis{padding:0 6px;border:1px solid var(--sp-border);border-radius:var(--sp-r-pill,999px);color:var(--sp-text-3);font-size:11px;line-height:16px}
 .sp-conversation-live{margin-left:10px;display:inline-flex;vertical-align:middle;font-size:var(--sp-fs-meta)}
-.sp-activity{display:flex;align-items:center;gap:10px;min-height:40px;margin:8px 0 0;padding:6px 8px 6px 14px;border:1px solid var(--sp-border);border-radius:var(--sp-r-pill,999px);background:var(--sp-surface);color:var(--sp-text-2);font:13px/1.4 var(--sp-font-sans)}
-.sp-activity>span:first-child{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.sp-activity{display:grid;gap:var(--sp-3);padding:var(--sp-5);border:1px solid var(--sp-border);border-radius:var(--sp-r-lg);background:var(--sp-surface);color:var(--sp-text-2)}
+.sp-activity>h2{margin:0;font-size:var(--sp-fs-title);color:var(--sp-text)}
+.sp-activity>p{margin:0;font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
 .sp-activity .sp-live-label{overflow:hidden;text-overflow:ellipsis;color:var(--sp-text)}
 .sp-activity-elapsed{font-variant-numeric:tabular-nums;color:var(--sp-text-3)}
 .sp-activity-stop{margin-left:auto;min-height:32px}
 @keyframes sp-live-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.sp-live[data-live="working"] .sp-live-shape{animation:none;border-right-color:var(--sp-accent);border-style:dotted}}
 @media(max-width:767px){.sp-activity-stop{min-height:44px}}
+
+/* ---- RC2 Coherent Console Redesign (issues 298-309 + live layout fixes) ---- */
+.sp-remote .sp-chat-card.sp-chat-user{background:var(--sp-surface-2);color:var(--sp-text);border:1px solid var(--sp-border)}
+.sp-remote .sp-chat-card.sp-chat-user header,.sp-remote .sp-chat-card.sp-chat-user header strong,.sp-remote .sp-chat-card.sp-chat-user time{color:var(--sp-text-2)}
+.sp-remote .sp-chat-card.sp-chat-assistant{background:transparent;border:0}
+
+/* Wide transcript with modest gutters (issue 301) */
+.sp-native-console .sp-workspace-chat-panel{max-width:none;width:100%;padding:0 clamp(12px,2vw,24px);display:flex;flex-direction:column;min-height:0;height:100%}
+.sp-native-console .sp-chat-stream-box,.sp-native-console .sp-chat-stream{max-width:none;width:100%}
+.sp-native-console .sp-chat-card.sp-chat-user{padding:10px 14px}
+.sp-native-console .sp-chat-card header{gap:8px;font-size:12px;color:var(--sp-text-3)}
+.sp-native-console .sp-chat-card .sp-chat-copy{opacity:0;transition:opacity .12s ease;min-height:28px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;border-radius:6px;background:transparent;border:1px solid transparent;color:var(--sp-text-3);font-size:12px}
+.sp-native-console .sp-chat-card:hover .sp-chat-copy,.sp-native-console .sp-chat-card:focus-within .sp-chat-copy,.sp-native-console .sp-chat-card .sp-chat-copy[data-copy-state]{opacity:1}
+.sp-native-console .sp-chat-card .sp-chat-copy:hover{background:var(--sp-surface-2);color:var(--sp-text);border-color:var(--sp-border)}
+@media (hover:none){.sp-native-console .sp-chat-card .sp-chat-copy{opacity:1;min-height:36px}}
+
+/* Copy icon consistency (issue 306) */
+.sp-copy-btn,.sp-code-btn{display:inline-flex;align-items:center;gap:5px}
+.sp-copy-icon{display:inline-flex;align-items:center;justify-content:center;line-height:0;flex:none}
+.sp-copy-btn[data-copy-state="copied"],.sp-copy-command.is-copied .sp-copy-command-status{color:var(--sp-ok)}
+.sp-copy-btn[data-copy-state="failed"],.sp-copy-command.is-error .sp-copy-command-status{color:var(--sp-danger)}
+
+/* Compact inline thinking & grouped tool rows (issue 305) */
+.sp-activity-inline{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:12px;color:var(--sp-text-3)}
+.sp-activity-inline>span:first-child{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.sp-tool-group{margin:4px 0;font-size:13px;color:var(--sp-text-2)}
+.sp-tool-group summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;color:var(--sp-text-3)}
+.sp-tool-group summary:hover{background:var(--sp-surface-2);color:var(--sp-text)}
+.sp-tool-group-list{margin:4px 0 6px 14px;padding-left:10px;border-left:1px solid var(--sp-border);display:grid;gap:4px}
+
+/* Optional side panel (issues 301, 309) */
+.sp-header-panel-toggles{display:inline-flex;align-items:center;gap:4px}
+.sp-header-panel-toggles .btn-control.is-active{background:var(--sp-surface-3,var(--sp-border));border-color:var(--sp-accent)}
+.sp-workspace-body{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;flex:1 1 auto;min-height:0}
+.sp-workspace-body.has-side-panel{grid-template-columns:minmax(0,1fr) minmax(300px,380px)}
+.sp-workspace-main-col{display:flex;flex-direction:column;min-width:0;min-height:0}
+.sp-workspace-side-panel{border-left:1px solid var(--sp-border);padding-left:14px;min-width:0;overflow-y:auto;max-height:calc(100dvh - 110px)}
+@media (max-width:1024px){.sp-workspace-body.has-side-panel{grid-template-columns:minmax(0,1fr)}.sp-workspace-side-panel{border-left:0;border-top:1px solid var(--sp-border);padding-left:0;padding-top:12px;max-height:none}}
+
+/* Queued prompts & composer (issues 303, 304) */
+.sp-queued-list{display:grid;gap:6px;margin:8px 0;padding:8px 10px;border:1px solid var(--sp-border);border-radius:10px;background:var(--sp-surface)}
+.sp-queued-head{margin:0;font-size:12px;color:var(--sp-text-3)}
+.sp-queued-item{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.sp-queued-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sp-text)}
+.sp-queued-edit{display:grid;gap:6px;width:100%}
+.sp-queued-edit textarea{width:100%;padding:6px 8px;border:1px solid var(--sp-border);background:var(--sp-bg);color:var(--sp-text)}
+.sp-queued-actions{display:inline-flex;gap:6px;flex:none}
+.sp-queued-actions .btn-control,.sp-queued-actions .btn-primary{min-height:30px;padding:4px 10px;font-size:12px}
+.sp-composer-status{font-size:12px;color:var(--sp-text-2);margin-right:auto}
+
+/* Compact sidebar, subagent indentation, contextual menu (issue 307 + screenshot 4) */
+.sp-native-console .sp-workspace-list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:2px}
+.ide-session-row{position:relative;display:flex;align-items:center;gap:2px}
+.ide-session-row .ide-session{flex:1 1 auto;min-width:0;text-align:left}
+.ide-session-row .ide-session[data-subagent="true"]{padding-left:22px;border-left:2px solid var(--sp-border);margin-left:8px}
+.ide-session-row .ide-session-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ide-session-row .ide-session-meta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--sp-text-3)}
+.ide-session-more{flex:none;min-height:28px;min-width:28px;padding:2px 6px;border-radius:6px;background:transparent;border:0;color:var(--sp-text-3);opacity:0}
+.ide-session-row:hover .ide-session-more,.ide-session-row:focus-within .ide-session-more{opacity:1}
+@media (hover:none){.ide-session-more{opacity:1;min-height:36px;min-width:36px}}
+.sp-subagents{margin:2px 0 6px 14px;padding-left:10px;border-left:2px solid var(--sp-border)}
+.sp-subagents summary{font-size:12px;color:var(--sp-text-3);cursor:pointer;padding:4px 6px}
+.sp-subagents ul{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px}
+.sp-subagent-row{width:100%;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:transparent;border:0;text-align:left;min-height:34px}
+.sp-subagent-row:hover{background:var(--sp-surface-2)}
+.sp-session-context-menu{position:fixed;z-index:120;min-width:188px;display:grid;gap:2px;padding:6px;border-radius:10px;border:1px solid var(--sp-border);background:var(--sp-surface);box-shadow:0 10px 28px rgb(0 0 0 / .28)}
+.sp-session-context-menu button{width:100%;text-align:left;min-height:34px;padding:6px 10px;border-radius:6px;background:transparent;border:0;color:var(--sp-text);font-size:13px}
+.sp-session-context-menu button:hover{background:var(--sp-surface-2)}
+
+/* Settings category pane & mobile selector (issue 308) */
+.sp-settings-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:24px;align-items:start}
+.sp-settings-nav{position:sticky;top:16px}
+.sp-settings-nav ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:2px}
+.sp-settings-nav a{display:block;padding:8px 10px;border-radius:8px;text-decoration:none;color:var(--sp-text-2);font-size:14px}
+.sp-settings-nav a:hover{background:var(--sp-surface-2);color:var(--sp-text)}
+.sp-settings-nav a.is-active{background:var(--sp-surface-2);color:var(--sp-text);font-weight:600}
+.sp-settings-mobile-bar{display:none;margin-top:8px}
+.sp-settings-mobile-select{width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface);color:var(--sp-text)}
+@media (max-width:760px){.sp-settings-layout{grid-template-columns:minmax(0,1fr);gap:14px}.sp-settings-nav{position:static}.sp-settings-nav ul{display:none}.sp-settings-mobile-bar{display:block}}

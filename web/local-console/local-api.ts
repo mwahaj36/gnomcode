@@ -17,6 +17,8 @@ export interface LocalSessionSummary {
   worktree_branch?: string;
   worktree_path?: string;
   limits?: unknown[];
+  header_limit?: unknown;
+  delivery_capability?: string;
   project_name?: string;
   last_event_at?: string;
   input_tokens?: number;
@@ -122,7 +124,7 @@ export async function fetchLocalJson<T>(url: string, timeoutMs = 15000): Promise
 
 export async function fetchLocalMutation<T>(
   url: string,
-  options: { method: 'POST' | 'PUT' | 'DELETE'; body?: unknown; timeoutMs?: number },
+  options: { method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown; timeoutMs?: number },
 ): Promise<T> {
   const headers: Record<string, string> = { ...localAuthHeaders() };
   if (options.body !== undefined) {

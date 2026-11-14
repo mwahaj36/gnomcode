@@ -85,7 +85,7 @@ test('an empty year with no busiest day says None and escapes input', () => {
 
 test('the grid carries no inline styles besides the month column variable', () => {
   const html = renderHeatmap(sample());
-  assert.equal(count(html, /style="/g), count(html, /style="--col:\d+"/g));
+  assert.equal(count(html, /style="/g), count(html, /style="--cols?:\d+"/g));
 });
 
 test('the hour strip always has 24 cells and uses Rust levels', () => {
