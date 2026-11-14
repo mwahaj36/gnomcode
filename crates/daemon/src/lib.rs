@@ -1244,13 +1244,75 @@ mod tests {
         );
     }
 
+    async fn wait_for(count: &std::sync::atomic::AtomicUsize, at_least: usize) -> bool {
+        for _ in 0..100 {
+            if count.load(std::sync::atomic::Ordering::SeqCst) >= at_least {
+                return true;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        false
+    }
+
+    #[tokio::test]
+    async fn reconcile_loop_picks_up_root_created_after_start() {
+        use gnomcode_ingest::watcher::IngestWatcher;
+        use std::sync::atomic::Ordering;
+        let home = tempfile::tempdir().expect("tempdir");
+        let root = home.path().join(".codex").join("sessions");
+        let mut watcher = IngestWatcher::with_paths(
+            std::slice::from_ref(&root),
+            std::time::Duration::from_secs(60),
+            std::time::Duration::from_secs(60),
+        );
+        assert!(
+            watcher.is_watching(),
+            "ancestor of a missing root is watched"
+        );
+        let (count, pass) = counting_pass();
+        let loop_task = tokio::spawn(async move {
+            super::run_reconcile_loop(
+                std::time::Duration::from_millis(20),
+                true,
+                &mut watcher,
+                pass,
+            )
+            .await;
+        });
+        assert!(wait_for(&count, 1).await, "initial pass");
+        // Unrelated home-dir churn must not wake ingestion.
+        std::fs::write(home.path().join("notes.txt"), "x").expect("write");
+        std::fs::create_dir(home.path().join(".other")).expect("mkdir");
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        let idle = count.load(Ordering::SeqCst);
+        // Create the root (and its parent) after start: a pass runs within a tick.
+        std::fs::create_dir_all(&root).expect("create root");
+        let created = wait_for(&count, idle + 1).await;
+        // Files written inside the new root keep triggering passes.
+        let before_write = count.load(Ordering::SeqCst);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        std::fs::write(root.join("rollout-a.jsonl"), "{}\n").expect("write");
+        let wrote = wait_for(&count, before_write + 1).await;
+        // Delete and recreate: picked up again.
+        std::fs::remove_dir_all(home.path().join(".codex")).expect("rm");
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let before_recreate = count.load(Ordering::SeqCst);
+        std::fs::create_dir_all(&root).expect("recreate");
+        std::fs::write(root.join("rollout-b.jsonl"), "{}\n").expect("write");
+        let recreated = wait_for(&count, before_recreate + 1).await;
+        loop_task.abort();
+        assert_eq!(idle, 1, "unrelated home writes must not trigger a pass");
+        assert!(created, "new root must trigger a pass");
+        assert!(wrote, "writes in the new root must trigger a pass");
+        assert!(recreated, "recreated root must trigger a pass");
+    }
+
     #[tokio::test]
     async fn reconcile_loop_falls_back_to_polling_without_watcher() {
         use gnomcode_ingest::watcher::IngestWatcher;
         use std::sync::atomic::Ordering;
-        let dir = tempfile::tempdir().expect("tempdir");
         let mut watcher = IngestWatcher::with_paths(
-            &[dir.path().join("missing")],
+            &[],
             std::time::Duration::from_secs(60),
             std::time::Duration::from_secs(60),
         );
