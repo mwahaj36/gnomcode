@@ -249,7 +249,7 @@ impl Database {
         "#)?;
         let rows = stmt.query_map(
             params![root, limit.unwrap_or(1000).min(5000) as i64, before],
-            handoff_chat_row,
+            crate::chat::chat_event_from_row,
         )?;
         let mut events = rows.collect::<Result<Vec<_>, _>>()?;
         events.reverse();
@@ -292,7 +292,7 @@ impl Database {
             FROM events WHERE role='user'
             ORDER BY segment ASC,turn_index ASC,created_at ASC,event_id ASC
         "#)?;
-        let rows = stmt.query_map([root], handoff_chat_row)?;
+        let rows = stmt.query_map([root], crate::chat::chat_event_from_row)?;
         for row in rows {
             let mut event = row?;
             event.content = gnomcode_core::redact::clean_user_message(&event.content);
@@ -320,27 +320,6 @@ impl Database {
         tx.commit()?;
         Ok(deleted)
     }
-}
-
-fn handoff_chat_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatEvent> {
-    let role: String = row.get(3)?;
-    let created: String = row.get(7)?;
-    Ok(ChatEvent {
-        event_id: row.get(0)?,
-        session_id: row.get(1)?,
-        turn_index: row.get(2)?,
-        role: ChatRole::parse_role(&role).unwrap_or(ChatRole::System),
-        content: if role == "tool" {
-            String::new()
-        } else {
-            gnomcode_core::redact::redact_chat_content(&row.get::<_, String>(4)?)
-        },
-        tool_name: row.get(5)?,
-        status: row.get(6)?,
-        created_at: DateTime::parse_from_rfc3339(&created)
-            .map(|time| time.with_timezone(&Utc))
-            .unwrap_or_default(),
-    })
 }
 
 #[cfg(test)]
@@ -772,5 +751,58 @@ mod tests {
             db.conversation_target("source-host").expect("target"),
             Some(("switch-target".into(), None, true))
         );
+    }
+
+    #[test]
+    fn conversation_chat_reclassifies_legacy_harness_wrappers() {
+        let db = Database::open_in_memory().expect("db");
+        db.conn
+            .execute(
+                "INSERT INTO project(id,canonical_key,repo_root,name) VALUES ('p','p','fixture','p')",
+                [],
+            )
+            .expect("project");
+        db.conn
+            .execute(
+                "INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at) VALUES ('claude:1','claude-code','cli','p','idle','2026-10-30T00:00:00Z','2026-10-30T00:00:00Z')",
+                [],
+            )
+            .expect("session");
+        for (idx, (id, content)) in [
+            (
+                "e1",
+                "<task-notification><summary>Build check</summary><result>ok</result></task-notification>",
+            ),
+            ("e2", "<agent-message from=\"worker\">Done</agent-message>"),
+            (
+                "e3",
+                "<system-reminder>Internal</system-reminder>\nReal user question",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            db.insert_chat_event(&ChatEvent {
+                event_id: id.into(),
+                session_id: "claude:1".into(),
+                turn_index: idx as i64,
+                role: ChatRole::User,
+                content: content.into(),
+                created_at: Utc::now(),
+                tool_name: None,
+                status: None,
+            })
+            .expect("insert");
+        }
+        let events = db.conversation_chat("claude:1", None, None).expect("chat");
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].role, ChatRole::System);
+        assert_eq!(events[0].status.as_deref(), Some("task_notification"));
+        assert!(events[0].content.contains("Build check"));
+        assert_eq!(events[1].role, ChatRole::System);
+        assert_eq!(events[1].status.as_deref(), Some("subagent_report"));
+        assert!(events[1].content.contains("Subagent report"));
+        assert_eq!(events[2].role, ChatRole::User);
+        assert_eq!(events[2].content, "Real user question");
     }
 }

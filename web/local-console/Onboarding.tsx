@@ -6,7 +6,7 @@ import { ProviderChecklist, SETUP_PROVIDERS, statusUrl, type ProviderSetupStatus
 export const ONBOARDING_FLAG = 'gnomcode-onboarding-v2';
 const LEGACY_FLAG = 'gnomcode-onboarding-v1';
 
-type Stage = 'welcome' | 'provider' | 'phone' | 'done';
+type Stage = 'welcome' | 'account' | 'provider' | 'phone' | 'done';
 
 /** Resume state kept in local storage; onboarding never blocks and can be reopened. */
 export interface OnboardingState {
@@ -45,6 +45,7 @@ function saveOnboarding(state: OnboardingState): void {
 
 const STAGES: [Stage, string][] = [
   ['welcome', 'Providers'],
+  ['account', 'Account'],
   ['provider', 'Set up'],
   ['phone', 'Phone'],
   ['done', 'Done'],
@@ -237,15 +238,18 @@ export function Onboarding({
   const providerName = SETUP_PROVIDERS.find(([id]) => id === provider)?.[1] ?? '';
   const distro = provider ? state.distros[provider] || undefined : undefined;
 
+  const advanceFromAccount = () =>
+    update(state.selected.length ? { ...state, stage: 'provider', index: 0 } : { ...state, stage: 'phone' });
   const nextProvider = () => {
     if (state.index + 1 < state.selected.length) update({ ...state, index: state.index + 1 });
     else update({ ...state, stage: 'phone' });
   };
   const back = () => {
-    if (state.stage === 'provider' && state.index > 0) update({ ...state, index: state.index - 1 });
-    else if (state.stage === 'provider') update({ ...state, stage: 'welcome' });
+    if (state.stage === 'account') update({ ...state, stage: 'welcome' });
+    else if (state.stage === 'provider' && state.index > 0) update({ ...state, index: state.index - 1 });
+    else if (state.stage === 'provider') update({ ...state, stage: 'account' });
     else if (state.stage === 'phone') {
-      update(state.selected.length ? { ...state, stage: 'provider', index: state.selected.length - 1 } : { ...state, stage: 'welcome' });
+      update(state.selected.length ? { ...state, stage: 'provider', index: state.selected.length - 1 } : { ...state, stage: 'account' });
     } else if (state.stage === 'done') update({ ...state, stage: 'phone' });
   };
 
@@ -254,9 +258,11 @@ export function Onboarding({
       ? `${providerName}: provider ${state.index + 1} of ${state.selected.length}`
       : state.stage === 'welcome'
         ? 'Choose providers to set up'
-        : state.stage === 'phone'
-          ? 'Optional: phone and notifications'
-          : 'Setup summary';
+        : state.stage === 'account'
+          ? 'Optional: sign in or skip for local-only use'
+          : state.stage === 'phone'
+            ? 'Optional: phone and notifications'
+            : 'Setup summary';
 
   return (
     <dialog
@@ -308,6 +314,37 @@ export function Onboarding({
                 );
               })}
             </fieldset>
+          </section>
+        ) : null}
+        {state.stage === 'account' ? (
+          <section data-onboarding-step="account">
+            <h2 id="onboarding-heading" tabIndex={-1} ref={headingRef}>
+              Sign in (optional)
+            </h2>
+            <p>
+              Local sessions, usage tracking, and workspace handoff work offline without an account. Sign in only if you want encrypted Remote pairing or cloud sync.
+            </p>
+            <div className="sp-onb-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                data-onboarding-action="signin"
+                onClick={() => {
+                  close(false);
+                  navigateTo('auth');
+                }}
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                className="btn-control"
+                data-onboarding-action="skip-account"
+                onClick={advanceFromAccount}
+              >
+                Skip for now
+              </button>
+            </div>
           </section>
         ) : null}
         {state.stage === 'provider' && provider ? (
@@ -396,11 +433,19 @@ export function Onboarding({
             id="onboarding-next"
             type="button"
             className="btn-primary"
-            onClick={() =>
-              update(state.selected.length ? { ...state, stage: 'provider', index: 0 } : { ...state, stage: 'phone' })
-            }
+            onClick={() => update({ ...state, stage: 'account' })}
           >
-            {state.selected.length ? 'Continue' : 'Skip'}
+            Continue
+          </button>
+        ) : null}
+        {state.stage === 'account' ? (
+          <button
+            id="onboarding-next"
+            type="button"
+            className="btn-control"
+            onClick={advanceFromAccount}
+          >
+            Skip for now
           </button>
         ) : null}
         {state.stage === 'provider' ? (

@@ -2,6 +2,59 @@
 
 use super::*;
 
+pub(crate) fn chat_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatEvent> {
+    let event_id: String = row.get(0)?;
+    let session_id: String = row.get(1)?;
+    let turn_index: i64 = row.get(2)?;
+    let role_str: String = row.get(3)?;
+    let content: String = row.get(4)?;
+    let tool_name: Option<String> = row.get(5)?;
+    let status: Option<String> = row.get(6)?;
+    let created_at_str: String = row.get(7)?;
+
+    let mut role = ChatRole::parse_role(&role_str).unwrap_or(ChatRole::System);
+    let mut status = status;
+    let mut content = content;
+    // Rows stored before harness entries were classified are reclassified on read.
+    if role == ChatRole::User {
+        match gnomcode_core::chat_meta::classify_user_entry(&content, false, false) {
+            gnomcode_core::chat_meta::UserEntry::User(text) => content = text,
+            gnomcode_core::chat_meta::UserEntry::System {
+                subtype,
+                summary,
+                detail,
+            } => {
+                role = ChatRole::System;
+                status = Some(subtype.to_owned());
+                content = if detail.is_empty() {
+                    summary
+                } else {
+                    format!("{summary}\n\n{detail}")
+                };
+            }
+        }
+    }
+    let content = if role == ChatRole::Tool {
+        String::new()
+    } else {
+        gnomcode_core::redact::redact_chat_content(&content)
+    };
+    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+        .map(|dt| dt.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now());
+
+    Ok(ChatEvent {
+        event_id,
+        session_id,
+        turn_index,
+        role,
+        content,
+        created_at,
+        tool_name,
+        status,
+    })
+}
+
 impl Database {
     /// Checks whether pre-format-fix chat needs a one-time source repair.
     ///
@@ -216,62 +269,10 @@ impl Database {
             "#,
         )?;
 
-        let rows = stmt.query_map(params![session_id, limit as i64, before], |row| {
-            let event_id: String = row.get(0)?;
-            let session_id: String = row.get(1)?;
-            let turn_index: i64 = row.get(2)?;
-            let role_str: String = row.get(3)?;
-            let content: String = row.get(4)?;
-            let tool_name: Option<String> = row.get(5)?;
-            let status: Option<String> = row.get(6)?;
-            let created_at_str: String = row.get(7)?;
-
-            let mut role = ChatRole::parse_role(&role_str).unwrap_or(ChatRole::System);
-            let mut status = status;
-            let mut content = content;
-            // Rows stored before harness entries were classified are reclassified on read.
-            if role == ChatRole::User {
-                match gnomcode_core::chat_meta::classify_user_entry(&content, false, false) {
-                    gnomcode_core::chat_meta::UserEntry::User(text) => content = text,
-                    gnomcode_core::chat_meta::UserEntry::System {
-                        subtype,
-                        summary,
-                        detail,
-                    } => {
-                        role = ChatRole::System;
-                        status = Some(subtype.to_owned());
-                        content = if detail.is_empty() {
-                            summary
-                        } else {
-                            format!(
-                                "{summary}
-
-{detail}"
-                            )
-                        };
-                    }
-                }
-            }
-            let content = if role == ChatRole::Tool {
-                String::new()
-            } else {
-                gnomcode_core::redact::redact_chat_content(&content)
-            };
-            let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now());
-
-            Ok(ChatEvent {
-                event_id,
-                session_id,
-                turn_index,
-                role,
-                content,
-                tool_name,
-                status,
-                created_at,
-            })
-        })?;
+        let rows = stmt.query_map(
+            params![session_id, limit as i64, before],
+            chat_event_from_row,
+        )?;
 
         let mut events = Vec::new();
         for r in rows {

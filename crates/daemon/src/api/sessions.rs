@@ -402,7 +402,7 @@ fn validate_prompt_text(raw: &str) -> Result<&str, &'static str> {
     Ok(text)
 }
 
-fn valid_message_id(raw: &str) -> Option<&str> {
+pub(crate) fn valid_message_id(raw: &str) -> Option<&str> {
     let trimmed = raw.trim();
     (!trimmed.is_empty()
         && trimmed.len() <= 96

@@ -57,3 +57,31 @@ test('file viewer wires into Remote', () => {
   assert.ok(css.includes('.sp-files-panel{'));
   assert.doesNotMatch(cssSlice, /#[0-9a-f]{3,6}\b/i);
 });
+
+test('renderFileViewer bounds 40000-line text previews to prevent DOM stalls (#334)', () => {
+  const big = Array.from({ length: 40000 }, (_, i) => `line-${i + 1}: payload`).join('\n');
+  const html = renderFileViewer({
+    path: 'logs/large.txt',
+    content: big,
+    lossy: false,
+  });
+  const lineCount = (html.match(/class="sp-file-line"/g) || []).length;
+  assert.ok(lineCount > 0 && lineCount <= 500, `expected bounded lines, got ${lineCount}`);
+  assert.match(html, /Showing first 500 of 40,000 lines/);
+});
+
+test('Remote has one composer toolbar, durable drafts, queue_if_busy, and onboarding offers account skip (#326 #337 #338 #333)', () => {
+  const remote = read('../components/RemoteCompanion.tsx');
+  const toolbarCount = (remote.match(/className="remote-composer-toolbar"/g) || []).length;
+  assert.equal(toolbarCount, 1, 'Remote should have exactly one composer toolbar');
+  assert.match(remote, /queue_if_busy:\s*true/);
+  assert.match(remote, /gnomcode-remote-drafts/);
+
+  const onboarding = read('../local-console/Onboarding.tsx');
+  assert.match(onboarding, /data-onboarding-step="account"/);
+  assert.match(onboarding, /data-onboarding-action="signin"/);
+  assert.match(onboarding, /data-onboarding-action="skip-account"/);
+
+  const setup = read('../../scripts/Setup.cs');
+  assert.match(setup, /ClearGnomcodeOwnedCredentialsAndUiState/);
+});

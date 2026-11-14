@@ -66,8 +66,7 @@ export function ShellDialogs() {
         const count =
           typeof res?.total_count === 'number' ? res.total_count : Array.isArray(res?.sessions) ? res.sessions.length : null;
         if (readOnboarding() || count === null) return;
-        if (count === 0) startTour();
-        else setTipOpen(true);
+        startTour();
       } catch {
         // No offer when the daemon cannot say
       }
