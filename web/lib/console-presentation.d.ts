@@ -109,3 +109,7 @@ export function openImageViewer(src: string, alt?: string): void;
 export function openPdfPreview(dataUrl: string): void;
 export function bindPreviewInteractions(element: HTMLElement): void;
 export function hydrateAttachmentThumbs(element: HTMLElement, fetchPreview: (path: string) => Promise<RepoFileData>): void;
+export type LiveStatus = { state: 'working' | 'waiting_for_you' | 'idle' | 'stopped'; basis: string; step: string };
+export function renderLiveBadge(live: LiveStatus | null | undefined): string;
+export function formatElapsed(fromIso: string | null | undefined, nowMs?: number): string;
+export function renderActivityIndicator(live: LiveStatus | null | undefined, turnStartedAt: string | null | undefined, nowMs?: number): string;

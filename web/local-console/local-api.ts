@@ -9,6 +9,8 @@ export interface LocalSessionSummary {
   repo_path?: string;
   started_at?: string;
   home_group?: string;
+  live?: { state: 'working' | 'waiting_for_you' | 'idle' | 'stopped'; basis: string; step: string };
+  turn_started_at?: string;
   can_resume?: boolean;
   can_reset?: boolean;
   worktree?: boolean;

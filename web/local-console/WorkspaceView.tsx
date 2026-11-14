@@ -13,6 +13,8 @@ import { createPortal } from 'react-dom';
 import {
   formatPromptWithAttachments,
   isSessionRunningState,
+  renderLiveBadge,
+  renderActivityIndicator,
   middleTruncate,
   reconcileChat,
   wslDistro,
@@ -284,6 +286,14 @@ export function WorkspaceView() {
       null,
     [sessions, selectedCache, activeSessionId],
   );
+  const activeLive = activeSession?.live || null;
+  const [liveTick, setLiveTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (activeLive?.state !== 'working') return;
+    const timer = window.setInterval(() => setLiveTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeLive?.state]);
+  const activityMarkup = renderActivityIndicator(activeLive, activeSession?.turn_started_at, liveTick);
   const activeHosted = useMemo(
     () => hostedSessions.find((item) => item.session_id === activeSessionId) ?? null,
     [hostedSessions, activeSessionId],
@@ -1425,6 +1435,10 @@ export function WorkspaceView() {
   };
 
   const imported = activeSession?.source === 'imported';
+  const canInterruptActive =
+    !imported &&
+    (activeHosted !== null || (activeSession as { hosted?: boolean } | null)?.hosted !== false) &&
+    (activeLive?.state === 'working' || isSessionRunningState(activeSession?.state || ''));
   const limitsMarkup = useMemo(
     () =>
       renderConversationLimits(
@@ -2064,6 +2078,13 @@ export function WorkspaceView() {
                 <p>
                   {activeHosted?.agent || activeSession?.agent || 'Agent'}
                   {imported ? ' · Observed' : ''}
+                  {activeLive ? (
+                    <span
+                      className="sp-conversation-live"
+                      role="status"
+                      dangerouslySetInnerHTML={{ __html: renderLiveBadge(activeLive) }}
+                    />
+                  ) : null}
                 </p>
               </div>
               <div className="sp-limits-popover-wrap">
@@ -2165,11 +2186,7 @@ export function WorkspaceView() {
             <SessionTools
               sessionId={activeSessionId}
               repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
-              canInterrupt={
-                !imported &&
-                (activeHosted !== null || (activeSession as { hosted?: boolean } | null)?.hosted !== false) &&
-                isSessionRunningState(activeSession?.state || '')
-              }
+              canInterrupt={canInterruptActive}
             />
             {activeSession?.worktree ||
             activeSession?.worktree_branch ||
@@ -2319,6 +2336,20 @@ export function WorkspaceView() {
               hidden={terminalStreamOpen}
               onClick={handleChatStreamClick}
             />
+            {activeLive?.state === 'working' && !terminalStreamOpen ? (
+              <div className="sp-activity" role="status" aria-label="Agent activity">
+                <span dangerouslySetInnerHTML={{ __html: activityMarkup }} />
+                {canInterruptActive ? (
+                  <button
+                    type="button"
+                    className="btn-control sp-activity-stop"
+                    onClick={() => document.querySelector<HTMLButtonElement>('.sp-interrupt-btn')?.click()}
+                  >
+                    Stop
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <div
               ref={chatTerminalRef}
               className="sp-chat-terminal-box"
@@ -2377,7 +2408,11 @@ export function WorkspaceView() {
                     aria-label="Message the agent"
                     rows={1}
                     maxLength={4000}
-                    placeholder="Message the agent..."
+                    placeholder={
+                      activeLive?.state === 'working'
+                        ? 'Queue a message for when the agent finishes...'
+                        : 'Message the agent...'
+                    }
                     value={currentDraft}
                     onChange={(event) => {
                       const next = event.target.value;
@@ -2428,7 +2463,7 @@ export function WorkspaceView() {
                       Attach
                     </button>
                     <button type="submit" className="btn-primary" disabled={sendBusy}>
-                      Send
+                      {activeLive?.state === 'working' ? 'Queue' : 'Send'}
                     </button>
                   </div>
                   <small className="sp-chat-composer-help">

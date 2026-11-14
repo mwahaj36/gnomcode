@@ -4,7 +4,9 @@ const EVENT_LABELS:Record<string,string>={
   approval_waiting:'Needs approval',
   turn_finished:'Turn finished',
   limit_low:'Limit low',
-  limit_reset:'Limit reset'
+  limit_reset:'Limit reset',
+  session_stopped:'Agent stopped',
+  needs_attention:'Needs attention'
 };
 
 export interface ParsedPushRequest {
