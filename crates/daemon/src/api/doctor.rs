@@ -22,6 +22,34 @@ pub(super) async fn doctor_handler(
     Ok(Json(report))
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub(super) struct OnboardingQuery {
+    provider: Option<String>,
+    distro: Option<String>,
+}
+
+/// `GET /api/v1/onboarding/status?provider=&distro=`: one provider, or all three.
+pub(super) async fn onboarding_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(params): Query<OnboardingQuery>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let distro = params.distro.as_deref().filter(|d| !d.is_empty());
+    let wanted: Vec<&str> = match params.provider.as_deref() {
+        Some(p) => vec![p],
+        None => crate::onboarding::PROVIDERS.to_vec(),
+    };
+    let mut providers = Vec::new();
+    for provider in wanted {
+        let status = crate::onboarding::status(&state.db, provider, distro)
+            .await
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        providers.push(status);
+    }
+    Ok(Json(json!({ "providers": providers })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,6 +100,36 @@ mod tests {
             "keep_awake",
         ] {
             assert!(ids.contains(&expected), "missing check {expected}");
+        }
+    }
+
+    #[tokio::test]
+    async fn onboarding_status_requires_auth_and_rejects_bad_input() {
+        let app = build_router(AppState {
+            db: Arc::new(Mutex::new(Database::open_in_memory().expect("database"))),
+            bearer_token: "t".to_owned(),
+            orchestrator: None,
+            remote: Arc::new(crate::remote::RemoteManager::new()),
+        });
+        let get = |uri: &str, auth: bool| {
+            let mut b = Request::builder().uri(uri).header("Host", "127.0.0.1");
+            if auth {
+                b = b.header("Authorization", "Bearer t");
+            }
+            b.body(Body::empty()).expect("request")
+        };
+        let res = app
+            .clone()
+            .oneshot(get("/api/v1/onboarding/status", false))
+            .await
+            .expect("res");
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        for bad in [
+            "/api/v1/onboarding/status?provider=gemini",
+            "/api/v1/onboarding/status?provider=codex&distro=-x",
+        ] {
+            let res = app.clone().oneshot(get(bad, true)).await.expect("res");
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{bad}");
         }
     }
 }

@@ -146,6 +146,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/auth/signin", post(auth_signin_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/doctor", get(doctor_handler))
+        .route("/api/v1/onboarding/status", get(onboarding_status_handler))
         .route(
             "/api/v1/evals/handoff",
             get(crate::handoff_eval::get_handler),

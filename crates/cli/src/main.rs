@@ -1006,6 +1006,9 @@ async fn cmd_doctor(db_path: &std::path::Path, network: bool, json: bool) -> Res
             println!("         Fix: {fix}");
         }
     }
+    println!(
+        "\nProvider setup with live checks: console Settings > Providers (#settings/providers)."
+    );
 
     println!("\nDetected Agent Log Roots:");
     let roots = discover_agent_roots();

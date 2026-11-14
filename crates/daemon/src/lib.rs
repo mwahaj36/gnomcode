@@ -15,6 +15,7 @@ pub mod features;
 pub mod handoff_eval;
 mod interrupt;
 pub mod model_catalog;
+pub mod onboarding;
 pub mod pro;
 mod quick_actions;
 pub mod remote;

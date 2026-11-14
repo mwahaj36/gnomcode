@@ -269,3 +269,4 @@ For each new session, add a dated file with goals, outcomes, problems/root-cause
 - [2026-11-13 - Check scripts triage](2026-11-13-check-scripts-triage.md)
 - [2026-11-14 - Antigravity stable session titles](2026-11-14-antigravity-stable-titles.md)
 - [2026-11-14 - Marketing site matches the redesigned console](2026-11-14-marketing-console-parity.md)
+- [2026-11-14 - Verified provider onboarding](2026-11-14-verified-onboarding.md)
