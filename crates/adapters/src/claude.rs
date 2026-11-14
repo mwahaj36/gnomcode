@@ -21,6 +21,8 @@ pub struct ClaudeAdapter {
     seen_dedup_keys: HashSet<String>,
     parent_session_id: Option<String>,
     subagent_title: Option<String>,
+    last_cwd: Option<String>,
+    last_git_branch: Option<String>,
 }
 
 impl ClaudeAdapter {
@@ -117,12 +119,32 @@ impl SourceAdapter for ClaudeAdapter {
                 .clone()
                 .filter(|parent| *parent != session_id);
 
+            if let Some(c) = obj
+                .get("cwd")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
+                self.last_cwd = Some(c.to_owned());
+            }
+            if let Some(b) = obj
+                .get("gitBranch")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+            {
+                self.last_git_branch = Some(b.to_owned());
+            }
             let cwd = obj
                 .get("cwd")
                 .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .or(self.last_cwd.as_deref())
                 .or(ctx.fallback_cwd.as_deref())
                 .unwrap_or("/unknown");
-            let git_branch = obj.get("gitBranch").and_then(Value::as_str);
+            let git_branch = obj
+                .get("gitBranch")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .or(self.last_git_branch.as_deref());
 
             // Only lines that name their host decide the surface; `api-request` and similar
             // bookkeeping lines carry neither field and must not reset it to Cli.
@@ -200,10 +222,16 @@ impl SourceAdapter for ClaudeAdapter {
                 sess.title.clone_from(&self.subagent_title);
             }
             if let Some(valid_ts) = parsed_ts {
+                if valid_ts < sess.started_at {
+                    sess.started_at = valid_ts;
+                }
                 sess.last_event_at = valid_ts;
             }
             if let Some(surface) = line_surface {
                 sess.surface = surface;
+            }
+            if !project.is_unassigned() {
+                sess.project_id.clone_from(&project.id);
             }
             let ts = sess.last_event_at;
 
@@ -213,7 +241,6 @@ impl SourceAdapter for ClaudeAdapter {
                 _ => None,
             };
             if let (Some(role), Some(message)) = (role, obj.get("message")) {
-                sess.state = SessionState::Thinking;
                 let content = message.get("content");
                 let text = match content {
                     Some(Value::String(text)) => text.clone(),
@@ -232,26 +259,31 @@ impl SourceAdapter for ClaudeAdapter {
                         flag("isMeta"),
                         flag("isCompactSummary"),
                     ) {
-                        gnomcode_core::chat_meta::UserEntry::User(text) => (role, text, None),
+                        gnomcode_core::chat_meta::UserEntry::User(text) => {
+                            sess.state = SessionState::Thinking;
+                            (role, text, None)
+                        }
                         gnomcode_core::chat_meta::UserEntry::System {
                             subtype,
                             summary,
                             detail,
-                        } => (
-                            ChatRole::System,
-                            if detail.is_empty() {
-                                summary
-                            } else {
-                                format!(
-                                    "{summary}
-
-{detail}"
-                                )
-                            },
-                            Some(subtype.to_owned()),
-                        ),
+                        } => {
+                            if matches!(subtype, "command" | "interrupt") {
+                                sess.state = SessionState::Idle;
+                            }
+                            (
+                                ChatRole::System,
+                                if detail.is_empty() {
+                                    summary
+                                } else {
+                                    format!("{summary}\n\n{detail}")
+                                },
+                                Some(subtype.to_owned()),
+                            )
+                        }
                     }
                 } else {
+                    sess.state = SessionState::Thinking;
                     (role, text, None)
                 };
                 if !text.is_empty() {
@@ -331,6 +363,9 @@ impl SourceAdapter for ClaudeAdapter {
             handle_claude_error_or_rate_limit(obj, sess, &session_id, ts, &mut batch);
         }
 
+        batch
+            .projects
+            .retain(|p| !p.is_unassigned() || sessions.iter().any(|s| s.project_id == p.id));
         batch.sessions.extend(sessions);
         crate::titles::apply_native_titles(&mut batch, AgentId::ClaudeCode, chunk);
         batch
@@ -720,4 +755,28 @@ fn emit_claude_error(
         summary_redacted: Some(redact_summary(label, friendly)),
         duration_ms: None,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{FileCtx, SourceAdapter};
+
+    #[test]
+    fn local_slash_command_entries_do_not_leave_session_stuck_in_thinking() {
+        let mut adapter = ClaudeAdapter::new();
+        let jsonl = concat!(
+            "{\"type\":\"mode\",\"mode\":\"normal\",\"sessionId\":\"41d9e154-8329-4c19-be76-f7f0ca88fa01\"}\n",
+            "{\"parentUuid\":null,\"isSidechain\":false,\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"<local-command-caveat>The command below was run directly in Claude Code.</local-command-caveat>\"},\"isMeta\":true,\"uuid\":\"u1\",\"timestamp\":\"2026-11-14T17:37:06.614Z\",\"cwd\":\"C:\\\\repo\",\"sessionId\":\"41d9e154-8329-4c19-be76-f7f0ca88fa01\"}\n",
+            "{\"parentUuid\":\"u1\",\"isSidechain\":false,\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"<command-name>/model</command-name>\\n            <command-message>model</command-message>\\n            <command-args>sonnet</command-args>\"},\"uuid\":\"u2\",\"timestamp\":\"2026-11-14T17:37:06.614Z\",\"cwd\":\"C:\\\\repo\",\"sessionId\":\"41d9e154-8329-4c19-be76-f7f0ca88fa01\"}\n",
+            "{\"parentUuid\":\"u2\",\"isSidechain\":false,\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"<local-command-stdout>Set model to `Sonnet 5.5` and saved as your default for new sessions</local-command-stdout>\"},\"uuid\":\"u3\",\"timestamp\":\"2026-11-14T17:37:06.614Z\",\"cwd\":\"C:\\\\repo\",\"sessionId\":\"41d9e154-8329-4c19-be76-f7f0ca88fa01\"}\n"
+        );
+        let batch = adapter.parse(&FileCtx::default(), jsonl.as_bytes());
+        let session = batch
+            .sessions
+            .iter()
+            .find(|s| s.id == "claude-code:41d9e154-8329-4c19-be76-f7f0ca88fa01")
+            .expect("session");
+        assert_eq!(session.state, SessionState::Idle);
+    }
 }

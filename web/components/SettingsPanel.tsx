@@ -128,8 +128,10 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
     await persist({display_name:displayName},"Account display name saved.");
   };
 
+  const RootTag = embedded ? "div" : "main";
+
   return (
-    <main className={embedded ? "sp-settings-page font-mono" : "sp-console-shell sp-settings-page mx-auto px-6 py-10 font-mono"}>
+    <RootTag className={embedded ? "sp-settings-page font-mono" : "sp-console-shell sp-settings-page mx-auto px-6 py-10 font-mono"}>
       {!embedded && <header className="sp-settings-header">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground font-sans">
@@ -280,6 +282,6 @@ export default function SettingsPanel({ embedded = false }: { embedded?: boolean
       </section>
 
       <section className="sp-settings-section"><h2>Usage and pricing</h2><p>Subscription costs and model pricing are configured in Profile on your desktop. Reports here use that desktop’s Rust-computed values. Choose the desktop in the reporting view.</p><Link href="/docs">Open setup guide</Link></section>
-    </main>
+    </RootTag>
   );
 }

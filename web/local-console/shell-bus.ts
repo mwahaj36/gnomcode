@@ -90,8 +90,42 @@ export function navigateTo(view: ConsoleView | string): void {
   navigator?.(view);
 }
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+export function currentThemeMode(): ThemeMode {
+  if (typeof document === 'undefined') return 'system';
+  const current = document.documentElement.dataset.theme;
+  return current === 'light' || current === 'dark' ? current : 'system';
+}
+
+export function applyThemeMode(next: ThemeMode): void {
+  if (typeof document === 'undefined') return;
+  if (next === 'system') {
+    delete document.documentElement.dataset.theme;
+    try {
+      localStorage.removeItem('gnomcode-theme');
+    } catch {
+      // Storage unavailable
+    }
+  } else {
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem('gnomcode-theme', next);
+    } catch {
+      // Storage unavailable
+    }
+  }
+  window.dispatchEvent(new CustomEvent('gnomcode:theme-changed', { detail: { theme: next } }));
+}
+
 export interface WorkspaceActionDetail {
-  type: 'new-session' | 'open-session' | 'toggle-chat-list';
+  type:
+    | 'new-session'
+    | 'open-session'
+    | 'toggle-chat-list'
+    | 'toggle-agent-terminal'
+    | 'toggle-overview'
+    | 'copy-workspace-path';
   sessionId?: string;
   folder?: string;
   focus?: boolean;

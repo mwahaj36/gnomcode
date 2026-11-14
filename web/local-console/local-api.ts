@@ -51,6 +51,8 @@ export interface LocalReportResponse {
 export interface LocalDesktopBridge {
   chooseWorkspace?: () => Promise<string | null>;
   restartToUpdate?: () => Promise<void> | void;
+  getLoginItem?: () => Promise<boolean>;
+  setLoginItem?: (enabled: boolean) => Promise<boolean>;
 }
 
 export interface LocalTerminalInstance {

@@ -79,7 +79,15 @@ pub(super) async fn git_output(
     const LIMIT: u64 = 1_048_576;
     let mut command = tokio::process::Command::new("git");
     command
-        .args(["--no-pager", "-c", "core.quotepath=off"])
+        .args([
+            "--no-pager",
+            "-c",
+            "safe.directory=*",
+            "-c",
+            "core.quotepath=off",
+            "-c",
+            "core.fsmonitor=false",
+        ])
         .args(args)
         .current_dir(repo)
         .env("GIT_TERMINAL_PROMPT", "0")

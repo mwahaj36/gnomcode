@@ -8,7 +8,15 @@ import {
   type ProviderOverview,
 } from '../lib/console-presentation.js';
 import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl } from './local-api';
-import { navigateTo, revealSection, startOnboarding, takeSettingsQuery } from './shell-bus';
+import {
+  applyThemeMode,
+  currentThemeMode,
+  navigateTo,
+  revealSection,
+  startOnboarding,
+  takeSettingsQuery,
+  type ThemeMode,
+} from './shell-bus';
 
 interface RemoteDeviceRow {
   id: string;
@@ -144,11 +152,27 @@ export function SettingsView() {
   }, []);
   const baseUrl = getConsoleBaseUrl();
 
-  const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>(() => {
-    if (typeof document === 'undefined') return 'system';
-    const current = document.documentElement.dataset.theme;
-    return current === 'light' || current === 'dark' ? current : 'system';
-  });
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => currentThemeMode());
+
+  useEffect(() => {
+    const onTheme = () => setThemeMode(currentThemeMode());
+    window.addEventListener('gnomcode:theme-changed', onTheme);
+    const bridge = typeof window !== 'undefined' ? window.gnomcodeDesktop : undefined;
+    let active = true;
+    if (bridge?.getLoginItem && bridge?.setLoginItem) {
+      setLoginItemSupported(true);
+      void bridge.getLoginItem().then(
+        (enabled) => {
+          if (active) setLoginItemEnabled(Boolean(enabled));
+        },
+        () => undefined,
+      );
+    }
+    return () => {
+      active = false;
+      window.removeEventListener('gnomcode:theme-changed', onTheme);
+    };
+  }, []);
 
   // Remote devices state
   const [remoteStatus, setRemoteStatus] = useState('Checking devices...');
@@ -198,16 +222,9 @@ export function SettingsView() {
   const [cachePrice, setCachePrice] = useState('');
   const [dbStatsText, setDbStatsText] = useState('Loading local storage stats...');
 
-  // License state
-  const [licensed, setLicensed] = useState(false);
-  const [licenseTier, setLicenseTier] = useState('FREE');
-  const [licenseDetails, setLicenseDetails] = useState(
-    'All local features are free. Existing offline licenses can still be managed here.',
-  );
-  const [showLicenseEntry, setShowLicenseEntry] = useState(true);
-  const [licenseKey, setLicenseKey] = useState('');
-  const [licenseFeedback, setLicenseFeedback] = useState('');
-  const [confirmRemoveLicense, setConfirmRemoveLicense] = useState(false);
+  // Desktop startup & appearance state
+  const [loginItemSupported, setLoginItemSupported] = useState(false);
+  const [loginItemEnabled, setLoginItemEnabled] = useState(false);
 
   // Account, Data, Updates, Guide state
   const [cloudSyncStatus, setCloudSyncStatus] = useState('Checking desktop publication status...');
@@ -260,27 +277,12 @@ export function SettingsView() {
 
   const loadProData = useCallback(async () => {
     try {
-      const [licRes, qRes, rulesRes, alertsRes, relayRes] = await Promise.all([
-        fetchLocalJson<{
-          licensed?: boolean;
-          tier?: string;
-          customer_name?: string;
-          expires_at?: string;
-        }>('/api/v1/license'),
+      const [qRes, rulesRes, alertsRes, relayRes] = await Promise.all([
         fetchLocalJson<ResumeQueueEntry[]>('/api/v1/resume-queue'),
         fetchLocalJson<GuardrailRule[]>('/api/v1/rules'),
         fetchLocalJson<GuardrailAlert[]>('/api/v1/alerts'),
         fetchLocalJson<{ relays?: RelayEntry[] }>('/api/v1/pro/relay'),
       ]);
-      const isLicensed = Boolean(licRes?.licensed);
-      setLicensed(isLicensed);
-      setShowLicenseEntry(!isLicensed);
-      setLicenseTier(isLicensed && licRes?.tier ? licRes.tier.toUpperCase() : 'FREE');
-      setLicenseDetails(
-        isLicensed
-          ? `License active for ${licRes.customer_name || 'user'}. ${licRes.expires_at ? `Expires ${licRes.expires_at}` : 'Perpetual license.'}`
-          : 'All local features are free. Existing offline licenses can still be managed here.',
-      );
       setResumeQueue(Array.isArray(qRes) ? qRes : []);
       setRules(Array.isArray(rulesRes) ? rulesRes : []);
       setAlerts(Array.isArray(alertsRes) ? alertsRes : []);
@@ -439,23 +441,9 @@ export function SettingsView() {
   }, [loadProviders, loadRemote, refreshAll]);
 
   const handleCycleTheme = () => {
-    const next: 'system' | 'light' | 'dark' =
+    const next: ThemeMode =
       themeMode === 'system' ? 'light' : themeMode === 'light' ? 'dark' : 'system';
-    if (next === 'system') {
-      delete document.documentElement.dataset.theme;
-      try {
-        localStorage.removeItem('gnomcode-theme');
-      } catch {
-        // Storage unavailable
-      }
-    } else {
-      document.documentElement.dataset.theme = next;
-      try {
-        localStorage.setItem('gnomcode-theme', next);
-      } catch {
-        // Storage unavailable
-      }
-    }
+    applyThemeMode(next);
     setThemeMode(next);
   };
 
@@ -720,6 +708,26 @@ export function SettingsView() {
         >
           {`Theme / ${themeMode}`}
         </button>
+        {loginItemSupported ? (
+          <div className="sp-setting-row">
+            <label className="sp-notify-toggle" htmlFor="settings-start-at-login">
+              <input
+                id="settings-start-at-login"
+                type="checkbox"
+                checked={loginItemEnabled}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setLoginItemEnabled(next);
+                  void window.gnomcodeDesktop?.setLoginItem?.(next).then(
+                    (saved) => setLoginItemEnabled(Boolean(saved)),
+                    () => setLoginItemEnabled(!next),
+                  );
+                }}
+              />
+              <span>Start Gnomcode when I sign in</span>
+            </label>
+          </div>
+        ) : null}
       </section>
 
       <section id="settings-remote" className="profile-devices sp-settings-section" aria-label="Remote and devices" hidden={!shown('settings-remote')}>

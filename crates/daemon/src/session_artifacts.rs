@@ -63,6 +63,8 @@ async fn git_porcelain_z(repo: &Path) -> Result<Vec<(String, &'static str)>, &'s
         .args([
             "--no-pager",
             "-c",
+            "safe.directory=*",
+            "-c",
             "core.quotepath=off",
             "-c",
             "core.fsmonitor=false",

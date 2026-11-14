@@ -12,8 +12,11 @@ import {
 import { createPortal } from 'react-dom';
 import {
   copyTextToClipboard,
+  createInterruptRequestId,
+  formatInterruptAckMessage,
   formatPromptWithAttachments,
   isSessionRunningState,
+  parseGitStatusLines,
   renderLiveBadge,
   renderActivityIndicator,
   middleTruncate,
@@ -129,6 +132,23 @@ const LAST_CHAT_STORAGE_KEY = 'gnomcode-last-chat';
 const CLI_AGENT_MAP: Record<string, string> = {
   'claude-code': 'claude',
 };
+const PINNED_SESSIONS_KEY = 'gnomcode.pinnedSessions';
+type SidebarQuickFilter = 'all' | 'active' | 'pinned';
+
+function readPinnedSessions(): string[] {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(PINNED_SESSIONS_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function isQuickActiveSession(session: LocalSessionSummary): boolean {
+  if (session.home_group === 'needs_you' || session.home_group === 'running') return true;
+  if (session.live?.state === 'working' || session.live?.state === 'waiting_for_you') return true;
+  return isSessionRunningState(session.state || '');
+}
 
 function isWorkspaceVisible(): boolean {
   if (typeof document === 'undefined') return false;
@@ -176,6 +196,8 @@ export function WorkspaceView() {
   const [catalogError, setCatalogError] = useState(false);
 
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [sidebarQuickFilter, setSidebarQuickFilter] = useState<SidebarQuickFilter>('all');
+  const [pinnedSessionIds, setPinnedSessionIds] = useState<string[]>(() => readPinnedSessions());
   const [searchQuery, setSearchQuery] = useState('');
   const [includeSubagents, setIncludeSubagentsState] = useState(() => subagentsIncluded());
   const setIncludeSubagents = useCallback((value: boolean) => {
@@ -247,10 +269,14 @@ export function WorkspaceView() {
   const [selectedModelValue, setSelectedModelValue] = useState('');
   const [modelHandoffBusy, setModelHandoffBusy] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
+  const [interruptBusy, setInterruptBusy] = useState(false);
+  const [activeChangesCount, setActiveChangesCount] = useState(0);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [continueHereBusy, setContinueHereBusy] = useState(false);
   // 'automation' is Workspace-only; the other panels belong to SessionTools.
   const [sidePanel, setSidePanel] = useState<WorkspaceSidePanel | 'automation' | null>(null);
+  const sidePanelRef = useRef(sidePanel);
+  sidePanelRef.current = sidePanel;
   // Overview card beside the conversation; a per-viewer layout preference. Narrow windows start with it
   // closed because it overlays the conversation there.
   const [overviewOpen, setOverviewOpenState] = useState(() => {
@@ -261,14 +287,16 @@ export function WorkspaceView() {
       return true;
     }
   });
-  const setOverviewOpen = (open: boolean) => {
+  const overviewOpenRef = useRef(overviewOpen);
+  overviewOpenRef.current = overviewOpen;
+  const setOverviewOpen = useCallback((open: boolean) => {
     setOverviewOpenState(open);
     try {
       localStorage.setItem('gnomcode.overview', open ? '1' : '0');
     } catch {
       // Storage unavailable
     }
-  };
+  }, []);
   // On narrow windows the Overview overlays the conversation, so opening a tool from it closes it
   // (without changing the remembered desktop preference) and closing the tool returns to the chat.
   const openTool = (panel: WorkspaceSidePanel | 'automation') => {
@@ -315,6 +343,9 @@ export function WorkspaceView() {
   const workspaceTerminalsRef = useRef<Map<string, WorkspaceTerminalEntry>>(new Map());
   const workspaceTerminalBusyRef = useRef(false);
   const pendingSendRef = useRef<Set<string>>(new Set());
+  const interruptAttemptRef = useRef<{ sessionId: string; requestId: string } | null>(null);
+  const toggleAgentTerminalRef = useRef<() => void>(() => {});
+  const activeCopyPathRef = useRef('');
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const attachments = useSessionAttachments(activeSessionId);
 
@@ -650,6 +681,35 @@ export function WorkspaceView() {
     }
   }, [launcherOpen]);
 
+  const togglePinSession = useCallback((sessionId: string) => {
+    setPinnedSessionIds((prev) => {
+      const next = prev.includes(sessionId)
+        ? prev.filter((id) => id !== sessionId)
+        : [sessionId, ...prev];
+      try {
+        localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(next));
+      } catch {
+        // Storage unavailable
+      }
+      return next;
+    });
+  }, []);
+
+  const visibleSidebarSessions = useMemo(() => {
+    if (sidebarQuickFilter === 'active') {
+      return sessions.filter(isQuickActiveSession);
+    }
+    if (sidebarQuickFilter === 'pinned') {
+      return sessions.filter((item) => pinnedSessionIds.includes(item.id));
+    }
+    if (!pinnedSessionIds.length) return sessions;
+    const pinnedSet = new Set(pinnedSessionIds);
+    return [
+      ...sessions.filter((item) => pinnedSet.has(item.id)),
+      ...sessions.filter((item) => !pinnedSet.has(item.id)),
+    ];
+  }, [sessions, sidebarQuickFilter, pinnedSessionIds]);
+
   // Sync rendered conversation list via shared pure helper
   useEffect(() => {
     if (!sessionListRef.current) return;
@@ -657,8 +717,18 @@ export function WorkspaceView() {
       sessionListRef.current.textContent = sidebarError;
       return;
     }
-    sessionListRef.current.innerHTML = renderSessionList(sessions, activeSessionId);
-  }, [sessions, activeSessionId, sidebarError]);
+    if (visibleSidebarSessions.length === 0 && sidebarQuickFilter !== 'all') {
+      const empty = document.createElement('p');
+      empty.className = 'local-view-message';
+      empty.textContent =
+        sidebarQuickFilter === 'pinned'
+          ? 'No pinned conversations yet. Use More actions on a conversation to pin it.'
+          : 'No active conversations right now.';
+      sessionListRef.current.replaceChildren(empty);
+      return;
+    }
+    sessionListRef.current.innerHTML = renderSessionList(visibleSidebarSessions, activeSessionId);
+  }, [visibleSidebarSessions, sidebarQuickFilter, activeSessionId, sidebarError]);
 
   // Sync reconciled chat cards via shared pure helper
   useEffect(() => {
@@ -770,6 +840,26 @@ export function WorkspaceView() {
         void loadChat(detail.sessionId);
       } else if (detail.type === 'toggle-chat-list') {
         toggleChatSidebar();
+      } else if (detail.type === 'toggle-agent-terminal') {
+        toggleAgentTerminalRef.current();
+      } else if (detail.type === 'toggle-overview') {
+        if (sidePanelRef.current) {
+          setSidePanel(null);
+          setOverviewOpen(false);
+        } else {
+          setOverviewOpen(!overviewOpenRef.current);
+        }
+      } else if (detail.type === 'copy-workspace-path') {
+        const targetPath = activeCopyPathRef.current;
+        if (targetPath) {
+          void copyTextToClipboard(targetPath).then((ok) =>
+            setActionStatus(
+              ok
+                ? 'Workspace path copied.'
+                : 'Could not copy the path. Check clipboard access and retry.',
+            ),
+          );
+        }
       }
     };
 
@@ -782,7 +872,15 @@ export function WorkspaceView() {
       window.removeEventListener('gnomcode:reload-view', onReload);
       window.removeEventListener('gnomcode:workspace-action', onWorkspaceAction);
     };
-  }, [loadChat, loadConversations, loadInstalledAgents, loadProjects, openLauncher, toggleChatSidebar]);
+  }, [
+    loadChat,
+    loadConversations,
+    loadInstalledAgents,
+    loadProjects,
+    openLauncher,
+    setOverviewOpen,
+    toggleChatSidebar,
+  ]);
 
   // Handle Escape / cleanup of sockets on unmount
   useEffect(() => {
@@ -930,6 +1028,38 @@ export function WorkspaceView() {
       window.requestAnimationFrame(() => connectAgentTerminal(activeSessionId));
     }
   };
+  toggleAgentTerminalRef.current = handleToggleAgentTerminal;
+
+  const interruptActiveSession = useCallback(async () => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId || interruptBusy) return;
+    if (!interruptAttemptRef.current || interruptAttemptRef.current.sessionId !== sessionId) {
+      interruptAttemptRef.current = { sessionId, requestId: createInterruptRequestId() };
+    }
+    setInterruptBusy(true);
+    setActionStatus('Sending interrupt signal (Esc)...');
+    try {
+      const ack = await fetchLocalMutation<{ type?: string; message?: string; sent?: boolean }>(
+        `/api/v1/sessions/${encodeURIComponent(sessionId)}/interrupt`,
+        { method: 'POST', body: { request_id: interruptAttemptRef.current.requestId } },
+      );
+      if (ack?.type === 'error') {
+        throw new Error(ack.message || 'Could not deliver interrupt. Retry or check Agent terminal.');
+      }
+      interruptAttemptRef.current = null;
+      if (activeSessionIdRef.current === sessionId) {
+        setActionStatus(formatInterruptAckMessage(ack));
+      }
+    } catch (err) {
+      if (activeSessionIdRef.current === sessionId) {
+        setActionStatus(
+          err instanceof Error ? err.message : 'Interrupt failed. Retry or check Agent terminal.',
+        );
+      }
+    } finally {
+      setInterruptBusy(false);
+    }
+  }, [interruptBusy]);
 
   const handleContinueHere = async () => {
     if (!activeSessionId || continueHereBusy) return;
@@ -1619,6 +1749,58 @@ export function WorkspaceView() {
     !imported &&
     (activeHosted !== null || (activeSession as { hosted?: boolean } | null)?.hosted !== false) &&
     (activeLive?.state === 'working' || isSessionRunningState(activeSession?.state || ''));
+  activeCopyPathRef.current = activeHosted?.repo_path || activeSession?.repo_path || copyPath || '';
+
+  useEffect(() => {
+    interruptAttemptRef.current = null;
+  }, [activeSessionId, canInterruptActive]);
+
+  useEffect(() => {
+    const repo = activeHosted?.repo_path || activeSession?.repo_path;
+    if (!activeSessionId || !repo) {
+      setActiveChangesCount(0);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void fetchLocalJson<{ status?: string }>(
+        `/api/v1/sessions/${encodeURIComponent(activeSessionId)}/changes`,
+      ).then(
+        (data) => {
+          if (!cancelled) {
+            setActiveChangesCount(parseGitStatusLines(data?.status || '').length);
+          }
+        },
+        () => {
+          if (!cancelled) setActiveChangesCount(0);
+        },
+      );
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeSessionId,
+    activeHosted?.repo_path,
+    activeSession?.repo_path,
+    activeLive?.state,
+    chatEvents.length,
+  ]);
+
+  useEffect(() => {
+    if (!activeSessionId || launcherOpen || terminalStreamOpen || imported) return;
+    if (typeof window === 'undefined' || window.innerWidth <= 900) return;
+    const frame = window.requestAnimationFrame(() => {
+      const activeEl = document.activeElement;
+      const insideSidebarList = Boolean(activeEl && activeEl.closest('.sp-workspace-list'));
+      const safeTarget = !activeEl || activeEl === document.body || insideSidebarList;
+      if (safeTarget) {
+        promptInputRef.current?.focus({ preventScroll: true });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSessionId, launcherOpen, terminalStreamOpen, imported]);
   const headerLimits = useMemo(() => {
     if (activeSession?.header_limit !== undefined) {
       return activeSession.header_limit ? [activeSession.header_limit as ConversationLimit] : [];
@@ -1732,6 +1914,29 @@ export function WorkspaceView() {
           }}
         />
 
+        <div className="sp-sidebar-quick-pills" role="group" aria-label="Quick conversation filters">
+          {(
+            [
+              ['all', 'All'],
+              ['active', 'Active'],
+              ['pinned', 'Pinned'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className="sp-sidebar-quick-pill"
+              aria-pressed={sidebarQuickFilter === key}
+              onClick={() => {
+                setPage(1);
+                setSidebarQuickFilter(key);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <details className="conversation-filters">
           <summary>Filters</summary>
           <div className="filters">
@@ -1842,6 +2047,19 @@ export function WorkspaceView() {
               }}
             >
               Open conversation
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const target = sessionContextMenu.session.id;
+                setSessionContextMenu(null);
+                togglePinSession(target);
+              }}
+            >
+              {pinnedSessionIds.includes(sessionContextMenu.session.id)
+                ? 'Unpin conversation'
+                : 'Pin conversation'}
             </button>
             {sessionContextMenu.session.source === 'imported' ? (
               <button
@@ -2447,6 +2665,11 @@ export function WorkspaceView() {
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                     <path d="M3 4h18v16H3z M15 4v16" />
                   </svg>
+                  {activeChangesCount > 0 ? (
+                    <span className="sp-overview-badge" aria-hidden="true">
+                      {activeChangesCount}
+                    </span>
+                  ) : null}
                 </button>
                 {canInterruptActive ? (
                   <button
@@ -2454,12 +2677,8 @@ export function WorkspaceView() {
                     className="btn-control sp-interrupt-btn"
                     aria-label="Interrupt running turn"
                     title="Sends Esc to interrupt the active turn without closing the session"
-                    onClick={() =>
-                      void fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(activeSessionId)}/interrupt`, {
-                        method: 'POST',
-                        body: { request_id: createUuid() },
-                      })
-                    }
+                    disabled={interruptBusy}
+                    onClick={() => void interruptActiveSession()}
                   >
                     Stop
                   </button>
@@ -2675,6 +2894,17 @@ export function WorkspaceView() {
               </button>
             ) : null}
 
+            {hasEarlier && !terminalStreamOpen ? (
+              <div className="ide-chat-controls">
+                <button
+                  type="button"
+                  className="btn-control"
+                  onClick={() => void loadChat(activeSessionId, { earlier: true })}
+                >
+                  Load earlier messages
+                </button>
+              </div>
+            ) : null}
             <div
               ref={chatStreamRef}
               className="sp-chat-stream-box"
@@ -2692,7 +2922,8 @@ export function WorkspaceView() {
                   <button
                     type="button"
                     className="btn-control sp-activity-stop"
-                    onClick={() => document.querySelector<HTMLButtonElement>('.sp-interrupt-btn')?.click()}
+                    disabled={interruptBusy}
+                    onClick={() => void interruptActiveSession()}
                   >
                     Stop
                   </button>
@@ -2898,7 +3129,12 @@ export function WorkspaceView() {
                   </div>
                   <button type="button" className="sp-overview-item" onClick={() => openTool('changes')}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12m0 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm12-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 0c0 6-12 3-12 9" /></svg>
-                    Changes
+                    <span>Changes</span>
+                    {activeChangesCount > 0 ? (
+                      <span className="sp-overview-badge" aria-hidden="true">
+                        {activeChangesCount}
+                      </span>
+                    ) : null}
                   </button>
                   <button type="button" className="sp-overview-item" onClick={() => openTool('files')}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z M14 3v4h4" /></svg>
@@ -3115,19 +3351,6 @@ export function WorkspaceView() {
               </div>
               <div ref={workspaceTerminalScreenRef} className="sp-workspace-terminal-screen" />
             </section>
-
-            {deliveryStatus ? <p role="status">{deliveryStatus}</p> : null}
-            {hasEarlier ? (
-              <div className="ide-chat-controls">
-                <button
-                  type="button"
-                  className="btn-control"
-                  onClick={() => void loadChat(activeSessionId, { earlier: true })}
-                >
-                  Load earlier messages
-                </button>
-              </div>
-            ) : null}
           </section>
         ) : null}
       </div>

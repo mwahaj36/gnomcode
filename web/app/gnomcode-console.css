@@ -1363,13 +1363,13 @@ html{touch-action:manipulation}
 .sp-limits-trigger:focus-visible{outline:2px solid var(--sp-accent);outline-offset:2px}
 .sp-remote .remote-sheet .sp-card-grid{grid-template-columns:minmax(0,1fr)}
 @media(max-width:767px){
- main.sp-web-app,main.sp-web-app.web-navigation-expanded{padding:max(var(--sp-4),env(safe-area-inset-top)) max(var(--sp-4),env(safe-area-inset-right)) calc(68px + env(safe-area-inset-bottom)) max(var(--sp-4),env(safe-area-inset-left))!important}
- main.sp-web-app:has(.sp-remote:is(.is-paired,.is-reconnecting)){padding-top:0!important}
- main.sp-web-app .sp-console-workspace>.sp-console-nav{inset:auto 0 0 0;width:100%!important;height:calc(56px + env(safe-area-inset-bottom));flex-direction:row;align-items:stretch;gap:var(--sp-1);padding:0 max(var(--sp-2),env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--sp-2),env(safe-area-inset-left));border-right:0;border-bottom:0;border-top:1px solid var(--sp-border);overflow:visible;z-index:40}
- main.sp-web-app .sp-console-nav :is(.web-rail-brand,.web-download-link,.web-rail-toggle){display:none}
- main.sp-web-app .sp-console-nav button{flex:1;justify-content:center;min-height:48px;padding:0;margin:0!important}
- main.sp-web-app .sp-console-nav button>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
- main.sp-web-app .web-context{min-height:48px;margin-bottom:var(--sp-4)}
+ .sp-console-app.sp-web-app,.sp-console-app.sp-web-app.web-navigation-expanded{padding:max(var(--sp-4),env(safe-area-inset-top)) max(var(--sp-4),env(safe-area-inset-right)) calc(68px + env(safe-area-inset-bottom)) max(var(--sp-4),env(safe-area-inset-left))!important}
+ .sp-console-app.sp-web-app:has(.sp-remote:is(.is-paired,.is-reconnecting)){padding-top:0!important}
+ .sp-console-app.sp-web-app .sp-console-workspace>.sp-console-nav{inset:auto 0 0 0;width:100%!important;height:calc(56px + env(safe-area-inset-bottom));flex-direction:row;align-items:stretch;gap:var(--sp-1);padding:0 max(var(--sp-2),env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--sp-2),env(safe-area-inset-left));border-right:0;border-bottom:0;border-top:1px solid var(--sp-border);overflow:visible;z-index:40}
+ .sp-console-app.sp-web-app .sp-console-nav :is(.web-rail-brand,.web-download-link,.web-rail-toggle){display:none}
+ .sp-console-app.sp-web-app .sp-console-nav button{flex:1;justify-content:center;min-height:48px;padding:0;margin:0!important}
+ .sp-console-app.sp-web-app .sp-console-nav button>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .sp-console-app.sp-web-app .web-context{min-height:48px;margin-bottom:var(--sp-4)}
 }
 .sp-remote .remote-heading{padding-top:max(8px,env(safe-area-inset-top))}
 .sp-title-gap{margin-bottom:var(--sp-4)}
@@ -2292,11 +2292,11 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 @media(max-width:767px){body.sp-native-console[data-console-view="sessions"] .sp-workspace-chat-panel .conversation-heading{padding-left:44px}}
 /* Web console: same icon rail on the page ground and an inset work pane as the desktop console */
 @media(min-width:768px){
- main.sp-web-app{background:var(--sp-bg);padding:8px 8px 8px 64px!important}
- main.sp-web-app.web-navigation-expanded{padding-left:216px!important}
- main.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;background:var(--sp-bg);border-right:0}
- main.sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
- main.sp-web-app .sp-console-content{max-width:none;margin:0;min-height:calc(100dvh - 16px);padding:0 var(--sp-gutter) var(--sp-6);background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:12px}
+ .sp-console-app.sp-web-app{background:var(--sp-bg);padding:8px 8px 8px 64px!important}
+ .sp-console-app.sp-web-app.web-navigation-expanded{padding-left:216px!important}
+ .sp-console-app.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;background:var(--sp-bg);border-right:0}
+ .sp-console-app.sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
+ .sp-console-app.sp-web-app .sp-console-content{max-width:none;margin:0;min-height:calc(100dvh - 16px);padding:0 var(--sp-gutter) var(--sp-6);background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:12px}
 }
 /* Pool rows: the value column sizes to its text and stacks the seen time under the percentage instead of spilling out */
 .sp-mini{grid-template-columns:minmax(48px,max-content) minmax(40px,1fr) minmax(0,max-content)}
@@ -2385,3 +2385,18 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-native-console .sp-chat-composer .sp-composer-status{order:10;flex:1 0 100%;font-size:var(--sp-fs-meta);color:var(--sp-text-3);line-height:1.4}
 /* One Stop: while the activity row shows, the header copy stays in the DOM (the row's Stop triggers it) but is hidden */
 .sp-native-console .sp-workspace-chat-panel:has(.sp-activity-inline) .conversation-heading .sp-interrupt-btn{display:none}
+/* Sidebar quick filter pills (All / Active / Pinned) */
+.sp-sidebar-quick-pills{display:flex;gap:4px;margin:2px 0 4px}
+.sp-sidebar-quick-pill{flex:1 1 0;min-height:28px;padding:0 8px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--sp-text-2);font:500 var(--sp-fs-meta)/1 var(--sp-font-sans);cursor:pointer;transition:background-color .14s ease,color .14s ease,border-color .14s ease}
+.sp-sidebar-quick-pill:hover{background:var(--sp-surface-raised);color:var(--sp-text)}
+.sp-sidebar-quick-pill[aria-pressed="true"]{background:var(--sp-surface-raised);border-color:var(--sp-border);color:var(--sp-text)}
+/* Overview diff badge */
+.sp-overview-toggle{position:relative;gap:6px}
+.sp-overview-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--sp-surface-raised);border:1px solid var(--sp-border);color:var(--sp-text);font:600 11px/1 var(--sp-font-mono);font-variant-numeric:tabular-nums}
+.sp-overview-item .sp-overview-badge{margin-left:auto}
+/* Composer elevation and smooth inspector entrance */
+.sp-native-console .sp-chat-composer{transition:border-color .15s ease,box-shadow .15s ease}
+.sp-native-console .sp-chat-composer:focus-within{border-color:var(--sp-text-3);box-shadow:0 0 0 1px color-mix(in srgb,var(--sp-text-3) 35%,transparent)}
+.sp-overview,.sp-inspector{animation:spPanelIn .14s ease-out}
+@keyframes spPanelIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+.sp-code-bar{position:sticky;top:0;z-index:2;backdrop-filter:blur(6px)}

@@ -6,6 +6,7 @@
 // console-presentation.js; the daemon remains the authority for every limit.
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import {
+  copyTextToClipboard,
   createInterruptRequestId,
   DEFAULT_QUICK_ACTIONS,
   formatInterruptAckMessage,
@@ -278,6 +279,8 @@ export function SessionTools({
     [controlledPanel, onPanelChange],
   );
   const [changesHtml, setChangesHtml] = useState('');
+  const [diffCopied, setDiffCopied] = useState(false);
+  const [hasDiffText, setHasDiffText] = useState(false);
   // The last changes payload, so picking a file re-renders without another git call.
   const changesData = useRef<unknown>(null);
   const [filesHtml, setFilesHtml] = useState('');
@@ -294,7 +297,10 @@ export function SessionTools({
 
   useEffect(() => {
     if (controlledPanel === undefined) setInternalPanel(null);
+    changesData.current = null;
     setChangesHtml('');
+    setHasDiffText(false);
+    setDiffCopied(false);
     setFilesHtml('');
     setFileBodyHtml('');
     setFilePath('');
@@ -311,6 +317,7 @@ export function SessionTools({
       const data = await fetchLocalJson<Record<string, unknown>>(`/api/v1/sessions/${encodeURIComponent(target)}/changes`);
       if (sessionRef.current === target) {
         changesData.current = data;
+        setHasDiffText(Boolean(typeof data?.diff === 'string' && data.diff.trim()));
         setChangesHtml(renderChangesView(data as never));
       }
     } catch (err) {
@@ -484,6 +491,22 @@ export function SessionTools({
           <div className="sp-changes-head">
             <h3 id="chat-changes-heading">Workspace changes</h3>
             <div className="sp-changes-actions">
+              <button
+                type="button"
+                className="btn-control"
+                disabled={!hasDiffText}
+                onClick={() => {
+                  const diffText = String((changesData.current as { diff?: string } | null)?.diff || '');
+                  if (!diffText) return;
+                  void copyTextToClipboard(diffText).then((ok) => {
+                    if (!ok) return;
+                    setDiffCopied(true);
+                    window.setTimeout(() => setDiffCopied(false), 1500);
+                  });
+                }}
+              >
+                {diffCopied ? 'Copied' : 'Copy diff'}
+              </button>
               <button type="button" className="btn-control" onClick={() => void loadChanges()}>
                 Refresh
               </button>

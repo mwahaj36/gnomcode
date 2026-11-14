@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { navigateTo, openSettingsSearch, revealSection, startOnboarding } from './shell-bus';
+import { applyThemeMode, navigateTo, openSettingsSearch, revealSection, startOnboarding, workspaceAction } from './shell-bus';
 import { sectionMatches, SETTINGS_SECTIONS, signOutDesktop } from './settings-index';
 
 interface Command {
@@ -18,6 +18,51 @@ export function CommandPalette() {
 
   const commands = useMemo<Command[]>(
     () => [
+      {
+        id: 'new-conversation',
+        title: 'New conversation',
+        keywords: 'launch start session agent chat new',
+        run: () => {
+          navigateTo('sessions');
+          workspaceAction({ type: 'new-session', focus: true });
+        },
+      },
+      {
+        id: 'toggle-agent-terminal',
+        title: 'Toggle Agent terminal',
+        keywords: 'pty stream terminal raw agent output',
+        run: () => {
+          navigateTo('sessions');
+          workspaceAction({ type: 'toggle-agent-terminal' });
+        },
+      },
+      {
+        id: 'toggle-overview',
+        title: 'Toggle Overview drawer',
+        keywords: 'changes files artifacts inspector overview drawer',
+        run: () => {
+          navigateTo('sessions');
+          workspaceAction({ type: 'toggle-overview' });
+        },
+      },
+      {
+        id: 'toggle-sidebar',
+        title: 'Toggle conversation sidebar',
+        keywords: 'conversations sidebar list hide show collapse',
+        run: () => {
+          navigateTo('sessions');
+          workspaceAction({ type: 'toggle-chat-list' });
+        },
+      },
+      {
+        id: 'copy-workspace-path',
+        title: 'Copy active workspace path',
+        keywords: 'copy repo folder directory path clipboard',
+        run: () => workspaceAction({ type: 'copy-workspace-path' }),
+      },
+      { id: 'theme-light', title: 'Switch theme: Light', keywords: 'appearance color light mode day', run: () => applyThemeMode('light') },
+      { id: 'theme-dark', title: 'Switch theme: Dark', keywords: 'appearance color dark mode night', run: () => applyThemeMode('dark') },
+      { id: 'theme-system', title: 'Switch theme: System', keywords: 'appearance color system auto theme', run: () => applyThemeMode('system') },
       { id: 'sign-out', title: 'Sign out', keywords: 'log out logout disconnect account', run: () => void signOutDesktop() },
       { id: 'home', title: 'Go to Home', keywords: 'overview dashboard', run: () => navigateTo('overview') },
       { id: 'workspace', title: 'Go to Workspace', keywords: 'chats sessions', run: () => navigateTo('sessions') },

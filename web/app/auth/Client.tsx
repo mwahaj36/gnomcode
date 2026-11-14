@@ -109,7 +109,7 @@ export default function AuthPage() {
   };
 
   return (
-    <main className="sp-auth-page">
+    <div className="sp-auth-page">
       <section className="sp-auth-panel">
         <header className="sp-auth-heading">
           <h1>{mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Reset password"}</h1>
@@ -242,6 +242,6 @@ export default function AuthPage() {
           </Link>
         </nav>
       </section>
-    </main>
+    </div>
   );
 }

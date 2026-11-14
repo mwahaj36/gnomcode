@@ -87,6 +87,29 @@ public static class CheckInstallerOptions {
                 }
                 configure.Invoke(null, new object[] { root, dir, false });
                 Assert(root.OpenSubKey(@"Software\Classes\Directory\shell\Gnomcode") == null, "Opt-out/uninstall must remove Explorer entry");
+
+                var configureAutostart = integration.GetMethod("ConfigureAutostart");
+                var isAutostart = integration.GetMethod("IsAutostartEnabled");
+                Assert(configureAutostart != null && isAutostart != null, "Missing autostart helpers");
+                string fakeInstall = Path.Combine(Path.GetTempPath(), "gnomcode-autostart-test-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(Path.Combine(fakeInstall, "desktop"));
+                try {
+                    string fakeDesktop = Path.Combine(fakeInstall, "desktop", "gnomcode-desktop.exe");
+                    File.WriteAllText(fakeDesktop, "stub");
+                    using (RegistryKey approved = root.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")) {
+                        approved.SetValue("Gnomcode", new byte[] { 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary);
+                    }
+                    configureAutostart.Invoke(null, new object[] { root, fakeInstall, true });
+                    Assert((bool)isAutostart.Invoke(null, new object[] { root }), "Enabling autostart must clear StartupApproved disable state");
+                    using (RegistryKey runKey = root.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) {
+                        string cmd = (string)runKey.GetValue("Gnomcode");
+                        Assert(cmd == "\"" + fakeDesktop + "\" --background", "Autostart must launch desktop executable directly when present");
+                    }
+                    configureAutostart.Invoke(null, new object[] { root, fakeInstall, false });
+                    Assert(!(bool)isAutostart.Invoke(null, new object[] { root }), "Disabling autostart must clear Run value");
+                } finally {
+                    Directory.Delete(fakeInstall, true);
+                }
             }
         } finally { Registry.CurrentUser.DeleteSubKeyTree(testKey, false); }
         Console.WriteLine("PASS: setup waits for consent, exposes options, quotes/removes Explorer integration and preserves unrelated files on uninstall");
