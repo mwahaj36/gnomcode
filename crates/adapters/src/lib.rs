@@ -1189,4 +1189,33 @@ mod tests {
             "a group with no model list keeps only its own name"
         );
     }
+
+    #[test]
+    fn claude_v2_1_325_header_lines_without_cwd_or_timestamp_adopt_first_turn_project_and_timestamp()
+     {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let cwd = r"C:\Users\Wahaj\AppData\Local\Temp\gnomcode-live-handoff-repo";
+        let payload = concat!(
+            r#"{"type":"mode","mode":"normal","sessionId":"35596450-15f1-48f8-a249-a5d9b05cf8d5"}"#,
+            "\n",
+            r#"{"type":"permission-mode","permissionMode":"auto","sessionId":"35596450-15f1-48f8-a249-a5d9b05cf8d5"}"#,
+            "\n",
+            r#"{"type":"session-owner","accountUuid":"acct-1","organizationUuid":"org-1","sessionId":"35596450-15f1-48f8-a249-a5d9b05cf8d5"}"#,
+            "\n",
+            r#"{"type":"atis-latch","atis":"","sessionId":"35596450-15f1-48f8-a249-a5d9b05cf8d5"}"#,
+            "\n",
+            r#"{"type":"user","sessionId":"35596450-15f1-48f8-a249-a5d9b05cf8d5","timestamp":"2026-11-14T17:12:50.161Z","cwd":"C:\\Users\\Wahaj\\AppData\\Local\\Temp\\gnomcode-live-handoff-repo","gitBranch":"master","uuid":"u-1","message":{"role":"user","content":"Reply with the exact single word PINEAPPLE and nothing else."}}"#,
+            "\n"
+        );
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), payload.as_bytes());
+        assert_eq!(batch.sessions.len(), 1);
+        let expected_project = gnomcode_core::Project::from_origin(None, cwd, Some("master"));
+        assert_eq!(batch.sessions[0].project_id, expected_project.id);
+        assert_eq!(
+            batch.sessions[0].started_at.to_rfc3339(),
+            "2026-11-14T17:12:50.161+00:00"
+        );
+        assert_eq!(batch.projects.len(), 1);
+        assert_eq!(batch.projects[0].id, expected_project.id);
+    }
 }

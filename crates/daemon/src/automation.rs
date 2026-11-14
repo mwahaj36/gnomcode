@@ -677,7 +677,7 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
     for q in &mut quotas {
         let old = q.provider.clone();
         q.provider = provider(&old).to_owned();
-        if q.limit_id == old {
+        if q.limit_id == old || provider(&q.limit_id) == q.provider {
             q.limit_id = q.provider.clone();
         }
     }
@@ -717,6 +717,7 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
         let Ok(Some(source)) = store(db, move |db| {
             let sessions = db.list_active_sessions(1000)?;
             let hosted = gnomcode_pty::list_active_sessions();
+            crate::remote::sync_conversation_bindings(db, &sessions, &hosted)?;
             let Some(record) =
                 crate::remote::conversation_host(db, &source_id, &sessions, &hosted)?
             else {

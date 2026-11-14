@@ -982,13 +982,24 @@ pub(crate) async fn persist_model_change(
     source: &str,
     target: &gnomcode_pty::SessionRecord,
 ) -> Result<(), gnomcode_store::Error> {
-    let result = {
+    let (previous_host, result) = {
         let guard = db.lock().await;
-        record_model_change(&guard, source, target)
+        let previous_host = guard
+            .conversation_target(source)
+            .ok()
+            .flatten()
+            .map(|(host, _, _)| host);
+        let result = record_model_change(&guard, source, target);
+        (previous_host, result)
     };
     if result.is_err() && target.session_id != source {
         // Never leave a newly launched target host orphaned if persistence fails.
         let _ = gnomcode_pty::stop_session(&target.session_id).await;
+    } else if result.is_ok()
+        && let Some(old_host) = previous_host.filter(|host| host != &target.session_id)
+    {
+        // Stop the superseded PTY host after cross-provider handoff so only the target stays live.
+        let _ = gnomcode_pty::stop_session(&old_host).await;
     }
     result
 }
@@ -1042,7 +1053,9 @@ pub(crate) fn record_model_change(
         tool_name: None,
         status: Some("model_changed".into()),
     };
-    db.insert_chat_event(&event)?;
+    if db.get_session_focus_target(&event.session_id)?.is_some() {
+        db.insert_chat_event(&event)?;
+    }
     db.automation_notice(
         &event.event_id,
         &event.session_id,
@@ -1655,22 +1668,25 @@ pub(crate) fn session_bindings<'s, 'h>(
             let project = Project::from_origin(remote.as_deref(), &root.to_string_lossy(), None);
             let workspace_project = Project::from_origin(None, &record.repo_path, None);
             let started = chrono::DateTime::parse_from_rfc3339(&record.started_at).ok()?;
-            let mut candidates = sessions.iter().filter(|candidate| {
-                !hosted.iter().any(|other| {
-                    other.session_id != record.session_id
-                        && (Some(other.child_pid) == candidate.pid
-                            || other.session_id == candidate.id)
-                }) && agent == candidate.agent.as_str()
-                    && (project.id == candidate.project_id
-                        || workspace_project.id == candidate.project_id)
-                    && {
-                        let delta = candidate.started_at.signed_duration_since(started);
-                        delta >= chrono::Duration::seconds(-5)
-                            && delta <= chrono::Duration::minutes(5)
-                    }
-            });
-            let candidate = candidates.next()?;
-            candidates.next().is_none().then_some((candidate, record))
+            let matching: Vec<&'s Session> = sessions
+                .iter()
+                .filter(|candidate| {
+                    !hosted.iter().any(|other| {
+                        other.session_id != record.session_id
+                            && (Some(other.child_pid) == candidate.pid
+                                || other.session_id == candidate.id)
+                    }) && agent == candidate.agent.as_str()
+                        && (project.id == candidate.project_id
+                            || workspace_project.id == candidate.project_id)
+                        && candidate.last_event_at >= started - chrono::Duration::seconds(1)
+                        && {
+                            let delta = candidate.started_at.signed_duration_since(started);
+                            delta >= chrono::Duration::seconds(-5)
+                                && delta <= chrono::Duration::minutes(5)
+                        }
+                })
+                .collect();
+            pick_unique_binding_candidate(&matching, &started).map(|candidate| (candidate, record))
         })
         .collect::<Vec<_>>();
     bindings
@@ -1684,6 +1700,38 @@ pub(crate) fn session_bindings<'s, 'h>(
         })
         .copied()
         .collect()
+}
+
+fn pick_unique_binding_candidate<'s>(
+    matching: &[&'s Session],
+    started: &chrono::DateTime<chrono::FixedOffset>,
+) -> Option<&'s Session> {
+    if let [only] = matching {
+        return Some(*only);
+    }
+    let after_start: Vec<&'s Session> = matching
+        .iter()
+        .copied()
+        .filter(|candidate| candidate.started_at >= *started)
+        .collect();
+    if let [only] = after_start.as_slice() {
+        return Some(*only);
+    }
+    let pool = if after_start.is_empty() {
+        matching
+    } else {
+        after_start.as_slice()
+    };
+    let active: Vec<&'s Session> = pool
+        .iter()
+        .copied()
+        .filter(|candidate| !matches!(candidate.state, gnomcode_core::SessionState::Ended))
+        .collect();
+    if let [only] = active.as_slice() {
+        Some(*only)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -2575,6 +2623,69 @@ mod tests {
             db.conversation_target("source-host").expect("target"),
             Some(("switch-123".into(), None, true))
         );
+    }
+
+    #[test]
+    fn session_bindings_ignores_prior_session_in_same_repo() {
+        let now = chrono::Utc::now();
+        let repo = std::env::temp_dir().join("gnomcode-session-binding-test");
+        let repo_str = repo.to_string_lossy().into_owned();
+        let project = gnomcode_core::Project::from_origin(None, &repo_str, None);
+        let prior_ended = gnomcode_core::Session {
+            id: "claude-code:prior-old".into(),
+            agent: gnomcode_core::AgentId::ClaudeCode,
+            surface: gnomcode_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: gnomcode_core::SessionState::Idle,
+            pid: None,
+            started_at: now - chrono::Duration::seconds(4),
+            last_event_at: now - chrono::Duration::seconds(3),
+        };
+        let prior_boundary = gnomcode_core::Session {
+            id: "claude-code:prior-boundary".into(),
+            agent: gnomcode_core::AgentId::ClaudeCode,
+            surface: gnomcode_core::Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: gnomcode_core::SessionState::Idle,
+            pid: None,
+            started_at: now - chrono::Duration::milliseconds(800),
+            last_event_at: now - chrono::Duration::milliseconds(500),
+        };
+        let current = gnomcode_core::Session {
+            id: "claude-code:current".into(),
+            agent: gnomcode_core::AgentId::ClaudeCode,
+            surface: gnomcode_core::Surface::Cli,
+            project_id: project.id,
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: gnomcode_core::SessionState::Thinking,
+            pid: None,
+            started_at: now + chrono::Duration::seconds(2),
+            last_event_at: now + chrono::Duration::seconds(3),
+        };
+        let hosted = gnomcode_pty::SessionRecord {
+            session_id: "claude-current-host".into(),
+            agent: "claude".into(),
+            repo_path: repo_str,
+            model: None,
+            host_pid: 1,
+            child_pid: 2,
+            port: 1,
+            token: "test".into(),
+            started_at: now.to_rfc3339(),
+        };
+        let sessions = [prior_ended, prior_boundary, current];
+        let matched = session_bindings(&sessions, std::slice::from_ref(&hosted));
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].0.id, "claude-code:current");
+        assert_eq!(matched[0].1.session_id, "claude-current-host");
     }
 
     #[test]

@@ -260,7 +260,17 @@ pub(crate) fn resolve_session_workspace(
         }
     }
     let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
-    let native_id = crate::remote::conversation_session_id(session_id, &sessions, &hosted);
+    if let Some(record) = crate::remote::conversation_host(db, session_id, &sessions, &hosted)
+        .ok()
+        .flatten()
+    {
+        let path = PathBuf::from(&record.repo_path);
+        if path.is_dir() {
+            return Ok(path);
+        }
+    }
+    let native_id = crate::remote::active_conversation_id(db, session_id, &sessions, &hosted)
+        .unwrap_or_else(|_| crate::remote::conversation_session_id(session_id, &sessions, &hosted));
     if let Some(record) = hosted.iter().find(|r| {
         sessions
             .iter()
@@ -272,20 +282,43 @@ pub(crate) fn resolve_session_workspace(
             return Ok(path);
         }
     }
-    let target = db
-        .get_session_focus_target(&native_id)
-        .map_err(|_| "Session workspace is unavailable")?
-        .ok_or("Session not found")?;
-    let folder = target
-        .repo_root
-        .filter(|path| !path.trim().is_empty())
-        .ok_or("Session has no workspace folder")?;
-    let path = PathBuf::from(folder);
-    if path.is_dir() {
-        Ok(path)
-    } else {
-        Err("Session workspace folder is unavailable")
+    let source_id = db
+        .conversation_source(session_id)
+        .unwrap_or_else(|_| session_id.to_owned());
+    let mut focus_found = false;
+    for id in [&native_id, &source_id] {
+        let target = db
+            .get_session_focus_target(id)
+            .map_err(|_| "Session workspace is unavailable")?;
+        if let Some(target) = target {
+            focus_found = true;
+            if let Some(folder) = target.repo_root.filter(|path| !path.trim().is_empty()) {
+                let path = PathBuf::from(folder);
+                return if path.is_dir() {
+                    Ok(path)
+                } else {
+                    Err("Session workspace folder is unavailable")
+                };
+            }
+        }
     }
+    for id in [session_id, source_id.as_str()] {
+        if let Ok(Some(launch)) = db.conversation_launch(id)
+            && !launch.repo.trim().is_empty()
+        {
+            let path = PathBuf::from(launch.repo);
+            return if path.is_dir() {
+                Ok(path)
+            } else {
+                Err("Session workspace folder is unavailable")
+            };
+        }
+    }
+    Err(if focus_found {
+        "Session has no workspace folder"
+    } else {
+        "Session not found"
+    })
 }
 
 /// Lists directory entries inside a workspace, confined to the workspace root.

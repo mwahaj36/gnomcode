@@ -210,7 +210,12 @@ enum LicenseCommands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    attach_parent_console();
+    if !matches!(
+        std::env::args().nth(1).as_deref(),
+        Some("daemon" | "pty-host" | "hook" | "statusline")
+    ) {
+        attach_parent_console();
+    }
 
     let exe_is_installer = std::env::current_exe()
         .ok()
@@ -1072,7 +1077,7 @@ fn truncate_str(s: &str, max_len: usize) -> String {
 }
 
 async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<()> {
-    let (lock, info) = match gnomcode_daemon::DaemonLock::acquire(port) {
+    let (mut lock, info) = match gnomcode_daemon::DaemonLock::hold(port) {
         Ok(res) => res,
         Err(gnomcode_daemon::Error::AlreadyRunning) => {
             if let Some(existing) = gnomcode_daemon::read_daemon_info() {
@@ -1126,6 +1131,8 @@ async fn cmd_daemon(db_path: &std::path::Path, port: u16, open: bool) -> Result<
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context(format!("failed to bind loopback TCP listener on {addr}"))?;
+    // Publish daemon.json only after SQLite initialization and TCP bind succeed so /health is ready immediately.
+    lock.publish(&info)?;
 
     let local_url = format!("http://127.0.0.1:{port}/?token={}", info.token);
     let console_url = std::env::var("GNOMCODE_CONSOLE_URL").unwrap_or_else(|_| local_url.clone());
@@ -1217,6 +1224,7 @@ fn open_browser(url: &str) {
         if !opened {
             let _ = std::process::Command::new("cmd")
                 .args(["/C", "start", url])
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn();
         }
     }
@@ -1294,7 +1302,11 @@ if ($UserPath -notlike "*$InstallDir*") {{
     [Environment]::SetEnvironmentVariable("Path", "$UserPath;$InstallDir", "User")
 }}
 $RunKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-Set-ItemProperty -Path $RunKey -Name "Gnomcode" -Value "wscript.exe `"$InstallDir\run-tray.vbs`"" -Force
+$DesktopExe = "$InstallDir\desktop\gnomcode-desktop.exe"
+$AutostartCmd = if (Test-Path $DesktopExe) {{ "`"$DesktopExe`" --background" }} else {{ "wscript.exe `"$InstallDir\run-tray.vbs`"" }}
+Set-ItemProperty -Path $RunKey -Name "Gnomcode" -Value $AutostartCmd -Force
+$ApprovedKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+if (Test-Path $ApprovedKey) {{ Remove-ItemProperty -Path $ApprovedKey -Name "Gnomcode" -ErrorAction SilentlyContinue }}
 $WshShell = New-Object -ComObject WScript.Shell
 $DesktopDir = [Environment]::GetFolderPath("Desktop")
 foreach ($lnkPath in @("$DesktopDir\Gnomcode Console.lnk", "$DesktopDir\Gnomcode.lnk", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Gnomcode Console.lnk")) {{

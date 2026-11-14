@@ -418,7 +418,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
   return (
     <AppLockGate>
-    <main className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
+    <div className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
       <header className="web-context"><h1 aria-live="polite">{VIEW_TITLES[activeView] || "Home"}</h1>{activeView === "sessions" && <button type="button" className="sp-link" onClick={() => changeConsoleView("overview")}>Back to Home</button>}</header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
         <p>Sign in to view activity from your paired desktop.</p>
@@ -540,7 +540,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         </div>
       </div>}
       </div></div>
-    </main>
+    </div>
     </AppLockGate>
   );
 }
