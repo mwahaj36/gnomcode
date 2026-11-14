@@ -595,6 +595,7 @@ public class UninstallForm : Form
             lblStatus.Text = "Stopping gnomcode processes...";
             progressBar.Value = 25;
             KillGnomcodeProcesses();
+            ClearGnomcodeOwnedCredentialsAndUiState();
         } else if (step == 4) {
             lblStatus.Text = "Removing autostart and environment settings...";
             progressBar.Value = 50;
@@ -628,6 +629,44 @@ public class UninstallForm : Form
                 p.Dispose();
             }
             InstallerIntegration.StopTrayProcesses(installDir);
+        } catch {}
+    }
+
+    private void ClearGnomcodeOwnedCredentialsAndUiState()
+    {
+        // Clear only Gnomcode-owned auth/pairing/session state and Electron UI partition
+        // so a reinstall starts with fresh onboarding instead of silently reconnecting.
+        // Never touch state.db, config.toml, or provider histories (~/.claude, ~/.codex, etc.).
+        try {
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] dataRoots = new string[] {
+                Path.Combine(userProfile, ".gnomcode"),
+                Path.Combine(userProfile, ".spawnt")
+            };
+            string[] ownedAuthFiles = new string[] {
+                "session.json",
+                "session.json.lock",
+                "daemon.json",
+                "daemon.lock"
+            };
+            foreach (string root in dataRoots) {
+                if (!Directory.Exists(root)) continue;
+                foreach (string name in ownedAuthFiles) {
+                    string p = Path.Combine(root, name);
+                    try { if (File.Exists(p)) File.Delete(p); } catch {}
+                }
+                string devicesDir = Path.Combine(root, "remote-devices");
+                try { if (Directory.Exists(devicesDir)) Directory.Delete(devicesDir, true); } catch {}
+            }
+
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string[] electronStateDirs = new string[] {
+                Path.Combine(appData, @"gnomcode-desktop\Partitions\gnomcode-local"),
+                Path.Combine(appData, @"gnomcode-desktop\Local Storage")
+            };
+            foreach (string dir in electronStateDirs) {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch {}
+            }
         } catch {}
     }
 

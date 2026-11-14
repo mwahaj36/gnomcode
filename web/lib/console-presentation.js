@@ -1280,6 +1280,9 @@ function downloadHref(fileData) {
   return '';
 }
 
+const MAX_PREVIEW_LINES = 500;
+const MAX_HIGHLIGHT_CHARS = 65536;
+
 function previewBody(fileData, content) {
   const kind = fileData.kind || 'text';
   const name = fileData.name || fileData.path || 'file';
@@ -1290,7 +1293,11 @@ function previewBody(fileData, content) {
   if (kind === 'pdf' && /^data:application\/pdf;base64,/.test(fileData.data_url || '')) {
     return `<div class="sp-preview-binary"><p>PDF document. It opens in a new tab with the browser's viewer.</p><button type="button" class="sp-code-btn" data-pdf-open="${escape(fileData.data_url)}">Open PDF</button></div>`;
   }
-  if (kind === 'markdown') return `<div class="sp-chat-body sp-preview-markdown">${chatMarkdown(content)}</div>`;
+  if (kind === 'markdown') {
+    const capped = content.length > MAX_HIGHLIGHT_CHARS ? content.slice(0, MAX_HIGHLIGHT_CHARS) : content;
+    const note = content.length > MAX_HIGHLIGHT_CHARS ? `<p class="sp-field-note">Showing first ${previewSize(MAX_HIGHLIGHT_CHARS)} of Markdown preview. Download for full file.</p>` : '';
+    return `<div class="sp-chat-body sp-preview-markdown">${chatMarkdown(capped)}</div>${note}`;
+  }
   if (kind === 'csv') {
     const rows = parseCsvRows(content, CSV_PREVIEW_ROWS + 1);
     const [head = [], ...body] = rows;
@@ -1299,16 +1306,24 @@ function previewBody(fileData, content) {
   }
   if (kind === 'json') {
     let pretty = content;
-    if (!fileData.truncated) { try { pretty = JSON.stringify(JSON.parse(content), null, 2); } catch { /* show as stored */ } }
+    if (!fileData.truncated && content.length <= MAX_HIGHLIGHT_CHARS) { try { pretty = JSON.stringify(JSON.parse(content), null, 2); } catch { /* show as stored */ } }
+    if (pretty.length > MAX_HIGHLIGHT_CHARS) {
+      const lines = pretty.slice(0, MAX_HIGHLIGHT_CHARS).split(/\r?\n/).slice(0, MAX_PREVIEW_LINES);
+      return `<p class="sp-field-note">Showing first ${lines.length} lines of JSON preview. Download for full file.</p><pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${escape(lines.join('\n'))}</pre>`;
+    }
     return `<div class="sp-chat-body">${renderCodeBlock(pretty, 'json')}</div>`;
   }
   if (kind === 'binary' || kind === 'image' || kind === 'svg' || kind === 'pdf') {
     return `<div class="sp-preview-binary"><p>${fileData.truncated ? 'Too large to preview here.' : 'No preview for this file type.'}</p></div>`;
   }
-  const language = kind === 'code' ? fileData.language || '' : '';
-  const lines = content.split(/\r?\n/);
+  const language = kind === 'code' && content.length <= MAX_HIGHLIGHT_CHARS ? fileData.language || '' : '';
+  const allLines = content.split(/\r?\n/);
+  const lines = allLines.slice(0, MAX_PREVIEW_LINES);
   const body = lines.map((line, index) => `<span class="sp-file-line"><span class="sp-file-ln">${index + 1}</span><span>${(language ? highlightCode(line, language) : escape(line)) || ' '}</span></span>`).join('');
-  return `<pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
+  const lineNotice = allLines.length > MAX_PREVIEW_LINES
+    ? `<p class="sp-field-note">Showing first ${MAX_PREVIEW_LINES} of ${allLines.length.toLocaleString()} lines. Download for full file.</p>`
+    : '';
+  return `${lineNotice}<pre class="sp-file-code" tabindex="0" aria-label="Workspace file contents">${body}</pre>`;
 }
 
 export function renderFileViewer(fileData) {
