@@ -609,9 +609,17 @@ pub(super) async fn pty_stream_handler(
     let hosted = gnomcode_pty::list_active_sessions();
     let db = state.db.lock().await;
     let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
-    let record = crate::remote::conversation_host(&db, &id, &sessions, &hosted)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+    // This loopback, token-authenticated stream also serves the local workspace shell, which
+    // `conversation_host` filters out because shells are never reachable over Remote.
+    let record = match hosted
+        .iter()
+        .find(|record| record.session_id == id && record.agent == "terminal")
+    {
+        Some(shell) => shell,
+        None => crate::remote::conversation_host(&db, &id, &sessions, &hosted)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?,
+    };
 
     let backend_url = format!(
         "ws://127.0.0.1:{}/stream?token={}",

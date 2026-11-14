@@ -249,7 +249,8 @@ export function WorkspaceView() {
   const [sendBusy, setSendBusy] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
   const [continueHereBusy, setContinueHereBusy] = useState(false);
-  const [sidePanel, setSidePanel] = useState<WorkspaceSidePanel | null>(null);
+  // 'automation' is Workspace-only; the other panels belong to SessionTools.
+  const [sidePanel, setSidePanel] = useState<WorkspaceSidePanel | 'automation' | null>(null);
   // Overview card beside the conversation; a per-viewer layout preference. Narrow windows start with it
   // closed because it overlays the conversation there.
   const [overviewOpen, setOverviewOpenState] = useState(() => {
@@ -270,17 +271,9 @@ export function WorkspaceView() {
   };
   // On narrow windows the Overview overlays the conversation, so opening a tool from it closes it
   // (without changing the remembered desktop preference) and closing the tool returns to the chat.
-  const openTool = (panel: WorkspaceSidePanel) => {
+  const openTool = (panel: WorkspaceSidePanel | 'automation') => {
     if (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 1181px)').matches) setOverviewOpenState(false);
     setSidePanel(panel);
-  };
-  const automationRef = useRef<HTMLDetailsElement | null>(null);
-  const openAutomation = () => {
-    const details = automationRef.current;
-    if (!details) return;
-    details.open = true;
-    details.scrollIntoView({ block: 'nearest' });
-    details.querySelector<HTMLElement>('summary')?.focus();
   };
   const [queuedPrompts, setQueuedPrompts] = useState<
     Array<{ id: string; text: string; status: string; created_at?: string; error?: string | null }>
@@ -1452,13 +1445,14 @@ export function WorkspaceView() {
     }
   };
 
+  const [scheduleText, setScheduleText] = useState('');
   const handleScheduleDraft = async () => {
     if (schedulingBusy || !activeSessionId) return;
     const sessionId = activeSessionId;
-    const text = (draftsBySession[sessionId] || '').trim();
+    const text = scheduleText.trim();
     const dueMs = new Date(scheduleTime).getTime();
     if (!text || !Number.isFinite(dueMs) || dueMs <= Date.now()) {
-      setScheduleStatus('Enter a message and a future delivery time.');
+      setScheduleStatus(!text ? 'Write the message to send.' : 'Pick a time in the future.');
       return;
     }
     setSchedulingBusy(true);
@@ -1473,10 +1467,8 @@ export function WorkspaceView() {
           due_at: Math.floor(dueMs / 1000),
         },
       });
-      setDraftsBySession((prev) =>
-        (prev[sessionId] || '').trim() === text ? { ...prev, [sessionId]: '' } : prev,
-      );
-      setScheduleStatus('Schedule confirmed on your laptop. You can close your phone.');
+      setScheduleText('');
+      setScheduleStatus('Scheduled. It sends at that time while Gnomcode is running.');
       await refreshAutomation(sessionId);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Schedule error';
@@ -2885,117 +2877,6 @@ export function WorkspaceView() {
               </small>
             </form>
 
-                <details ref={automationRef} className="profile-disclosure sp-chat-automation">
-                  <summary>Schedule and automation</summary>
-                  <p>
-                    Saved on this laptop after confirmation. Keep it awake with Gnomcode running.
-                    Message text is redacted before storage.
-                  </p>
-                  <label>
-                    Delivery time (your local time)
-                    <input
-                      type="datetime-local"
-                      value={scheduleTime}
-                      onChange={(event) => setScheduleTime(event.target.value)}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-control"
-                    disabled={schedulingBusy}
-                    onClick={() => void handleScheduleDraft()}
-                  >
-                    Schedule current draft
-                  </button>
-                  <div role="status">
-                    {scheduleStatus ? <p>{scheduleStatus}</p> : null}
-                    {scheduledMessages.length ? (
-                      scheduledMessages.map((msg) => (
-                        <p key={msg.id}>
-                          {`${new Date(msg.due_at * 1000).toLocaleString()} - ${msg.status}`}
-                          {msg.text ? (
-                            <>
-                              <br />
-                              {msg.text.slice(0, 120)}
-                            </>
-                          ) : null}
-                          {msg.status === 'pending' ? (
-                            <>
-                              {' '}
-                              <button
-                                type="button"
-                                className="btn-control"
-                                onClick={() => void handleCancelSchedule(msg.id)}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : null}
-                        </p>
-                      ))
-                    ) : (
-                      <p>No scheduled messages.</p>
-                    )}
-                  </div>
-                  <label>
-                    When an agent reaches a limit
-                    <select
-                      value={routingPolicy}
-                      onChange={(event) => {
-                        setRoutingDirty(true);
-                        setRoutingPolicy(event.target.value);
-                      }}
-                    >
-                      <option value="ask_first">Let me choose</option>
-                      <option value="automatic">Automatically switch model or provider</option>
-                      <option value="deny_cross_provider">
-                        Automatically switch within provider
-                      </option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-control"
-                    onClick={() => void handleSaveRouting()}
-                  >
-                    Save routing policy
-                  </button>
-                  <p>
-                    Switching needs fresh known quota. Send your next message to continue; previous
-                    tasks are not replayed.
-                  </p>
-                  <p role="status">
-                    {resetArmed
-                      ? 'Reset reconnection armed. Waiting for fresh quota confirmation.'
-                      : 'Reset reconnection is not armed.'}
-                  </p>
-                  {!activeSession?.can_reset ? (
-                    <p>
-                      This agent does not support native reconnection after reset. Choose another
-                      model or start a new conversation.
-                    </p>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn-control"
-                      onClick={() => void handleResetReconnect(true)}
-                    >
-                      Reconnect after reset
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn-control"
-                    onClick={() => void handleResetReconnect(false)}
-                  >
-                    Cancel reset reconnection
-                  </button>
-                  <div aria-label="Recent events">
-                    {automationNotices.map((notice, idx) => (
-                      <p key={`${idx}-${notice.message}`}>{notice.message}</p>
-                    ))}
-                  </div>
-                </details>
               </div>
               {!sidePanel && overviewOpen ? (
                 <aside className="sp-overview" aria-label="Conversation tools">
@@ -3038,7 +2919,7 @@ export function WorkspaceView() {
                     Workspace terminal
                   </button>
                   <div className="sp-overview-sep" />
-                  <button type="button" className="sp-overview-item sp-overview-sub" onClick={openAutomation}>
+                  <button type="button" className="sp-overview-item sp-overview-sub" onClick={() => openTool('automation')}>
                     Schedule and automation
                   </button>
                   <div className="sp-overview-sep" />
@@ -3052,11 +2933,11 @@ export function WorkspaceView() {
                 </aside>
               ) : null}
               {sidePanel ? (
-                  <aside className="sp-inspector" aria-label="Workspace files, changes, and artifacts">
+                  <aside className="sp-inspector" aria-label="Workspace tools">
                     <PaneResizer cssVar="--inspector-w" label="Resize tools panel" min={360} max={960} initial={560} direction={-1} />
                     <div className="sp-workspace-modal-head">
                       <div className="sp-header-panel-toggles" role="tablist" aria-label="Inspector views">
-                        {(['files', 'changes', 'artifacts'] as const).map((tab) => (
+                        {(['files', 'changes', 'artifacts', 'automation'] as const).map((tab) => (
                           <button
                             key={tab}
                             type="button"
@@ -3065,7 +2946,7 @@ export function WorkspaceView() {
                             className={`btn-control${sidePanel === tab ? ' is-active' : ''}`}
                             onClick={() => setSidePanel(tab)}
                           >
-                            {tab === 'files' ? 'Files' : tab === 'changes' ? 'Changes' : 'Artifacts'}
+                            {tab === 'files' ? 'Files' : tab === 'changes' ? 'Changes' : tab === 'artifacts' ? 'Artifacts' : 'Automation'}
                           </button>
                         ))}
                       </div>
@@ -3082,14 +2963,136 @@ export function WorkspaceView() {
                       </button>
                     </div>
                     <div className="sp-workspace-modal-body">
-                      <SessionTools
-                        sessionId={activeSessionId}
-                        repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
-                        canInterrupt={canInterruptActive}
-                        panel={sidePanel}
-                        onPanelChange={setSidePanel}
-                        hideToolbar
-                      />
+                      {sidePanel === 'automation' ? (
+                        <section className="sp-automation-panel" aria-label="Schedule and automation">
+                        <div className="sp-auto">
+                          <section className="sp-auto-section" aria-labelledby="auto-later">
+                            <h4 id="auto-later">Send later</h4>
+                            <p className="sp-auto-help">
+                              Sends this message to the agent at the time you pick. Gnomcode must be running and this computer awake. The saved
+                              text is redacted.
+                            </p>
+                            <label className="sp-auto-field">
+                              <span>Message</span>
+                              <textarea
+                                rows={3}
+                                value={scheduleText}
+                                placeholder="What should the agent do then?"
+                                onChange={(event) => setScheduleText(event.target.value)}
+                              />
+                            </label>
+                            <div className="sp-auto-row">
+                              <label className="sp-auto-field">
+                                <span>Send at (your local time)</span>
+                                <input type="datetime-local" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} />
+                              </label>
+                              <button type="button" className="btn-control" disabled={schedulingBusy} onClick={() => void handleScheduleDraft()}>
+                                Schedule
+                              </button>
+                            </div>
+                            <div role="status">
+                              {scheduleStatus ? <p className="sp-auto-help">{scheduleStatus}</p> : null}
+                            </div>
+                            {scheduledMessages.length ? (
+                              <ul className="sp-auto-list" aria-label="Scheduled messages">
+                                {scheduledMessages.map((msg) => (
+                                  <li key={msg.id}>
+                                    <span className="sp-auto-when">{msg.due_at > 0 ? new Date(msg.due_at * 1000).toLocaleString() : 'Next turn'}</span>
+                                    <span className="sp-chip sp-chip--neutral">{msg.status}</span>
+                                    <span className="sp-auto-text">{msg.text ? msg.text.slice(0, 120) : ''}</span>
+                                    {msg.status === 'pending' ? (
+                                      <button type="button" className="btn-control" onClick={() => void handleCancelSchedule(msg.id)}>
+                                        Cancel
+                                      </button>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="sp-auto-help">Nothing scheduled.</p>
+                            )}
+                          </section>
+      
+                          <section className="sp-auto-section" aria-labelledby="auto-limit">
+                            <h4 id="auto-limit">When this agent reaches a limit</h4>
+                            <div className="sp-auto-choices" role="radiogroup" aria-labelledby="auto-limit">
+                              {(
+                                [
+                                  ['ask_first', 'Ask me', 'Show the best alternative and wait for you to pick.'],
+                                  ['automatic', 'Switch automatically', 'Hand off to the model or provider with the most capacity left.'],
+                                  ['deny_cross_provider', 'Switch within this provider', 'Only move to another model from the same provider.'],
+                                ] as const
+                              ).map(([value, label, help]) => (
+                                <label key={value} className="sp-auto-choice">
+                                  <input
+                                    type="radio"
+                                    name="routing-policy"
+                                    value={value}
+                                    checked={routingPolicy === value}
+                                    onChange={() => {
+                                      setRoutingDirty(true);
+                                      setRoutingPolicy(value);
+                                    }}
+                                  />
+                                  <span>
+                                    <b>{label}</b>
+                                    <small>{help}</small>
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="sp-auto-row">
+                              <p className="sp-auto-help">Switching needs a fresh limit reading. Earlier tasks are not replayed; your next message continues.</p>
+                              <button type="button" className="btn-control" onClick={() => void handleSaveRouting()}>
+                                Save
+                              </button>
+                            </div>
+                          </section>
+      
+                          <section className="sp-auto-section" aria-labelledby="auto-reset">
+                            <h4 id="auto-reset">After the limit resets</h4>
+                            {!activeSession?.can_reset ? (
+                              <p className="sp-auto-help">
+                                This agent cannot reconnect on its own after a reset. Pick another model or start a new conversation.
+                              </p>
+                            ) : (
+                              <div className="sp-auto-row">
+                                <p className="sp-auto-help" role="status">
+                                  {resetArmed
+                                    ? 'Armed: Gnomcode reconnects this conversation once a fresh reading confirms the reset.'
+                                    : 'Off: this conversation waits for you after a reset.'}
+                                </p>
+                                <button type="button" className="btn-control" onClick={() => void handleResetReconnect(!resetArmed)}>
+                                  {resetArmed ? 'Turn off' : 'Reconnect after reset'}
+                                </button>
+                              </div>
+                            )}
+                          </section>
+      
+                          {automationNotices.length ? (
+                            <section className="sp-auto-section" aria-labelledby="auto-events">
+                              <h4 id="auto-events">Recent events</h4>
+                              <ul className="sp-auto-list" aria-label="Recent events">
+                                {automationNotices.map((notice, idx) => (
+                                  <li key={`${idx}-${notice.message}`}>
+                                    <span className="sp-auto-text">{notice.message}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </section>
+                          ) : null}
+                        </div>
+                        </section>
+                      ) : (
+                        <SessionTools
+                          sessionId={activeSessionId}
+                          repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
+                          canInterrupt={canInterruptActive}
+                          panel={sidePanel}
+                          onPanelChange={setSidePanel}
+                          hideToolbar
+                        />
+                      )}
                     </div>
                   </aside>
               ) : null}
