@@ -291,7 +291,7 @@ export function SessionTools({
   sessionRef.current = sessionId;
 
   useEffect(() => {
-    if (controlledPanel === undefined) setUncontrolledPanel(null);
+    if (controlledPanel === undefined) setInternalPanel(null);
     setChangesHtml('');
     setFilesHtml('');
     setFileBodyHtml('');
