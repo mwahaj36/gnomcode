@@ -222,13 +222,14 @@ impl SourceAdapter for AntigravityAdapter {
                     }
                     if sess.title.is_none()
                         && self.parent_session_id.is_none()
-                        && let Some(prompt) = extract_antigravity_user_prompt(content)
+                        && source != "SYSTEM"
+                        && let Some(title) = extract_antigravity_user_prompt(content)
+                            .as_deref()
+                            .and_then(prompt_title)
                     {
-                        let first_line = prompt.lines().next().unwrap_or("").trim();
-                        if !first_line.is_empty() {
-                            let truncated: String = first_line.chars().take(80).collect();
-                            sess.title = Some(truncated);
-                        }
+                        // Only a first-seen title: the store keeps it write-once, so a later
+                        // chunk's first prompt never replaces the conversation's opening goal.
+                        sess.title = Some(title);
                     }
                 }
             } else if step_type == "PLANNER_RESPONSE" {
@@ -738,6 +739,29 @@ pub fn is_antigravity_tool_output(content: &str) -> bool {
         || trimmed.starts_with("Log output:")
         || (trimmed.starts_with("At line:") && trimmed.contains("CategoryInfo"))
         || trimmed.starts_with("Select-String :")
+}
+
+/// Derives a session title from a user prompt: its first line, trimmed to 80 characters.
+///
+/// System and meta text (tag-only blocks such as settings changes or reminders) is not a title.
+fn prompt_title(prompt: &str) -> Option<String> {
+    let line = prompt
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())?;
+    let lower = line.to_ascii_lowercase();
+    let meta = [
+        "<user_settings_change",
+        "<additional_metadata",
+        "<ephemeral_message",
+        "<system",
+        "<conversation_summaries",
+        "<environment_context",
+    ];
+    if meta.iter().any(|tag| lower.starts_with(tag)) {
+        return None;
+    }
+    Some(line.chars().take(80).collect())
 }
 
 /// Extracts a clean user prompt from an Antigravity `USER_INPUT` content string.

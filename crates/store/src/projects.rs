@@ -207,7 +207,6 @@ impl Database {
             FROM session s
             LEFT JOIN project p ON s.project_id = p.id
             WHERE s.agent = 'antigravity'
-              AND (p.name = 'unknown' OR p.name IS NULL OR s.title IS NULL OR s.title = '')
             "#,
         )?;
 
@@ -280,13 +279,13 @@ impl Database {
                         .unwrap_or(project.id);
 
                     let _ = self.conn.execute(
-                            "UPDATE session SET project_id = ?1, title = COALESCE(title, ?2) WHERE id = ?3",
+                            "UPDATE session SET project_id = ?1, title = COALESCE(?2, title) WHERE id = ?3",
                             params![proj_id, title, sid],
                         );
                     updated += 1;
                 } else if title.is_some() {
                     let _ = self.conn.execute(
-                        "UPDATE session SET title = COALESCE(title, ?1) WHERE id = ?2",
+                        "UPDATE session SET title = ?1 WHERE id = ?2 AND title IS NOT ?1",
                         params![title, sid],
                     );
                     updated += 1;
