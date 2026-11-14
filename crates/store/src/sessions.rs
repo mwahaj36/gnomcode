@@ -150,11 +150,9 @@ impl Database {
     pub fn session_state(&self, id: &str) -> Result<Option<SessionState>, Error> {
         let state: Option<String> = self
             .conn
-            .query_row(
-                obfstr::obfstr!("SELECT state FROM session WHERE id=?1"),
-                [id],
-                |row| row.get(0),
-            )
+            .query_row("SELECT state FROM session WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
             .optional()?;
         Ok(state.and_then(|state| match state.as_str() {
             "idle" => Some(SessionState::Idle),
@@ -176,16 +174,14 @@ impl Database {
         let (kind, tool) = self
             .conn
             .query_row(
-                obfstr::obfstr!("SELECT kind, tool_name FROM activity_event WHERE session_id=?1 ORDER BY julianday(timestamp) DESC, id DESC LIMIT 1"),
+                "SELECT kind, tool_name FROM activity_event WHERE session_id=?1 ORDER BY julianday(timestamp) DESC, id DESC LIMIT 1",
                 [id],
                 |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?)),
             )
             .optional()?
             .unwrap_or((None, None));
         let turn: Option<String> = self.conn.query_row(
-            obfstr::obfstr!(
-                "SELECT MAX(created_at) FROM chat_event WHERE session_id=?1 AND role='user'"
-            ),
+            "SELECT MAX(created_at) FROM chat_event WHERE session_id=?1 AND role='user'",
             [id],
             |row| row.get(0),
         )?;
@@ -437,9 +433,7 @@ impl Database {
                     .join(",");
                 format!(
                     "{} ({marks}))",
-                    obfstr::obfstr!(
-                        "(s.state = 'tool' AND (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = 'tool_start' AND s.id IN"
-                    )
+                    "(s.state = 'tool' AND (SELECT kind FROM activity_event ae WHERE ae.session_id = s.id ORDER BY julianday(ae.timestamp) DESC, ae.id DESC LIMIT 1) = 'tool_start' AND s.id IN"
                 )
             }
         };

@@ -75,8 +75,7 @@ impl Database {
 
         // 2. Upsert sessions
         {
-            let mut stmt = tx.prepare_cached(obfstr::obfstr!(
-                r#"
+            let mut stmt = tx.prepare_cached(r#"
                 INSERT INTO session (
                     id, agent, surface, project_id, parent_session_id,
                     model, title, state, pid, started_at, last_event_at
@@ -91,8 +90,7 @@ impl Database {
                     state = excluded.state,
                     pid = coalesce(excluded.pid, session.pid),
                     last_event_at = excluded.last_event_at
-                "#
-            ))?;
+                "#)?;
             for s in sessions {
                 stmt.execute(params![
                     s.id,
@@ -211,7 +209,7 @@ impl Database {
             } else {
                 gnomcode_core::redact::redact_chat_content(&event.content)
             };
-            tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)"), params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(gnomcode_core::redact::redact_chat_content), event.status.as_deref().map(gnomcode_core::redact::redact_chat_content), event.created_at.to_rfc3339(), event_marker(&event.event_id)])?;
+            tx.execute("INSERT OR IGNORE INTO chat_event (event_id, session_id, turn_index, role, content, tool_name, status, created_at) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE NOT EXISTS (SELECT 1 FROM deleted_chat_event WHERE event_id=?9)", params![event.event_id, event.session_id, event.turn_index, event.role.as_str(), content, event.tool_name.as_deref().map(gnomcode_core::redact::redact_chat_content), event.status.as_deref().map(gnomcode_core::redact::redact_chat_content), event.created_at.to_rfc3339(), event_marker(&event.event_id)])?;
         }
 
         // 6. Update source file checkpoint

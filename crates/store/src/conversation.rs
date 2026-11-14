@@ -16,9 +16,9 @@ impl Database {
     /// # Errors
     /// Returns an error if the local mapping cannot be read.
     pub fn conversation_ids(&self) -> Result<Vec<String>, Error> {
-        let mut statement = self.conn.prepare(obfstr::obfstr!(
-            "SELECT DISTINCT conversation_id FROM conversation_member"
-        ))?;
+        let mut statement = self
+            .conn
+            .prepare("SELECT DISTINCT conversation_id FROM conversation_member")?;
         let rows = statement.query_map([], |row| row.get(0))?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
     }
@@ -34,8 +34,11 @@ impl Database {
         repo: &str,
         model: Option<&str>,
     ) -> Result<(), Error> {
-        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO conversation_member(host_id,conversation_id,position) VALUES (?1,?1,0)"),[host])?;
-        self.conn.execute(obfstr::obfstr!("UPDATE conversation_member SET agent=?2,repo=?3,requested_model=?4 WHERE host_id=?1"),params![host,agent,repo,model])?;
+        self.conn.execute("INSERT OR IGNORE INTO conversation_member(host_id,conversation_id,position) VALUES (?1,?1,0)",[host])?;
+        self.conn.execute(
+            "UPDATE conversation_member SET agent=?2,repo=?3,requested_model=?4 WHERE host_id=?1",
+            params![host, agent, repo, model],
+        )?;
         Ok(())
     }
 
@@ -45,7 +48,7 @@ impl Database {
     /// Returns an error if the metadata cannot be read.
     pub fn conversation_launch(&self, id: &str) -> Result<Option<ConversationLaunch>, Error> {
         let root = self.conversation_id(id)?;
-        Ok(self.conn.query_row(obfstr::obfstr!("SELECT agent,repo,requested_model FROM conversation_member WHERE conversation_id=?1 AND agent IS NOT NULL ORDER BY position DESC LIMIT 1"),[root],|row| Ok(ConversationLaunch {agent:row.get(0)?,repo:row.get(1)?,model:row.get(2)?})).optional()?)
+        Ok(self.conn.query_row("SELECT agent,repo,requested_model FROM conversation_member WHERE conversation_id=?1 AND agent IS NOT NULL ORDER BY position DESC LIMIT 1",[root],|row| Ok(ConversationLaunch {agent:row.get(0)?,repo:row.get(1)?,model:row.get(2)?})).optional()?)
     }
 
     /// Replaces a stopped host, preserving the conversation and native history.
@@ -60,9 +63,9 @@ impl Database {
     ) -> Result<(), Error> {
         let root = self.conversation_id(id)?;
         if self.conversation_target(id)?.is_some() {
-            self.conn.execute(obfstr::obfstr!("UPDATE conversation_member SET host_id=?2 WHERE conversation_id=?1 AND position=(SELECT MAX(position) FROM conversation_member WHERE conversation_id=?1)"),params![root,new_host])?;
+            self.conn.execute("UPDATE conversation_member SET host_id=?2 WHERE conversation_id=?1 AND position=(SELECT MAX(position) FROM conversation_member WHERE conversation_id=?1)",params![root,new_host])?;
         } else {
-            self.conn.execute(obfstr::obfstr!("INSERT INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?2,?3,0)"),params![new_host,root,native])?;
+            self.conn.execute("INSERT INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?2,?3,0)",params![new_host,root,native])?;
         }
         Ok(())
     }
@@ -73,7 +76,7 @@ impl Database {
     /// Returns an error if conversation metadata cannot be read.
     pub fn conversation_source(&self, id: &str) -> Result<String, Error> {
         let root = self.conversation_id(id)?;
-        Ok(self.conn.query_row(obfstr::obfstr!("SELECT native_id FROM conversation_member WHERE conversation_id=?1 AND native_id IS NOT NULL ORDER BY position LIMIT 1"),[root],|row| row.get(0)).optional()?.unwrap_or_else(|| id.to_owned()))
+        Ok(self.conn.query_row("SELECT native_id FROM conversation_member WHERE conversation_id=?1 AND native_id IS NOT NULL ORDER BY position LIMIT 1",[root],|row| row.get(0)).optional()?.unwrap_or_else(|| id.to_owned()))
     }
 
     /// Returns the durable conversation identity for a native session or host.
@@ -81,7 +84,7 @@ impl Database {
     /// # Errors
     /// Returns an error if the local mapping cannot be read.
     pub fn conversation_id(&self, id: &str) -> Result<String, Error> {
-        Ok(self.conn.query_row(obfstr::obfstr!("SELECT conversation_id FROM conversation_member WHERE host_id=?1 OR native_id=?1 OR conversation_id=?1 LIMIT 1"), [id], |row| row.get(0)).optional()?.unwrap_or_else(|| id.to_owned()))
+        Ok(self.conn.query_row("SELECT conversation_id FROM conversation_member WHERE host_id=?1 OR native_id=?1 OR conversation_id=?1 LIMIT 1", [id], |row| row.get(0)).optional()?.unwrap_or_else(|| id.to_owned()))
     }
 
     /// Records a unique observed native-to-host binding without replacing history.
@@ -89,7 +92,7 @@ impl Database {
     /// # Errors
     /// Returns an error if the binding conflicts with an existing native identity.
     pub fn bind_conversation_host(&self, host: &str, native: &str) -> Result<(), Error> {
-        self.conn.execute(obfstr::obfstr!("INSERT INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?1,?2,0) ON CONFLICT(host_id) DO UPDATE SET native_id=excluded.native_id WHERE conversation_member.native_id IS NULL OR conversation_member.native_id=excluded.native_id"), params![host,native])?;
+        self.conn.execute("INSERT INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?1,?2,0) ON CONFLICT(host_id) DO UPDATE SET native_id=excluded.native_id WHERE conversation_member.native_id IS NULL OR conversation_member.native_id=excluded.native_id", params![host,native])?;
         Ok(())
     }
 
@@ -100,8 +103,8 @@ impl Database {
     pub fn continue_conversation(&self, source: &str, target_host: &str) -> Result<(), Error> {
         let root = self.conversation_id(source)?;
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute(obfstr::obfstr!("INSERT OR IGNORE INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?1,?1,0)"), [&root])?;
-        tx.execute(obfstr::obfstr!("INSERT INTO conversation_member(host_id,conversation_id,position,needs_context) SELECT ?1,?2,COALESCE(MAX(position),0)+1,1 FROM conversation_member WHERE conversation_id=?2"),params![target_host,root])?;
+        tx.execute("INSERT OR IGNORE INTO conversation_member(host_id,conversation_id,native_id,position) VALUES (?1,?1,?1,0)", [&root])?;
+        tx.execute("INSERT INTO conversation_member(host_id,conversation_id,position,needs_context) SELECT ?1,?2,COALESCE(MAX(position),0)+1,1 FROM conversation_member WHERE conversation_id=?2",params![target_host,root])?;
         tx.commit()?;
         Ok(())
     }
@@ -115,7 +118,7 @@ impl Database {
         id: &str,
     ) -> Result<Option<(String, Option<String>, bool)>, Error> {
         let root = self.conversation_id(id)?;
-        Ok(self.conn.query_row(obfstr::obfstr!("SELECT host_id,native_id,needs_context FROM conversation_member WHERE conversation_id=?1 ORDER BY position DESC LIMIT 1"),[root],|row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional()?)
+        Ok(self.conn.query_row("SELECT host_id,native_id,needs_context FROM conversation_member WHERE conversation_id=?1 ORDER BY position DESC LIMIT 1",[root],|row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).optional()?)
     }
 
     /// Hosts bound to a thinking, tool or approval session that are absent from `live_hosts`:
@@ -124,9 +127,7 @@ impl Database {
     /// # Errors
     /// Returns an error if the lookup fails.
     pub fn unlisted_bound_hosts(&self, live_hosts: &[String]) -> Result<Vec<String>, Error> {
-        let mut statement = self.conn.prepare(obfstr::obfstr!(
-            "SELECT DISTINCT m.host_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')"
-        ))?;
+        let mut statement = self.conn.prepare("SELECT DISTINCT m.host_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')")?;
         let hosts = statement
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -147,9 +148,7 @@ impl Database {
         let marks = vec!["?"; live_hosts.len()].join(",");
         let sql = format!(
             "{} ({marks})",
-            obfstr::obfstr!(
-                "SELECT DISTINCT native_id FROM conversation_member WHERE native_id IS NOT NULL AND host_id IN"
-            )
+            "SELECT DISTINCT native_id FROM conversation_member WHERE native_id IS NOT NULL AND host_id IN"
         );
         let mut statement = self.conn.prepare(&sql)?;
         let ids = statement
@@ -178,9 +177,7 @@ impl Database {
         if known_alive.iter().any(|host| !live_hosts.contains(host)) {
             return Ok(0);
         }
-        let mut statement = self.conn.prepare(obfstr::obfstr!(
-            "SELECT m.host_id, m.native_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')"
-        ))?;
+        let mut statement = self.conn.prepare("SELECT m.host_id, m.native_id FROM conversation_member m JOIN session s ON s.id = m.native_id WHERE m.native_id <> m.host_id AND s.state IN ('thinking','tool','awaiting_approval')")?;
         let rows = statement
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -189,10 +186,9 @@ impl Database {
         let mut ended = 0;
         for (host, native) in rows {
             if !live_hosts.contains(&host) {
-                ended += self.conn.execute(
-                    obfstr::obfstr!("UPDATE session SET state='ended' WHERE id=?1"),
-                    [native],
-                )?;
+                ended += self
+                    .conn
+                    .execute("UPDATE session SET state='ended' WHERE id=?1", [native])?;
             }
         }
         Ok(ended)
@@ -204,7 +200,7 @@ impl Database {
     /// Returns an error if the delivery state cannot be saved.
     pub fn conversation_context_delivered(&self, host: &str) -> Result<(), Error> {
         self.conn.execute(
-            obfstr::obfstr!("UPDATE conversation_member SET needs_context=0 WHERE host_id=?1"),
+            "UPDATE conversation_member SET needs_context=0 WHERE host_id=?1",
             [host],
         )?;
         Ok(())
@@ -221,7 +217,7 @@ impl Database {
         before: Option<&str>,
     ) -> Result<Vec<ChatEvent>, Error> {
         let root = self.conversation_id(id)?;
-        let mut stmt = self.conn.prepare(obfstr::obfstr!(r#"
+        let mut stmt = self.conn.prepare(r#"
             WITH members AS (
                 SELECT native_id, host_id, position FROM conversation_member WHERE conversation_id=?1
                 UNION ALL SELECT ?1, ?1, 0 WHERE NOT EXISTS (SELECT 1 FROM conversation_member WHERE conversation_id=?1)
@@ -231,7 +227,7 @@ impl Database {
             SELECT event_id,session_id,segment*1000000000+turn_index,role,content,tool_name,status,created_at
             FROM events WHERE (?3 IS NULL OR (segment,turn_index,created_at,event_id) < (SELECT segment,turn_index,created_at,event_id FROM events WHERE event_id=?3))
             ORDER BY segment DESC,turn_index DESC,created_at DESC,event_id DESC LIMIT ?2
-        "#))?;
+        "#)?;
         let rows = stmt.query_map(
             params![root, limit.unwrap_or(1000).min(5000) as i64, before],
             handoff_chat_row,
@@ -247,7 +243,7 @@ impl Database {
     /// Returns an error if conversation metadata cannot be read.
     pub fn conversation_title(&self, id: &str) -> Result<Option<String>, Error> {
         let root = self.conversation_id(id)?;
-        let title: Option<String> = self.conn.query_row(obfstr::obfstr!(r#"
+        let title: Option<String> = self.conn.query_row(r#"
             WITH members AS (
                 SELECT native_id,host_id,position FROM conversation_member WHERE conversation_id=?1
                 UNION ALL SELECT ?1,?1,0 WHERE NOT EXISTS (SELECT 1 FROM conversation_member WHERE conversation_id=?1)
@@ -255,7 +251,7 @@ impl Database {
             SELECT s.title FROM session s JOIN members m ON s.id=m.native_id OR s.id=m.host_id
             WHERE s.title IS NOT NULL AND trim(s.title)<>''
             ORDER BY m.position,s.started_at,s.id LIMIT 1
-        "#), [root], |row| row.get(0)).optional()?;
+        "#, [root], |row| row.get(0)).optional()?;
         Ok(title.map(|title| gnomcode_core::redact::redact_chat_content(&title)))
     }
 
@@ -266,7 +262,7 @@ impl Database {
     /// Returns an error if the conversation history cannot be read.
     pub fn conversation_first_user_event(&self, id: &str) -> Result<Option<ChatEvent>, Error> {
         let root = self.conversation_id(id)?;
-        let mut stmt = self.conn.prepare(obfstr::obfstr!(r#"
+        let mut stmt = self.conn.prepare(r#"
             WITH members AS (
                 SELECT native_id, host_id, position FROM conversation_member WHERE conversation_id=?1
                 UNION ALL SELECT ?1, ?1, 0 WHERE NOT EXISTS (SELECT 1 FROM conversation_member WHERE conversation_id=?1)
@@ -276,7 +272,7 @@ impl Database {
             SELECT event_id,session_id,segment*1000000000+turn_index,role,content,tool_name,status,created_at
             FROM events WHERE role='user'
             ORDER BY segment ASC,turn_index ASC,created_at ASC,event_id ASC
-        "#))?;
+        "#)?;
         let rows = stmt.query_map([root], handoff_chat_row)?;
         for row in rows {
             let mut event = row?;
@@ -298,12 +294,10 @@ impl Database {
         let tx = self.conn.unchecked_transaction()?;
         mark_deleted(
             &tx,
-            obfstr::obfstr!(
-                "SELECT event_id FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)"
-            ),
+            "SELECT event_id FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)",
             [&root],
         )?;
-        let deleted = tx.execute(obfstr::obfstr!("DELETE FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)"), [&root])?;
+        let deleted = tx.execute("DELETE FROM chat_event WHERE session_id=?1 OR session_id IN (SELECT native_id FROM conversation_member WHERE conversation_id=?1) OR session_id IN (SELECT host_id FROM conversation_member WHERE conversation_id=?1)", [&root])?;
         tx.commit()?;
         Ok(deleted)
     }

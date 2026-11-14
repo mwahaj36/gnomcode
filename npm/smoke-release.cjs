@@ -12,10 +12,10 @@ const suffix = `${process.platform}-${process.arch}${header && !header.glibcVers
 const platform = path.join(root, 'platform', suffix);
 if (!fs.existsSync(platform)) throw new Error(`No Gnomcode package for ${suffix}`);
 for (const dir of [shim, platform]) {
-  for (const name of ['EULA.txt', 'THIRD_PARTY_NOTICES.html']) {
+  for (const name of ['LICENSE', 'THIRD_PARTY_NOTICES.html']) {
     if (!fs.statSync(path.join(dir, name)).size) throw new Error(`Empty ${name}`);
   }
-  if (/\bdraft\b/i.test(fs.readFileSync(path.join(dir, 'EULA.txt'), 'utf8'))) throw new Error('Approved EULA required.');
+  if (/\bdraft\b/i.test(fs.readFileSync(path.join(dir, 'LICENSE'), 'utf8'))) throw new Error('Approved license required.');
 }
 
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'gnomcode-npm-smoke-'));

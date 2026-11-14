@@ -1,7 +1,7 @@
 import { pageMetadata } from "../../lib/seo";
 import Link from "next/link";
 
-export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local AI Agent Tools", "All local Gnomcode features are free. Remote pricing is not finalized. Your agent provider bills inference separately.");
+export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Local AI Agent Tools", "All local Gnomcode features are free. Remote is free. Your agent provider bills inference separately.");
 
 const tiers = [
   {
@@ -11,7 +11,7 @@ const tiers = [
     action: "Download free", href: "/downloads",
   },
   {
-    name: "Remote", note: "PROTOTYPE", price: "Remote", cadence: "pricing not finalized",
+    name: "Remote", note: "FREE · PROTOTYPE", price: "$0", cadence: "free, no license",
     description: "Access your own sessions from your phone.",
     features: ["End-to-end encrypted access", "Link and revoke devices", "View sessions, send prompts and answer approvals (Codex and Antigravity need opt-in protocol mode)"],
     action: "Explore Remote", href: "/docs/remote-access",
@@ -29,7 +29,7 @@ const questions = [
   },
   {
     question: "How much does Remote cost?",
-    answer: "Remote pricing and terms are not finalized. Your agent provider bills inference separately.",
+    answer: "Remote is free in 1.0. Your agent provider bills inference separately.",
   },
 ];
 
@@ -38,7 +38,7 @@ export default function PricingPage() {
     <div className="sp-console-shell sp-pricing-page mx-auto max-w-7xl px-6 py-16 font-sans">
       <header className="sp-pricing-intro">
         <h1>All local features are free.</h1>
-        <p>Use the CLI and local dashboard without an account. Remote is a prototype; its pricing and terms are not finalized. Provider inference is billed separately.</p>
+        <p>Use the CLI and local dashboard without an account. Remote is a free prototype. Gnomcode is open source under Apache-2.0. Provider inference is billed separately.</p>
       </header>
 
       <section className="sp-pricing-grid" aria-label="Plans">

@@ -51,9 +51,7 @@ impl Database {
         let existing: Option<(String, String, i64, String)> = self
             .conn
             .query_row(
-                obfstr::obfstr!(
-                    "SELECT conversation_id,text,due_at,status FROM scheduled_message WHERE id=?1"
-                ),
+                "SELECT conversation_id,text,due_at,status FROM scheduled_message WHERE id=?1",
                 [id],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
@@ -66,13 +64,13 @@ impl Database {
             }
             return Ok(false);
         }
-        Ok(self.conn.execute(obfstr::obfstr!("INSERT INTO scheduled_message(id,conversation_id,text,due_at,status,created_at) VALUES (?1,?2,?3,?4,'pending',?5)"), params![id,root,redacted,due,Utc::now().timestamp()])? == 1)
+        Ok(self.conn.execute("INSERT INTO scheduled_message(id,conversation_id,text,due_at,status,created_at) VALUES (?1,?2,?3,?4,'pending',?5)", params![id,root,redacted,due,Utc::now().timestamp()])? == 1)
     }
 
     /// Reads local schedules, bounded to the most recent 200 entries.
     pub fn scheduled_messages(&self, conversation: &str) -> Result<Vec<ScheduledMessage>, Error> {
         let root = self.conversation_id(conversation)?;
-        let mut query = self.conn.prepare(obfstr::obfstr!("SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE conversation_id=?1 ORDER BY due_at DESC LIMIT 200"))?;
+        let mut query = self.conn.prepare("SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE conversation_id=?1 ORDER BY due_at DESC LIMIT 200")?;
         Ok(query
             .query_map([root], |r| {
                 Ok(ScheduledMessage {
@@ -88,7 +86,7 @@ impl Database {
 
     /// Returns due pending messages in deadline order.
     pub fn due_messages(&self, now: i64) -> Result<Vec<ScheduledMessage>, Error> {
-        let mut query = self.conn.prepare(obfstr::obfstr!("SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE status='pending' AND due_at<=?1 ORDER BY due_at,id LIMIT 100"))?;
+        let mut query = self.conn.prepare("SELECT id,conversation_id,text,due_at,status FROM scheduled_message WHERE status='pending' AND due_at<=?1 ORDER BY due_at,id LIMIT 100")?;
         Ok(query
             .query_map([now], |r| {
                 Ok(ScheduledMessage {
@@ -105,9 +103,7 @@ impl Database {
     /// Atomically claims delivery; a second worker cannot deliver again.
     pub fn claim_message(&self, id: &str) -> Result<bool, Error> {
         Ok(self.conn.execute(
-            obfstr::obfstr!(
-                "UPDATE scheduled_message SET status='delivering',attempted_at=?2 WHERE id=?1 AND status='pending'"
-            ),
+            "UPDATE scheduled_message SET status='delivering',attempted_at=?2 WHERE id=?1 AND status='pending'",
             params![id,Utc::now().timestamp_millis()],
         )? == 1)
     }
@@ -115,9 +111,7 @@ impl Database {
     /// Erases message text and records delivery, failure, or uncertainty.
     pub fn finish_message(&self, id: &str, status: &str) -> Result<(), Error> {
         self.conn.execute(
-            obfstr::obfstr!(
-                "UPDATE scheduled_message SET status=?2,text='',finished_at=unixepoch() WHERE id=?1 AND status='delivering'"
-            ),
+            "UPDATE scheduled_message SET status=?2,text='',finished_at=unixepoch() WHERE id=?1 AND status='delivering'",
             params![id, status],
         )?;
         Ok(())
@@ -126,7 +120,7 @@ impl Database {
     /// Cancels a pending message only within its owning conversation.
     pub fn cancel_message(&self, conversation: &str, id: &str) -> Result<bool, Error> {
         let root = self.conversation_id(conversation)?;
-        Ok(self.conn.execute(obfstr::obfstr!("UPDATE scheduled_message SET status='cancelled',text='',finished_at=unixepoch() WHERE id=?1 AND conversation_id=?2 AND status='pending'"),params![id,root])? == 1)
+        Ok(self.conn.execute("UPDATE scheduled_message SET status='cancelled',text='',finished_at=unixepoch() WHERE id=?1 AND conversation_id=?2 AND status='pending'",params![id,root])? == 1)
     }
 
     /// Updates the text of a pending queued message within its owning conversation.
@@ -182,20 +176,18 @@ impl Database {
     /// Cancels and erases pending messages when chat history is deleted.
     pub fn cancel_conversation_schedules(&self, conversation: &str) -> Result<(), Error> {
         let root = self.conversation_id(conversation)?;
-        self.conn.execute(obfstr::obfstr!("UPDATE scheduled_message SET status='cancelled',text='',finished_at=unixepoch() WHERE conversation_id=?1 AND status='pending'"),[root])?;
+        self.conn.execute("UPDATE scheduled_message SET status='cancelled',text='',finished_at=unixepoch() WHERE conversation_id=?1 AND status='pending'",[root])?;
         Ok(())
     }
 
     /// Recovers interrupted delivery without replay and expires terminal metadata.
     pub fn recover_scheduled_messages(&self) -> Result<(), Error> {
-        self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at) SELECT 'interrupted:'||id,conversation_id,'Scheduled delivery was interrupted. Check the terminal before retrying; it will not be replayed.',unixepoch() FROM scheduled_message WHERE status='delivering'"),[])?;
+        self.conn.execute("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at) SELECT 'interrupted:'||id,conversation_id,'Scheduled delivery was interrupted. Check the terminal before retrying; it will not be replayed.',unixepoch() FROM scheduled_message WHERE status='delivering'",[])?;
         self.conn.execute(
-            obfstr::obfstr!(
-                "UPDATE scheduled_message SET status='uncertain',text='',finished_at=unixepoch() WHERE status='delivering'"
-            ),
+            "UPDATE scheduled_message SET status='uncertain',text='',finished_at=unixepoch() WHERE status='delivering'",
             [],
         )?;
-        self.conn.execute(obfstr::obfstr!("DELETE FROM scheduled_message WHERE status NOT IN ('pending','delivering') AND COALESCE(finished_at,created_at)<?1"),[Utc::now().timestamp()-30*86400])?;
+        self.conn.execute("DELETE FROM scheduled_message WHERE status NOT IN ('pending','delivering') AND COALESCE(finished_at,created_at)<?1",[Utc::now().timestamp()-30*86400])?;
         Ok(())
     }
 
@@ -206,7 +198,7 @@ impl Database {
         conversation: &str,
         message: &str,
     ) -> Result<bool, Error> {
-        Ok(self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at) VALUES (?1,?2,?3,?4)"),params![id,self.conversation_id(conversation)?,message,Utc::now().timestamp()])? == 1)
+        Ok(self.conn.execute("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at) VALUES (?1,?2,?3,?4)",params![id,self.conversation_id(conversation)?,message,Utc::now().timestamp()])? == 1)
     }
 
     /// Records a redacted notification once alongside structured push metadata.
@@ -221,12 +213,12 @@ impl Database {
         payload: &gnomcode_core::notifications::RedactedNotificationPayload,
     ) -> Result<bool, Error> {
         let encoded = serde_json::to_string(payload)?;
-        Ok(self.conn.execute(obfstr::obfstr!("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at,push_payload) VALUES (?1,?2,?3,?4,?5)"),params![id,self.conversation_id(conversation)?,message,Utc::now().timestamp(),encoded])? == 1)
+        Ok(self.conn.execute("INSERT OR IGNORE INTO automation_notice(id,conversation_id,message,created_at,push_payload) VALUES (?1,?2,?3,?4,?5)",params![id,self.conversation_id(conversation)?,message,Utc::now().timestamp(),encoded])? == 1)
     }
 
     /// Returns recent generic lifecycle notifications for desktop and Remote.
     pub fn automation_notices(&self) -> Result<Vec<AutomationNotice>, Error> {
-        let mut query = self.conn.prepare(obfstr::obfstr!("SELECT id,conversation_id,message,created_at FROM automation_notice WHERE id NOT LIKE 'reset-ready:%' ORDER BY created_at DESC,rowid DESC LIMIT 100"))?;
+        let mut query = self.conn.prepare("SELECT id,conversation_id,message,created_at FROM automation_notice WHERE id NOT LIKE 'reset-ready:%' ORDER BY created_at DESC,rowid DESC LIMIT 100")?;
         Ok(query
             .query_map([], |r| {
                 Ok(AutomationNotice {
@@ -248,9 +240,7 @@ impl Database {
     pub fn get_notification_settings(
         &self,
     ) -> Result<gnomcode_core::notifications::NotificationSettings, Error> {
-        let mut query = self.conn.prepare(obfstr::obfstr!(
-            "SELECT approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset FROM notification_settings WHERE id = 1 LIMIT 1"
-        ))?;
+        let mut query = self.conn.prepare("SELECT approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset FROM notification_settings WHERE id = 1 LIMIT 1")?;
         let row = query
             .query_row([], |row| {
                 Ok(gnomcode_core::notifications::NotificationSettings {
@@ -279,8 +269,7 @@ impl Database {
     ) -> Result<(), Error> {
         let s = settings.clone().sanitized();
         self.conn.execute(
-            obfstr::obfstr!(
-                r#"INSERT INTO notification_settings(id, approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset, updated_at)
+            r#"INSERT INTO notification_settings(id, approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset, updated_at)
                    VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
                    ON CONFLICT(id) DO UPDATE SET
                        approval_waiting = excluded.approval_waiting,
@@ -288,8 +277,7 @@ impl Database {
                        turn_finished_min_minutes = excluded.turn_finished_min_minutes,
                        limit_low = excluded.limit_low,
                        limit_reset = excluded.limit_reset,
-                       updated_at = excluded.updated_at"#
-            ),
+                       updated_at = excluded.updated_at"#,
             params![
                 i64::from(s.approval_waiting),
                 i64::from(s.turn_finished),
@@ -319,7 +307,7 @@ impl Database {
     /// # Errors
     /// Returns an error if pending notices cannot be read.
     pub fn pending_push_notices_with_meta(&self) -> Result<Vec<PendingPushNotice>, Error> {
-        let mut query = self.conn.prepare(obfstr::obfstr!("SELECT id, push_payload FROM automation_notice WHERE pushed=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5"))?;
+        let mut query = self.conn.prepare("SELECT id, push_payload FROM automation_notice WHERE pushed=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5")?;
         Ok(query
             .query_map([Utc::now().timestamp() - 120], |row| {
                 let id: String = row.get(0)?;
@@ -340,16 +328,14 @@ impl Database {
     /// # Errors
     /// Returns an error if delivery state cannot be saved.
     pub fn mark_notice_pushed(&self, id: &str) -> Result<(), Error> {
-        self.conn.execute(
-            obfstr::obfstr!("UPDATE automation_notice SET pushed=1 WHERE id=?1"),
-            [id],
-        )?;
+        self.conn
+            .execute("UPDATE automation_notice SET pushed=1 WHERE id=?1", [id])?;
         Ok(())
     }
 
     /// Claims a bounded batch of recent OS notifications exactly once.
     pub fn claim_automation_notices(&self) -> Result<Vec<String>, Error> {
-        let mut query=self.conn.prepare(obfstr::obfstr!("UPDATE automation_notice SET notified=1 WHERE id IN (SELECT id FROM automation_notice WHERE notified=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5) RETURNING message"))?;
+        let mut query=self.conn.prepare("UPDATE automation_notice SET notified=1 WHERE id IN (SELECT id FROM automation_notice WHERE notified=0 AND id NOT LIKE 'reset-ready:%' AND created_at>=?1 ORDER BY rowid LIMIT 5) RETURNING message")?;
         Ok(query
             .query_map([Utc::now().timestamp() - 120], |r| r.get(0))?
             .collect::<Result<Vec<_>, _>>()?)
@@ -359,9 +345,7 @@ impl Database {
     pub fn last_scheduled_attempt(&self, conversation: &str) -> Result<Option<i64>, Error> {
         let root = self.conversation_id(conversation)?;
         Ok(self.conn.query_row(
-            obfstr::obfstr!(
-                "SELECT MAX(attempted_at) FROM scheduled_message WHERE conversation_id=?1"
-            ),
+            "SELECT MAX(attempted_at) FROM scheduled_message WHERE conversation_id=?1",
             [root],
             |r| r.get(0),
         )?)
@@ -370,7 +354,7 @@ impl Database {
     /// Looks up a lifecycle key without a bounded UI list affecting deduplication.
     pub fn has_automation_notice(&self, id: &str) -> Result<bool, Error> {
         Ok(self.conn.query_row(
-            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM automation_notice WHERE id=?1)"),
+            "SELECT EXISTS(SELECT 1 FROM automation_notice WHERE id=?1)",
             [id],
             |r| r.get(0),
         )?)
@@ -379,9 +363,9 @@ impl Database {
     /// Expires terminal records and generic lifecycle feedback after 30 days.
     pub fn expire_automation_records(&self) -> Result<(), Error> {
         let cutoff = Utc::now().timestamp() - 30 * 86400;
-        self.conn.execute(obfstr::obfstr!("DELETE FROM scheduled_message WHERE status NOT IN ('pending','delivering') AND COALESCE(finished_at,created_at)<?1"),[cutoff])?;
+        self.conn.execute("DELETE FROM scheduled_message WHERE status NOT IN ('pending','delivering') AND COALESCE(finished_at,created_at)<?1",[cutoff])?;
         self.conn.execute(
-            obfstr::obfstr!("DELETE FROM automation_notice WHERE created_at<?1"),
+            "DELETE FROM automation_notice WHERE created_at<?1",
             [cutoff],
         )?;
         Ok(())
@@ -391,7 +375,7 @@ impl Database {
     pub fn quota_reset_ready(&self, native: &str, event_at: DateTime<Utc>) -> Result<bool, Error> {
         let key = format!("reset-ready:{native}:{}", event_at.to_rfc3339());
         Ok(self.conn.query_row(
-            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM automation_notice WHERE id=?1)"),
+            "SELECT EXISTS(SELECT 1 FROM automation_notice WHERE id=?1)",
             [key],
             |r| r.get(0),
         )?)
@@ -399,7 +383,7 @@ impl Database {
 
     /// Recent lifecycle events, excluding text and tool output.
     pub fn automation_events(&self) -> Result<Vec<(i64, String, String, String)>, Error> {
-        let mut query=self.conn.prepare(obfstr::obfstr!("SELECT id,session_id,kind,timestamp FROM activity_event WHERE kind IN ('rate_limited','approval_wait','error') AND julianday(timestamp)>=julianday('now','-30 minutes') ORDER BY id DESC LIMIT 100"))?;
+        let mut query=self.conn.prepare("SELECT id,session_id,kind,timestamp FROM activity_event WHERE kind IN ('rate_limited','approval_wait','error') AND julianday(timestamp)>=julianday('now','-30 minutes') ORDER BY id DESC LIMIT 100")?;
         Ok(query
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
             .collect::<Result<Vec<_>, _>>()?)

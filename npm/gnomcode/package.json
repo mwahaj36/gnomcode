@@ -2,13 +2,13 @@
   "name": "gnomcode",
   "version": "1.0.0",
   "description": "Local agent console and standalone CLI",
-  "license": "SEE LICENSE IN EULA.txt",
+  "license": "Apache-2.0",
   "bin": {
     "gnomcode": "bin/gnomcode.js"
   },
   "files": [
     "bin",
-    "EULA.txt",
+    "LICENSE",
     "THIRD_PARTY_NOTICES.html"
   ],
   "engines": {

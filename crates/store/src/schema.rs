@@ -267,7 +267,7 @@ impl Database {
             )?;
         }
 
-        self.conn.execute_batch(obfstr::obfstr!(r#"
+        self.conn.execute_batch(r#"
             CREATE TABLE IF NOT EXISTS conversation_member (
                 host_id TEXT PRIMARY KEY,
                 conversation_id TEXT NOT NULL,
@@ -278,13 +278,12 @@ impl Database {
             );
             CREATE INDEX IF NOT EXISTS idx_conversation_member ON conversation_member(conversation_id, position);
             INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (9, datetime('now'));
-        "#))?;
-        self.conn.execute_batch(obfstr::obfstr!(r#"
+        "#)?;
+        self.conn.execute_batch(r#"
             CREATE TABLE IF NOT EXISTS deleted_chat_event (event_id BLOB PRIMARY KEY);
             INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (10, datetime('now'));
-        "#))?;
-        self.conn.execute_batch(obfstr::obfstr!(
-            r#"
+        "#)?;
+        self.conn.execute_batch(r#"
             CREATE TABLE IF NOT EXISTS scheduled_message (
                 id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, text TEXT NOT NULL,
                 due_at INTEGER NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, attempted_at INTEGER, finished_at INTEGER
@@ -295,23 +294,22 @@ impl Database {
                 created_at INTEGER NOT NULL, notified INTEGER NOT NULL DEFAULT 0
             );
             INSERT OR IGNORE INTO schema_migrations(version,applied_at) VALUES (12,datetime('now'));
-        "#
-        ))?;
+        "#)?;
         let push_column_exists: bool = self.conn.query_row(
-            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=14)"),
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=14)",
             [],
             |row| row.get(0),
         )?;
         if !push_column_exists {
-            self.conn.execute_batch(obfstr::obfstr!("BEGIN; ALTER TABLE automation_notice ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0; INSERT INTO schema_migrations(version,applied_at) VALUES (14,datetime('now')); COMMIT;"))?;
+            self.conn.execute_batch("BEGIN; ALTER TABLE automation_notice ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0; INSERT INTO schema_migrations(version,applied_at) VALUES (14,datetime('now')); COMMIT;")?;
         }
         let v15_exists: bool = self.conn.query_row(
-            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=15)"),
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=15)",
             [],
             |row| row.get(0),
         )?;
         if !v15_exists {
-            self.conn.execute_batch(obfstr::obfstr!(
+            self.conn.execute_batch(
                 r#"BEGIN;
                 CREATE TABLE IF NOT EXISTS notification_settings (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -324,17 +322,17 @@ impl Database {
                 );
                 ALTER TABLE automation_notice ADD COLUMN push_payload TEXT;
                 INSERT INTO schema_migrations(version,applied_at) VALUES (15,datetime('now'));
-                COMMIT;"#
-            ))?;
+                COMMIT;"#,
+            )?;
         }
         let v16_exists: bool = self.conn.query_row(
-            obfstr::obfstr!("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=16)"),
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=16)",
             [],
             |row| row.get(0),
         )?;
         if !v16_exists {
             // Antigravity titles drifted to the latest prompt; restore the first user prompt.
-            self.conn.execute_batch(obfstr::obfstr!(
+            self.conn.execute_batch(
                 r#"BEGIN;
                 UPDATE session SET title = (
                     SELECT substr(trim(CASE WHEN instr(t.c, char(10)) > 0
@@ -347,13 +345,11 @@ impl Database {
                   AND EXISTS (SELECT 1 FROM chat_event e WHERE e.session_id = session.id
                       AND e.role = 'user' AND trim(e.content) <> '' AND e.content NOT LIKE '<%');
                 INSERT INTO schema_migrations(version,applied_at) VALUES (16,datetime('now'));
-                COMMIT;"#
-            ))?;
+                COMMIT;"#,
+            )?;
         }
-        self.conn.execute_batch(obfstr::obfstr!(
-            "CREATE TABLE IF NOT EXISTS desktop_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
-        ))?;
-        self.conn.execute_batch(obfstr::obfstr!(r#"
+        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS desktop_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
+        self.conn.execute_batch(r#"
             DELETE FROM usage_record
             WHERE session_id IN (
                 SELECT id FROM session
@@ -379,7 +375,7 @@ impl Database {
             -- Clean up self-referencing subagents where background tasks set parent to self
             UPDATE session SET parent_session_id = NULL WHERE parent_session_id = id;
             UPDATE session SET title = NULL WHERE title = 'Subagent' AND parent_session_id IS NULL;
-        "#))?;
+        "#)?;
         Ok(())
     }
 }

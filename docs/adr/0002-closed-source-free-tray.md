@@ -1,6 +1,6 @@
 # 0002 — Closed source; free tray; Pro unlocked by signed license file
 
-- **Status:** Accepted. Superseded in part by [0058](./0058-1.0-scope-three-agents.md) (the later Teams tier is not in 1.0).
+- **Status:** Superseded by [0062](./0062-open-source-apache-2.md). Earlier partly superseded by [0058](./0058-1.0-scope-three-agents.md).
 - **Date:** 2026-10-26
 
 ## Context

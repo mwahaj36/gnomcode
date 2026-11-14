@@ -11,7 +11,7 @@ module.exports = {
     asar: true,
     extraResource: [
       path.join(__dirname, 'staging', 'bin'),
-      path.join(__dirname, 'staging', 'EULA.txt'),
+      path.join(__dirname, 'staging', 'LICENSE'),
       path.join(__dirname, 'staging', 'THIRD_PARTY_NOTICES.html'),
       path.join(__dirname, 'staging', 'DESKTOP_THIRD_PARTY_NOTICES.html'),
       path.join(__dirname, 'staging', 'ELECTRON_LICENSE.txt'),

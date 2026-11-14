@@ -66,7 +66,7 @@ pub(crate) struct AccountDevices {
 
 fn root(owner: &str) -> PathBuf {
     gnomcode_platform::gnomcode_home()
-        .join(obfstr::obfstr!("remote-devices"))
+        .join("remote-devices")
         .join(owner)
 }
 
@@ -413,9 +413,6 @@ impl AccountDevices {
                 })
                 .clone();
             if !manager.status().await.enabled {
-                if !crate::pro::has_remote_access().await {
-                    continue;
-                }
                 let _ = manager.start_device(db.clone(), request.id.clone()).await;
             }
             let status = manager.status().await;

@@ -270,7 +270,7 @@ jobs:
           mkdir -p apps/desktop/staging/bin
           cp target/release/gnomcode apps/desktop/staging/bin/gnomcode
           chmod +x apps/desktop/staging/bin/gnomcode
-          cp docs/legal/EULA.txt apps/desktop/staging/EULA.txt
+          cp LICENSE apps/desktop/staging/LICENSE
           if ! cargo about --version >/dev/null 2>&1; then
             cargo install cargo-about --locked --features cli
           fi
