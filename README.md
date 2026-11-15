@@ -68,7 +68,7 @@ What actually works depends on the installed CLI version, your authentication an
 
 ## Free and open source
 
-Gnomcode is licensed under the [Apache License 2.0](LICENSE). Everything in 1.0 is free, Remote included. The name and logo are covered by [TRADEMARKS.md](TRADEMARKS.md).
+Gnomcode is licensed under the [Apache License 2.0](LICENSE).
 
 Contributions are welcome - see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) (DCO sign-off required), [SECURITY.md](SECURITY.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Engineering rules live in [AGENTS.md](AGENTS.md); the product brief is [docs/PRODUCT.md](docs/PRODUCT.md) and a feature comparison with similar tools is in [docs/comparison.md](docs/comparison.md).
 
