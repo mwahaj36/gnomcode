@@ -217,14 +217,20 @@ pub(crate) fn ingest_trajectories(db: &mut Database, catalog: &Catalog) -> Resul
                 .and_modify(|seen| *seen = (*seen).min(seconds))
                 .or_insert(seconds);
         }
+        // A turn with no recorded time is dated by when the conversation file was last
+        // written. The Unix epoch used before put thousands of turns in January 1970.
+        let written = fs::metadata(&t.path)
+            .and_then(|meta| meta.modified())
+            .map_or_else(|_| Utc::now(), DateTime::<Utc>::from);
         let usage = generation_usage(&t.conversation, &generations, |generation| {
-            let seconds = generation
+            generation
                 .response_id
                 .as_ref()
                 .and_then(|response| started.get(response))
                 .copied()
-                .unwrap_or(earliest);
-            DateTime::from_timestamp(seconds, 0).unwrap_or(DateTime::<Utc>::UNIX_EPOCH)
+                .or((earliest != i64::MAX).then_some(earliest))
+                .and_then(|seconds| DateTime::from_timestamp(seconds, 0))
+                .unwrap_or(written)
         });
         let last = rows.generations.last().map_or(after, |(idx, _)| *idx);
         let size = fs::metadata(&t.path).map_or(0, |meta| meta.len());
