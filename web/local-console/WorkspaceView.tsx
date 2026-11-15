@@ -280,6 +280,7 @@ export function WorkspaceView() {
   const [terminalStreamOpen, setTerminalStreamOpen] = useState(false);
   const [workspaceTerminalOpen, setWorkspaceTerminalOpen] = useState(false);
   const [workspaceTerminalPath, setWorkspaceTerminalPath] = useState('');
+  const [workspaceTerminalError, setWorkspaceTerminalError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [selectedModelValue, setSelectedModelValue] = useState('');
   const [modelHandoffBusy, setModelHandoffBusy] = useState(false);
@@ -1291,6 +1292,7 @@ export function WorkspaceView() {
   const handleOpenWorkspaceTerminal = async () => {
     const source = activeSessionId;
     if (!source || workspaceTerminalBusyRef.current) return;
+    setWorkspaceTerminalError(null);
     setSidePanel('shell');
     // The screen element lives in the pane that just opened; wait for React to mount it.
     for (let frame = 0; frame < 60 && !workspaceTerminalScreenRef.current; frame += 1) {
@@ -1300,9 +1302,16 @@ export function WorkspaceView() {
     workspaceTerminalBusyRef.current = true;
     try {
       let entry = workspaceTerminalsRef.current.get(source);
+      if (entry && (entry.socket.readyState === WebSocket.CLOSING || entry.socket.readyState === WebSocket.CLOSED)) {
+        entry.observer.disconnect();
+        entry.terminal.dispose();
+        entry.element.remove();
+        workspaceTerminalsRef.current.delete(source);
+        entry = undefined;
+      }
       if (!entry) {
         if (!window.Terminal || !window.FitAddon) {
-          setDeliveryStatus('Terminal renderer unavailable.');
+          setWorkspaceTerminalError('Terminal renderer unavailable.');
           return;
         }
         const record = await fetchLocalMutation<{ session_id: string; repo_path: string }>(
@@ -1368,6 +1377,9 @@ export function WorkspaceView() {
         workspaceTerminalsRef.current.set(source, entry);
       }
       if (source !== activeSessionIdRef.current) return;
+      if (entry.element.parentElement !== workspaceTerminalScreenRef.current) {
+        workspaceTerminalScreenRef.current.append(entry.element);
+      }
       workspaceTerminalScreenRef.current
         .querySelectorAll<HTMLDivElement>('div')
         .forEach((node) => {
@@ -1379,10 +1391,14 @@ export function WorkspaceView() {
         entry?.resize();
         entry?.terminal.focus();
       });
-    } catch {
-      setDeliveryStatus(
-        'Could not open a shell in this workspace. Check that the directory still exists.',
-      );
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not open a shell in this workspace. Check that the directory still exists.';
+      setWorkspaceTerminalPath('');
+      setWorkspaceTerminalError(message);
+      setWorkspaceTerminalOpen(false);
     } finally {
       workspaceTerminalBusyRef.current = false;
     }
@@ -1412,6 +1428,7 @@ export function WorkspaceView() {
     setTerminalStreamOpen(false);
     closeAgentTerminal();
     setWorkspaceTerminalOpen(false);
+    setWorkspaceTerminalError(null);
     setHostBusy(null);
     setEditingQueueId(null);
     setEditingQueueText('');
@@ -3352,7 +3369,16 @@ export function WorkspaceView() {
                         <div className="workspace-terminal-heading">
                           <span>{workspaceTerminalPath || 'Terminal'}</span>
                         </div>
-                        <div ref={workspaceTerminalScreenRef} className="sp-workspace-terminal-screen" />
+                        {workspaceTerminalError ? (
+                          <p className="sp-panel-error" role="status" style={{ padding: '12px' }}>
+                            {workspaceTerminalError}
+                          </p>
+                        ) : null}
+                        <div
+                          ref={workspaceTerminalScreenRef}
+                          className="sp-workspace-terminal-screen"
+                          hidden={Boolean(workspaceTerminalError)}
+                        />
                       </section>
                       {sidePanel === 'agent-terminal' || sidePanel === 'shell' ? null : sidePanel === 'automation' ? (
                         <section className="sp-automation-panel" aria-label="Schedule and automation">

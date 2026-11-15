@@ -1,6 +1,12 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl, LocalApiError } from './local-api';
-import { confirmAction, showNotice } from './shell-bus';
+import { advanceOnboardingAfterAccount } from './Onboarding';
+import {
+  clearOnboardingPausedForAuth,
+  confirmAction,
+  isOnboardingPausedForAuth,
+  startOnboarding,
+} from './shell-bus';
 import { signOutDesktop } from './settings-index';
 
 interface AccountState {
@@ -44,6 +50,7 @@ export function AccountView() {
   const [showToken, setShowToken] = useState(false);
   const [busy, setBusy] = useState<'signin' | 'pair' | 'unpair' | null>(null);
   const [status, setStatus] = useState<{ text: string; tone: Tone } | null>(null);
+  const [onboardingPaused, setOnboardingPaused] = useState(() => isOnboardingPausedForAuth());
   const busyRef = useRef(false);
   const cloudStatusRef = useRef<HTMLParagraphElement | null>(null);
 
@@ -67,13 +74,23 @@ export function AccountView() {
     );
     setCloudStatus(value.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.');
     setAccount({ paired: Boolean(value.paired), email: value.email });
+    if (value.paired && isOnboardingPausedForAuth()) {
+      clearOnboardingPausedForAuth();
+      setOnboardingPaused(false);
+      advanceOnboardingAfterAccount();
+      startOnboarding();
+    }
     return true;
   }, []);
 
   useEffect(() => {
+    setOnboardingPaused(isOnboardingPausedForAuth());
     void check();
     const onReload = (event: Event) => {
-      if ((event as CustomEvent<{ view?: string }>).detail?.view === 'auth') void check();
+      if ((event as CustomEvent<{ view?: string }>).detail?.view === 'auth') {
+        setOnboardingPaused(isOnboardingPausedForAuth());
+        void check();
+      }
     };
     window.addEventListener('gnomcode:reload-view', onReload);
     return () => window.removeEventListener('gnomcode:reload-view', onReload);
@@ -164,6 +181,23 @@ export function AccountView() {
 
   return (
     <section className="sp-account-panel" aria-labelledby="account-heading">
+      {onboardingPaused ? (
+        <div className="sp-account-state" role="region" aria-label="Setup in progress">
+          <p>Sign in below, or return to the setup checklist to finish configuring your providers.</p>
+          <button
+            type="button"
+            className="btn-control"
+            data-onboarding-action="return-to-setup"
+            onClick={() => {
+              clearOnboardingPausedForAuth();
+              setOnboardingPaused(false);
+              startOnboarding();
+            }}
+          >
+            Return to setup
+          </button>
+        </div>
+      ) : null}
       <div className="sp-account-intro">
         <div>
           <span className="sp-account-label">THIS DESKTOP</span>

@@ -1583,6 +1583,18 @@ pub(crate) fn conversation_sessions(
         }) {
             row["state"] = json!("waiting_for_history");
         }
+        let observed_repo = db
+            .get_session_focus_target(native)?
+            .and_then(|target| target.repo_root)
+            .or_else(|| launch.as_ref().map(|launch| launch.repo.clone()));
+        if row.get("repo_path").and_then(Value::as_str).is_none()
+            && let Some(repo) = host
+                .map(|record| record.repo_path.as_str())
+                .or(observed_repo.as_deref())
+                .filter(|path| !path.trim().is_empty())
+        {
+            row["repo_path"] = json!(repo);
+        }
         if let Some(title) = crate::conversation_title(db, &root) {
             row["title"] = json!(title);
         }

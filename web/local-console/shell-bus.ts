@@ -29,6 +29,33 @@ export function startOnboarding(): void {
   controller?.startTour();
 }
 
+const ONBOARDING_AUTH_KEY = 'gnomcode-onboarding-auth-return';
+
+/** Marks that onboarding paused to open the Account sign-in view and should resume after. */
+export function pauseOnboardingForAuth(): void {
+  try {
+    sessionStorage.setItem(ONBOARDING_AUTH_KEY, '1');
+  } catch {
+    // Storage unavailable
+  }
+}
+
+export function isOnboardingPausedForAuth(): boolean {
+  try {
+    return sessionStorage.getItem(ONBOARDING_AUTH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function clearOnboardingPausedForAuth(): void {
+  try {
+    sessionStorage.removeItem(ONBOARDING_AUTH_KEY);
+  } catch {
+    // Storage unavailable
+  }
+}
+
 let providerSetupWanted = false;
 
 /** Asks Settings to scroll to the provider setup checklist (from onboarding or the doctor link). */
