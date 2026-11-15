@@ -1108,6 +1108,17 @@ pub(crate) fn conversation_host<'a>(
     sessions: &[Session],
     hosted: &'a [gnomcode_pty::SessionRecord],
 ) -> Result<Option<&'a gnomcode_pty::SessionRecord>, gnomcode_store::Error> {
+    conversation_host_in(db, id, hosted, || session_bindings(sessions, hosted))
+}
+
+/// [`conversation_host`] with the native-to-host bindings supplied by the caller. Working
+/// them out runs Git for each host, so a list asks once rather than once per row.
+fn conversation_host_in<'s, 'a>(
+    db: &Database,
+    id: &str,
+    hosted: &'a [gnomcode_pty::SessionRecord],
+    bindings: impl FnOnce() -> Vec<(&'s Session, &'a gnomcode_pty::SessionRecord)>,
+) -> Result<Option<&'a gnomcode_pty::SessionRecord>, gnomcode_store::Error> {
     let record = if let Some((host, _, _)) = db.conversation_target(id)? {
         hosted.iter().find(|record| record.session_id == host)
     } else {
@@ -1115,10 +1126,10 @@ pub(crate) fn conversation_host<'a>(
             .iter()
             .find(|record| record.session_id == id)
             .or_else(|| {
-                sessions
-                    .iter()
-                    .find(|session| session.id == id)
-                    .and_then(|session| session_host(session, sessions, hosted))
+                bindings()
+                    .into_iter()
+                    .find(|(session, _)| session.id == id)
+                    .map(|(_, record)| record)
             })
     };
     Ok(record.filter(|record| crate::agent_for_model("@default", Some(&record.agent)).is_some()))
@@ -1397,6 +1408,8 @@ pub(crate) fn conversation_sessions(
     hosted: &[gnomcode_pty::SessionRecord],
 ) -> Result<Vec<Value>, gnomcode_store::Error> {
     sync_conversation_bindings(db, sessions, hosted)?;
+    // Bindings run Git for each host; work them out once for the whole list.
+    let bindings = session_bindings(sessions, hosted);
     let quota = db.get_latest_quota_snapshots()?;
     let worktrees = crate::worktree_api::index();
     let mut visible = Vec::new();
@@ -1439,7 +1452,7 @@ pub(crate) fn conversation_sessions(
             row["parent_session_id"] = json!(source.parent_session_id);
             row["project_id"] = json!(source.project_id);
         }
-        let host = conversation_host(db, id, sessions, hosted)?;
+        let host = conversation_host_in(db, id, hosted, || bindings.clone())?;
         let native = mapping
             .as_ref()
             .and_then(|(_, native, _)| native.as_deref())
