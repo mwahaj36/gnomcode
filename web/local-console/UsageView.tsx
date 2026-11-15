@@ -4,11 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   mountProjectList,
   updateActivity,
-  updateHeatmap,
   updateProviderCards,
   updateProviders,
   updateValue,
-  type ActivityHeatmap,
   type ProjectActivity,
   type ProviderOverview,
 } from '../lib/console-presentation.js';
@@ -16,6 +14,7 @@ import {
   renderHandoffEvalMarkup,
   type HandoffEvalReport,
 } from '../lib/eval-presentation.mjs';
+import { ActivityGrid } from './ActivityGrid';
 import {
   fetchLocalJson,
   localAuthHeaders,
@@ -23,7 +22,6 @@ import {
 } from './local-api';
 
 const POLL_INTERVAL_MS = 15_000;
-const HEATMAP_TTL_MS = 60_000;
 
 const PERIOD_LABELS: Record<string, string> = {
   today: 'Today',
@@ -57,7 +55,6 @@ export function UsageView() {
   const [exportStatus, setExportStatus] = useState('');
 
   const quotaRef = useRef<HTMLDivElement | null>(null);
-  const heatmapRef = useRef<HTMLDivElement | null>(null);
   const activityRef = useRef<HTMLDivElement | null>(null);
   const providersRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef<HTMLElement | null>(null);
@@ -68,15 +65,7 @@ export function UsageView() {
   rangeRef.current = range;
   const lastQuotaKeyRef = useRef('');
   const lastReportKeyRef = useRef('');
-  const lastHeatmapAtRef = useRef(0);
   const exportDetailsRef = useRef<HTMLDetailsElement | null>(null);
-
-  const scrollHeatmapToToday = useCallback(() => {
-    const scroller = heatmapRef.current?.querySelector<HTMLElement>('.sp-heatmap-scroll');
-    if (scroller) {
-      scroller.scrollLeft = scroller.scrollWidth;
-    }
-  }, []);
 
   const loadQuota = useCallback(async () => {
     try {
@@ -99,22 +88,6 @@ export function UsageView() {
       if (quotaRef.current) {
         quotaRef.current.textContent =
           'Quota refresh failed. Last observations are stale; retry Reload view.';
-      }
-    }
-  }, []);
-
-  const loadHeatmap = useCallback(async (force = false) => {
-    if (!force && Date.now() - lastHeatmapAtRef.current < HEATMAP_TTL_MS) return;
-    lastHeatmapAtRef.current = Date.now();
-    try {
-      const data = await fetchLocalJson<ActivityHeatmap>('/api/v1/activity/heatmap');
-      if (heatmapRef.current) {
-        updateHeatmap(heatmapRef.current, data);
-      }
-    } catch {
-      lastHeatmapAtRef.current = Date.now() - 50_000;
-      if (heatmapRef.current && !heatmapRef.current.firstChild) {
-        heatmapRef.current.innerHTML = '<div class="sp-empty"><p>Activity could not be loaded.</p></div>';
       }
     }
   }, []);
@@ -210,17 +183,16 @@ export function UsageView() {
   }, []);
 
   const refreshAll = useCallback(
-    async (forceHeatmap = false) => {
+    async () => {
       const currentRange = rangeRef.current;
       await Promise.all([
         loadQuota(),
         loadReport(currentRange),
-        loadHeatmap(forceHeatmap),
         loadProjects(currentRange),
         loadEvals(),
       ]);
     },
-    [loadEvals, loadHeatmap, loadProjects, loadQuota, loadReport],
+    [loadEvals, loadProjects, loadQuota, loadReport],
   );
 
   useEffect(() => {
@@ -230,18 +202,17 @@ export function UsageView() {
   }, [range, loadProjects, loadReport]);
 
   useEffect(() => {
-    void refreshAll(false);
+    void refreshAll();
     const timer = window.setInterval(() => {
       if (isUsageVisible()) {
-        void refreshAll(false);
+        void refreshAll();
       }
     }, POLL_INTERVAL_MS);
 
     const onViewChange = (event: Event) => {
       const detail = (event as CustomEvent<{ view?: string }>).detail;
       if (detail?.view === 'usage') {
-        scrollHeatmapToToday();
-        void refreshAll(false);
+        void refreshAll();
       }
     };
     const onReload = (event: Event) => {
@@ -249,7 +220,7 @@ export function UsageView() {
       if (detail?.view === 'usage') {
         lastQuotaKeyRef.current = '';
         lastReportKeyRef.current = '';
-        void refreshAll(true);
+        void refreshAll();
       }
     };
 
@@ -260,12 +231,10 @@ export function UsageView() {
       window.removeEventListener('gnomcode:view-change', onViewChange);
       window.removeEventListener('gnomcode:reload-view', onReload);
     };
-  }, [refreshAll, scrollHeatmapToToday]);
+  }, [refreshAll]);
 
-  const handleHeatmapClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    const cell = (event.target as HTMLElement).closest<HTMLElement>('.sp-heatmap-grid .sp-heat[data-date]');
-    const date = cell?.dataset.date;
-    if (!date || !activityRef.current) return;
+  const handleDaySelect = (date: string) => {
+    if (!activityRef.current) return;
     const day = activityRef.current.querySelector<HTMLDetailsElement>(
       `.sp-activity-breakdown [data-date="${CSS.escape(date)}"]`,
     );
@@ -355,7 +324,7 @@ export function UsageView() {
       <div ref={quotaRef}>
         <p>Loading provider limits...</p>
       </div>
-      <div ref={heatmapRef} onClick={handleHeatmapClick} />
+      <ActivityGrid viewName="usage" onDaySelect={handleDaySelect} />
       <div ref={activityRef} className="sp-usage-daily">
         <p>Loading daily activity...</p>
       </div>

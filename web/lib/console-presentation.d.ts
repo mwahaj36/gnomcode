@@ -96,6 +96,7 @@ export type ArtifactItem = { id?: string; path: string; title?: string; kind?: A
 export function classifyArtifactKind(item: ArtifactItem | null | undefined): ArtifactKind;
 export function isSafeArtifactImageSrc(src: unknown): boolean;
 export function renderArtifactsList(items?: ArtifactItem[], selectedId?: string): string;
+export function sandboxArtifactHtml(content: string | null | undefined): string;
 export function renderArtifactPreview(artifact: ArtifactItem | null | undefined): string;
 export const MAX_ATTACHMENT_BYTES: number;
 export type AttachmentItem = { id: string; filename: string; size: number; mime_type: string; status: 'uploading' | 'saved' | 'error'; workspace_path?: string; error?: string };
