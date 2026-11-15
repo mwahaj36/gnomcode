@@ -12,6 +12,7 @@ export interface LocalSessionSummary {
   live?: { state: 'working' | 'waiting_for_you' | 'idle' | 'stopped'; basis: string; step: string };
   turn_started_at?: string;
   can_resume?: boolean;
+  can_continue_here?: boolean;
   can_reset?: boolean;
   worktree?: boolean;
   worktree_branch?: string;

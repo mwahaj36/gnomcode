@@ -12,7 +12,7 @@ import { formatWorktreeBadge, renderWorktreeDiffMarkup, type WorktreeDiffData } 
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
 type Channel = Awaited<ReturnType<typeof createChannel>>;
-type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; header_limit?:ConversationLimit | null; hosted?:boolean; live?:LiveStatus; turn_started_at?:string; worktree?:boolean; worktree_branch?:string; worktree_path?:string };
+type Session = { source?:string; id: string; title?: string | null; agent: string; model?: string | null; state: string; can_prompt: boolean; can_resume?:boolean; can_continue_here?:boolean; can_reset?:boolean; requested_model?:string; limits?:ConversationLimit[]; header_limit?:ConversationLimit | null; hosted?:boolean; live?:LiveStatus; turn_started_at?:string; worktree?:boolean; worktree_branch?:string; worktree_path?:string };
 type ChatEvent = { event_id: string; turn_index: number; created_at: string; role: string; content: string; status?: string | null };
 type FolderListing = {path:string; parent:string | null; roots:string[]; folders:{name:string; path:string}[]; truncated:boolean};
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
@@ -88,6 +88,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const backgroundNotifications=useRef(false);
   const [selected, setSelected] = useState('');
   const [showSessions, setShowSessions] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 761px)').matches) {
+      setShowSessions(true);
+    }
+  }, []);
   const [newSession,setNewSession]=useState(false);
   const [events, setEvents] = useState<ChatEvent[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -1002,7 +1007,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           </section>
           {automationNotices.some(item=>item.conversation_id===selected || !item.conversation_id) && <section className="sp-auto-section" aria-labelledby="remote-auto-events"><h4 id="remote-auto-events">Recent events</h4><ul className="sp-auto-list" aria-label="Recent events">{automationNotices.filter(item=>(item.conversation_id===selected || !item.conversation_id)).slice(0,8).map(item=><li key={item.id}><span className="sp-auto-text">{item.message}</span></li>)}</ul></section>}
           </div>
-        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : 'Imported session history.'}</p><div className="sp-imported-actions">{active?.source === 'imported' && <button type="button" className="sp-primary-action" disabled={!connected || continueHereBusy} onClick={() => { setContinueHereBusy(true); setNotice('Continuing imported session in Gnomcode...'); void send({type:'continue_here',session_id:selected}).catch(() => { setContinueHereBusy(false); setError('Continue here requires desktop support.'); }); }}>{continueHereBusy ? 'Continuing...' : 'Continue here'}</button>}{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div></div> : <>
+        </details>{readOnly ? <div className="remote-readonly"><p>{active?.can_resume ? 'Continue where you left off.' : active?.can_continue_here ? 'Imported CLI session history.' : 'Observed external session history (read-only).'}</p><div className="sp-imported-actions">{active?.source === 'imported' && active?.can_continue_here && <button type="button" className="sp-primary-action" disabled={!connected || continueHereBusy} onClick={() => { setContinueHereBusy(true); setNotice('Continuing imported session in Gnomcode...'); void send({type:'continue_here',session_id:selected}).catch(() => { setContinueHereBusy(false); setError('Continue here requires desktop support.'); }); }}>{continueHereBusy ? 'Continuing...' : 'Continue here'}</button>}{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div></div> : <>
           <div className="sp-quick-actions" role="toolbar" aria-label="Quick prompts">
             {quickActions.map(action => <button key={action.id} type="button" className="sp-quick-action" title={action.prompt} disabled={!connected || sending || !active?.can_prompt} onClick={() => submitQuickAction(action)}>{action.label}</button>)}
             <button type="button" className="sp-quick-action sp-quick-action--manage" aria-label="Manage quick prompts" onClick={() => setQuickActionsPanel(true)}>Customize</button>

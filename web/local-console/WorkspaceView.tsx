@@ -2186,7 +2186,8 @@ export function WorkspaceView() {
                 ? 'Unpin conversation'
                 : 'Pin conversation'}
             </button>
-            {sessionContextMenu.session.source === 'imported' ? (
+            {sessionContextMenu.session.source === 'imported' &&
+            sessionContextMenu.session.can_continue_here ? (
               <button
                 type="button"
                 role="menuitem"
@@ -2850,7 +2851,7 @@ export function WorkspaceView() {
               >
                 <summary aria-label="Conversation actions">Actions</summary>
                 <div>
-                  {imported ? (
+                  {imported && activeSession?.can_continue_here ? (
                     <button
                       type="button"
                       className="btn-control"
@@ -3237,14 +3238,24 @@ export function WorkspaceView() {
                   Attach
                 </button>
                 {imported ? (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    disabled={continueHereBusy}
-                    onClick={() => void handleContinueHere()}
-                  >
-                    {continueHereBusy ? 'Continuing...' : 'Continue here'}
-                  </button>
+                  activeSession?.can_continue_here ? (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={continueHereBusy}
+                      onClick={() => void handleContinueHere()}
+                    >
+                      {continueHereBusy ? 'Continuing...' : 'Continue here'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-control"
+                      onClick={() => openLauncher()}
+                    >
+                      New conversation
+                    </button>
+                  )
                 ) : (
                   <button type="submit" className="btn-primary" disabled={sendBusy}>
                     {working ? 'Queue' : 'Send'}
@@ -3253,7 +3264,9 @@ export function WorkspaceView() {
               </div>
               <small className="sp-chat-composer-help">
                 {imported
-                  ? `Observed in ${importedAgentLabel}. Drafts are saved locally; choose Continue here to send.`
+                  ? activeSession?.can_continue_here
+                    ? `Observed in ${importedAgentLabel}. Drafts are saved locally; choose Continue here to send.`
+                    : `Observed in ${importedAgentLabel}. External IDE or app sessions are read-only here; start a new conversation in Gnomcode to send.`
                   : 'Enter to send · Shift+Enter for a new line'}
               </small>
             </form>

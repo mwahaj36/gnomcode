@@ -1545,8 +1545,11 @@ pub(crate) fn conversation_sessions(
             }
             row["live"] = json!(live);
         }
+        let can_continue_here =
+            !managed && observed.is_some_and(|s| crate::continue_here::plan(db, &s.id).is_ok());
         row["can_prompt"] = json!(can_prompt);
         row["can_resume"] = json!(can_resume);
+        row["can_continue_here"] = json!(can_continue_here);
         row["can_reset"] = json!(managed && matches!(agent, "codex" | "claude-code"));
         row["limits"] = json!(limits);
         row["header_limit"] = json!(header_limit);
@@ -1557,7 +1560,11 @@ pub(crate) fn conversation_sessions(
         let (delivery_mode, delivery_reason, can_queue) = if !managed {
             (
                 "observed_read_only",
-                "Observed external session. Use Continue here in Actions to start a managed session.",
+                if can_continue_here {
+                    "Observed external session. Use Continue here in Actions to start a managed session."
+                } else {
+                    "Observed external session. Start a new conversation in Gnomcode to send messages."
+                },
                 false,
             )
         } else if can_prompt {
