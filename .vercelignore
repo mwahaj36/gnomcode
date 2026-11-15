@@ -1,13 +1,9 @@
 target/
 apps/
 npm/
-# Keep the generated console bundle: web prebuild checks it is fresh.
-crates/*
-!crates/daemon/
-crates/daemon/*
-!crates/daemon/src/
-crates/daemon/src/*
-!crates/daemon/src/console-react.js
+# The whole crates tree is 3 MB of text and goes up as-is: re-including only
+# crates/daemon/src/console-react.js from an excluded parent did not survive the upload,
+# and the web prebuild fails without that bundle.
 fixtures/
 workers/
 /docs/
