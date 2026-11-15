@@ -1473,9 +1473,9 @@ html{touch-action:manipulation}
 .sp-approval-title{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--sp-fs-strong);color:var(--sp-text)}
 .sp-approval-summary{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:var(--sp-fs-meta)/1.5 var(--sp-font-mono);color:var(--sp-text-2)}
 .sp-approval-meta{font-size:var(--sp-fs-meta);color:var(--sp-text-3)}
-.sp-approval-actions{display:flex;gap:var(--sp-2);flex-shrink:0}
+.sp-approval-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--sp-2);flex-shrink:1;max-width:60%}
 .sp-approval-actions .btn-control{min-height:40px}
-@media (max-width:720px){.sp-approval{flex-direction:column;align-items:stretch}.sp-approval-actions .btn-control{flex:1;min-height:44px}}
+@media (max-width:720px){.sp-approval{flex-direction:column;align-items:stretch}.sp-approval-actions{max-width:none}.sp-approval-actions .btn-control{flex:1 1 40%;min-height:44px}}
 
 /* Project activity (fix/project-activity): left-aligned rows, newest first, 44px, shared by the local and web consoles */
 .sp-projects .sp-project-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); margin: 0 0 var(--sp-3); }
@@ -2400,3 +2400,34 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-overview,.sp-inspector{animation:spPanelIn .14s ease-out}
 @keyframes spPanelIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
 .sp-code-bar{position:sticky;top:0;z-index:2;backdrop-filter:blur(6px)}
+/* Terminals dock in the right-hand tools pane beside the conversation, never under it. */
+.sp-native-console .sp-inspector .sp-chat-terminal-box,.sp-native-console .sp-inspector .sp-workspace-terminal{height:100%;min-height:0;margin:0;border:0;border-radius:0}
+.sp-native-console .sp-inspector .sp-chat-terminal-box{padding:8px;overflow:hidden}
+.sp-native-console .sp-inspector .sp-workspace-terminal{display:flex;flex-direction:column}
+.sp-native-console .sp-inspector .sp-workspace-terminal[hidden]{display:none}
+.sp-native-console .sp-inspector .sp-workspace-terminal-screen{flex:1 1 auto;height:auto;min-height:0}
+.sp-session-context-menu .sp-menu-danger{color:var(--sp-danger)}
+/* Touch targets: every control a finger has to hit is at least 44px on a phone. */
+@media (max-width:767px){
+  .sp-native-console .ide-session-more,.sp-native-console .sp-chat-column .ide-session-more{min-height:44px;min-width:44px;opacity:1}
+  .sp-native-console .sp-quick-action,.sp-native-console .sp-quick-action--manage{min-height:44px;height:44px}
+  .sp-native-console .btn-primary,.sp-native-console .btn-control,.sp-native-console .sp-icon-btn{min-height:44px}
+  .sp-native-console .sp-chat-composer .btn-primary{min-height:44px}
+}
+/* Message time and Copy stay out of the way: they appear on hover, keyboard focus, or a
+   click/tap on the message. The time sits at the right edge of the header, so in your own
+   bubble it lines up with the bubble's right side. */
+.sp-chat-card header time{margin-left:auto;font-variant-numeric:tabular-nums}
+.sp-native-console .sp-chat-card header time,.sp-native-console .sp-chat-card .sp-chat-copy,
+.sp-remote-chat .sp-chat-card header time,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0;transition:opacity .12s ease}
+.sp-native-console .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) header time,
+.sp-native-console .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) .sp-chat-copy,
+.sp-native-console .sp-chat-card .sp-chat-copy[data-copy-state],
+.sp-remote-chat .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) header time,
+.sp-remote-chat .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) .sp-chat-copy,
+.sp-remote-chat .sp-chat-card .sp-chat-copy[data-copy-state]{opacity:1}
+@media (hover:none){
+  .sp-native-console .sp-chat-card .sp-chat-copy,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0}
+  .sp-native-console .sp-chat-card[data-meta="shown"] .sp-chat-copy,.sp-remote-chat .sp-chat-card[data-meta="shown"] .sp-chat-copy{opacity:1}
+}
+@media (prefers-reduced-motion:reduce){.sp-chat-card header time,.sp-chat-card .sp-chat-copy{transition:none}}

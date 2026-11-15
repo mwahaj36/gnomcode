@@ -5,13 +5,13 @@ export const metadata = pageMetadata("/pricing", "Gnomcode Pricing — Free Loca
 
 const tiers = [
   {
-    name: "Local", note: "FREE · NO ACCOUNT", price: "$0", cadence: "free, no account",
+    name: "Local", note: "NO ACCOUNT NEEDED",
     description: "Monitor and manage agents on your own machine.",
     features: ["CLI, daemon, tray and local console", "Live sessions, usage, and quota", "Guardrails and alert rules", "Resume Queue and Context Relay", "Analytics and exports"],
     action: "Download free", href: "/downloads",
   },
   {
-    name: "Remote", note: "FREE · PROTOTYPE", price: "$0", cadence: "free, no license",
+    name: "Remote", note: "PROTOTYPE",
     description: "Access your own sessions from your phone.",
     features: ["End-to-end encrypted access", "Link and revoke devices", "View sessions, send prompts and answer approvals (Codex and Antigravity need opt-in protocol mode)"],
     action: "Explore Remote", href: "/docs/remote-access",
@@ -28,8 +28,8 @@ const questions = [
     answer: "Yes. All local features run without an account. Existing cloud sync is optional and is not end-to-end encrypted.",
   },
   {
-    question: "How much does Remote cost?",
-    answer: "Remote is free in 1.0. Your agent provider bills inference separately.",
+    question: "Is any part of Gnomcode paid?",
+    answer: "No. Every feature, Remote included, is free and open source under Apache-2.0. Your agent provider bills its own inference separately.",
   },
 ];
 
@@ -49,7 +49,6 @@ export default function PricingPage() {
               <span>{tier.note}</span>
             </div>
             <p className="sp-pricing-description">{tier.description}</p>
-            <p className="sp-pricing-price"><strong>{tier.price}</strong><span>{tier.cadence}</span></p>
             <ul>
               {tier.features.map((feature) => <li key={feature}>{feature}</li>)}
             </ul>

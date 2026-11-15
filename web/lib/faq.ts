@@ -88,7 +88,7 @@ export const faqGroups = [
     ]
   },
   {
-    "title": "Pricing and privacy",
+    "title": "Cost and privacy",
     "questions": [
       {
         "question": "What is free and what is paid?",

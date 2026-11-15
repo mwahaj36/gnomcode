@@ -1,40 +1,6 @@
-//! License, profile and notification settings handlers.
+//! Profile and notification settings handlers.
 
 use super::*;
-
-pub(super) async fn license_get_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, StatusCode> {
-    validate_auth(&headers, &state.bearer_token)?;
-    Ok(Json(crate::pro::get_verified_license_status().await))
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct LicenseActivateRequest {
-    pub(crate) license_key: String,
-}
-
-pub(super) async fn license_post_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Json(payload): Json<LicenseActivateRequest>,
-) -> Result<impl IntoResponse, StatusCode> {
-    validate_auth(&headers, &state.bearer_token)?;
-    match crate::pro::activate_license(&payload.license_key) {
-        Ok(status) => Ok(Json(status)),
-        Err(_) => Err(StatusCode::BAD_REQUEST),
-    }
-}
-
-pub(super) async fn license_delete_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, StatusCode> {
-    validate_auth(&headers, &state.bearer_token)?;
-    crate::pro::remove_license().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(crate::pro::get_verified_license_status().await))
-}
 
 pub(super) async fn user_get_handler(
     headers: HeaderMap,

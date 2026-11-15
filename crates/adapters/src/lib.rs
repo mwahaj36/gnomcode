@@ -387,6 +387,30 @@ mod tests {
     }
 
     #[test]
+    fn claude_message_sent_while_the_agent_works_is_kept_as_a_user_message() {
+        use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
+        let bytes = include_bytes!("../../../fixtures/claude-code/v2.1.325/queued-command.jsonl");
+        let batch = ClaudeAdapter::new().parse(&FileCtx::default(), bytes);
+        assert_eq!(batch.parse_errors, 0);
+        let said: Vec<_> = batch
+            .chat_events
+            .iter()
+            .map(|event| (event.role, event.content.as_str()))
+            .collect();
+        assert_eq!(
+            said,
+            [
+                (gnomcode_core::ChatRole::User, "List the open issues."),
+                (
+                    gnomcode_core::ChatRole::User,
+                    "Also check the terminal pane."
+                ),
+            ],
+            "the mid-turn message appears once; the task notification is not a user message"
+        );
+    }
+
+    #[test]
     fn claude_desktop_main_transcript_is_an_unlinked_desktop_session() {
         use super::{FileCtx, SourceAdapter, claude::ClaudeAdapter};
         let bytes = include_bytes!("../../../fixtures/claude-code/v2.1.321/desktop-main.jsonl");

@@ -8,14 +8,14 @@
 use crate::acp_approvals::{self, AcpApprovalOutcome};
 use crate::codex_app_server::{self, ApprovalOutcome};
 use crate::{
-    Error, HostParts, LaunchCommand, PtyInput, Scrollback, launch_command, serve_host,
+    Error, HostParts, LaunchCommand, PtyInput, Scrollback, TurnControl, launch_command, serve_host,
     valid_session_id,
 };
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{broadcast, mpsc};
@@ -280,6 +280,17 @@ pub async fn run_protocol_host(
         }
     });
 
+    // The driver owns the turn; the host reports it and relays the person's cancel.
+    let busy_flag = Arc::new(AtomicBool::new(false));
+    let (cancel_tx, cancel_rx) = std::sync::mpsc::channel::<()>();
+    let (cancel_async_tx, cancel_async_rx) = mpsc::unbounded_channel::<()>();
+    std::thread::spawn(move || {
+        while cancel_rx.recv().is_ok() {
+            if cancel_async_tx.send(()).is_err() {
+                return;
+            }
+        }
+    });
     let ctx = Context {
         kind,
         session_id: session_id.to_owned(),
@@ -293,6 +304,7 @@ pub async fn run_protocol_host(
         daemon,
     };
     let driver_term = term.clone();
+    let driver_busy = Arc::clone(&busy_flag);
     let stopping = Arc::new(AtomicBool::new(false));
     let driver = tokio::spawn(async move {
         if let Err(error) = drive(
@@ -301,6 +313,8 @@ pub async fn run_protocol_host(
             BufReader::new(stdout),
             stdin,
             prompt_rx,
+            cancel_async_rx,
+            driver_busy,
         )
         .await
         {
@@ -320,6 +334,11 @@ pub async fn run_protocol_host(
         stopping,
         resize: Arc::new(|_, _| {}),
         protocol: true,
+        native_id: None,
+        turn: Some(TurnControl {
+            busy: Arc::clone(&busy_flag),
+            cancel: cancel_tx,
+        }),
     })
     .await;
     driver.abort();
@@ -405,6 +424,8 @@ async fn drive<R, W>(
     reader: R,
     writer: W,
     mut prompts: mpsc::UnboundedReceiver<String>,
+    mut cancels: mpsc::UnboundedReceiver<()>,
+    busy_flag: Arc<AtomicBool>,
 ) -> Result<(), Error>
 where
     R: AsyncBufRead + Unpin,
@@ -457,6 +478,13 @@ where
     let Some(remote_id) = remote_id else {
         return Err(Error::Process("agent returned no session id".to_owned()));
     };
+    // The agent just named its own conversation, so the daemon can bind this host to the
+    // ingested transcript exactly instead of guessing from the repository and start time.
+    crate::record_native_id(
+        &ctx.session_id,
+        &crate::compose_native_id(ctx.agent, &remote_id),
+    )
+    .await;
     term.emit(&format!(
         "[RUN] {} protocol session ready. Approvals appear in the Gnomcode console and phone.\r\n\r\n> ",
         if ctx.kind == Kind::Codex {
@@ -484,7 +512,33 @@ where
                 let Some(prompt) = prompt else { return Ok(()) };
                 queued.push_back(prompt);
             }
+            cancel = cancels.recv(), if busy => {
+                if cancel.is_none() { return Ok(()); }
+                // The person pressed Stop: ask the agent to end the turn its own way. The
+                // agent reports the stop itself, so `busy` clears when that arrives.
+                term.emit("
+[CANCEL] stopping this turn...
+");
+                match ctx.kind {
+                    Kind::Codex => {
+                        wire.send(&json!({
+                            "jsonrpc": "2.0",
+                            "method": "turn/interrupt",
+                            "params": {"threadId": remote_id},
+                        })).await?;
+                    }
+                    Kind::Acp => {
+                        wire.send(&json!({
+                            "jsonrpc": "2.0",
+                            "method": "session/cancel",
+                            "params": {"sessionId": remote_id},
+                        })).await?;
+                    }
+                }
+                queued.clear();
+            }
         }
+        busy_flag.store(busy, Ordering::Relaxed);
         while !busy {
             let Some(prompt) = queued.pop_front() else {
                 break;
@@ -528,6 +582,7 @@ where
             };
             turn_request = Some(id);
             busy = true;
+            busy_flag.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -891,12 +946,15 @@ mod tests {
         let (agent_out, host_in) = duplex(64 * 1024);
         let (prompt_tx, prompt_rx) = mpsc::unbounded_channel();
         prompt_tx.send("do it".to_owned()).expect("prompt");
+        let (_cancel_tx, cancel_rx) = mpsc::unbounded_channel::<()>();
         let driver = tokio::spawn(drive(
             context(kind, daemon),
             term(),
             BufReader::new(host_in),
             host_out,
             prompt_rx,
+            cancel_rx,
+            Arc::new(AtomicBool::new(false)),
         ));
         let answer = fake_agent(kind, BufReader::new(agent_in).lines(), agent_out).await;
         driver.abort();

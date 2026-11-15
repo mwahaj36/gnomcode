@@ -175,7 +175,7 @@ async fn request_inner(db: &Arc<Mutex<Database>>, request: Value) -> Result<Valu
     })
     .await?
     {
-        return Err("Scheduled messages are frozen behind an off-by-default setting (E3).".into());
+        return Err("Scheduled messages are turned off in Settings.".into());
     }
     let text = request["text"]
         .as_str()
@@ -459,6 +459,10 @@ pub(crate) async fn sync_keep_awake(
     KEEP_AWAKE_HOLDS.store(awake.holds(), std::sync::atomic::Ordering::Relaxed);
 }
 
+/// How long a conversation waits for visible evidence that the agent reacted to its last
+/// scheduled message before the next one may be delivered.
+const REACTION_GRACE_MS: i64 = 60_000;
+
 async fn deliver_due(db: &Arc<Mutex<Database>>) {
     if !matches!(
         store(db, |db| Ok(db
@@ -492,9 +496,17 @@ async fn deliver_due(db: &Arc<Mutex<Database>>) {
                         chrono::DateTime::parse_from_rfc3339(&host.started_at)
                             .is_ok_and(|time| time.timestamp_millis() > attempt)
                     });
-                if !restarted
-                    && observed.is_none_or(|s| s.last_event_at.timestamp_millis() <= attempt)
-                {
+                let reacted = observed
+                    .is_some_and(|session| session.last_event_at.timestamp_millis() > attempt);
+                let waited = chrono::Utc::now()
+                    .timestamp_millis()
+                    .saturating_sub(attempt);
+                // Give the agent time to react to the previous scheduled message before
+                // sending another, but never wait on it forever: a conversation whose
+                // transcript Gnomcode cannot observe would otherwise keep every later
+                // message pending for good. Once the wait is over, the agent's own
+                // readiness decides, and a refusal returns the message to the queue.
+                if !restarted && !reacted && waited < REACTION_GRACE_MS {
                     return Ok(false);
                 }
             }
@@ -524,6 +536,18 @@ async fn deliver_due(db: &Arc<Mutex<Database>>) {
         let result =
             crate::deliver_conversation_prompt_locked(db, &message.conversation_id, &message.text)
                 .await;
+        if matches!(
+            result,
+            Err(crate::HandoffError::Busy | crate::HandoffError::NotReady)
+        ) {
+            // The agent refused the message before any of it was sent, so it is still
+            // unsent: queue it again rather than burning it as an uncertain delivery.
+            let id = message.id.clone();
+            if store(db, move |db| db.release_message(&id)).await.is_err() {
+                tracing::warn!("scheduled message could not be returned to the queue");
+            }
+            continue;
+        }
         let status = match &result {
             Ok(()) => "delivered",
             Err(crate::HandoffError::MissingSession | crate::HandoffError::UnsupportedTarget) => {
@@ -1034,6 +1058,7 @@ mod tests {
             port,
             token: "fixture".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         })
         .expect("host");
         let checkpoint = gnomcode_store::SourceCheckpoint {
@@ -1137,6 +1162,17 @@ mod tests {
             inputs.lock().await.concat(),
             first,
             "stale idle evidence cannot deliver a second message"
+        );
+        assert_eq!(
+            db.lock()
+                .await
+                .scheduled_messages(&session.id)
+                .expect("list")
+                .iter()
+                .filter(|message| message.status == "pending")
+                .count(),
+            1,
+            "the undelivered message stays queued instead of being burned"
         );
         session.last_event_at = chrono::Utc::now() + chrono::Duration::seconds(1);
         db.lock()
@@ -1301,7 +1337,7 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn scheduled_messages_are_frozen_by_default() {
+    async fn scheduling_works_unless_the_person_turns_it_off() {
         let db = Arc::new(Mutex::new(Database::open_in_memory().expect("db")));
         db.lock()
             .await
@@ -1311,14 +1347,27 @@ mod tests {
             .await
             .save_conversation_launch("host", "codex", "fixture", None)
             .expect("launch");
-        let request = json!({"type":"schedule","session_id":"conversation","id":"one","text":"hello","due_at":chrono::Utc::now().timestamp()+60});
-        let result = command(&db, request).await;
-        assert_eq!(result["type"], "error");
+        let request = |id: &str| json!({"type":"schedule","session_id":"conversation","id":id,"text":"hello","due_at":chrono::Utc::now().timestamp()+60});
+        assert_eq!(
+            command(&db, request("one")).await["type"],
+            "schedule_ack",
+            "scheduling is available without turning anything on first"
+        );
+        db.lock()
+            .await
+            .set_feature_toggles(&gnomcode_core::FeatureToggles {
+                scheduled_messages_enabled: false,
+                ..Default::default()
+            })
+            .expect("turn off");
+        let refused = command(&db, request("two")).await;
+        assert_eq!(refused["type"], "error");
         assert!(
-            result["message"]
+            refused["message"]
                 .as_str()
                 .unwrap_or_default()
-                .contains("frozen")
+                .contains("turned off in Settings"),
+            "the refusal names where to turn it back on: {refused}"
         );
     }
 

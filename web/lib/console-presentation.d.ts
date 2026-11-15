@@ -1,4 +1,7 @@
 export function sessionStateLabel(state: string): string;
+export function agentLabel(id: string | undefined): string;
+export function toggleChatMeta(target: EventTarget | null): boolean;
+export function approvalCopy(agent: string): { agent: string; unanswered: string; unansweredPhone: string; unreachable: string };
 export function renderActivity(report: unknown): string;
 export function renderProviders(report: unknown): string;
 export function updateProviders(element: HTMLElement, report: unknown): void;

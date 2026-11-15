@@ -91,7 +91,16 @@ pub(super) async fn launch_session_handler(
     let repo = std::path::Path::new(&payload.repo_path);
     let starting = match crate::wsl_launch::preflight(&payload.agent, repo).await {
         Ok(starting) => starting,
-        Err(crate::wsl_launch::Refusal::BadFolder) => return Err(StatusCode::BAD_REQUEST),
+        Err(crate::wsl_launch::Refusal::BadFolder) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "ok": false,
+                    "message": "That folder could not be opened. Check the path and that the drive or distro is available.",
+                })),
+            )
+                .into_response());
+        }
         Err(crate::wsl_launch::Refusal::Missing(message)) => {
             return Ok((
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -145,11 +154,29 @@ pub(super) async fn launch_session_handler(
             crate::wsl_launch::annotate(&mut body, repo, starting);
             Ok(Json(body).into_response())
         }
-        Err(_) => {
+        Err(error) => {
             if let Some(isolated) = &isolated {
                 crate::worktree_api::abort_launch(isolated).await;
             }
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            // An agent Gnomcode does not support, or a folder it cannot use, is the caller's
+            // request being wrong, and the person is told which it is.
+            let (status, message) = match error {
+                gnomcode_pty::Error::UnsupportedAgent(name) => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Gnomcode 1.0 runs Claude Code, Codex and Antigravity. It cannot launch {name}."
+                    ),
+                ),
+                gnomcode_pty::Error::SessionNotFound(_) => (
+                    StatusCode::BAD_REQUEST,
+                    "That folder cannot be used for a session. Choose another one.".to_owned(),
+                ),
+                other => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("The agent could not be started: {other}"),
+                ),
+            };
+            Ok((status, Json(json!({"ok": false, "message": message}))).into_response())
         }
     }
 }
@@ -287,6 +314,30 @@ pub(super) async fn workspace_terminal_handler(
     Ok(Json(record))
 }
 
+/// `DELETE /api/v1/sessions/{id}`: removes a conversation from Gnomcode. Stops the agent
+/// Gnomcode hosts for it, erases Gnomcode's own stored copy of the chat and its schedules,
+/// and hides the row for good. The agent's own history files are left untouched.
+pub(super) async fn delete_conversation_handler(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    // A running agent is stopped first; "not found" only means nothing was hosted.
+    let _ = stop_session_handler(headers.clone(), Path(id.clone()), State(state.clone())).await;
+    let _control = crate::CONVERSATION_CONTROL.lock().await;
+    let db = state.db.lock().await;
+    let sessions = db.list_active_sessions(usize::MAX).unwrap_or_default();
+    let hosted = gnomcode_pty::list_active_sessions();
+    let native = crate::remote::active_conversation_id(&db, &id, &sessions, &hosted)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    db.hide_conversation(&id)
+        .and_then(|()| db.hide_conversation(&native))
+        .and_then(|()| db.delete_session_chat_with_host(&native, &id))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "ok": true, "session_id": id })))
+}
+
 pub(super) async fn stop_session_handler(
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -313,6 +364,8 @@ pub(super) async fn stop_session_handler(
     };
     let mut stopped_any = false;
     for target in &target_ids {
+        // A standing approval grant ends with the session it was given to.
+        crate::approvals::global().revoke(target);
         if gnomcode_pty::stop_session(target).await.is_ok() {
             stopped_any = true;
         }

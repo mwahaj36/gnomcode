@@ -110,9 +110,21 @@ async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesErro
         return Err(ChangesError::NotGitRepo);
     }
     // A managed worktree is reviewed against the commit it was cut from, so committed work shows.
-    let base =
-        crate::worktree_session::diff_base(&crate::worktree_session::managed_root(), &canonical)
-            .unwrap_or_else(|| "HEAD".to_owned());
+    let base = match crate::worktree_session::diff_base(
+        &crate::worktree_session::managed_root(),
+        &canonical,
+    ) {
+        Some(base) => base,
+        // A repository with no commits has no HEAD, which `git diff HEAD` rejects; a new
+        // project is exactly where someone opens Changes first.
+        None if run_git_readonly(&canonical, &["rev-parse", "--verify", "--quiet", "HEAD"])
+            .await
+            .is_err() =>
+        {
+            gnomcode_core::EMPTY_TREE_OBJECT.to_owned()
+        }
+        None => "HEAD".to_owned(),
+    };
     let (diff, diff_lossy) = run_git_readonly(
         &canonical,
         &["diff", "--no-ext-diff", "--no-textconv", &base],
