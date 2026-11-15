@@ -148,8 +148,14 @@ export function projectsFromSessions(sessions) {
   for (const session of Array.isArray(sessions) ? sessions : []) {
     const name = String(session?.project_name ?? '').trim();
     if (!name || name.toLowerCase() === 'unknown') continue;
-    const group = groups.get(name) || { id: name, name, sessions: 0, last_active: null, agents: [] };
+    const group = groups.get(name) || { id: name, name, sessions: 0, total_tokens: null, cost_usd: null, last_active: null, agents: [] };
     group.sessions += 1;
+    if (session.usage_available !== false && Number.isFinite(session.total_tokens)) {
+      group.total_tokens = (group.total_tokens ?? 0) + session.total_tokens;
+    }
+    if (Number.isFinite(session.cost_usd)) {
+      group.cost_usd = (group.cost_usd ?? 0) + session.cost_usd;
+    }
     if (projectTime({ last_active: session.last_event_at }) > projectTime(group)) group.last_active = session.last_event_at;
     if (session.agent && !group.agents.includes(session.agent)) group.agents.push(session.agent);
     groups.set(name, group);
@@ -165,54 +171,64 @@ function projectRow(project) {
   const path = shortPath(project.repo_root);
   const agents = (Array.isArray(project.agents) ? project.agents : []).map(agentLabel).join(', ');
   const sessions = Number.isFinite(project.sessions) ? project.sessions : 0;
+  const hasTokens = Number.isFinite(project.total_tokens);
   const at = new Date(project.last_active);
   const known = Number.isFinite(at.getTime());
   const second = path || agents;
-  // Local rollups also carry recorded usage; it stays in the tooltip, with its price coverage, to keep the row to one line.
-  const usage = Number.isFinite(project.total_tokens) ? `\n${tokens(project.total_tokens)} recorded tokens\n${cost(project, project.cost_usd)} · ${priced(project) ? coverage(project) : 'Price unavailable'}` : '';
-  return `<button type="button" class="sp-project-row" data-project-id="${escape(project.id)}" title="${escape((project.repo_root || project.name) + usage)}">${FOLDER_ICON}<span class="sp-project-main"><strong>${escape(project.name)}</strong>${second ? `<span>${escape(second)}</span>` : ''}</span><span class="sp-project-agents">${path ? escape(agents) : ''}</span><span class="sp-project-count"><b>${sessions}</b><span> ${sessions === 1 ? 'session' : 'sessions'}</span></span><time class="sp-project-time" datetime="${known ? escape(project.last_active) : ''}" title="${known ? escape(at.toLocaleString()) : 'Unknown'}">${known ? escape(shortAge(project.last_active)) : '-'}</time>${CHEVRON_RIGHT}</button>`;
+  const usage = hasTokens ? `\n${tokens(project.total_tokens)} recorded tokens\n${cost(project, project.cost_usd)} · ${priced(project) ? coverage(project) : 'Price unavailable'}` : '';
+  const tokenCell = `<span class="sp-project-tokens">${hasTokens ? `<b>${escape(tokens(project.total_tokens))}</b><span> tokens</span>` : '-'}</span>`;
+  return `<button type="button" class="sp-project-row" data-project-id="${escape(project.id)}" title="${escape((project.repo_root || project.name) + usage)}">${FOLDER_ICON}<span class="sp-project-main"><strong>${escape(project.name)}</strong>${second ? `<span>${escape(second)}</span>` : ''}</span><span class="sp-project-agents">${path ? escape(agents) : ''}</span>${tokenCell}<span class="sp-project-count"><b>${sessions}</b><span> ${sessions === 1 ? 'session' : 'sessions'}</span></span><time class="sp-project-time" datetime="${known ? escape(project.last_active) : ''}" title="${known ? escape(at.toLocaleString()) : 'Unknown'}">${known ? escape(shortAge(project.last_active)) : '-'}</time>${CHEVRON_RIGHT}</button>`;
 }
 
-/** The rows and the Show all control; `query` filters by name or folder and always shows every match. */
-export function renderProjectRows(projects, { query = '', expanded = false } = {}) {
+/** The rows and pagination controls; `query` filters by name or folder and paginates matches. */
+export function renderProjectRows(projects, { query = '', page = 1, pageSize = PROJECT_TOP } = {}) {
   const all = listedProjects(projects);
   if (!all.length) return '<div class="sp-empty"><p>No project activity recorded yet.</p></div>';
   const needle = String(query).trim().toLowerCase();
   const matches = needle ? all.filter(project => `${project.name} ${project.repo_root || ''}`.toLowerCase().includes(needle)) : all;
   if (!matches.length) return `<div class="sp-empty"><p>No project matches "${escape(String(query).trim())}".</p></div>`;
-  const shown = needle || expanded ? matches : matches.slice(0, PROJECT_TOP);
-  const more = !needle && all.length > PROJECT_TOP ? `<button type="button" class="sp-link sp-project-more" aria-expanded="${expanded}">${expanded ? 'Show fewer' : `Show all ${all.length}`}</button>` : '';
-  return `<div class="sp-project-list">${shown.map(projectRow).join('')}</div>${more}`;
+  const size = Math.max(1, Number(pageSize) || PROJECT_TOP);
+  const totalPages = Math.max(1, Math.ceil(matches.length / size));
+  const currentPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+  const start = (currentPage - 1) * size;
+  const shown = matches.slice(start, start + size);
+  const pager = matches.length > size
+    ? `<div class="sp-project-pager" role="navigation" aria-label="Projects pagination"><span class="sp-project-page-info">Showing ${start + 1}–${start + shown.length} of ${matches.length}</span><div class="sp-project-page-actions"><button type="button" class="btn-control sp-project-page-btn" data-page="${currentPage - 1}"${currentPage <= 1 ? ' disabled' : ''}>Previous</button><span class="sp-project-page-num">Page ${currentPage} of ${totalPages}</span><button type="button" class="btn-control sp-project-page-btn" data-page="${currentPage + 1}"${currentPage >= totalPages ? ' disabled' : ''}>Next</button></div></div>`
+    : '';
+  return `<div class="sp-project-list">${shown.map(projectRow).join('')}</div>${pager}`;
 }
 
-export function renderProjects(projects, { query = '', expanded = false, helper = PROJECT_HELPER, heading = true } = {}) {
+export function renderProjects(projects, { query = '', page = 1, pageSize = PROJECT_TOP, helper = PROJECT_HELPER, heading = true } = {}) {
   if (!Array.isArray(projects)) return '<section class="sp-section sp-projects"><header class="sp-section-head"><h2>Project activity</h2></header><p class="sp-project-helper">Project rollups remain local. This cloud source does not publish repository identity or project totals.</p></section>';
-  const search = listedProjects(projects).length > PROJECT_TOP ? `<input type="search" class="sp-project-search" aria-label="Filter projects" placeholder="Filter projects" autocomplete="off" value="${escape(query)}">` : '';
-  return `<section class="sp-section sp-projects" aria-label="Project activity">${heading ? '<header class="sp-section-head"><h2>Project activity</h2></header>' : ''}<div class="sp-project-tools"><p class="sp-project-helper">${escape(helper)}</p>${search}</div><div class="sp-project-rows">${renderProjectRows(projects, { query, expanded })}</div></section>`;
+  const search = listedProjects(projects).length > 0 ? `<input type="search" class="sp-project-search" aria-label="Filter projects" placeholder="Filter projects" autocomplete="off" value="${escape(query)}">` : '';
+  return `<section class="sp-section sp-projects" aria-label="Project activity">${heading ? '<header class="sp-section-head"><h2>Project activity</h2></header>' : ''}<div class="sp-project-tools"><p class="sp-project-helper">${escape(helper)}</p>${search}</div><div class="sp-project-rows">${renderProjectRows(projects, { query, page, pageSize })}</div></section>`;
 }
 
 const projectViews = new WeakMap();
 
-/** Renders the list into `element` and keeps the filter text and Show all choice across refreshes. Rows carry `data-project-id`; opening one is the caller's job. */
+/** Renders the list into `element` and keeps the filter text and page choice across refreshes. Rows carry `data-project-id`; opening one is the caller's job. */
 export function mountProjectList(element, projects, options = {}) {
   let view = projectViews.get(element);
   if (!view) {
-    view = { query: '', expanded: false };
+    view = { query: '', page: 1 };
     projectViews.set(element, view);
     element.addEventListener('input', event => {
       if (!event.target.matches?.('.sp-project-search')) return;
       view.query = event.target.value;
+      view.page = 1;
       element.querySelector('.sp-project-rows').innerHTML = renderProjectRows(view.projects, view);
     });
     element.addEventListener('click', event => {
-      if (!event.target.closest?.('.sp-project-more')) return;
-      view.expanded = !view.expanded;
+      const btn = event.target.closest?.('.sp-project-page-btn');
+      if (!btn || btn.disabled) return;
+      const nextPage = Number(btn.dataset.page);
+      if (!Number.isFinite(nextPage) || nextPage < 1) return;
+      view.page = nextPage;
       element.querySelector('.sp-project-rows').innerHTML = renderProjectRows(view.projects, view);
-      element.querySelector('.sp-project-more')?.focus({ preventScroll: true });
     });
   }
   view.projects = projects;
-  const markup = renderProjects(projects, { ...options, query: view.query, expanded: view.expanded });
+  const markup = renderProjects(projects, { ...options, query: view.query, page: view.page });
   if (view.markup === markup && element.querySelector('.sp-projects')) return;
   const typing = element.querySelector('.sp-project-search') === document.activeElement;
   if (typing && Array.isArray(projects)) {

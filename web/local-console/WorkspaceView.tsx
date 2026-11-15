@@ -3154,91 +3154,15 @@ export function WorkspaceView() {
               </div>
             ) : null}
 
-            {!imported ? (
-              <QuickActionsBar disabled={sendBusy} onSend={(text) => void sendPromptText(text, false)} />
-            ) : null}
-            <form className="sp-chat-composer" onSubmit={handleSendPrompt}>
-              <AttachmentsBar items={attachments.items} status={attachments.status} onRemove={attachments.remove} />
-              <input
-                ref={attachInputRef}
-                type="file"
-                hidden
-                accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = '';
-                  void attachments.pick(file);
-                }}
-              />
-              <textarea
-                ref={promptInputRef}
-                className="sp-chat-composer-input"
-                aria-label="Message the agent"
-                rows={1}
-                maxLength={4000}
-                placeholder={
-                  imported
-                    ? `Draft a message (observed in ${importedAgentLabel})...`
-                    : activeLive?.state === 'working'
-                      ? 'Queue a message for when the agent finishes...'
-                      : 'Message the agent...'
-                }
-                value={currentDraft}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setDraftsBySession((prev) => ({ ...prev, [activeSessionId]: next }));
-                  resizePrompt();
-                }}
-                onKeyDown={handlePromptKeyDown}
-              />
-              <div className="composer-toolbar">
-                <div className="composer-model">
-                  <select
-                    aria-label="Model"
-                    disabled={!hasCatalogModels || modelHandoffBusy}
-                    value={selectedModelValue}
-                    onChange={(event) => void handleModelSwitch(event.target.value)}
-                  >
-                    <option value="">
-                      {catalogError ? 'Model catalog unavailable' : 'Agent default'}
-                    </option>
-                    {providers.map((provider) => (
-                      <optgroup
-                        key={provider.name}
-                        label={`${provider.name}${providerBadgeLabel(provider.name)}`}
-                      >
-                        {provider.models?.length ? (
-                          provider.models.map((item) => (
-                            <option
-                              key={`${item.agent}:${item.model}`}
-                              value={`${item.agent}:${item.model}`}
-                            >
-                              {item.display_name || item.model}
-                            </option>
-                          ))
-                        ) : (
-                          <option disabled>{provider.message || 'No models'}</option>
-                        )}
-                      </optgroup>
-                    ))}
-                    {currentSessionModel && !matchedCatalogOption ? (
-                      <option value={currentSessionModel} disabled>
-                        {`${currentSessionModel} (current)`}
-                      </option>
-                    ) : null}
-                  </select>
-                  <span role="status">{modelStatusText}</span>
-                </div>
-                {deliveryStatus ? (
-                  <span className="sp-composer-status" role="status">
-                    {deliveryStatus}
-                  </span>
-                ) : null}
-                <button type="button" className="btn-control" onClick={() => attachInputRef.current?.click()}>
-                  Attach
-                </button>
-                {imported ? (
-                  activeSession?.can_continue_here ? (
+            {imported ? (
+              <div className="sp-readonly-banner" role="region" aria-label="Observed session actions">
+                <p>
+                  {activeSession?.can_continue_here
+                    ? `Observed in ${importedAgentLabel}. Continue this CLI session in Gnomcode to send messages.`
+                    : `Observed in ${importedAgentLabel}. External IDE or app sessions are read-only here.`}
+                </p>
+                <div className="sp-imported-actions">
+                  {activeSession?.can_continue_here ? (
                     <button
                       type="button"
                       className="btn-primary"
@@ -3251,25 +3175,113 @@ export function WorkspaceView() {
                     <button
                       type="button"
                       className="btn-control"
-                      onClick={() => openLauncher()}
+                      onClick={() => void handleFocusChat()}
                     >
-                      New conversation
+                      {activeSession?.agent === 'antigravity'
+                        ? 'Open in Antigravity'
+                        : 'Focus agent window'}
                     </button>
-                  )
-                ) : (
-                  <button type="submit" className="btn-primary" disabled={sendBusy}>
-                    {working ? 'Queue' : 'Send'}
+                  )}
+                  <button
+                    type="button"
+                    className="btn-control"
+                    onClick={() => openLauncher()}
+                  >
+                    New conversation
                   </button>
-                )}
+                </div>
               </div>
-              <small className="sp-chat-composer-help">
-                {imported
-                  ? activeSession?.can_continue_here
-                    ? `Observed in ${importedAgentLabel}. Drafts are saved locally; choose Continue here to send.`
-                    : `Observed in ${importedAgentLabel}. External IDE or app sessions are read-only here; start a new conversation in Gnomcode to send.`
-                  : 'Enter to send · Shift+Enter for a new line'}
-              </small>
-            </form>
+            ) : (
+              <>
+                <QuickActionsBar disabled={sendBusy} onSend={(text) => void sendPromptText(text, false)} />
+                <form className="sp-chat-composer" onSubmit={handleSendPrompt}>
+                  <AttachmentsBar items={attachments.items} status={attachments.status} onRemove={attachments.remove} />
+                  <input
+                    ref={attachInputRef}
+                    type="file"
+                    hidden
+                    accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      void attachments.pick(file);
+                    }}
+                  />
+                  <textarea
+                    ref={promptInputRef}
+                    className="sp-chat-composer-input"
+                    aria-label="Message the agent"
+                    rows={1}
+                    maxLength={4000}
+                    placeholder={
+                      activeLive?.state === 'working'
+                        ? 'Queue a message for when the agent finishes...'
+                        : 'Message the agent...'
+                    }
+                    value={currentDraft}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setDraftsBySession((prev) => ({ ...prev, [activeSessionId]: next }));
+                      resizePrompt();
+                    }}
+                    onKeyDown={handlePromptKeyDown}
+                  />
+                  <div className="composer-toolbar">
+                    <div className="composer-model">
+                      <select
+                        aria-label="Model"
+                        disabled={!hasCatalogModels || modelHandoffBusy}
+                        value={selectedModelValue}
+                        onChange={(event) => void handleModelSwitch(event.target.value)}
+                      >
+                        <option value="">
+                          {catalogError ? 'Model catalog unavailable' : 'Agent default'}
+                        </option>
+                        {providers.map((provider) => (
+                          <optgroup
+                            key={provider.name}
+                            label={`${provider.name}${providerBadgeLabel(provider.name)}`}
+                          >
+                            {provider.models?.length ? (
+                              provider.models.map((item) => (
+                                <option
+                                  key={`${item.agent}:${item.model}`}
+                                  value={`${item.agent}:${item.model}`}
+                                >
+                                  {item.display_name || item.model}
+                                </option>
+                              ))
+                            ) : (
+                              <option disabled>{provider.message || 'No models'}</option>
+                            )}
+                          </optgroup>
+                        ))}
+                        {currentSessionModel && !matchedCatalogOption ? (
+                          <option value={currentSessionModel} disabled>
+                            {`${currentSessionModel} (current)`}
+                          </option>
+                        ) : null}
+                      </select>
+                      <span role="status">{modelStatusText}</span>
+                    </div>
+                    {deliveryStatus ? (
+                      <span className="sp-composer-status" role="status">
+                        {deliveryStatus}
+                      </span>
+                    ) : null}
+                    <button type="button" className="btn-control" onClick={() => attachInputRef.current?.click()}>
+                      Attach
+                    </button>
+                    <button type="submit" className="btn-primary" disabled={sendBusy}>
+                      {working ? 'Queue' : 'Send'}
+                    </button>
+                  </div>
+                  <small className="sp-chat-composer-help">
+                    Enter to send · Shift+Enter for a new line
+                  </small>
+                </form>
+              </>
+            )}
 
               </div>
               {!sidePanel && overviewOpen ? (

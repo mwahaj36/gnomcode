@@ -21,15 +21,15 @@ export function renderProviderCards(list: ProviderOverview[], options?: Provider
 export function renderProviderSources(list: ProviderOverview[]): string;
 export function updateProviderSources(element: HTMLElement, list: ProviderOverview[]): void;
 export function updateProviderCards(element: HTMLElement, list: ProviderOverview[], options?: ProviderCardOptions): void;
-export type ProjectActivity = { id: string; name: string; sessions: number; last_active?: string | null; agents?: string[]; repo_root?: string };
-export type ProjectListOptions = { query?: string; expanded?: boolean; helper?: string; heading?: boolean };
+export type ProjectActivity = { id: string; name: string; sessions: number; total_tokens?: number | null; cost_usd?: number | null; last_active?: string | null; agents?: string[]; repo_root?: string };
+export type ProjectListOptions = { query?: string; page?: number; pageSize?: number; helper?: string; heading?: boolean };
 export function shortPath(path: unknown): string;
 export function wslDistro(path: unknown): string;
 export function wslFolder(distro: string, linuxPath: string): string;
 export function middleTruncate(text: unknown, max?: number): string;
 export function wslBadge(session: unknown): string;
 export function projectsFromSessions(sessions: unknown): ProjectActivity[];
-export function renderProjectRows(projects: unknown, options?: { query?: string; expanded?: boolean }): string;
+export function renderProjectRows(projects: unknown, options?: { query?: string; page?: number; pageSize?: number }): string;
 export function renderProjects(projects: unknown, options?: ProjectListOptions): string;
 export function mountProjectList(element: HTMLElement, projects: unknown, options?: { helper?: string; heading?: boolean }): void;
 export function renderSummary(data: { activeCount?: number | null; report?: unknown; quotaCount?: number | null }): string;

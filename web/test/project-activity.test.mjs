@@ -6,22 +6,23 @@ import { projectsFromSessions, renderProjectRows, renderProjects, shortPath } fr
 const day = n => new Date(Date.UTC(2026, 10, 13 - n)).toISOString();
 const many = count => Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: `project-${i}`, sessions: i + 1, last_active: day(i), agents: ['codex'], repo_root: `C:\\Users\\Wahaj\\Documents\\GitHub\\project-${i}` }));
 
-test('projects come from synced sessions, newest first, without the unassigned bucket', () => {
+test('projects come from synced sessions with token totals, newest first, without the unassigned bucket', () => {
   const projects = projectsFromSessions([
-    { project_name: 'alpha', agent: 'codex', last_event_at: day(3) },
-    { project_name: 'alpha', agent: 'claude-code', last_event_at: day(1) },
-    { project_name: 'unknown', agent: 'codex', last_event_at: day(0) },
+    { project_name: 'alpha', agent: 'codex', total_tokens: 1500, last_event_at: day(3) },
+    { project_name: 'alpha', agent: 'claude-code', total_tokens: 2500, last_event_at: day(1) },
+    { project_name: 'unknown', agent: 'codex', total_tokens: 999, last_event_at: day(0) },
     { project_name: '', agent: 'codex', last_event_at: day(0) },
-    { project_name: 'beta', agent: 'antigravity', last_event_at: day(2) },
+    { project_name: 'beta', agent: 'antigravity', total_tokens: 500, last_event_at: day(2) },
   ]);
-  assert.deepEqual(projects.map(project => [project.name, project.sessions, project.last_active, project.agents.join('+')]), [
-    ['alpha', 2, day(1), 'codex+claude-code'],
-    ['beta', 1, day(2), 'antigravity'],
+  assert.deepEqual(projects.map(project => [project.name, project.sessions, project.total_tokens, project.last_active, project.agents.join('+')]), [
+    ['alpha', 2, 4000, day(1), 'codex+claude-code'],
+    ['beta', 1, 500, day(2), 'antigravity'],
   ]);
   const rows = renderProjectRows(projects);
   assert.ok(rows.indexOf('alpha') < rows.indexOf('beta'));
-  assert.doesNotMatch(rows, /unknown/i);
+  assert.doesNotMatch(rows, /data-project-id="unknown"/i);
   assert.match(rows, /Codex, Claude Code/);
+  assert.match(rows, /<b>4K<\/b><span> tokens</);
   assert.match(rows, /<b>2<\/b><span> sessions</);
   assert.match(rows, /<b>1<\/b><span> session</);
 });
@@ -36,20 +37,24 @@ test('folders are shortened for one line and keep the full path as the tooltip',
   assert.match(html, /<span>~\/Documents\/GitHub<\/span>/);
 });
 
-test('ten rows by default, a filter and Show all beyond that, and every match while filtering', () => {
+test('filter is always shown when projects exist and rows paginate cleanly beyond ten', () => {
   const ten = renderProjects(many(10));
   assert.equal((ten.match(/class="sp-project-row"/g) || []).length, 10);
-  assert.doesNotMatch(ten, /sp-project-search|sp-project-more/);
+  assert.match(ten, /class="sp-project-search"/);
+  assert.doesNotMatch(ten, /sp-project-pager/);
   const twelve = renderProjects(many(12));
   assert.equal((twelve.match(/class="sp-project-row"/g) || []).length, 10);
   assert.match(twelve, /class="sp-project-search"/);
-  assert.match(twelve, /Show all 12/);
+  assert.match(twelve, /Page 1 of 2/);
+  assert.match(twelve, /Showing 1–10 of 12/);
   assert.doesNotMatch(twelve, /project-11/);
-  assert.equal((renderProjectRows(many(12), { expanded: true }).match(/class="sp-project-row"/g) || []).length, 12);
-  assert.match(renderProjectRows(many(12), { expanded: true }), /Show fewer/);
+  const page2 = renderProjectRows(many(12), { page: 2 });
+  assert.equal((page2.match(/class="sp-project-row"/g) || []).length, 2);
+  assert.match(page2, /Page 2 of 2/);
+  assert.match(page2, /project-11/);
   const filtered = renderProjectRows(many(12), { query: 'PROJECT-1' });
   assert.equal((filtered.match(/class="sp-project-row"/g) || []).length, 3, 'project-1, -10 and -11, matched case-insensitively');
-  assert.doesNotMatch(filtered, /sp-project-more/);
+  assert.doesNotMatch(filtered, /sp-project-pager/);
   assert.match(renderProjectRows(many(12), { query: 'zzz' }), /No project matches "zzz"/);
 });
 
