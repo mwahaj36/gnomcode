@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchLocalJson } from './local-api';
-import { navigateTo, requestProviderSetup } from './shell-bus';
+import { clearOnboardingPausedForAuth, navigateTo, pauseOnboardingForAuth, requestProviderSetup } from './shell-bus';
 import { ProviderChecklist, SETUP_PROVIDERS, statusUrl, type ProviderSetupStatus } from './ProviderSetup';
 
 export const ONBOARDING_FLAG = 'gnomcode-onboarding-v2';
@@ -41,6 +41,17 @@ function saveOnboarding(state: OnboardingState): void {
   } catch {
     // Storage unavailable: onboarding still works for this visit
   }
+}
+
+/** Advances saved onboarding past the Account step once sign-in succeeds. */
+export function advanceOnboardingAfterAccount(): void {
+  const saved = readOnboarding();
+  if (!saved || saved.finished || saved.stage !== 'account') return;
+  saveOnboarding({
+    ...saved,
+    stage: saved.selected.length ? 'provider' : 'phone',
+    index: 0,
+  });
 }
 
 const STAGES: [Stage, string][] = [
@@ -186,6 +197,7 @@ export function Onboarding({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      clearOnboardingPausedForAuth();
       returnFocus.current = document.activeElement;
       const start = initial && !initial.finished ? initial : FRESH;
       setState(start);
@@ -330,6 +342,7 @@ export function Onboarding({
                 className="btn-primary"
                 data-onboarding-action="signin"
                 onClick={() => {
+                  pauseOnboardingForAuth();
                   close(false);
                   navigateTo('auth');
                 }}
