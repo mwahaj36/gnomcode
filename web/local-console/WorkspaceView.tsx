@@ -1973,45 +1973,35 @@ export function WorkspaceView() {
     <aside id="ide-session-sidebar" className="ide-sidebar" aria-label="Session history">
         <div className="ide-sidebar-title">
           <h2>Conversations</h2>
-          <button
-            type="button"
-            className="btn-control"
-            onClick={toggleChatSidebar}
-            aria-label="Collapse conversations"
-            title="Collapse conversations"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              aria-hidden="true"
+          <div className="ide-sidebar-actions">
+            <button
+              className="btn-control sp-sidebar-new-btn"
+              type="button"
+              onClick={() => openLauncher(true)}
             >
-              <path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2" />
-            </svg>
-          </button>
+              + New
+            </button>
+            <button
+              type="button"
+              className="btn-control"
+              onClick={toggleChatSidebar}
+              aria-label="Collapse conversations"
+              title="Collapse conversations"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                aria-hidden="true"
+              >
+                <path d="M3 4h18v16H3z M9 4v16 m-2-7-2 2 2 2" />
+              </svg>
+            </button>
+          </div>
         </div>
-
-        <button className="btn-control" type="button" onClick={() => openLauncher(true)}>
-          New
-        </button>
-
-        <label>
-          History
-          <select
-            value={sourceFilter}
-            onChange={(event) => {
-              setPage(1);
-              setSourceFilter(event.target.value);
-            }}
-          >
-            <option value="all">All sessions</option>
-            <option value="managed">Gnomcode conversations</option>
-            <option value="imported">Imported sessions (view-only)</option>
-          </select>
-        </label>
 
         <input
           type="search"
@@ -2050,6 +2040,20 @@ export function WorkspaceView() {
         <details className="conversation-filters">
           <summary>Filters</summary>
           <div className="filters">
+            <label>
+              History{' '}
+              <select
+                value={sourceFilter}
+                onChange={(event) => {
+                  setPage(1);
+                  setSourceFilter(event.target.value);
+                }}
+              >
+                <option value="all">All sessions</option>
+                <option value="managed">Gnomcode conversations</option>
+                <option value="imported">Imported sessions (view-only)</option>
+              </select>
+            </label>
             <label className="subagent-filter sp-all-chats-toggle">
               <input
                 type="checkbox"
