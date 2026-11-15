@@ -2,15 +2,18 @@
 
 ## Unreleased
 
+- Relicense Gnomcode under the Apache License 2.0: free and open source with no paid tier, Remote included. Remove the closed-source string obfuscation, the Pro/Remote license gate and the EULA; add CONTRIBUTING (DCO), TRADEMARKS, CODE_OF_CONDUCT.
+- Route the Remote relay and Supabase defaults through the single branding constant; swap the personal email contact for GitHub Issues.
+- Let the quota-triggered context relay hand off to Antigravity, not just Claude Code and Codex.
+- Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
+
+## 1.0.2 — 2026-11-16
+
 - Opt-in per-record usage history backup to Supabase (`gnomcode_usage_record` and `gnomcode_session_meta` with account-scoped RLS): incremental watermark push, idempotent restore on fresh installs, and "Delete my cloud usage history" in Settings and Account. Never syncs chat content, prompts, or session titles.
 - Observed sessions now expose their folder in `Files`, `Changes`, and `Terminal` (`resolve_session_workspace`, re-attaching detached xterm screens, and JSON error messages instead of empty black panes).
 - Onboarding preserves progress across sign-in and returns to the exact step; tucks WSL distro selection behind an optional disclosure; replaces the obsolete phone QR-pairing step with account-wide Remote guidance.
 - Left navigation rail scrolls cleanly instead of clipping on short windows; Conversations sidebar is decluttered (compact `+ New`, quiet subagent tree, no repeated `[Inferred]` pills in sidebar rows, clean scroll/overflow across viewports).
 - Settings `Limit sources` reports Claude Code as `Status line` when the Gnomcode status line hook is installed rather than `Off`.
-- Relicense Gnomcode under the Apache License 2.0: free and open source with no paid tier, Remote included. Remove the closed-source string obfuscation, the Pro/Remote license gate and the EULA; add CONTRIBUTING (DCO), TRADEMARKS, CODE_OF_CONDUCT.
-- Route the Remote relay and Supabase defaults through the single branding constant; swap the personal email contact for GitHub Issues.
-- Let the quota-triggered context relay hand off to Antigravity, not just Claude Code and Codex.
-- Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
 
 ## 1.0.1 — 2026-11-15
 
