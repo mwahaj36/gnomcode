@@ -1740,8 +1740,11 @@ pub(crate) fn session_bindings<'s, 'h>(
                                 || other.session_id == candidate.id
                                 || other.native_id.as_deref() == Some(candidate.id.as_str()))
                     }) && agent == candidate.agent.as_str()
-                        // A desktop application's own conversation is never a CLI we launched.
-                        && candidate.surface != gnomcode_core::Surface::DesktopApp
+                        // A desktop application or IDE conversation is never a CLI we launched.
+                        && !matches!(
+                            candidate.surface,
+                            gnomcode_core::Surface::DesktopApp | gnomcode_core::Surface::Ide
+                        )
                         && (project.id == candidate.project_id
                             || workspace_project.id == candidate.project_id)
                         && candidate.last_event_at >= started - chrono::Duration::seconds(1)
