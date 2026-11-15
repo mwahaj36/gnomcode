@@ -14,6 +14,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 const MAX_ARTIFACTS: usize = 30;
+/// How deep and how wide the non-git scan walks before it stops.
+const MAX_SCAN_DEPTH: usize = 4;
+const MAX_SCANNED_FILES: usize = 2000;
 const MAX_TEXT_ARTIFACT_BYTES: u64 = 256 * 1024;
 const MAX_IMAGE_ARTIFACT_BYTES: u64 = 512 * 1024;
 const MAX_GIT_BYTES: u64 = 1_048_576;
@@ -54,6 +57,56 @@ fn classify_path(rel_path: &str) -> (&'static str, &'static str) {
     } else {
         ("other", "text/plain")
     }
+}
+
+/// Files most recently written inside a folder that git does not track, newest first.
+/// Bounded in depth, breadth and count so a huge tree cannot stall the pane, and it skips
+/// the dependency and build directories nobody wants listed as an artifact.
+fn recent_files(root: &Path) -> Vec<(String, &'static str)> {
+    const SKIP: [&str; 8] = [
+        "node_modules",
+        "target",
+        ".git",
+        ".next",
+        "dist",
+        "build",
+        "__pycache__",
+        ".venv",
+    ];
+    let mut found: Vec<(std::time::SystemTime, String)> = Vec::new();
+    let mut queue = std::collections::VecDeque::from([(root.to_path_buf(), 0_usize)]);
+    while let Some((dir, depth)) = queue.pop_front() {
+        if found.len() >= MAX_SCANNED_FILES || depth > MAX_SCAN_DEPTH {
+            break;
+        }
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten().take(MAX_SCANNED_FILES) {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || SKIP.contains(&name.as_str()) {
+                continue;
+            }
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                queue.push_back((path, depth + 1));
+            } else if kind.is_file()
+                && let Ok(relative) = path.strip_prefix(root)
+                && let Ok(modified) = entry.metadata().and_then(|meta| meta.modified())
+            {
+                found.push((modified, relative.to_string_lossy().replace('\\', "/")));
+            }
+        }
+    }
+    found.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    found
+        .into_iter()
+        .take(MAX_ARTIFACTS)
+        .map(|(_, path)| (path, "written"))
+        .collect()
 }
 
 async fn git_porcelain_z(repo: &Path) -> Result<Vec<(String, &'static str)>, &'static str> {
@@ -146,8 +199,16 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
     if !canonical_root.is_dir() {
         return Err("Workspace folder is unavailable");
     }
-    let mut changed = git_porcelain_z(&canonical_root).await?;
-    let changes_count = changed.len();
+    // Agents that work in a plain folder (a Codex desktop task, a scratch directory) have no
+    // git status to read, so the files they wrote are listed by modification time instead.
+    let (mut changed, changes_count) = match git_porcelain_z(&canonical_root).await {
+        Ok(changed) => {
+            let count = changed.len();
+            (changed, count)
+        }
+        Err("Workspace is not a git repository") => (recent_files(&canonical_root), 0),
+        Err(reason) => return Err(reason),
+    };
 
     // Prioritize rich artifact outputs (image, html, markdown) before plain files.
     changed.sort_by_key(|(path, _)| match classify_path(path).0 {
@@ -222,16 +283,30 @@ pub(crate) async fn get_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let workspace = {
         let db = state.db.lock().await;
-        resolve_session_workspace(&db, &session_id).map_err(|_| StatusCode::NOT_FOUND)?
+        match resolve_session_workspace(&db, &session_id) {
+            Ok(path) => path,
+            Err(message) => {
+                return Ok((
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"ok": false, "message": message})),
+                )
+                    .into_response());
+            }
+        }
     };
-    let (artifacts, changes_count) = collect_artifacts(&workspace)
-        .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-    Ok(Json(json!({
-        "session_id": session_id,
-        "artifacts": artifacts,
-        "changes_count": changes_count,
-    })))
+    match collect_artifacts(&workspace).await {
+        Ok((artifacts, changes_count)) => Ok(Json(json!({
+            "session_id": session_id,
+            "artifacts": artifacts,
+            "changes_count": changes_count,
+        }))
+        .into_response()),
+        Err(message) => Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "message": message})),
+        )
+            .into_response()),
+    }
 }
 
 /// Handles E2EE Remote `artifacts` requests for a session's workspace.
