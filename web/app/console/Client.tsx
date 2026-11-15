@@ -517,7 +517,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
             <select aria-label="Agent"
               value={agentFilter}
               onChange={(e) => { setAgentFilter(e.target.value); setPage(1); }}
-              className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"
+              className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus-visible:outline-2 focus-visible:outline-[var(--sp-accent)] focus-visible:outline-offset-2"
             >
               <option value="all">All Agents</option>
               <option value="claude-code">Claude Code</option>
@@ -527,7 +527,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
             <select aria-label="Session status"
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus:outline-none"
+              className="bg-bg border border-border text-xs rounded px-2.5 py-1 text-foreground focus-visible:outline-2 focus-visible:outline-[var(--sp-accent)] focus-visible:outline-offset-2"
             >
               <option value="all">All Statuses</option>
               <option value="ongoing">Ongoing</option><option value="active">Running or waiting</option>
