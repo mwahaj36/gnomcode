@@ -82,7 +82,7 @@ const PROJECT_HELPER = 'Most recent first.';
 const FOLDER_ICON = '<svg class="sp-project-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.5h8.5A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>';
 const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' };
 // Agents removed in 1.0 (E4) keep their stored rows; they show as unsupported.
-export const agentLabel = id => AGENT_NAMES[id] || 'Unsupported agent';
+export const agentLabel = id => AGENT_NAMES[id === 'claude' ? 'claude-code' : id === 'agy' ? 'antigravity' : id] || 'Unsupported agent';
 // Wording for a held tool approval. Claude Code is held by a hook, so its own prompt stays
 // available; Codex and Antigravity protocol sessions have no other prompt and cancel the call.
 export function approvalCopy(agent) {

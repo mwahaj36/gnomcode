@@ -1367,7 +1367,7 @@ fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord])
                 || "New conversation".to_owned(),
                 |name| name.to_string_lossy().into_owned(),
             );
-            visible.push(json!({"id":record.session_id,"title":title,"agent":record.agent,"requested_model":record.model,"state":"waiting_for_history","hosted":true,"can_prompt":true,"last_event_at":record.started_at}));
+            visible.push(json!({"id":record.session_id,"title":title,"agent":gnomcode_core::canonical_agent(&record.agent),"requested_model":record.model,"state":"waiting_for_history","hosted":true,"can_prompt":true,"last_event_at":record.started_at}));
         }
     }
     visible.sort_by(|a, b| {
@@ -1446,11 +1446,14 @@ pub(crate) fn conversation_sessions(
             .unwrap_or(id);
         let observed = sessions.iter().find(|session| session.id == native);
         let launch = db.conversation_launch(id)?;
-        let agent = host
-            .map(|record| record.agent.as_str())
-            .or_else(|| observed.map(|session| session.agent.as_str()))
-            .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
-            .unwrap_or_default();
+        // Always the stored id: a host records the launch slug (`claude`, `agy`), and a row
+        // carrying that would be filtered out and shown as an unsupported agent.
+        let agent = gnomcode_core::canonical_agent(
+            host.map(|record| record.agent.as_str())
+                .or_else(|| observed.map(|session| session.agent.as_str()))
+                .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
+                .unwrap_or_default(),
+        );
         let managed = host.is_some() || launch.is_some();
         row["source"] = json!(if managed { "managed" } else { "imported" });
         row["host_id"] = json!(host.map(|record| record.session_id.as_str()));
@@ -2724,6 +2727,34 @@ mod tests {
         assert_eq!(matched.len(), 1);
         assert_eq!(matched[0].0.id, "claude-code:current");
         assert_eq!(matched[0].1.session_id, "claude-current-host");
+    }
+
+    /// A launched Claude row once carried the launch slug `claude`, which the console
+    /// renders as "Unsupported agent" and the Claude Code filter skips.
+    #[test]
+    fn a_launched_row_carries_the_stored_agent_id() {
+        let db = Database::open_in_memory().expect("database");
+        let repo = tempfile::tempdir().expect("repo");
+        let record = |agent: &str, id: &str| gnomcode_pty::SessionRecord {
+            session_id: id.into(),
+            agent: agent.into(),
+            repo_path: repo.path().to_string_lossy().into_owned(),
+            model: None,
+            host_pid: std::process::id(),
+            child_pid: 0,
+            port: 1,
+            token: "test".into(),
+            started_at: chrono::Utc::now().to_rfc3339(),
+            native_id: None,
+        };
+        let hosted = [record("claude", "claude-1"), record("agy", "agy-1")];
+        let rows = conversation_sessions(&db, &[], &hosted).expect("rows");
+        let mut agents: Vec<&str> = rows
+            .iter()
+            .filter_map(|row| row["agent"].as_str())
+            .collect();
+        agents.sort_unstable();
+        assert_eq!(agents, ["antigravity", "claude-code"]);
     }
 
     /// Issue 351: a resumed host and a freshly launched protocol host in one repository both

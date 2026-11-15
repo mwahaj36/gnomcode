@@ -515,6 +515,17 @@ impl Default for FeatureToggles {
     }
 }
 
+/// The stored id of an agent, whatever slug a launch command or a host record used
+/// (`claude` and `agy` are the launch names; `claude-code` and `antigravity` are stored).
+#[must_use]
+pub fn canonical_agent(agent: &str) -> &str {
+    match agent {
+        "claude" => "claude-code",
+        "agy" => "antigravity",
+        other => other,
+    }
+}
+
 /// Git's empty tree. Diffing against it shows every tracked file as an addition, which is
 /// what a repository with no commits yet has to be compared with: `HEAD` does not resolve
 /// there and `git diff HEAD` fails outright.
