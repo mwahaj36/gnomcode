@@ -1,101 +1,12 @@
-//! Local Pro license checks, guardrails execution, and Resume Queue.
+//! Guardrails execution and the Resume Queue. Gnomcode is free: there is no licence.
 
 use gnomcode_core::AgentId;
-use gnomcode_core::license::{GNOMCODE_LICENSE_PUBKEY_HEX, LicenseFile, Tier, verify_license};
 use gnomcode_core::rules::{RuleAction, evaluate_guardrails};
 use gnomcode_platform::gnomcode_home;
 use gnomcode_store::Database;
-use serde::{Deserialize, Serialize};
+
 use std::fs;
 use std::time::{Duration, SystemTime};
-
-/// Information about the current active license.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LicenseStatus {
-    /// Licensed tier (`free`, `pro`; legacy `team` licenses report `team` and are treated as Pro).
-    pub tier: String,
-    /// Whether a valid Pro license is active.
-    pub licensed: bool,
-    /// License ID if signed license is present.
-    pub license_id: Option<String>,
-    /// Customer name or email if present in payload.
-    pub customer_name: Option<String>,
-    /// RFC3339 expiration timestamp if time-limited.
-    pub expires_at: Option<String>,
-}
-
-/// Returns details on the local license status.
-#[must_use]
-pub fn get_license_status() -> LicenseStatus {
-    // 1. First check offline signed license key
-    if let Ok(bytes) = fs::read(gnomcode_home().join("license.key"))
-        && let Ok(license) = serde_json::from_slice::<LicenseFile>(&bytes)
-        && let Ok(tier) = verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX)
-    {
-        let (tier_str, is_lic) = match tier {
-            Tier::Pro => ("pro", true),
-            Tier::Team => ("team", true),
-            Tier::Free => ("free", false),
-        };
-        return LicenseStatus {
-            tier: tier_str.to_owned(),
-            licensed: is_lic,
-            license_id: Some(format!(
-                "lic-{}",
-                &license.signature_hex[..12.min(license.signature_hex.len())]
-            )),
-            customer_name: Some(license.payload.licensee.clone()),
-            expires_at: license.payload.expires_at.clone(),
-        };
-    }
-
-    LicenseStatus {
-        tier: "free".to_owned(),
-        licensed: false,
-        license_id: None,
-        customer_name: None,
-        expires_at: None,
-    }
-}
-
-/// Returns the local license status. Remote needs no license.
-pub async fn get_verified_license_status() -> LicenseStatus {
-    get_license_status()
-}
-
-/// Activates an Ed25519-signed license key.
-pub fn activate_license(raw_input: &str) -> Result<LicenseStatus, String> {
-    let trimmed = raw_input.trim();
-    let license: LicenseFile =
-        serde_json::from_str(trimmed).map_err(|e| format!("Invalid license JSON format: {e}"))?;
-
-    let tier = verify_license(&license, GNOMCODE_LICENSE_PUBKEY_HEX)
-        .map_err(|e| format!("License verification failed: {e}"))?;
-
-    if tier == Tier::Free {
-        return Err("License payload specifies Free tier; Pro required.".to_owned());
-    }
-
-    let key_path = gnomcode_home().join("license.key");
-    fs::create_dir_all(gnomcode_home())
-        .map_err(|e| format!("Failed to create gnomcode home: {e}"))?;
-    fs::write(
-        &key_path,
-        serde_json::to_vec_pretty(&license).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| format!("Failed to save license key: {e}"))?;
-
-    Ok(get_license_status())
-}
-
-/// Deletes the local license key, reverting to Free tier.
-pub fn remove_license() -> Result<(), std::io::Error> {
-    let key_path = gnomcode_home().join("license.key");
-    if key_path.exists() {
-        fs::remove_file(key_path)?;
-    }
-    Ok(())
-}
 
 /// Evaluates persisted rules after ingestion and records alerts.
 /// Claude hard stops are read by the fail-open PreToolUse hook.

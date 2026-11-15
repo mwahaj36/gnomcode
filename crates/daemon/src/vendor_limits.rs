@@ -82,6 +82,9 @@ pub fn set_refresh_enabled(on: bool) -> std::io::Result<()> {
 /// Refresh when the token expires within this window.
 const REFRESH_WINDOW_MS: i64 = 30 * 60 * 1000;
 const REFRESH_EVERY: Duration = Duration::from_secs(15 * 60);
+/// After a refresh that failed, try again at the next poll instead of waiting the full
+/// interval: the usual cause is a laptop whose network is not up yet right after it starts.
+const REFRESH_RETRY: Duration = Duration::from_secs(45);
 const REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Keeps the Claude sign-in fresh by running the official CLI's `auth status`, which refreshes
@@ -89,6 +92,7 @@ const REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Default)]
 struct Refresher {
     last_attempt: Option<std::time::Instant>,
+    last_failed: bool,
 }
 
 impl Refresher {
@@ -114,22 +118,30 @@ impl Refresher {
         if expires_ms - now_ms > REFRESH_WINDOW_MS {
             return false;
         }
+        let wait = if self.last_failed {
+            REFRESH_RETRY
+        } else {
+            REFRESH_EVERY
+        };
         if self
             .last_attempt
-            .is_some_and(|last| now.saturating_duration_since(last) < REFRESH_EVERY)
+            .is_some_and(|last| now.saturating_duration_since(last) < wait)
         {
             return false;
         }
         self.last_attempt = Some(now);
         let command = command();
-        match tokio::task::spawn_blocking(move || run_hidden(command, timeout)).await {
-            Ok(Ok(())) => true,
-            Ok(Err(reason)) => {
-                tracing::warn!("Claude sign-in refresh failed: {reason}");
-                false
-            }
-            Err(_) => false,
-        }
+        let refreshed =
+            match tokio::task::spawn_blocking(move || run_hidden(command, timeout)).await {
+                Ok(Ok(())) => true,
+                Ok(Err(reason)) => {
+                    tracing::warn!("Claude sign-in refresh failed: {reason}");
+                    false
+                }
+                Err(_) => false,
+            };
+        self.last_failed = !refreshed;
+        refreshed
     }
 }
 
@@ -275,7 +287,13 @@ fn claude_access_token_in(dir: &Path, now_ms: i64) -> Result<String, String> {
     // Gnomcode never refreshes the token itself: Claude Code rotates refresh tokens. The daemon
     // asks the official CLI to do it (`Refresher`); the Claude desktop app does not rewrite this file.
     if expires_ms <= now_ms {
-        return Err("Claude sign-in expired; run `claude` in a terminal to refresh it".into());
+        // Gnomcode retries with the official CLI, which fixes a token that merely lapsed
+        // while the computer was off. A real sign-out needs the person, so say both.
+        return Err(if refresh_enabled("claude") {
+            "Claude sign-in expired; Gnomcode is retrying with the official CLI. If it stays, run `claude` in a terminal".to_owned()
+        } else {
+            "Claude sign-in expired; run `claude` in a terminal to refresh it".to_owned()
+        });
     }
     oauth
         .get("accessToken")
@@ -733,9 +751,11 @@ mod tests {
             .expect("credentials");
         };
         write(1_000);
-        assert_eq!(
-            claude_access_token_in(dir.path(), 2_000),
-            Err("Claude sign-in expired; run `claude` in a terminal to refresh it".to_owned())
+        let expired = claude_access_token_in(dir.path(), 2_000).expect_err("expired");
+        assert!(
+            expired.starts_with("Claude sign-in expired")
+                && expired.contains("run `claude` in a terminal"),
+            "the person is always told how to fix it themselves: {expired}"
         );
         write(3_000);
         assert_eq!(

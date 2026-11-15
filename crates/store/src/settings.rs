@@ -92,7 +92,8 @@ impl Database {
         Ok(())
     }
 
-    /// Returns the E3 off-by-default feature toggles (all `false` when unset).
+    /// Returns the E3 feature toggles, or their defaults (all on) when the person has not
+    /// changed them.
     ///
     /// # Errors
     /// Returns [`Error`] on SQLite query failure.
