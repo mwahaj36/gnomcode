@@ -161,7 +161,8 @@ test('a WSL distro is passed to the status endpoint', async ({ page, openConsole
   await openConsole('#settings');
   await openSetup(page, daemon.consoleUrl);
   await advanceToProvider(page);
-  await page.locator('#onboarding-dialog').getByLabel('Run in').fill('Ubuntu');
+  await page.locator('#onboarding-dialog .sp-onb-wsl > summary').click();
+  await page.locator('#onboarding-dialog').getByLabel('WSL distro').fill('Ubuntu');
   await expect.poll(() => seen.some((q) => q.includes('distro=Ubuntu') && q.includes('provider=claude'))).toBe(true);
   await expect(page.locator('#onboarding-dialog .sp-setup-meta')).toContainText('WSL: Ubuntu');
 });
