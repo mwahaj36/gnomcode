@@ -1979,7 +1979,7 @@ export function WorkspaceView() {
               type="button"
               onClick={() => openLauncher(true)}
             >
-              + New
+              <span aria-hidden="true">+ </span>New
             </button>
             <button
               type="button"
