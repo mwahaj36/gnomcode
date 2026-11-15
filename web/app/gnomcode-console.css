@@ -2218,8 +2218,9 @@ body.sp-resizing{cursor:col-resize;user-select:none}
  body.sp-native-console[data-console-view="sessions"] .sp-console-content{padding:0;overflow:hidden;display:flex;flex-direction:column}
  body.sp-native-console[data-console-view="sessions"] .console-context{padding:0 var(--sp-3);min-height:48px}
  body.sp-native-console[data-console-view="sessions"] #view-console{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
- body.sp-native-console[data-console-view="sessions"] #local-workspace-root{flex:1 1 auto;min-height:0}
- body.sp-native-console .ide-layout{height:100%;min-height:0}
+ body.sp-native-console[data-console-view="sessions"] #local-workspace-root{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+ body.sp-native-console .ide-layout{flex:1 1 auto;height:100%;min-height:0;overflow:hidden}
+ body.sp-native-console .ide-main{display:flex;flex-direction:column;min-height:0;overflow-y:auto;overflow-x:hidden}
 }
 /* Conversation: plain agent text, pill user turns, floating composer */
 .sp-native-console .sp-workspace-chat-panel .conversation-heading{border-bottom:0;padding:var(--sp-2) 0}
@@ -2262,24 +2263,28 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-heatmap-foot .sp-heatmap-stats{margin:0;flex:1 1 auto}
 .sp-heatmap-foot .sp-heatmap-legend{margin:0 0 0 auto}
 /* Conversation column: compact rows, quiet controls */
-.sp-chat-column .ide-sidebar{gap:6px}
-.sp-chat-column .ide-sidebar-title{display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 4px}
-.sp-chat-column .ide-sidebar-title h2{font-size:var(--sp-fs-control);font-weight:500;color:var(--sp-text-3)}
+.sp-chat-column .ide-sidebar{gap:8px;overflow:hidden!important;display:flex;flex-direction:column}
+.sp-chat-column .ide-sidebar-title{display:flex;align-items:center;justify-content:space-between;min-height:32px;padding:0 2px}
+.sp-chat-column .ide-sidebar-title h2{font-size:var(--sp-fs-control);font-weight:600;color:var(--sp-text-2)}
+.sp-chat-column .ide-sidebar-actions{display:flex;align-items:center;gap:4px}
 .sp-chat-column .ide-sidebar-title .btn-control{min-height:28px;min-width:28px;padding:0;border:0;background:transparent}
-.sp-chat-column .ide-sidebar>.btn-control:first-of-type{justify-content:flex-start;gap:10px;min-height:36px;padding:0 12px;font-weight:500;background:var(--sp-surface-raised);border:1px solid var(--sp-border);border-radius:8px}
-.sp-chat-column .ide-sidebar>.btn-control:first-of-type::before{content:"+" / "";font-size:18px;line-height:1;color:var(--sp-text-2)}
-.sp-chat-column .ide-sidebar>label{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:0 4px}
-.sp-chat-column .ide-sidebar>label select,.sp-chat-column .ide-sidebar>input[type="search"]{min-height:32px;height:32px;font-size:var(--sp-fs-control);border-radius:8px;background:transparent}
-.sp-chat-column .conversation-filters>summary{font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:2px 4px}
+.sp-chat-column .ide-sidebar-title .sp-sidebar-new-btn{min-height:28px;padding:0 10px;border:1px solid var(--sp-border);border-radius:7px;background:var(--sp-surface-raised);color:var(--sp-text);font-size:var(--sp-fs-meta);font-weight:500}
+.sp-chat-column .ide-sidebar-title .sp-sidebar-new-btn:hover{border-color:var(--sp-border-strong)}
+.sp-chat-column .ide-sidebar>input[type="search"]{min-height:32px;height:32px;margin:0;font-size:var(--sp-fs-control);border-radius:8px;background:var(--sp-surface);border:1px solid var(--sp-border)}
+.sp-chat-column .conversation-filters>summary{font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:2px 4px;cursor:pointer}
 .sp-chat-column .ide-session-row{display:flex;align-items:center;border-radius:8px}
 .sp-chat-column .ide-session-row:hover,.sp-chat-column .ide-session-row:has([aria-current="true"]){background:var(--sp-surface-raised)}
-.sp-chat-column .ide-session{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:6px 6px 6px 10px;min-height:44px;background:transparent;border:0;text-align:left}
+.sp-chat-column .ide-session{flex:1 1 auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:6px 6px 6px 10px;min-height:42px;background:transparent;border:0;text-align:left}
 .sp-chat-column .ide-session-title{grid-column:1;font-weight:500;font-size:var(--sp-fs-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sp-chat-column .ide-session time{grid-column:2;grid-row:1;font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap}
 .sp-chat-column .ide-session-meta{grid-column:1 / -1;font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-chat-column .ide-session .sp-live-basis{display:none}
 .sp-chat-column .ide-session-more{opacity:0;min-width:28px;min-height:28px;border:0;background:transparent;color:var(--sp-text-3)}
 .sp-chat-column .ide-session-row:is(:hover,:focus-within) .ide-session-more{opacity:1}
-.sp-chat-column .pagination{font-size:var(--sp-fs-meta)}
+.sp-chat-column .sp-subagents{margin:2px 0 6px 12px;padding-left:8px;border:0;border-left:1px solid var(--sp-border);background:transparent}
+.sp-chat-column .sp-subagents>summary{padding:3px 6px;font-size:var(--sp-fs-meta);color:var(--sp-text-3);border-radius:6px}
+.sp-chat-column .sp-subagent-row{border-top:0;min-height:32px;padding:4px 6px;gap:8px;border-radius:6px;grid-template-columns:8px minmax(0,1fr) auto}
+.sp-chat-column .pagination{font-size:var(--sp-fs-meta);margin-top:4px;padding:8px 4px 2px}
 /* Workspace: the conversation header is the pane's top bar; the view title stays for assistive tech */
 @media(min-width:768px){
  body.sp-native-console[data-console-view="sessions"] .console-context{position:absolute;top:8px;left:8px;z-index:5;min-height:0;padding:0;background:transparent;border:0}
@@ -2331,8 +2336,9 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-native-console .sp-workspace-terminal-screen{height:min(320px,40vh);padding:6px}
 /* Conversation column: only the list scrolls */
 .sp-chat-column .ide-sidebar{overflow:hidden!important;display:flex;flex-direction:column}
-.sp-chat-column .sp-workspace-list{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin}
+.sp-chat-column .sp-workspace-list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;padding-right:2px}
 .sp-chat-column .ide-sidebar>:not(.sp-workspace-list){flex:none}
+.sp-native-console .sp-chat-stream-box{min-height:120px}
 /* Schedule and automation: labelled sections, one idea each */
 .sp-chat-automation>summary{font-size:var(--sp-fs-control);font-weight:500;color:var(--sp-text-2);padding:8px 0;cursor:pointer}
 .sp-auto{display:grid;gap:12px;padding:4px 0 12px}
@@ -2386,10 +2392,10 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 /* One Stop: while the activity row shows, the header copy stays in the DOM (the row's Stop triggers it) but is hidden */
 .sp-native-console .sp-workspace-chat-panel:has(.sp-activity-inline) .conversation-heading .sp-interrupt-btn{display:none}
 /* Sidebar quick filter pills (All / Active / Pinned) */
-.sp-sidebar-quick-pills{display:flex;gap:4px;margin:2px 0 4px}
-.sp-sidebar-quick-pill{flex:1 1 0;min-height:28px;padding:0 8px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--sp-text-2);font:500 var(--sp-fs-meta)/1 var(--sp-font-sans);cursor:pointer;transition:background-color .14s ease,color .14s ease,border-color .14s ease}
-.sp-sidebar-quick-pill:hover{background:var(--sp-surface-raised);color:var(--sp-text)}
-.sp-sidebar-quick-pill[aria-pressed="true"]{background:var(--sp-surface-raised);border-color:var(--sp-border);color:var(--sp-text)}
+.sp-sidebar-quick-pills{display:flex;gap:2px;margin:0;padding:2px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface)}
+.sp-sidebar-quick-pill{flex:1 1 0;min-height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--sp-text-3);font:500 var(--sp-fs-meta)/1 var(--sp-font-sans);cursor:pointer;transition:background-color .14s ease,color .14s ease}
+.sp-sidebar-quick-pill:hover{color:var(--sp-text)}
+.sp-sidebar-quick-pill[aria-pressed="true"]{background:var(--sp-surface-raised);color:var(--sp-text);box-shadow:0 1px 2px rgb(0 0 0 / .16)}
 /* Overview diff badge */
 .sp-overview-toggle{position:relative;gap:6px}
 .sp-overview-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--sp-surface-raised);border:1px solid var(--sp-border);color:var(--sp-text);font:600 11px/1 var(--sp-font-mono);font-variant-numeric:tabular-nums}
@@ -2430,4 +2436,7 @@ body.sp-resizing{cursor:col-resize;user-select:none}
   .sp-native-console .sp-chat-card .sp-chat-copy,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0}
   .sp-native-console .sp-chat-card[data-meta="shown"] .sp-chat-copy,.sp-remote-chat .sp-chat-card[data-meta="shown"] .sp-chat-copy{opacity:1}
 }
+.sp-onb-wsl{margin-top:12px;font-size:var(--sp-fs-meta);color:var(--sp-text-2)}
+.sp-onb-wsl>summary{cursor:pointer;padding:4px 0;color:var(--sp-text-3)}
+.sp-onb-wsl[open]>summary{margin-bottom:8px;color:var(--sp-text-2)}
 @media (prefers-reduced-motion:reduce){.sp-chat-card header time,.sp-chat-card .sp-chat-copy{transition:none}}

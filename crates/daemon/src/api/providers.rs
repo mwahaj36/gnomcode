@@ -128,11 +128,12 @@ pub(super) fn provider_costs(
 pub(super) fn provider_empty_state(
     slug: &str,
     claude_api: bool,
+    claude_statusline: bool,
     antigravity_api: bool,
 ) -> (String, String, Option<String>) {
     let enable = |name: &str| Some(format!("gnomcode limits enable {name}"));
     match slug {
-        "claude-code" if claude_api => (
+        "claude-code" if claude_api || claude_statusline => (
             "Claude Code".into(),
             "Waiting for the first Claude reading.".into(),
             None,
@@ -170,11 +171,32 @@ pub(super) fn provider_display_name(slug: &str) -> String {
     }
 }
 
+fn claude_statusline_enabled() -> bool {
+    if gnomcode_platform::gnomcode_home()
+        .join(gnomcode_ingest::CLAUDE_LIMITS_FILE)
+        .is_file()
+    {
+        return true;
+    }
+    let settings_path = crate::vendor_limits::claude_config_dir().join("settings.json");
+    let Ok(bytes) = std::fs::read(settings_path) else {
+        return false;
+    };
+    let Ok(settings) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    settings
+        .pointer("/statusLine/command")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|cmd| cmd.contains("gnomcode") && cmd.ends_with(" statusline"))
+}
+
 /// Builds one overview per provider from already-derived quota views.
 pub(super) fn provider_overviews(
     views: Vec<QuotaPoolView>,
     mut costs: std::collections::HashMap<String, ProviderCost>,
     claude_api: bool,
+    claude_statusline: bool,
     antigravity_api: bool,
 ) -> Vec<ProviderOverview> {
     use gnomcode_core::TrustLevel;
@@ -209,7 +231,7 @@ pub(super) fn provider_overviews(
                 .any(|w| w.snapshot.basis == TrustLevel::Exact);
             let source_label = match slug.as_str() {
                 "claude-code" if claude_api => "Provider API",
-                "claude-code" if has_exact => "Status line",
+                "claude-code" if has_exact || claude_statusline => "Status line",
                 "claude-code" => "Off",
                 "antigravity" if antigravity_api => "Native limits",
                 "antigravity" => "Off",
@@ -217,7 +239,7 @@ pub(super) fn provider_overviews(
             };
             let (display_name, enable_hint, enable_command) = if windows.is_empty() {
                 let (name, hint, command) =
-                    provider_empty_state(&slug, claude_api, antigravity_api);
+                    provider_empty_state(&slug, claude_api, claude_statusline, antigravity_api);
                 (name, Some(hint), command)
             } else {
                 (provider_display_name(&slug), None, None)
@@ -329,6 +351,7 @@ pub(super) async fn providers_overview_handler(
         views,
         provider_costs(&today, &last_30_days),
         crate::vendor_limits::enabled("claude"),
+        claude_statusline_enabled(),
         crate::vendor_limits::enabled("antigravity"),
     )))
 }
@@ -354,6 +377,7 @@ mod tests {
             super::quota_views_at(snapshots, now),
             std::collections::HashMap::new(),
             claude_api,
+            false,
             antigravity_api,
         )
     }
@@ -705,7 +729,7 @@ mod tests {
         assert_eq!(codex.today_usd, 0.0);
         assert_eq!(codex.basis, gnomcode_core::TrustLevel::Unknown);
         assert!(!costs.contains_key("antigravity"), "no spend means no cost");
-        let list = super::provider_overviews(Vec::new(), costs, false, false);
+        let list = super::provider_overviews(Vec::new(), costs, false, false, false);
         assert!(list[0].cost.is_some() && list[1].cost.is_some() && list[2].cost.is_none());
     }
 
@@ -755,7 +779,7 @@ mod tests {
             make_pool("Gemini Models", 87.0),
         ];
         let mixed_cards =
-            super::provider_overviews(mixed, std::collections::HashMap::new(), false, true);
+            super::provider_overviews(mixed, std::collections::HashMap::new(), false, false, true);
         let ag_mixed = mixed_cards
             .iter()
             .find(|c| c.provider == "antigravity")
@@ -767,12 +791,38 @@ mod tests {
             make_pool("Claude Models", 100.0),
             make_pool("Gemini Models", 100.0),
         ];
-        let all_out_cards =
-            super::provider_overviews(all_out, std::collections::HashMap::new(), false, true);
+        let all_out_cards = super::provider_overviews(
+            all_out,
+            std::collections::HashMap::new(),
+            false,
+            false,
+            true,
+        );
         let ag_out = all_out_cards
             .iter()
             .find(|c| c.provider == "antigravity")
             .expect("antigravity");
         assert_eq!(ag_out.state, gnomcode_core::quota::QuotaState::Exhausted);
+    }
+
+    #[test]
+    fn claude_statusline_reports_active_source_without_exact_windows() {
+        let cards = super::provider_overviews(
+            Vec::new(),
+            std::collections::HashMap::new(),
+            false,
+            true,
+            false,
+        );
+        let claude = cards
+            .iter()
+            .find(|c| c.provider == "claude-code")
+            .expect("claude-code");
+        assert_eq!(claude.source_label, "Status line");
+        assert_eq!(
+            claude.enable_hint.as_deref(),
+            Some("Waiting for the first Claude reading.")
+        );
+        assert!(claude.enable_command.is_none());
     }
 }

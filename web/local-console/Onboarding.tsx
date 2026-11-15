@@ -81,56 +81,55 @@ function Progress({ stage, detail }: { stage: Stage; detail: string }) {
 }
 
 function PhoneStep({ active }: { active: boolean }) {
-  const [paired, setPaired] = useState<number | null>(null);
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
   const [permission, setPermission] = useState<string>(() =>
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   );
   useEffect(() => {
     if (!active) return;
-    let stopped = false;
-    let timer: number | undefined;
-    const tick = async () => {
-      if (document.visibilityState === 'visible') {
-        try {
-          const res = await fetchLocalJson<{ devices?: unknown[] }>('/api/v1/remote/devices', 8000);
-          if (!stopped) setPaired(Array.isArray(res.devices) ? res.devices.length : 0);
-        } catch {
-          if (!stopped) setPaired(null);
-        }
-      }
-      if (!stopped) timer = window.setTimeout(tick, 2000);
-    };
-    void tick();
+    let cancelled = false;
+    void fetchLocalJson<{ signed_in?: boolean; email?: string }>('/api/v1/auth/session', 8000)
+      .then((res) => {
+        if (cancelled) return;
+        setSignedIn(Boolean(res.signed_in));
+        setAccountEmail(res.email ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSignedIn(false);
+      });
     return () => {
-      stopped = true;
-      window.clearTimeout(timer);
+      cancelled = true;
     };
   }, [active]);
   return (
     <ol className="sp-setup-steps">
-      <li className={`sp-setup-step is-${paired ? 'done' : 'todo'}`} data-step="phone" data-state={paired ? 'done' : 'todo'}>
+      <li className={`sp-setup-step is-${signedIn ? 'done' : 'todo'}`} data-step="phone" data-state={signedIn ? 'done' : 'todo'}>
         <span className="sp-setup-mark" aria-hidden="true">
-          {paired ? (
+          {signedIn ? (
             <svg viewBox="0 0 16 16" width="16" height="16">
               <path className="sp-tick" d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           ) : null}
         </span>
         <div className="sp-setup-body">
-          <p className="sp-setup-label">Pair your phone</p>
+          <p className="sp-setup-label">Remote on your phone</p>
           <p className="sp-setup-note">
-            {paired ? `${paired} device${paired === 1 ? '' : 's'} paired` : 'Scan the Remote QR code in Settings > Devices.'}
+            {signedIn
+              ? `Signed in${accountEmail ? ` as ${accountEmail}` : ''}. Open Gnomcode on your phone with the same account — no pairing needed.`
+              : 'Optional. Sign in with a Gnomcode account to reach your sessions from your phone.'}
           </p>
-          {!paired ? (
-            <>
-              <button type="button" className="btn-control" onClick={() => navigateTo('settings')}>
-                Open Devices and Remote
-              </button>
-              <p className="sp-setup-wait" role="status" aria-live="polite">
-                <span className="sp-pulse" aria-hidden="true" />
-                Waiting for a paired device...
-              </p>
-            </>
+          {!signedIn ? (
+            <button
+              type="button"
+              className="btn-control"
+              onClick={() => {
+                pauseOnboardingForAuth();
+                navigateTo('auth');
+              }}
+            >
+              Sign in for Remote
+            </button>
           ) : null}
         </div>
       </li>
@@ -366,22 +365,6 @@ export function Onboarding({
               {`Set up ${providerName}`}
             </h2>
             <p>Run each command in your own terminal. Steps tick as Gnomcode sees them.</p>
-            <label className="sp-onb-distro">
-              <span>Run in</span>
-              <input
-                type="text"
-                inputMode="text"
-                placeholder="This computer"
-                aria-describedby="onb-distro-help"
-                value={state.distros[provider] ?? ''}
-                onChange={(event) =>
-                  update({ ...state, distros: { ...state.distros, [provider]: event.target.value.trim() } })
-                }
-              />
-            </label>
-            <p id="onb-distro-help" className="sp-setup-note">
-              Windows only: type a WSL distro name (for example Ubuntu) to check inside it.
-            </p>
             <ProviderChecklist
               key={`${provider}@${distro ?? ''}`}
               provider={provider}
@@ -389,6 +372,25 @@ export function Onboarding({
               active={open}
               onStatus={(status) => setReady((prev) => (prev[provider] === status.ready ? prev : { ...prev, [provider]: status.ready }))}
             />
+            <details className="sp-onb-wsl" open={Boolean(distro)}>
+              <summary>{distro ? `Checking WSL distro: ${distro}` : 'Using WSL on Windows? Check inside a WSL distro'}</summary>
+              <label className="sp-onb-distro">
+                <span>WSL distro</span>
+                <input
+                  type="text"
+                  inputMode="text"
+                  placeholder="Ubuntu"
+                  aria-describedby="onb-distro-help"
+                  value={state.distros[provider] ?? ''}
+                  onChange={(event) =>
+                    update({ ...state, distros: { ...state.distros, [provider]: event.target.value.trim() } })
+                  }
+                />
+              </label>
+              <p id="onb-distro-help" className="sp-setup-note">
+                Leave empty to check this computer directly.
+              </p>
+            </details>
           </section>
         ) : null}
         {state.stage === 'phone' ? (
@@ -396,7 +398,7 @@ export function Onboarding({
             <h2 id="onboarding-heading" tabIndex={-1} ref={headingRef}>
               Take it with you
             </h2>
-            <p>Optional. Pair a phone for Remote and approvals.</p>
+            <p>Optional. Use Remote on your phone and enable desktop alerts.</p>
             <PhoneStep active={open} />
           </section>
         ) : null}
