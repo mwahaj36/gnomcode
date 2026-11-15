@@ -117,6 +117,21 @@ impl Database {
         Ok(())
     }
 
+    /// Returns a claimed message to the queue after the agent refused to take it, so the
+    /// next pass tries again. Only for refusals that happen before any text is sent (the
+    /// agent is busy or not at its prompt); a claim whose delivery may have started is
+    /// finished as uncertain instead and never replayed.
+    ///
+    /// # Errors
+    /// Returns [`Error`] if the row cannot be updated.
+    pub fn release_message(&self, id: &str) -> Result<(), Error> {
+        self.conn.execute(
+            "UPDATE scheduled_message SET status='pending' WHERE id=?1 AND status='delivering'",
+            [id],
+        )?;
+        Ok(())
+    }
+
     /// Cancels a pending message only within its owning conversation.
     pub fn cancel_message(&self, conversation: &str, id: &str) -> Result<bool, Error> {
         let root = self.conversation_id(conversation)?;

@@ -349,6 +349,9 @@ impl Database {
             )?;
         }
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS desktop_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
+        // Conversations the person deleted from Gnomcode. The agent keeps its own history, so
+        // this marker is what stops a re-read of that history from listing them again.
+        self.conn.execute_batch("CREATE TABLE IF NOT EXISTS hidden_conversation (id TEXT PRIMARY KEY, hidden_at INTEGER NOT NULL);")?;
         self.conn.execute_batch(r#"
             DELETE FROM usage_record
             WHERE session_id IN (

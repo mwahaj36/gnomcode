@@ -83,7 +83,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[tokio::test]
-    async fn features_http_and_remote_default_false_and_roundtrip() {
+    async fn features_are_on_by_default_and_roundtrip() {
         let dir = tempdir().expect("tempdir");
         let db = Arc::new(Mutex::new(
             Database::open(&dir.path().join("state.db")).expect("open db"),
@@ -91,8 +91,21 @@ mod tests {
 
         let initial = handle_remote(&db, &json!({ "type": "features.get" })).await;
         assert_eq!(initial["type"], "features");
-        assert_eq!(initial["features"]["scheduled_messages_enabled"], false);
-        assert_eq!(initial["features"]["account_sync_enabled"], false);
+        assert_eq!(initial["features"]["scheduled_messages_enabled"], true);
+        assert_eq!(initial["features"]["account_sync_enabled"], true);
+
+        // Turning one off is saved, and turning it back on is saved too.
+        let off = FeatureToggles {
+            scheduled_messages_enabled: false,
+            account_sync_enabled: false,
+        };
+        let stored = handle_remote(&db, &json!({ "type": "features.set", "features": off })).await;
+        assert_eq!(stored["features"]["scheduled_messages_enabled"], false);
+        assert_eq!(
+            handle_remote(&db, &json!({ "type": "features.get" })).await["features"]["account_sync_enabled"],
+            false,
+            "an explicit choice is never overwritten by the default"
+        );
 
         let updated = FeatureToggles {
             scheduled_messages_enabled: true,

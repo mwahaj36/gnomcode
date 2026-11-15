@@ -109,11 +109,6 @@ enum Commands {
         #[command(subcommand)]
         action: evals::EvalsCommands,
     },
-    /// Manage gnomcode offline Pro license.
-    License {
-        #[command(subcommand)]
-        action: LicenseCommands,
-    },
     /// Internal fail-open hook callback.
     #[command(hide = true)]
     Hook,
@@ -195,19 +190,6 @@ enum Commands {
     },
 }
 
-#[derive(Subcommand, Debug)]
-enum LicenseCommands {
-    /// Show current local license tier and status.
-    Status,
-    /// Activate an Ed25519-signed license key from a file or JSON string.
-    Activate {
-        /// File path or raw JSON string of the license key.
-        key: String,
-    },
-    /// Remove the saved offline license. Local features remain free.
-    Remove,
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     if !matches!(
@@ -248,7 +230,6 @@ async fn main() -> Result<()> {
             remove,
             no_approvals,
         } => cmd_integrate(&agent, remove, !no_approvals),
-        Commands::License { action } => cmd_license(action),
         Commands::Evals { action } => evals::run(action),
         Commands::Hook => cmd_hook(),
         Commands::Limits {
@@ -283,89 +264,6 @@ async fn main() -> Result<()> {
                 resume_session.as_deref(),
             )
             .await
-        }
-    }
-}
-
-fn cmd_license(action: LicenseCommands) -> Result<()> {
-    match action {
-        LicenseCommands::Status => {
-            let key_path = gnomcode_home().join("license.key");
-            if !key_path.exists() {
-                println!("Tier: Free (freeware, forever)");
-                println!(
-                    "All local features are free, including guardrails, Resume Queue, and export."
-                );
-                println!("No local license is required.");
-                return Ok(());
-            }
-            let bytes = std::fs::read(&key_path)?;
-            let license: gnomcode_core::license::LicenseFile = serde_json::from_slice(&bytes)?;
-            match gnomcode_core::license::verify_license(
-                &license,
-                gnomcode_core::license::GNOMCODE_LICENSE_PUBKEY_HEX,
-            ) {
-                Ok(tier) => {
-                    println!(
-                        "Tier: {}",
-                        match tier {
-                            gnomcode_core::license::Tier::Pro => "Pro ($19 perpetual)",
-                            gnomcode_core::license::Tier::Team => "Pro (legacy Team license)",
-                            gnomcode_core::license::Tier::Free => "Free",
-                        }
-                    );
-                    println!("Licensee: {}", license.payload.licensee);
-                    println!("Issued At: {}", license.payload.issued_at);
-                    if let Some(ref exp) = license.payload.expires_at {
-                        println!("Expires: {}", exp);
-                    } else {
-                        println!("Status: Active (perpetual)");
-                    }
-                }
-                Err(err) => {
-                    println!("Tier: Free (invalid or expired license file: {err})");
-                }
-            }
-            Ok(())
-        }
-        LicenseCommands::Activate { key } => {
-            let content = if std::path::Path::new(&key).is_file() {
-                std::fs::read_to_string(&key)?
-            } else {
-                key
-            };
-            let license: gnomcode_core::license::LicenseFile =
-                serde_json::from_str(content.trim()).context("invalid license JSON format")?;
-            let tier = gnomcode_core::license::verify_license(
-                &license,
-                gnomcode_core::license::GNOMCODE_LICENSE_PUBKEY_HEX,
-            )
-            .context("license cryptographic verification failed")?;
-            anyhow::ensure!(
-                matches!(
-                    tier,
-                    gnomcode_core::license::Tier::Pro | gnomcode_core::license::Tier::Team
-                ),
-                "License is for Free tier; Pro required."
-            );
-            std::fs::create_dir_all(gnomcode_home())?;
-            std::fs::write(
-                gnomcode_home().join("license.key"),
-                serde_json::to_vec_pretty(&license)?,
-            )?;
-            println!(
-                "License successfully activated for {} ({:?})!",
-                license.payload.licensee, tier
-            );
-            Ok(())
-        }
-        LicenseCommands::Remove => {
-            let key_path = gnomcode_home().join("license.key");
-            if key_path.exists() {
-                std::fs::remove_file(key_path)?;
-            }
-            println!("License removed. Reverted to Free tier.");
-            Ok(())
         }
     }
 }

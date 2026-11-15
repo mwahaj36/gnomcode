@@ -182,7 +182,8 @@ pub fn spawn_cloud_sync(
             {
                 let mut status = SYNC_STATUS.lock().await;
                 status.state = "frozen";
-                status.message = "Account sync is disabled by default (E3).";
+                status.message =
+                    "Account sync is turned off in Settings, so the web console has no snapshot.";
                 continue;
             }
             {

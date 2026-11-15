@@ -304,6 +304,34 @@ impl SourceAdapter for ClaudeAdapter {
                 }
             }
 
+            // A message the person typed while the agent was working is delivered inside the
+            // running turn. Claude Code (seen in 2.1.325) records it only as a `queued_command`
+            // attachment, never as a `user` line, so without this it vanishes from the chat.
+            // Task notifications use the same attachment with another mode and origin.
+            if obj.get("type").and_then(Value::as_str) == Some("attachment")
+                && let Some(queued) = obj.get("attachment")
+                && queued.get("type").and_then(Value::as_str) == Some("queued_command")
+                && queued.get("commandMode").and_then(Value::as_str) == Some("prompt")
+                && queued.pointer("/origin/kind").and_then(Value::as_str) == Some("human")
+                && let Some(text) = queued.get("prompt").and_then(Value::as_str)
+                && !text.trim().is_empty()
+            {
+                let event_key = obj
+                    .get("uuid")
+                    .and_then(Value::as_str)
+                    .map_or_else(|| current_offset.to_string(), str::to_owned);
+                batch.chat_events.push(ChatEvent {
+                    event_id: format!("{session_id}:{event_key}"),
+                    session_id: session_id.clone(),
+                    turn_index: i64::try_from(current_offset).unwrap_or(i64::MAX),
+                    role: ChatRole::User,
+                    content: redact_chat_content(text),
+                    tool_name: None,
+                    status: None,
+                    created_at: ts,
+                });
+            }
+
             if obj.get("type").and_then(Value::as_str) == Some("assistant")
                 && let Some(msg) = obj.get("message").and_then(Value::as_object)
             {

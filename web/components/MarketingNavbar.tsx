@@ -35,7 +35,7 @@ export default function MarketingNavbar({ showTheme = false }: { showTheme?: boo
         <Link href="/#features" onClick={() => setMenuOpen(false)}>Product</Link>
         <Link href="/#agents" onClick={() => setMenuOpen(false)}>Agents</Link>
         <Link href="/docs">Docs</Link>
-        <Link href="/pricing">Pricing</Link>
+        <Link href="/pricing">Free</Link>
         <Link className="sp-site-mobile-download" href="/downloads" onClick={() => setMenuOpen(false)}>Download</Link>
         {showTheme && <ThemeControl className="sp-mobile-theme" />}
       </nav>

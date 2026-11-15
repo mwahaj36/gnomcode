@@ -16,7 +16,8 @@ test('phone shows approve and deny for each pending request over the encrypted c
 });
 
 test('approval card keeps phone targets at 44px and uses neutral controls', () => {
-  assert.match(css, /\.sp-approval-actions \.btn-control\{flex:1;min-height:44px\}/);
+  // Session-scoped choices made this a multi-button row; each still fills its line at 44px.
+  assert.match(css, /\.sp-approval-actions \.btn-control\{flex:1 1 40%;min-height:44px\}/);
   assert.match(css, /\.sp-approval\{[^}]*border-radius:var\(--sp-radius-card\)/);
   assert.doesNotMatch(css.slice(css.indexOf('.sp-approvals{')), /#[0-9a-f]{3,6}\b/i);
 });
