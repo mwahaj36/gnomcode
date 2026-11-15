@@ -100,8 +100,18 @@ pub enum HandoffError {
 
 /// Resolve an interactive agent for a model, rejecting mismatched agent requests.
 pub fn agent_for_model(model: &str, requested_agent: Option<&str>) -> Option<&'static str> {
-    if model == "@default" {
-        return match requested_agent {
+    // A provider's own name means "that provider, its default model": what a caller naming
+    // only the agent to switch to is asking for.
+    let named_provider = matches!(
+        model,
+        "codex" | "claude" | "claude-code" | "antigravity" | "agy"
+    );
+    if model == "@default" || (named_provider && requested_agent.is_none()) {
+        return match if named_provider {
+            Some(model)
+        } else {
+            requested_agent
+        } {
             Some("codex") => Some("codex"),
             Some("claude" | "claude-code") => Some("claude-code"),
             Some("antigravity" | "agy") => Some("antigravity"),
@@ -1045,6 +1055,27 @@ impl DaemonOrchestrator {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_provider_name_switches_to_that_provider_on_its_default_model() {
+        use super::agent_for_model;
+        for (name, expected) in [
+            ("codex", "codex"),
+            ("claude", "claude-code"),
+            ("antigravity", "antigravity"),
+            ("agy", "antigravity"),
+        ] {
+            assert_eq!(agent_for_model(name, None), Some(expected), "{name}");
+        }
+        assert_eq!(agent_for_model("@default", Some("codex")), Some("codex"));
+        // A real model id still decides on its own, and an explicit agent still wins.
+        assert_eq!(agent_for_model("gpt-6.1-sol", None), Some("codex"));
+        assert_eq!(
+            agent_for_model("claude-opus-5-5", Some("antigravity")),
+            Some("antigravity")
+        );
+        assert_eq!(agent_for_model("not a model", None), None);
+    }
+
     #[test]
     fn handoff_reserves_original_request_and_title_before_recent_budget() {
         use gnomcode_core::{ChatEvent, ChatRole};

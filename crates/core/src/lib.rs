@@ -515,6 +515,11 @@ impl Default for FeatureToggles {
     }
 }
 
+/// Git's empty tree. Diffing against it shows every tracked file as an addition, which is
+/// what a repository with no commits yet has to be compared with: `HEAD` does not resolve
+/// there and `git diff HEAD` fails outright.
+pub const EMPTY_TREE_OBJECT: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
 /// Role of a message in a conversation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
