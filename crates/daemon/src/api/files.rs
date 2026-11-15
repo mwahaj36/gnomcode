@@ -55,8 +55,11 @@ pub(super) async fn repo_diff_get_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let (diff_str, diff_lossy) =
-        git_output(&canonical_repo, &["diff", "--no-ext-diff", "HEAD"]).await?;
+    let (diff_str, diff_lossy) = git_output(
+        &canonical_repo,
+        &["diff", "--no-ext-diff", diff_base(&canonical_repo).await],
+    )
+    .await?;
     let (status_str, status_lossy) =
         git_output(&canonical_repo, &["status", "--porcelain=v1", "-z"]).await?;
     // shortcut: -z entries become lines, so names containing newlines split; fine for a viewer.
@@ -71,6 +74,19 @@ pub(super) async fn repo_diff_get_handler(
 }
 
 /// Runs a read-only git command; returns stdout decoded lossily and whether bytes were replaced.
+/// What to diff against: the last commit, or Git's empty tree in a repository that has
+/// none yet, where `HEAD` does not resolve and `git diff HEAD` fails.
+async fn diff_base(repo: &std::path::Path) -> &'static str {
+    if git_output(repo, &["rev-parse", "--verify", "--quiet", "HEAD"])
+        .await
+        .is_ok()
+    {
+        "HEAD"
+    } else {
+        gnomcode_core::EMPTY_TREE_OBJECT
+    }
+}
+
 pub(super) async fn git_output(
     repo: &std::path::Path,
     args: &[&str],
@@ -140,6 +156,36 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt as _;
+
+    /// A project someone just created has no commits, and that is exactly when Changes is
+    /// opened first: it must list the new files instead of failing.
+    #[tokio::test]
+    async fn a_repository_without_commits_still_reports_its_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "--quiet"])
+                .current_dir(dir.path())
+                .status()
+                .expect("git init")
+                .success()
+        );
+        std::fs::write(dir.path().join("new.txt"), "hello").expect("write");
+        assert!(
+            std::process::Command::new("git")
+                .args(["add", "new.txt"])
+                .current_dir(dir.path())
+                .status()
+                .expect("git add")
+                .success()
+        );
+        let base = super::diff_base(dir.path()).await;
+        assert_eq!(base, gnomcode_core::EMPTY_TREE_OBJECT);
+        let (diff, _) = super::git_output(dir.path(), &["diff", "--no-ext-diff", base])
+            .await
+            .expect("diff without HEAD");
+        assert!(diff.contains("new.txt"), "{diff}");
+    }
 
     #[tokio::test]
     async fn git_output_reports_changes_and_untracked_files() {

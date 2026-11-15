@@ -87,21 +87,36 @@ pub(crate) async fn command(db: &Arc<Mutex<Database>>, request: Value) -> Value 
                     .split_once(':')
                     .is_some_and(|(_, id)| approval.session_id == id)
         });
-        Ok::<_, gnomcode_store::Error>(host.filter(|_| running && !waiting))
+        Ok::<_, gnomcode_store::Error>((host, running && !waiting))
     })
     .await;
+    let acknowledged = |sent: bool| json!({"type":"interrupt_ack", "session_id":id, "request_id":request_id, "sent":sent});
+    let unconfirmed = || {
+        error(
+            "Interrupt delivery could not be confirmed; check the agent terminal before trying again",
+        )
+    };
     let response = match target {
-        Ok(Ok(Some(record))) => match gnomcode_pty::send_input(&record, b"\x1b").await {
-            Ok(()) => {
-                json!({"type":"interrupt_ack", "session_id":id, "request_id":request_id, "sent":true})
+        Ok(Ok((Some(record), transcript_says_running))) => {
+            // A protocol host knows whether a turn is running and cancels it through the
+            // agent's own protocol. A PTY host knows neither, so its turn is judged from the
+            // transcript and ended with an Esc keystroke.
+            match gnomcode_pty::turn_busy(&record).await {
+                Some(true) => match gnomcode_pty::interrupt_turn(&record).await {
+                    Ok(sent) => acknowledged(sent),
+                    Err(_) => unconfirmed(),
+                },
+                Some(false) => acknowledged(false),
+                None if transcript_says_running => {
+                    match gnomcode_pty::send_input(&record, b"\x1b").await {
+                        Ok(()) => acknowledged(true),
+                        Err(_) => unconfirmed(),
+                    }
+                }
+                None => acknowledged(false),
             }
-            Err(_) => error(
-                "Interrupt delivery could not be confirmed; check the agent terminal before trying again",
-            ),
-        },
-        Ok(Ok(None)) => {
-            json!({"type":"interrupt_ack", "session_id":id, "request_id":request_id, "sent":false})
         }
+        Ok(Ok((None, _))) => acknowledged(false),
         _ => error("Could not inspect this conversation"),
     };
     // Retain ambiguous writes too: retrying a timed-out Esc could affect a later composer.
@@ -198,6 +213,7 @@ mod tests {
             port,
             token: "interrupt-host-token".into(),
             started_at: (now - chrono::Duration::seconds(1)).to_rfc3339(),
+            native_id: None,
         };
         gnomcode_pty::save_session_record(&record).expect("host record");
         let project = Project::from_origin(None, &record.repo_path, None);

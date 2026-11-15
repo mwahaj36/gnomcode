@@ -7,7 +7,6 @@ pub mod branding;
 pub mod chat_meta;
 pub mod file_preview;
 pub mod handoff_eval;
-pub mod license;
 pub mod notifications;
 pub mod presence;
 pub mod pricing;
@@ -494,15 +493,43 @@ impl Default for UserSettings {
     }
 }
 
-/// Off-by-default feature toggles for unproven 1.0 subsystems (E3, ADR 0049).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Feature toggles for the subsystems frozen during 1.0 development (E3, ADR 0049). Both are
+/// on by default now that they are exercised: a feature nobody can find is a feature that
+/// looks broken. Each stays switchable in Settings, and account sync still publishes nothing
+/// until the person signs in and registers a desktop themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FeatureToggles {
-    /// Enable scheduled prompt delivery and creation (default `false`).
+    /// Deliver and create scheduled prompts (local only).
     pub scheduled_messages_enabled: bool,
-    /// Enable cloud account usage synchronization (default `false`).
+    /// Publish the account metadata snapshot that the web console reads.
     pub account_sync_enabled: bool,
 }
+
+impl Default for FeatureToggles {
+    fn default() -> Self {
+        Self {
+            scheduled_messages_enabled: true,
+            account_sync_enabled: true,
+        }
+    }
+}
+
+/// The stored id of an agent, whatever slug a launch command or a host record used
+/// (`claude` and `agy` are the launch names; `claude-code` and `antigravity` are stored).
+#[must_use]
+pub fn canonical_agent(agent: &str) -> &str {
+    match agent {
+        "claude" => "claude-code",
+        "agy" => "antigravity",
+        other => other,
+    }
+}
+
+/// Git's empty tree. Diffing against it shows every tracked file as an addition, which is
+/// what a repository with no commits yet has to be compared with: `HEAD` does not resolve
+/// there and `git diff HEAD` fails outright.
+pub const EMPTY_TREE_OBJECT: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /// Role of a message in a conversation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

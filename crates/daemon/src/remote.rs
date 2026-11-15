@@ -602,7 +602,7 @@ async fn run_connection(
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
                 if request_type.as_str()==Some("interrupt") {room.activity().await;}
-                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file"|"changes"|"artifacts"|"upload_attachment"|"quick_actions"|"continue_here"|"worktree_merge"|"worktree_discard"|"worktree_open_pr"|"approvals")) {room.activity().await;}
+                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file"|"changes"|"artifacts"|"upload_attachment"|"quick_actions"|"continue_here"|"worktree_merge"|"worktree_discard"|"worktree_open_pr"|"approvals"|"trust_folder")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
@@ -942,6 +942,7 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
             }
         }
         Some("interrupt") => crate::interrupt::command(db, request.clone()).await,
+        Some("setup" | "trust_folder") => crate::session_setup::remote_command(db, &request).await,
         _ => json!({"type":"error","message":"Unsupported remote command"}),
     }
 }
@@ -1107,6 +1108,17 @@ pub(crate) fn conversation_host<'a>(
     sessions: &[Session],
     hosted: &'a [gnomcode_pty::SessionRecord],
 ) -> Result<Option<&'a gnomcode_pty::SessionRecord>, gnomcode_store::Error> {
+    conversation_host_in(db, id, hosted, || session_bindings(sessions, hosted))
+}
+
+/// [`conversation_host`] with the native-to-host bindings supplied by the caller. Working
+/// them out runs Git for each host, so a list asks once rather than once per row.
+fn conversation_host_in<'s, 'a>(
+    db: &Database,
+    id: &str,
+    hosted: &'a [gnomcode_pty::SessionRecord],
+    bindings: impl FnOnce() -> Vec<(&'s Session, &'a gnomcode_pty::SessionRecord)>,
+) -> Result<Option<&'a gnomcode_pty::SessionRecord>, gnomcode_store::Error> {
     let record = if let Some((host, _, _)) = db.conversation_target(id)? {
         hosted.iter().find(|record| record.session_id == host)
     } else {
@@ -1114,10 +1126,10 @@ pub(crate) fn conversation_host<'a>(
             .iter()
             .find(|record| record.session_id == id)
             .or_else(|| {
-                sessions
-                    .iter()
-                    .find(|session| session.id == id)
-                    .and_then(|session| session_host(session, sessions, hosted))
+                bindings()
+                    .into_iter()
+                    .find(|(session, _)| session.id == id)
+                    .map(|(_, record)| record)
             })
     };
     Ok(record.filter(|record| crate::agent_for_model("@default", Some(&record.agent)).is_some()))
@@ -1148,13 +1160,11 @@ pub(crate) fn conversation_chat(
     };
     let mut events = db.conversation_chat(id, limit, before)?;
     for event in &mut events {
-        if event.role == gnomcode_core::ChatRole::User
-            && let Some((_, message)) = event
-                .content
-                .strip_prefix("<spawnt_context>")
-                .and_then(|text| text.split_once("</spawnt_context>"))
-        {
-            event.content = message.trim_start().to_owned();
+        if event.role == gnomcode_core::ChatRole::User {
+            let shown = gnomcode_core::redact::clean_user_text(&event.content);
+            if shown.len() != event.content.len() {
+                event.content = shown.to_owned();
+            }
         }
     }
     Ok(events)
@@ -1183,12 +1193,9 @@ pub(crate) fn conversation_handoff_chat(
     if let Some(mut first) = db.conversation_first_user_event(id)?
         && !events.iter().any(|event| event.event_id == first.event_id)
     {
-        if let Some((_, message)) = first
-            .content
-            .strip_prefix("<spawnt_context>")
-            .and_then(|text| text.split_once("</spawnt_context>"))
-        {
-            first.content = message.trim_start().to_owned();
+        let shown = gnomcode_core::redact::clean_user_text(&first.content);
+        if shown.len() != first.content.len() {
+            first.content = shown.to_owned();
         }
         events.insert(0, first);
     }
@@ -1371,7 +1378,7 @@ fn remote_sessions(sessions: &[Session], hosted: &[gnomcode_pty::SessionRecord])
                 || "New conversation".to_owned(),
                 |name| name.to_string_lossy().into_owned(),
             );
-            visible.push(json!({"id":record.session_id,"title":title,"agent":record.agent,"requested_model":record.model,"state":"waiting_for_history","hosted":true,"can_prompt":true,"last_event_at":record.started_at}));
+            visible.push(json!({"id":record.session_id,"title":title,"agent":gnomcode_core::canonical_agent(&record.agent),"requested_model":record.model,"state":"waiting_for_history","hosted":true,"can_prompt":true,"last_event_at":record.started_at}));
         }
     }
     visible.sort_by(|a, b| {
@@ -1401,9 +1408,12 @@ pub(crate) fn conversation_sessions(
     hosted: &[gnomcode_pty::SessionRecord],
 ) -> Result<Vec<Value>, gnomcode_store::Error> {
     sync_conversation_bindings(db, sessions, hosted)?;
+    // Bindings run Git for each host; work them out once for the whole list.
+    let bindings = session_bindings(sessions, hosted);
     let quota = db.get_latest_quota_snapshots()?;
     let worktrees = crate::worktree_api::index();
     let mut visible = Vec::new();
+    let hidden = db.hidden_conversations()?;
     let mut candidates = remote_sessions(sessions, hosted);
     for root in db.conversation_ids()? {
         let target = db.conversation_target(&root)?;
@@ -1427,26 +1437,39 @@ pub(crate) fn conversation_sessions(
             continue;
         }
         let root = db.conversation_id(id)?;
+        // Deleted from Gnomcode by the person; a deleted parent takes its subagents with it.
+        if hidden.contains(id)
+            || hidden.contains(&root)
+            || row["parent_session_id"]
+                .as_str()
+                .is_some_and(|parent| hidden.contains(parent))
+        {
+            continue;
+        }
         if let Some(source) = sessions.iter().find(|session| {
             session.id == db.conversation_source(id).unwrap_or_else(|_| id.to_owned())
         }) {
             row["parent_session_id"] = json!(source.parent_session_id);
             row["project_id"] = json!(source.project_id);
         }
-        let host = conversation_host(db, id, sessions, hosted)?;
+        let host = conversation_host_in(db, id, hosted, || bindings.clone())?;
         let native = mapping
             .as_ref()
             .and_then(|(_, native, _)| native.as_deref())
             .unwrap_or(id);
         let observed = sessions.iter().find(|session| session.id == native);
         let launch = db.conversation_launch(id)?;
-        let agent = host
-            .map(|record| record.agent.as_str())
-            .or_else(|| observed.map(|session| session.agent.as_str()))
-            .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
-            .unwrap_or_default();
+        // Always the stored id: a host records the launch slug (`claude`, `agy`), and a row
+        // carrying that would be filtered out and shown as an unsupported agent.
+        let agent = gnomcode_core::canonical_agent(
+            host.map(|record| record.agent.as_str())
+                .or_else(|| observed.map(|session| session.agent.as_str()))
+                .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
+                .unwrap_or_default(),
+        );
         let managed = host.is_some() || launch.is_some();
         row["source"] = json!(if managed { "managed" } else { "imported" });
+        row["host_id"] = json!(host.map(|record| record.session_id.as_str()));
         let can_resume = managed
             && host.is_none()
             && (matches!(agent, "codex" | "claude-code" | "claude" | "antigravity")
@@ -1567,15 +1590,24 @@ pub(crate) fn conversation_sessions(
             .as_str()
             .is_none_or(|title| title.trim().is_empty() || title.eq_ignore_ascii_case("unknown"))
         {
+            let folder_name = |path: String| {
+                Path::new(&path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .filter(|name| name != "unknown" && !name.is_empty())
+            };
             let label = db
                 .get_session_focus_target(native)?
                 .and_then(|target| target.repo_root)
-                .and_then(|path| {
-                    Path::new(&path)
-                        .file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
+                .and_then(folder_name)
+                // A conversation Gnomcode launched always knows its folder, even with no
+                // transcript yet, so name it after that instead of "Saved conversation".
+                .or_else(|| {
+                    db.conversation_launch(&root)
+                        .ok()
+                        .flatten()
+                        .and_then(|launch| folder_name(launch.repo))
                 })
-                .filter(|name| name != "unknown")
                 .unwrap_or_else(|| "Saved conversation".into());
             row["title"] = json!(format!(
                 "{label} · {}",
@@ -1651,11 +1683,23 @@ pub(crate) fn session_bindings<'s, 'h>(
     let bindings = hosted
         .iter()
         .filter_map(|record| {
+            // A host that knows its native conversation binds to exactly that one.
+            if let Some(known) = record
+                .native_id
+                .as_deref()
+                .and_then(|native| sessions.iter().find(|candidate| candidate.id == native))
+            {
+                return Some((known, record));
+            }
             let mut exact = sessions.iter().filter(|candidate| {
                 Some(record.child_pid) == candidate.pid || record.session_id == candidate.id
             });
             if let Some(candidate) = exact.next() {
                 return exact.next().is_none().then_some((candidate, record));
+            }
+            // Its transcript is not ingested yet: guessing now would claim a neighbour's.
+            if record.native_id.is_some() {
+                return None;
             }
             let agent = match record.agent.as_str() {
                 "claude" => "claude-code",
@@ -1674,8 +1718,11 @@ pub(crate) fn session_bindings<'s, 'h>(
                     !hosted.iter().any(|other| {
                         other.session_id != record.session_id
                             && (Some(other.child_pid) == candidate.pid
-                                || other.session_id == candidate.id)
+                                || other.session_id == candidate.id
+                                || other.native_id.as_deref() == Some(candidate.id.as_str()))
                     }) && agent == candidate.agent.as_str()
+                        // A desktop application's own conversation is never a CLI we launched.
+                        && candidate.surface != gnomcode_core::Surface::DesktopApp
                         && (project.id == candidate.project_id
                             || workspace_project.id == candidate.project_id)
                         && candidate.last_event_at >= started - chrono::Duration::seconds(1)
@@ -1852,6 +1899,7 @@ mod tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         assert_eq!(
             conversation_session_id(
@@ -1911,6 +1959,7 @@ mod tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         assert_eq!(
             conversation_session_id(
@@ -1936,6 +1985,7 @@ mod tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         assert_eq!(
             conversation_sessions(&db, &[], std::slice::from_ref(&record))
@@ -1986,6 +2036,7 @@ mod tests {
             port: 1,
             token: "test".to_owned(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         assert!(
             session_host(
@@ -2494,6 +2545,7 @@ mod tests {
             port: 1,
             token: "test".into(),
             started_at: chrono::Utc::now().to_rfc3339(),
+            native_id: None,
         };
         record_model_change(&db, "source", &target).expect("persist request notice");
         db.insert_chat_event(&gnomcode_core::ChatEvent {
@@ -2609,6 +2661,7 @@ mod tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         // Simulate a concurrent sync_conversation_bindings seeing the newly launched target host.
         sync_conversation_bindings(&db, &[source_session], std::slice::from_ref(&target))
@@ -2680,12 +2733,127 @@ mod tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         let sessions = [prior_ended, prior_boundary, current];
         let matched = session_bindings(&sessions, std::slice::from_ref(&hosted));
         assert_eq!(matched.len(), 1);
         assert_eq!(matched[0].0.id, "claude-code:current");
         assert_eq!(matched[0].1.session_id, "claude-current-host");
+    }
+
+    /// A launched Claude row once carried the launch slug `claude`, which the console
+    /// renders as "Unsupported agent" and the Claude Code filter skips.
+    #[test]
+    fn a_launched_row_carries_the_stored_agent_id() {
+        let db = Database::open_in_memory().expect("database");
+        let repo = tempfile::tempdir().expect("repo");
+        let record = |agent: &str, id: &str| gnomcode_pty::SessionRecord {
+            session_id: id.into(),
+            agent: agent.into(),
+            repo_path: repo.path().to_string_lossy().into_owned(),
+            model: None,
+            host_pid: std::process::id(),
+            child_pid: 0,
+            port: 1,
+            token: "test".into(),
+            started_at: chrono::Utc::now().to_rfc3339(),
+            native_id: None,
+        };
+        let hosted = [record("claude", "claude-1"), record("agy", "agy-1")];
+        let rows = conversation_sessions(&db, &[], &hosted).expect("rows");
+        let mut agents: Vec<&str> = rows
+            .iter()
+            .filter_map(|row| row["agent"].as_str())
+            .collect();
+        agents.sort_unstable();
+        assert_eq!(agents, ["antigravity", "claude-code"]);
+    }
+
+    /// Issue 351: a resumed host and a freshly launched protocol host in one repository both
+    /// matched the new transcript by time, so neither bound and the launch split in two rows.
+    #[test]
+    fn hosts_that_know_their_native_session_bind_exactly_in_a_shared_repository() {
+        let repo = tempfile::tempdir().expect("repo");
+        let repo_str = repo.path().to_string_lossy().into_owned();
+        let project = Project::from_origin(None, &repo_str, None);
+        let now = chrono::Utc::now();
+        let session = |id: &str, surface, started: chrono::DateTime<chrono::Utc>| Session {
+            id: id.into(),
+            agent: gnomcode_core::AgentId::Antigravity,
+            surface,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: gnomcode_core::SessionState::Idle,
+            pid: None,
+            started_at: started,
+            last_event_at: now + chrono::Duration::seconds(90),
+        };
+        let host = |id: &str, native: Option<&str>, started: chrono::DateTime<chrono::Utc>| {
+            gnomcode_pty::SessionRecord {
+                session_id: id.into(),
+                agent: "antigravity".into(),
+                repo_path: repo_str.clone(),
+                model: None,
+                host_pid: 1,
+                child_pid: 0,
+                port: 1,
+                token: "test".into(),
+                started_at: started.to_rfc3339(),
+                native_id: native.map(str::to_owned),
+            }
+        };
+        let sessions = [
+            session(
+                "antigravity:ide",
+                gnomcode_core::Surface::DesktopApp,
+                now - chrono::Duration::hours(4),
+            ),
+            session(
+                "antigravity:new",
+                gnomcode_core::Surface::Cli,
+                now + chrono::Duration::seconds(80),
+            ),
+        ];
+        let hosted = [
+            host("resume-ide", Some("antigravity:ide"), now),
+            host(
+                "antigravity-launch",
+                Some("antigravity:new"),
+                now + chrono::Duration::seconds(50),
+            ),
+        ];
+        let mut bound: Vec<_> = session_bindings(&sessions, &hosted)
+            .into_iter()
+            .map(|(session, record)| (session.id.clone(), record.session_id.clone()))
+            .collect();
+        bound.sort();
+        assert_eq!(
+            bound,
+            [
+                ("antigravity:ide".to_owned(), "resume-ide".to_owned()),
+                (
+                    "antigravity:new".to_owned(),
+                    "antigravity-launch".to_owned()
+                ),
+            ]
+        );
+
+        // A host from an older build has no recorded native session; it must not steal the
+        // transcript another host owns, nor a desktop application's conversation.
+        let legacy = [
+            host("legacy", None, now),
+            host(
+                "antigravity-launch",
+                Some("antigravity:new"),
+                now + chrono::Duration::seconds(50),
+            ),
+        ];
+        let bound = session_bindings(&sessions, &legacy);
+        assert_eq!(bound.len(), 1);
+        assert_eq!(bound[0].1.session_id, "antigravity-launch");
     }
 
     #[test]
@@ -2847,5 +3015,44 @@ mod tests {
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].id, "req-2");
         assert_eq!(pending[0].text, "follow up");
+    }
+}
+
+#[cfg(test)]
+mod launched_row_tests {
+    use super::*;
+
+    /// A session the person just launched must be listed at once, before the agent has
+    /// written any transcript Gnomcode could ingest.
+    #[test]
+    fn a_launched_host_is_listed_before_its_transcript_exists() {
+        let db = Database::open_in_memory().expect("database");
+        let repo = tempfile::tempdir().expect("repo");
+        let record = gnomcode_pty::SessionRecord {
+            session_id: "antigravity-1794729572462198900".into(),
+            agent: "antigravity".into(),
+            repo_path: repo.path().to_string_lossy().into_owned(),
+            model: None,
+            host_pid: std::process::id(),
+            child_pid: 0,
+            port: 1,
+            token: "test".into(),
+            started_at: chrono::Utc::now().to_rfc3339(),
+            native_id: Some("antigravity:d8216974-1c88-4fab-a4d5-24e637a59236".into()),
+        };
+        let rows = conversation_sessions(&db, &[], std::slice::from_ref(&record)).expect("rows");
+        let ids: Vec<&str> = rows.iter().filter_map(|row| row["id"].as_str()).collect();
+        assert!(ids.contains(&record.session_id.as_str()), "listed: {ids:?}");
+        let page = conversation_page(rows, &json!({}));
+        let listed: Vec<&str> = page["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .filter_map(|row| row["id"].as_str())
+            .collect();
+        assert!(
+            listed.contains(&record.session_id.as_str()),
+            "page: {listed:?}"
+        );
     }
 }

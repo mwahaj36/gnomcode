@@ -59,7 +59,7 @@ pub(crate) use quota::*;
 use remote::*;
 pub use report::*;
 pub use sessions::*;
-pub(crate) use settings::*;
+use settings::*;
 use sync::*;
 use update::*;
 
@@ -171,6 +171,18 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/sessions/{id}/stop", post(stop_session_handler))
         .route(
+            "/api/v1/sessions/{id}",
+            axum::routing::delete(delete_conversation_handler),
+        )
+        .route(
+            "/api/v1/sessions/{id}/setup",
+            get(crate::session_setup::status_handler),
+        )
+        .route(
+            "/api/v1/sessions/{id}/trust-folder",
+            post(crate::session_setup::trust_handler),
+        )
+        .route(
             "/api/v1/sessions/{id}/interrupt",
             post(crate::interrupt::handler),
         )
@@ -237,12 +249,6 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/alerts", get(alerts_get_handler))
         .route("/api/v1/export", get(export_handler))
-        .route(
-            "/api/v1/license",
-            get(license_get_handler)
-                .post(license_post_handler)
-                .delete(license_delete_handler),
-        )
         .route("/api/v1/automation", post(automation_handler))
         .route("/api/v1/resume-queue", get(resume_queue_get_handler))
         .route("/api/v1/resume-queue/arm", post(resume_queue_arm_handler))
@@ -284,6 +290,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/approvals/{id}/decision",
             post(crate::approvals::decision_handler),
+        )
+        .route(
+            "/api/v1/approvals/grants/{session_id}",
+            axum::routing::delete(crate::approvals::revoke_grants_handler),
         )
         .route("/api/v1/repos/file", get(repo_file_get_handler))
         .route(

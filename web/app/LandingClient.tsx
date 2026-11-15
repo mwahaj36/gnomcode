@@ -93,7 +93,7 @@ export default function LandingPage() {
           <a href="#features" onClick={() => setMenuOpen(false)}>Product</a>
           <a href="#agents" onClick={() => setMenuOpen(false)}>Agents</a>
           <Link href="/docs">Docs</Link>
-          <Link href="/pricing">Pricing</Link>
+          <Link href="/pricing">Free</Link>
           <Link className="sp-nav-download-mobile" href="/downloads" onClick={() => setMenuOpen(false)}>Download</Link>
         </nav>
         <div className="sp-nav-right"><Link href="/downloads" className="sp-nav-cta">Download <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link><AccountLink className="sp-nav-login sp-account-cta" arrow /></div>
@@ -144,7 +144,7 @@ export default function LandingPage() {
     <footer className="sp-footer" data-reveal>
       <div className="sp-width sp-footer-grid">
         <div className="sp-footer-intro"><Link className="sp-brand" href="/"><Mark /><span>gnomcode</span></Link><h2>Keep your agents moving.</h2><p>Launch, switch and control AI coding agents. Local-first, with encrypted access from paired devices.</p></div>
-        <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Pricing</Link><Link href="/downloads">Downloads</Link></div>
+        <div><span>PRODUCT</span><Link href="/auth">Console</Link><Link href="/pricing">Free</Link><Link href="/downloads">Downloads</Link></div>
         <div><span>RESOURCES</span><Link href="/docs">Documentation</Link><Link href="/docs/supported-agents">Supported agents</Link></div>
         <div><span>LEGAL</span><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>
       </div>

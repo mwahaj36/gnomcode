@@ -37,7 +37,7 @@ export async function copyTextToClipboard(text) {
   return false;
 }
 
-export const sessionStateLabel = state => ({ thinking: 'Running', tool: 'Running', running: 'Running', awaiting_approval: 'Waiting', waiting: 'Waiting', idle: 'Idle', error: 'Error', ended: 'Ended' }[state] || 'Unknown');
+export const sessionStateLabel = state => ({ thinking: 'Running', tool: 'Running', running: 'Running', awaiting_approval: 'Waiting', waiting: 'Waiting', idle: 'Idle', error: 'Error', ended: 'Ended', waiting_for_history: 'Starting' }[state] || 'Unknown');
 // Shared presentation only. Rust supplies totals, pricing, and chart proportions.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const tokens = value => Number.isFinite(value) ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value) : 'Unknown';
@@ -82,7 +82,19 @@ const PROJECT_HELPER = 'Most recent first.';
 const FOLDER_ICON = '<svg class="sp-project-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.5h8.5A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>';
 const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' };
 // Agents removed in 1.0 (E4) keep their stored rows; they show as unsupported.
-const agentLabel = id => AGENT_NAMES[id] || 'Unsupported agent';
+export const agentLabel = id => AGENT_NAMES[id === 'claude' ? 'claude-code' : id === 'agy' ? 'antigravity' : id] || 'Unsupported agent';
+// Wording for a held tool approval. Claude Code is held by a hook, so its own prompt stays
+// available; Codex and Antigravity protocol sessions have no other prompt and cancel the call.
+export function approvalCopy(agent) {
+  const name = AGENT_NAMES[agent === 'claude' ? 'claude-code' : agent === 'agy' ? 'antigravity' : agent] || 'The agent';
+  const native = name === 'Claude Code';
+  return {
+    agent: name,
+    unanswered: native ? 'If you do not answer, Claude asks in its own window.' : `If you do not answer, ${name} cancels this tool call.`,
+    unansweredPhone: native ? 'Then Claude asks on your laptop if you do not answer.' : `${name} cancels this tool call if you do not answer.`,
+    unreachable: native ? 'Could not reach your laptop. Claude will ask there instead.' : `Could not reach your laptop. ${name} will cancel this tool call.`,
+  };
+}
 const projectTime = project => { const time = Date.parse(project.last_active); return Number.isFinite(time) ? time : -Infinity; };
 
 /** The folder a project lives in, shortened for one line: home becomes ~, then at most the last three folders. */
@@ -1033,7 +1045,7 @@ export function renderChatCards(events) {
       <header>
         <strong>${escape(roleLabel)}</strong>
         ${statusBadge}
-        <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
+        <time datetime="${escape(evt.created_at || '')}" title="${escape(new Date(evt.created_at).toLocaleString())}">${escape(new Date(evt.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time>
         ${copyBtn}
       </header>
       <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : renderUserBody(evt.content)}</div>
@@ -1042,6 +1054,18 @@ export function renderChatCards(events) {
     </article>`);
   }
   return `<div class="sp-chat-stream">${chunks.join('')}</div>`;
+}
+
+/** Shows or hides the time and Copy of the message a person clicked; other messages hide theirs. */
+export function toggleChatMeta(target) {
+  if (!target?.closest || target.closest('a, button, summary, input, textarea, .sp-code')) return false;
+  if (globalThis.getSelection?.()?.toString()) return false;
+  const card = target.closest('.sp-chat-card');
+  if (!card) return false;
+  const shown = card.dataset.meta === 'shown';
+  card.parentElement?.querySelectorAll('.sp-chat-card[data-meta="shown"]').forEach(other => { delete other.dataset.meta; });
+  if (!shown) card.dataset.meta = 'shown';
+  return true;
 }
 
 export function reconcileChat(events, pending, state = '') {
