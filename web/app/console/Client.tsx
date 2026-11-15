@@ -8,7 +8,7 @@ import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import AppLockGate from "../../components/AppLockGate";
 import { supabase } from "../../lib/supabase";
-import { updateActivity, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue, mountProjectList, projectsFromSessions } from "../../lib/console-presentation.js";
+import { updateActivity, updateHeatmap, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue, mountProjectList, projectsFromSessions, type ActivityHeatmap } from "../../lib/console-presentation.js";
 
 // The four places of the console. `sessions` is the synced history reached from Home, so it keeps Home highlighted.
 const PLACES: [string, string][] = [["overview", "Home"], ["chat", "Workspace"], ["usage", "Usage"], ["settings", "Settings"]];
@@ -45,6 +45,17 @@ function PeriodTilesPanel({ report }: { report: unknown }) {
 function ActivityPanel({ report }: { report: unknown }) {
   const element = useRef<HTMLDivElement>(null);
   useEffect(() => { if (element.current) updateActivity(element.current, report, { totals: false }); }, [report]);
+  return <div ref={element} />;
+}
+
+function HeatmapPanel({ heatmap }: { heatmap: ActivityHeatmap | null }) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!element.current) return;
+    updateHeatmap(element.current, heatmap, { weeks: 53, stats: true, legend: true, months: true });
+    const scroller = element.current.querySelector<HTMLElement>(".sp-heatmap-scroll");
+    if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+  }, [heatmap]);
   return <div ref={element} />;
 }
 
@@ -198,6 +209,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
   const [report, setReport] = useState<TimelineReport | null>(null);
   const [homeSessions, setHomeSessions] = useState<SessionItem[] | null>(null);
   const [todayReport, setTodayReport] = useState<TimelineReport | null>(null);
+  const [activityHeatmap, setActivityHeatmap] = useState<ActivityHeatmap | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quota, setQuota] = useState<QuotaItem[]>([]);
   const [snapshotGeneratedAt, setSnapshotGeneratedAt] = useState<string | null>(null);
@@ -302,6 +314,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         allSessions.sort((a, b) => Date.parse(b.last_event_at) - Date.parse(a.last_event_at));
         setHomeSessions(snap ? allSessions : null);
         setTodayReport(snap?.timelines?.today || snap?.timeline || null);
+        setActivityHeatmap(snap?.activity_heatmap || null);
         const filtered = allSessions.filter((session) =>
           (projectFilter === "all" || session.project_name === projectFilter) &&
           (agentFilter === "all" || session.agent === agentFilter) &&
@@ -454,10 +467,12 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
           Home and limits show the last snapshot your desktop published, {new Date(snapshotGeneratedAt).toLocaleString()}. Desktops publish only while Account sync is on (desktop Settings, Privacy and data). Conversations in Workspace are live over Remote.
         </p>}
         <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />
+        <HeatmapPanel heatmap={activityHeatmap} />
         <HomeSessionsPanel sessions={homeSessions} onAction={homeAction} />
         <section className="sp-section"><TodayPanel report={todayReport} activeCount={activeCount} /></section>
       </div>}
       {activeView === "usage" && <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />}
+      {activeView === "usage" && <HeatmapPanel heatmap={activityHeatmap} />}
 
       {/* Timeline Filter Bar */}
       {user && desktopChoices.length>0 && activeView!=="chat" && <label className="sp-console-timeline-filter">Desktop<select value={desktopId || desktopChoices[0].id} onChange={event=>{lastDesktopSnapshot.current=null;setDesktopId(event.target.value);setPage(1);}}>{desktopChoices.map(desktop=><option key={desktop.id} value={desktop.id}>{desktop.name}</option>)}</select></label>}
