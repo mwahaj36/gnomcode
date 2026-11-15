@@ -3347,7 +3347,27 @@ export function WorkspaceView() {
                   <aside className="sp-inspector" aria-label="Workspace tools">
                     <PaneResizer cssVar="--inspector-w" label="Resize tools panel" min={360} max={960} initial={560} direction={-1} />
                     <div className="sp-workspace-modal-head">
-                      <div className="sp-header-panel-toggles" role="tablist" aria-label="Inspector views">
+                      <div
+                        className="sp-header-panel-toggles"
+                        role="tablist"
+                        aria-label="Inspector views"
+                        onKeyDown={(event) => {
+                          const tabs = Array.from(
+                            event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+                          );
+                          const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+                          if (current === -1 || tabs.length === 0) return;
+                          let next = -1;
+                          if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+                          else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+                          else if (event.key === 'Home') next = 0;
+                          else if (event.key === 'End') next = tabs.length - 1;
+                          if (next === -1) return;
+                          event.preventDefault();
+                          tabs[next].focus();
+                          tabs[next].click();
+                        }}
+                      >
                         {(
                           [
                             ['files', 'Files'],
@@ -3363,6 +3383,7 @@ export function WorkspaceView() {
                             type="button"
                             role="tab"
                             aria-selected={sidePanel === tab}
+                            tabIndex={sidePanel === tab ? 0 : -1}
                             className={`btn-control${sidePanel === tab ? ' is-active' : ''}`}
                             onClick={() => {
                               if (tab === 'agent-terminal') {
