@@ -889,7 +889,7 @@ impl Database {
 pub(crate) fn heatmap_db(timestamps: &[&str]) -> Database {
     let mut db = Database::open_in_memory().expect("in-memory db");
     let project = Project::from_origin(
-        Some("https://github.com/mwahaj36/spawnt"),
+        Some("https://github.com/mwahaj36/gnomcode"),
         "/workspace/gnomcode",
         Some("main"),
     );
@@ -1028,7 +1028,7 @@ mod tests {
     fn usage_report_timeline_honors_explicit_from_ts_and_local_start_of_day() {
         let mut db = Database::open_in_memory().expect("in-memory db");
         let p = Project::from_origin(
-            Some("https://github.com/mwahaj36/spawnt"),
+            Some("https://github.com/mwahaj36/gnomcode"),
             "/workspace/gnomcode",
             Some("main"),
         );

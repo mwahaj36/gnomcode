@@ -307,7 +307,7 @@ mod tests {
     fn commit_batch_persists_and_queries_idempotently() {
         let mut db = Database::open_in_memory().expect("in-memory db");
         let p = Project::from_origin(
-            Some("https://github.com/mwahaj36/spawnt"),
+            Some("https://github.com/mwahaj36/gnomcode"),
             "/workspace/gnomcode",
             Some("main"),
         );

@@ -1035,7 +1035,7 @@ mod tests {
         let dot_git = repo_root.join(".git");
         fs::create_dir_all(&dot_git).expect("create .git dir");
 
-        let git_config = "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:mwahaj36/spawnt.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
+        let git_config = "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:mwahaj36/gnomcode.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
         fs::write(dot_git.join("config"), git_config).expect("write git config");
 
         // 1. Direct repo lookup
@@ -1056,7 +1056,7 @@ mod tests {
         );
         assert_eq!(
             remote.as_deref(),
-            Some("git@github.com:mwahaj36/spawnt.git")
+            Some("git@github.com:mwahaj36/gnomcode.git")
         );
 
         #[cfg(unix)]
@@ -1086,7 +1086,7 @@ mod tests {
         );
         assert_eq!(
             wt_remote.as_deref(),
-            Some("git@github.com:mwahaj36/spawnt.git")
+            Some("git@github.com:mwahaj36/gnomcode.git")
         );
     }
 }
