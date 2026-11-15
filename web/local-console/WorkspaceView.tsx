@@ -983,7 +983,15 @@ export function WorkspaceView() {
   const canLaunchAgent = Boolean(launchRepo.trim()) && !launchBusy && !(selectedInstalledAgent && !selectedInstalledAgent.installed);
 
   const connectAgentTerminal = useCallback((sessionId: string) => {
-    if (chatSocketRef.current || !sessionId || !chatTerminalRef.current) return;
+    if (!sessionId || !chatTerminalRef.current) return;
+    // Reopening the pane builds a fresh terminal, so any earlier stream is replaced rather
+    // than left to close later and strand the new one without a socket.
+    if (chatSocketRef.current) {
+      const previous = chatSocketRef.current;
+      chatSocketRef.current = null;
+      previous.onclose = null;
+      previous.close();
+    }
     const host = chatTerminalRef.current;
     host.replaceChildren();
     if (!window.Terminal || !window.FitAddon) {
@@ -1060,15 +1068,18 @@ export function WorkspaceView() {
       setSidePanel(null);
       return;
     }
+    // Opening the pane mounts the terminal host; the effect below attaches to it once it is
+    // on screen, which a callback here cannot rely on.
     setSidePanel('agent-terminal');
-    if (terminalStreamOpen) return;
     setTerminalStreamOpen(true);
-    // The pane mounts the terminal host first; two frames so its width is real before fit().
-    window.requestAnimationFrame(() =>
-      window.requestAnimationFrame(() => connectAgentTerminal(activeSessionId)),
-    );
   };
   toggleAgentTerminalRef.current = handleToggleAgentTerminal;
+
+  // The stream attaches only once the pane holding the terminal is actually mounted.
+  useEffect(() => {
+    if (sidePanel !== 'agent-terminal' || !activeSessionId) return;
+    connectAgentTerminal(activeSessionId);
+  }, [sidePanel, activeSessionId, connectAgentTerminal]);
 
   const interruptActiveSession = useCallback(async () => {
     const sessionId = activeSessionIdRef.current;
@@ -1267,8 +1278,10 @@ export function WorkspaceView() {
     const source = activeSessionId;
     if (!source || workspaceTerminalBusyRef.current) return;
     setSidePanel('shell');
-    // The screen element lives in the pane that just opened.
-    await new Promise((done) => window.requestAnimationFrame(() => done(null)));
+    // The screen element lives in the pane that just opened; wait for React to mount it.
+    for (let frame = 0; frame < 60 && !workspaceTerminalScreenRef.current; frame += 1) {
+      await new Promise((done) => window.requestAnimationFrame(() => done(null)));
+    }
     if (!workspaceTerminalScreenRef.current) return;
     workspaceTerminalBusyRef.current = true;
     try {
@@ -1380,10 +1393,15 @@ export function WorkspaceView() {
 
   useEffect(() => {
     setSidePanel(null);
+    // The pane that held the terminal is gone with the conversation it belonged to; leaving
+    // the flag set would make the next Agent terminal click open an empty box.
+    setTerminalStreamOpen(false);
+    closeAgentTerminal();
+    setWorkspaceTerminalOpen(false);
     setEditingQueueId(null);
     setEditingQueueText('');
     void loadQueue(activeSessionId);
-  }, [activeSessionId, loadQueue]);
+  }, [activeSessionId, closeAgentTerminal, loadQueue]);
 
   const sendPromptText = async (rawText: string, fromComposer: boolean) => {
     const sessionId = activeSessionId;

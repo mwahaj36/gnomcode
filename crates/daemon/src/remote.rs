@@ -1579,15 +1579,24 @@ pub(crate) fn conversation_sessions(
             .as_str()
             .is_none_or(|title| title.trim().is_empty() || title.eq_ignore_ascii_case("unknown"))
         {
+            let folder_name = |path: String| {
+                Path::new(&path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .filter(|name| name != "unknown" && !name.is_empty())
+            };
             let label = db
                 .get_session_focus_target(native)?
                 .and_then(|target| target.repo_root)
-                .and_then(|path| {
-                    Path::new(&path)
-                        .file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
+                .and_then(folder_name)
+                // A conversation Gnomcode launched always knows its folder, even with no
+                // transcript yet, so name it after that instead of "Saved conversation".
+                .or_else(|| {
+                    db.conversation_launch(&root)
+                        .ok()
+                        .flatten()
+                        .and_then(|launch| folder_name(launch.repo))
                 })
-                .filter(|name| name != "unknown")
                 .unwrap_or_else(|| "Saved conversation".into());
             row["title"] = json!(format!(
                 "{label} · {}",
@@ -2967,5 +2976,44 @@ mod tests {
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].id, "req-2");
         assert_eq!(pending[0].text, "follow up");
+    }
+}
+
+#[cfg(test)]
+mod launched_row_tests {
+    use super::*;
+
+    /// A session the person just launched must be listed at once, before the agent has
+    /// written any transcript Gnomcode could ingest.
+    #[test]
+    fn a_launched_host_is_listed_before_its_transcript_exists() {
+        let db = Database::open_in_memory().expect("database");
+        let repo = tempfile::tempdir().expect("repo");
+        let record = gnomcode_pty::SessionRecord {
+            session_id: "antigravity-1794729572462198900".into(),
+            agent: "antigravity".into(),
+            repo_path: repo.path().to_string_lossy().into_owned(),
+            model: None,
+            host_pid: std::process::id(),
+            child_pid: 0,
+            port: 1,
+            token: "test".into(),
+            started_at: chrono::Utc::now().to_rfc3339(),
+            native_id: Some("antigravity:d8216974-1c88-4fab-a4d5-24e637a59236".into()),
+        };
+        let rows = conversation_sessions(&db, &[], std::slice::from_ref(&record)).expect("rows");
+        let ids: Vec<&str> = rows.iter().filter_map(|row| row["id"].as_str()).collect();
+        assert!(ids.contains(&record.session_id.as_str()), "listed: {ids:?}");
+        let page = conversation_page(rows, &json!({}));
+        let listed: Vec<&str> = page["sessions"]
+            .as_array()
+            .expect("sessions")
+            .iter()
+            .filter_map(|row| row["id"].as_str())
+            .collect();
+        assert!(
+            listed.contains(&record.session_id.as_str()),
+            "page: {listed:?}"
+        );
     }
 }
