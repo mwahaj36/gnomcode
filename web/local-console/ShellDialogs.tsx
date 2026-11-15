@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchLocalJson } from './local-api';
-import { registerShellDialogs } from './shell-bus';
+import { isOnboardingPausedForAuth, registerShellDialogs } from './shell-bus';
 import { Onboarding, readOnboarding, type OnboardingState } from './Onboarding';
 
 
@@ -107,7 +107,15 @@ export function ShellDialogs() {
           </button>
         </div>
       </div>
-      <Onboarding open={tourOpen} initial={resume} onClose={() => setTourOpen(false)} />
+      <Onboarding
+        open={tourOpen}
+        initial={resume}
+        onClose={() => {
+          setTourOpen(false);
+          const saved = readOnboarding();
+          if (saved && !saved.finished && !isOnboardingPausedForAuth()) setTipOpen(true);
+        }}
+      />
       <dialog
         id="confirm-dialog"
         ref={confirmRef}

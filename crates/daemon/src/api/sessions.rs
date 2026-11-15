@@ -278,21 +278,25 @@ pub(super) async fn workspace_terminal_handler(
     headers: HeaderMap,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<impl IntoResponse, StatusCode> {
-    validate_auth(&headers, &state.bearer_token)?;
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    validate_auth(&headers, &state.bearer_token).map_err(|status| {
+        (
+            status,
+            Json(json!({"ok": false, "message": "Unauthorized."})),
+        )
+    })?;
     let _launch = WORKSPACE_TERMINAL_LAUNCH.lock().await;
     let hosted = gnomcode_pty::list_active_sessions();
-    let repo = if let Some(record) = hosted.iter().find(|record| record.session_id == id) {
-        record.repo_path.clone()
-    } else {
-        state
-            .db
-            .lock()
-            .await
-            .get_session_focus_target(&id)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .and_then(|target| target.repo_root)
-            .ok_or(StatusCode::NOT_FOUND)?
+    let repo = {
+        let db = state.db.lock().await;
+        crate::workspace_files::resolve_session_workspace(&db, &id)
+            .map(|path| path.to_string_lossy().into_owned())
+            .map_err(|message| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"ok": false, "message": message})),
+                )
+            })?
     };
     use sha2::Digest as _;
     let digest = sha2::Sha256::digest(format!("{id}:{repo}").as_bytes());
@@ -310,7 +314,12 @@ pub(super) async fn workspace_terminal_handler(
     let record =
         gnomcode_pty::launch_session(&session_id, "terminal", std::path::Path::new(&repo), None)
             .await
-            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+            .map_err(|err| {
+                (
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({"ok": false, "message": err.to_string()})),
+                )
+            })?;
     Ok(Json(record))
 }
 
@@ -1341,7 +1350,23 @@ mod tests {
             .header("Authorization", "Bearer prompt-token")
             .body(Body::empty())
             .expect("request");
-        let res = app.oneshot(agents_req).await.expect("response");
+        let res = app.clone().oneshot(agents_req).await.expect("response");
         assert_eq!(res.status(), StatusCode::OK);
+
+        let missing_terminal = Request::builder()
+            .method("POST")
+            .uri("/api/v1/sessions/nonexistent/terminal")
+            .header("Host", "127.0.0.1")
+            .header("Authorization", "Bearer prompt-token")
+            .body(Body::empty())
+            .expect("request");
+        let res = app.oneshot(missing_terminal).await.expect("response");
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json error");
+        assert_eq!(json["ok"], false);
+        assert!(json["message"].as_str().is_some_and(|m| !m.is_empty()));
     }
 }
