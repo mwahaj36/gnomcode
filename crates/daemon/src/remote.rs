@@ -1149,13 +1149,11 @@ pub(crate) fn conversation_chat(
     };
     let mut events = db.conversation_chat(id, limit, before)?;
     for event in &mut events {
-        if event.role == gnomcode_core::ChatRole::User
-            && let Some((_, message)) = event
-                .content
-                .strip_prefix("<spawnt_context>")
-                .and_then(|text| text.split_once("</spawnt_context>"))
-        {
-            event.content = message.trim_start().to_owned();
+        if event.role == gnomcode_core::ChatRole::User {
+            let shown = gnomcode_core::redact::clean_user_text(&event.content);
+            if shown.len() != event.content.len() {
+                event.content = shown.to_owned();
+            }
         }
     }
     Ok(events)
@@ -1184,12 +1182,9 @@ pub(crate) fn conversation_handoff_chat(
     if let Some(mut first) = db.conversation_first_user_event(id)?
         && !events.iter().any(|event| event.event_id == first.event_id)
     {
-        if let Some((_, message)) = first
-            .content
-            .strip_prefix("<spawnt_context>")
-            .and_then(|text| text.split_once("</spawnt_context>"))
-        {
-            first.content = message.trim_start().to_owned();
+        let shown = gnomcode_core::redact::clean_user_text(&first.content);
+        if shown.len() != first.content.len() {
+            first.content = shown.to_owned();
         }
         events.insert(0, first);
     }
