@@ -20,6 +20,9 @@ export interface LocalSessionSummary {
   header_limit?: unknown;
   delivery_capability?: string;
   project_name?: string;
+  surface_label?: string;
+  /** Id of the live PTY or protocol host Gnomcode runs for this conversation, if any. */
+  host_id?: string | null;
   last_event_at?: string;
   input_tokens?: number;
   output_tokens?: number;

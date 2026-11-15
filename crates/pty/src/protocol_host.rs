@@ -320,6 +320,7 @@ pub async fn run_protocol_host(
         stopping,
         resize: Arc::new(|_, _| {}),
         protocol: true,
+        native_id: None,
     })
     .await;
     driver.abort();
@@ -457,6 +458,13 @@ where
     let Some(remote_id) = remote_id else {
         return Err(Error::Process("agent returned no session id".to_owned()));
     };
+    // The agent just named its own conversation, so the daemon can bind this host to the
+    // ingested transcript exactly instead of guessing from the repository and start time.
+    crate::record_native_id(
+        &ctx.session_id,
+        &crate::compose_native_id(ctx.agent, &remote_id),
+    )
+    .await;
     term.emit(&format!(
         "[RUN] {} protocol session ready. Approvals appear in the Gnomcode console and phone.\r\n\r\n> ",
         if ctx.kind == Kind::Codex {

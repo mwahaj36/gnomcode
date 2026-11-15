@@ -22,6 +22,7 @@ pub mod remote;
 mod remote_trust;
 mod session_artifacts;
 mod session_changes;
+mod session_setup;
 pub mod sync;
 pub mod update;
 pub mod vendor_limits;
@@ -178,6 +179,7 @@ mod switch_tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         gnomcode_pty::save_session_record(&record).expect("host fixture");
         let mut db = gnomcode_store::Database::open_in_memory().expect("db");
@@ -284,6 +286,7 @@ mod switch_tests {
             port: 1,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         gnomcode_pty::save_session_record(&claude_record).expect("host fixture");
 
@@ -318,6 +321,7 @@ mod switch_tests {
             port: 2,
             token: "test".into(),
             started_at: now.to_rfc3339(),
+            native_id: None,
         };
         crate::remote::record_model_change(&db, &claude_record.session_id, &codex_record)
             .expect("record cross-provider switch without session row");

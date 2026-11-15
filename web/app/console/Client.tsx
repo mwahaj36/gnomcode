@@ -289,6 +289,12 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         if (!desktop.error) lastDesktopSnapshot.current = desktop.data?.live_snapshot || null;
         const snap = lastDesktopSnapshot.current;
         if (desktop.error) setViewError("Desktop snapshot unavailable. Last received data remains visible.");
+        else if (chosen && !lastDesktopSnapshot.current)
+          // The desktop is registered but has published nothing, which is what an empty page
+          // here always means: say so instead of showing a page of "Unknown".
+          setViewError(
+            `${chosen.name || "This desktop"} has not published a snapshot yet. Open Gnomcode on that computer and turn on "Share this desktop's snapshot with your account" in Settings.`,
+          );
         refreshed = !desktop.error;
         if (refreshed) setLastSuccessfulUpdate(new Date());
         const allSessions: SessionItem[] = [...(snap?.sessions || [])];

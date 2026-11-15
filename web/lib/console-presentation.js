@@ -82,7 +82,19 @@ const PROJECT_HELPER = 'Most recent first.';
 const FOLDER_ICON = '<svg class="sp-project-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.5h8.5A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>';
 const AGENT_NAMES = { 'claude-code': 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' };
 // Agents removed in 1.0 (E4) keep their stored rows; they show as unsupported.
-const agentLabel = id => AGENT_NAMES[id] || 'Unsupported agent';
+export const agentLabel = id => AGENT_NAMES[id] || 'Unsupported agent';
+// Wording for a held tool approval. Claude Code is held by a hook, so its own prompt stays
+// available; Codex and Antigravity protocol sessions have no other prompt and cancel the call.
+export function approvalCopy(agent) {
+  const name = AGENT_NAMES[agent === 'claude' ? 'claude-code' : agent === 'agy' ? 'antigravity' : agent] || 'The agent';
+  const native = name === 'Claude Code';
+  return {
+    agent: name,
+    unanswered: native ? 'If you do not answer, Claude asks in its own window.' : `If you do not answer, ${name} cancels this tool call.`,
+    unansweredPhone: native ? 'Then Claude asks on your laptop if you do not answer.' : `${name} cancels this tool call if you do not answer.`,
+    unreachable: native ? 'Could not reach your laptop. Claude will ask there instead.' : `Could not reach your laptop. ${name} will cancel this tool call.`,
+  };
+}
 const projectTime = project => { const time = Date.parse(project.last_active); return Number.isFinite(time) ? time : -Infinity; };
 
 /** The folder a project lives in, shortened for one line: home becomes ~, then at most the last three folders. */

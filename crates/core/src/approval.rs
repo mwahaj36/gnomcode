@@ -44,6 +44,54 @@ impl Decision {
     }
 }
 
+/// How far an allow reaches. Anything wider than one call is a standing grant for one
+/// session, held in memory only: it ends with the session or the daemon, whichever is first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scope {
+    /// This one tool call.
+    #[default]
+    Once,
+    /// Every later call of the same tool in this session.
+    Tool,
+    /// Every later tool call in this session.
+    Session,
+}
+
+impl Scope {
+    /// Parses `once`, `tool` and `session`.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "once" => Some(Self::Once),
+            "tool" => Some(Self::Tool),
+            "session" => Some(Self::Session),
+            _ => None,
+        }
+    }
+}
+
+/// Tool label of a request to widen the agent's own sandbox or permissions. A standing grant
+/// never answers it (SPEC invariant 7): the person decides each one.
+pub const ESCALATION_TOOL: &str = "Permissions";
+/// Most standing grants kept at once; the oldest is dropped first.
+pub const MAX_GRANTS: usize = 64;
+/// Longest a standing grant lasts when nothing reports that its session ended.
+pub const GRANT_SECS: u64 = 8 * 60 * 60;
+
+/// A standing allow the person gave for one session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Grant {
+    /// Agent slug.
+    pub agent: String,
+    /// Session the grant is limited to.
+    pub session_id: String,
+    /// The one tool it covers, or `None` for every tool.
+    pub tool: Option<String>,
+    /// Unix seconds when it lapses on its own.
+    pub expires_at: u64,
+}
+
 /// Where a request stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -139,6 +187,7 @@ pub enum Applied {
 #[derive(Debug, Default)]
 pub struct ApprovalBook {
     items: Vec<Approval>,
+    grants: Vec<Grant>,
 }
 
 impl ApprovalBook {
@@ -151,6 +200,7 @@ impl ApprovalBook {
         self.items.retain(|item| {
             item.state == State::Pending || now < item.expires_at + KEEP_DECIDED_SECS
         });
+        self.grants.retain(|grant| now < grant.expires_at);
     }
 
     /// Adds a pending request that stops waiting after `hold_secs`.
@@ -173,7 +223,7 @@ impl ApprovalBook {
         {
             return Err(CreateError::Rejected);
         }
-        let item = Approval {
+        let mut item = Approval {
             id: new.id.to_owned(),
             agent: bounded(new.agent, 32),
             session_id: bounded(new.session_id, 128),
@@ -185,8 +235,70 @@ impl ApprovalBook {
             state: State::Pending,
             decided_by: None,
         };
+        if self.granted(&item.session_id, &item.tool) {
+            // The person already allowed this for the session, at the console.
+            item.state = State::Allowed;
+            item.decided_by = Some(Decider::Console);
+            item.expires_at = now;
+        }
         self.items.push(item.clone());
         Ok(item)
+    }
+
+    /// Whether a standing grant covers `tool` in `session_id`.
+    #[must_use]
+    pub fn granted(&self, session_id: &str, tool: &str) -> bool {
+        tool != ESCALATION_TOOL
+            && self.grants.iter().any(|grant| {
+                grant.session_id == session_id
+                    && grant.tool.as_deref().is_none_or(|covered| covered == tool)
+            })
+    }
+
+    /// Turns an allowed request into a standing grant for its session. Returns the grant,
+    /// or `None` when the scope is one call, the request is unknown or not allowed, or it
+    /// asked to widen the agent's own permissions.
+    pub fn grant(&mut self, id: &str, scope: Scope, now: u64) -> Option<Grant> {
+        self.sweep(now);
+        let item = self
+            .items
+            .iter()
+            .find(|item| item.id == id && item.state == State::Allowed)?;
+        if item.tool == ESCALATION_TOOL {
+            return None;
+        }
+        let grant = Grant {
+            agent: item.agent.clone(),
+            session_id: item.session_id.clone(),
+            tool: match scope {
+                Scope::Once => return None,
+                Scope::Tool => Some(item.tool.clone()),
+                Scope::Session => None,
+            },
+            expires_at: now + GRANT_SECS,
+        };
+        // A whole-session grant replaces the per-tool ones; a repeat refreshes the old one.
+        self.grants.retain(|held| {
+            held.session_id != grant.session_id || (grant.tool.is_some() && held.tool != grant.tool)
+        });
+        if self.grants.len() >= MAX_GRANTS {
+            self.grants.remove(0);
+        }
+        self.grants.push(grant.clone());
+        Some(grant)
+    }
+
+    /// Ends every standing grant for a session. Returns whether any existed.
+    pub fn revoke(&mut self, session_id: &str) -> bool {
+        let before = self.grants.len();
+        self.grants.retain(|grant| grant.session_id != session_id);
+        self.grants.len() != before
+    }
+
+    /// Standing grants, oldest first.
+    pub fn grants(&mut self, now: u64) -> &[Grant] {
+        self.sweep(now);
+        &self.grants
     }
 
     /// Records a decision for the exact request id.
@@ -386,6 +498,66 @@ mod tests {
             Err(DecideError::Conflict)
         );
         assert_eq!(book.state("req-0001", 104), Some(State::Allowed));
+    }
+
+    #[test]
+    fn a_session_grant_answers_later_calls_only_in_its_own_session_and_scope() {
+        let mut book = book_with(100);
+        // Nothing is granted before the request itself is allowed.
+        assert_eq!(book.grant("req-0001", Scope::Session, 100), None);
+        book.decide("req-0001", Decision::Allow, Decider::Console, 101)
+            .unwrap();
+        assert_eq!(book.grant("req-0001", Scope::Once, 101), None);
+        let grant = book.grant("req-0001", Scope::Tool, 101).unwrap();
+        assert_eq!(grant.tool.as_deref(), Some("Bash"));
+
+        let same = book.create(&req("req-0002", "pwd"), 102, 90).unwrap();
+        assert_eq!(same.state, State::Allowed);
+        let mut other_tool = req("req-0003", "a.rs");
+        other_tool.tool = "Edit";
+        assert_eq!(
+            book.create(&other_tool, 102, 90).unwrap().state,
+            State::Pending
+        );
+        let mut other_session = req("req-0004", "ls");
+        other_session.session_id = "s2";
+        assert_eq!(
+            book.create(&other_session, 102, 90).unwrap().state,
+            State::Pending
+        );
+
+        // Widening to the whole session covers other tools, but never a permission request.
+        book.grant("req-0001", Scope::Session, 103).unwrap();
+        assert_eq!(book.grants(103).len(), 1);
+        let mut edit = req("req-0005", "b.rs");
+        edit.tool = "Edit";
+        assert_eq!(book.create(&edit, 104, 90).unwrap().state, State::Allowed);
+        let mut escalation = req("req-0006", "network access");
+        escalation.tool = ESCALATION_TOOL;
+        assert_eq!(
+            book.create(&escalation, 104, 90).unwrap().state,
+            State::Pending
+        );
+        book.decide("req-0006", Decision::Allow, Decider::Console, 105)
+            .unwrap();
+        assert_eq!(book.grant("req-0006", Scope::Session, 105), None);
+
+        // Revoking, or the time limit, puts the person back in charge.
+        assert!(book.revoke("s1"));
+        assert_eq!(
+            book.create(&req("req-0007", "ls"), 106, 90).unwrap().state,
+            State::Pending
+        );
+        book.decide("req-0007", Decision::Allow, Decider::Console, 107)
+            .unwrap();
+        book.grant("req-0007", Scope::Session, 107).unwrap();
+        let later = 107 + GRANT_SECS;
+        assert_eq!(
+            book.create(&req("req-0008", "ls"), later, 90)
+                .unwrap()
+                .state,
+            State::Pending
+        );
     }
 
     #[test]

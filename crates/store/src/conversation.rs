@@ -23,6 +23,40 @@ impl Database {
         rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
     }
 
+    /// Removes a conversation from Gnomcode's lists for good: every identity it has (the
+    /// conversation, its hosts and its native sessions) is marked hidden. The agent's own
+    /// history files are never touched.
+    ///
+    /// # Errors
+    /// Returns an error if the markers cannot be saved.
+    pub fn hide_conversation(&self, id: &str) -> Result<(), Error> {
+        let root = self.conversation_id(id)?;
+        let tx = self.conn.unchecked_transaction()?;
+        let now = chrono::Utc::now().timestamp();
+        tx.execute(
+            "INSERT OR IGNORE INTO hidden_conversation(id,hidden_at) VALUES (?1,?3),(?2,?3)",
+            params![id, root, now],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO hidden_conversation(id,hidden_at)
+             SELECT host_id,?2 FROM conversation_member WHERE conversation_id=?1
+             UNION SELECT native_id,?2 FROM conversation_member WHERE conversation_id=?1 AND native_id IS NOT NULL",
+            params![root, now],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Identities of every conversation the person deleted from Gnomcode.
+    ///
+    /// # Errors
+    /// Returns an error if the markers cannot be read.
+    pub fn hidden_conversations(&self) -> Result<std::collections::HashSet<String>, Error> {
+        let mut statement = self.conn.prepare("SELECT id FROM hidden_conversation")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        rows.collect::<Result<_, _>>().map_err(Error::from)
+    }
+
     /// Saves launch metadata locally for restart and model selection.
     ///
     /// # Errors
@@ -340,6 +374,27 @@ mod tests {
             status: None,
         })
         .expect("message");
+    }
+
+    #[test]
+    fn a_deleted_conversation_is_hidden_under_every_identity_it_has() {
+        let db = Database::open_in_memory().expect("database");
+        db.bind_conversation_host("host-a", "codex:native-a")
+            .expect("bind");
+        db.continue_conversation("host-a", "host-b")
+            .expect("continue");
+        db.bind_conversation_host("other-host", "codex:other")
+            .expect("bind other");
+        assert!(db.hidden_conversations().expect("none").is_empty());
+        // Deleting by the native id hides the whole conversation, including a later host.
+        db.hide_conversation("codex:native-a").expect("hide");
+        let hidden = db.hidden_conversations().expect("hidden");
+        for id in ["host-a", "host-b", "codex:native-a"] {
+            assert!(hidden.contains(id), "{id}");
+        }
+        assert!(!hidden.contains("other-host") && !hidden.contains("codex:other"));
+        db.hide_conversation("codex:native-a")
+            .expect("repeat is harmless");
     }
 
     #[test]

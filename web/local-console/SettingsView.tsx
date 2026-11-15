@@ -228,6 +228,10 @@ export function SettingsView() {
 
   // Account, Data, Updates, Guide state
   const [cloudSyncStatus, setCloudSyncStatus] = useState('Checking desktop publication status...');
+  // Both are on unless the person turns them off here (E3, ADR 0049).
+  const [features, setFeatures] = useState<{ scheduled_messages_enabled: boolean; account_sync_enabled: boolean } | null>(
+    null,
+  );
   const [lastUpdatedText, setLastUpdatedText] = useState('Last successful update: not yet');
   const [dataBusy, setDataBusy] = useState(false);
   const [updateStatusText, setUpdateStatusText] = useState('Checking update status...');
@@ -294,6 +298,28 @@ export function SettingsView() {
       );
     }
   }, []);
+
+  const loadFeatures = useCallback(async () => {
+    try {
+      setFeatures(
+        await fetchLocalJson<{ scheduled_messages_enabled: boolean; account_sync_enabled: boolean }>(
+          '/api/v1/settings/features',
+        ),
+      );
+    } catch {
+      setFeatures(null);
+    }
+  }, []);
+
+  const saveFeature = async (key: 'scheduled_messages_enabled' | 'account_sync_enabled', on: boolean) => {
+    const next = { ...(features ?? { scheduled_messages_enabled: true, account_sync_enabled: true }), [key]: on };
+    setFeatures(next);
+    try {
+      await fetchLocalMutation('/api/v1/settings/features', { method: 'POST', body: next });
+    } catch {
+      await loadFeatures();
+    }
+  };
 
   const loadCoreSettings = useCallback(async () => {
     void fetchLocalJson<{ version?: string }>('/health')
@@ -406,8 +432,14 @@ export function SettingsView() {
   }, []);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadProviders(), loadRemote(), loadProData(), loadCoreSettings()]);
-  }, [loadCoreSettings, loadProData, loadProviders, loadRemote]);
+    await Promise.all([
+      loadProviders(),
+      loadRemote(),
+      loadProData(),
+      loadCoreSettings(),
+      loadFeatures(),
+    ]);
+  }, [loadCoreSettings, loadFeatures, loadProData, loadProviders, loadRemote]);
 
   useEffect(() => {
     void refreshAll();
@@ -668,6 +700,43 @@ export function SettingsView() {
           <button className="btn-control" type="button" onClick={() => navigateTo('auth')}>
             Manage account
           </button>
+        </div>
+        <div className="sp-setting-row">
+          <div>
+            <p className="sp-setting-label">Share this desktop's snapshot with your account</p>
+            <p className="sp-setting-desc">
+              Publishes session names, project names and usage totals so the web console can show this desktop while you
+              are away. Chat content is never published. Off means the web console shows nothing for this desktop.
+            </p>
+          </div>
+          <label className="sp-notify-toggle" htmlFor="settings-account-sync">
+            <input
+              id="settings-account-sync"
+              type="checkbox"
+              checked={features?.account_sync_enabled ?? true}
+              disabled={!features}
+              onChange={(event) => void saveFeature('account_sync_enabled', event.target.checked)}
+            />
+            <span>Publish snapshot</span>
+          </label>
+        </div>
+        <div className="sp-setting-row">
+          <div>
+            <p className="sp-setting-label">Scheduled messages</p>
+            <p className="sp-setting-desc">
+              Lets you queue a message for a later time. It is sent from this computer while Gnomcode is running.
+            </p>
+          </div>
+          <label className="sp-notify-toggle" htmlFor="settings-scheduled-messages">
+            <input
+              id="settings-scheduled-messages"
+              type="checkbox"
+              checked={features?.scheduled_messages_enabled ?? true}
+              disabled={!features}
+              onChange={(event) => void saveFeature('scheduled_messages_enabled', event.target.checked)}
+            />
+            <span>Send later</span>
+          </label>
         </div>
         {accountState?.paired ? (
           <div className="sp-setting-row sp-danger-zone">

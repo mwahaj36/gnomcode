@@ -159,6 +159,36 @@ pub struct SessionRecord {
     pub token: String,
     /// Timestamp when started (RFC3339).
     pub started_at: String,
+    /// Composite native session ID (`"<agent>:<id>"`) when the host knows exactly which agent
+    /// conversation it owns: a resumed session, or the ID a protocol agent returned at start-up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_id: Option<String>,
+}
+
+/// Composite native session ID (`"<agent>:<id>"`) as ingestion stores it.
+#[must_use]
+pub fn compose_native_id(agent: &str, id: &str) -> String {
+    let agent = match agent {
+        "claude" => "claude-code",
+        "agy" => "antigravity",
+        other => other,
+    };
+    format!("{agent}:{id}")
+}
+
+/// Records the native conversation a running host owns, once the agent has reported it.
+/// The host writes its record just after binding its listener, so this waits briefly for it.
+pub(crate) async fn record_native_id(session_id: &str, native_id: &str) {
+    for _ in 0..40 {
+        if let Ok(mut record) = load_session_record(session_id) {
+            record.native_id = Some(native_id.to_owned());
+            if let Err(error) = save_session_record(&record) {
+                tracing::warn!(%error, "could not record the native session of a hosted agent");
+            }
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 /// Directory where active session records are stored.
@@ -616,6 +646,7 @@ pub async fn run_pty_host_resuming(
         stopping,
         resize,
         protocol: false,
+        native_id: resume_id.map(|id| compose_native_id(agent, id)),
     })
     .await
 }
@@ -635,6 +666,8 @@ pub(crate) struct HostParts<'a> {
     pub(crate) resize: Arc<dyn Fn(u16, u16) + Send + Sync>,
     /// Protocol hosts have no terminal screen, so the PTY readiness checks do not apply.
     pub(crate) protocol: bool,
+    /// Composite native session ID already known at start-up (a resumed session).
+    pub(crate) native_id: Option<String>,
 }
 
 /// Binds the authenticated loopback listener, records the session and serves until the child exits.
@@ -652,6 +685,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
         stopping,
         resize,
         protocol,
+        native_id,
     } = parts;
     // Bind loopback HTTP/WebSocket listener
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -668,6 +702,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
         port,
         token: token.clone(),
         started_at: chrono::Utc::now().to_rfc3339(),
+        native_id,
     };
     save_session_record(&record)?;
 
@@ -693,6 +728,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
             "/confirm-model-switch",
             post(host_confirm_model_switch_handler),
         )
+        .route("/confirm-trust", post(host_confirm_trust_handler))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .route("/stop", post(host_stop_handler))
         .with_state(state);
@@ -751,10 +787,18 @@ async fn host_health_handler(
     if auth != Some(&state.token) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    let setup = if state.protocol {
+        None
+    } else {
+        state.scrollback.lock().ok().and_then(|output| {
+            setup_blocker_from_rows(&state.agent, &output.screen_rows(), output.len())
+        })
+    };
     Json(serde_json::json!({
         "ok": true,
         "session_id": state.session_id,
         "child_pid": state.child_pid,
+        "setup": setup,
     }))
     .into_response()
 }
@@ -807,15 +851,37 @@ fn last_composer(text: &str) -> Option<usize> {
     found
 }
 
-/// True while the agent shows a startup, trust, login or choice screen, or has not yet
-/// shown its normal input prompt. Chat input must wait; it is never answered for the user.
-///
-/// Matching is per agent on the recent rendered screen, and the latest marker wins. The
-/// strings for agy, Codex and Claude Code were seen live (Claude Code v2.1.322, see
-/// `fixtures/claude-code/`).
-fn startup_needs_setup_from_rows(agent: &str, rows: &[String], bytes_len: usize) -> bool {
-    let (blockers, ready, require_ready): (&[&str], &[&str], bool) = match agent {
-        "codex" => (&["hooks are new or changed"], &["? for shortcuts"], false),
+/// A screen that keeps a hosted agent from accepting chat input until a person answers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SetupBlocker {
+    /// The agent asks whether to trust the folder.
+    TrustFolder,
+    /// Any other login, choice or confirmation screen; only the terminal can answer it.
+    Setup,
+}
+
+/// The question each agent asks before first working in a folder (lower-cased screen text).
+fn trust_marks(agent: &str) -> &'static [&'static str] {
+    match agent {
+        "claude" | "claude-code" => &["yes, i trust this folder"],
+        "codex" => &["do you trust the contents of this directory"],
+        _ => &["do you trust the contents of this project?"],
+    }
+}
+
+/// Start-up screen markers per agent: blockers, ready prompts, and whether a ready prompt
+/// must have been seen before input is accepted.
+fn setup_marks(agent: &str) -> (&'static [&'static str], &'static [&'static str], bool) {
+    match agent {
+        "codex" => (
+            &[
+                "hooks are new or changed",
+                "do you trust the contents of this directory",
+            ],
+            &["? for shortcuts"],
+            false,
+        ),
         "claude" | "claude-code" => (
             &[
                 "quick safety check",
@@ -844,18 +910,77 @@ fn startup_needs_setup_from_rows(agent: &str, rows: &[String], bytes_len: usize)
             &["? for shortcuts"],
             false,
         ),
+    }
+}
+
+/// Position of the agent's last normal input prompt on the rendered screen text.
+fn last_ready(agent: &str, text: &str) -> Option<usize> {
+    let composer = if matches!(agent, "claude" | "claude-code") {
+        last_composer(text)
+    } else {
+        None
     };
-    let claude = matches!(agent, "claude" | "claude-code");
-    let marks = |text: &str| {
-        let composer = if claude { last_composer(text) } else { None };
-        last_of(text, ready).max(composer)
-    };
+    last_of(text, setup_marks(agent).1).max(composer)
+}
+
+/// True while the agent shows a startup, trust, login or choice screen, or has not yet
+/// shown its normal input prompt. Chat input must wait: Gnomcode never answers such a screen
+/// by itself. The person answers in the terminal, or confirms folder trust with one explicit
+/// click ([`confirm_trust`]).
+///
+/// Matching is per agent on the recent rendered screen, and the latest marker wins. The
+/// strings for agy, Codex and Claude Code were seen live (Claude Code v2.1.322, see
+/// `fixtures/claude-code/`).
+fn startup_needs_setup_from_rows(agent: &str, rows: &[String], bytes_len: usize) -> bool {
+    let (blockers, _, require_ready) = setup_marks(agent);
     let recent = screen_text_from_rows(rows);
     if let Some(blocked) = last_of(&recent, blockers) {
-        return marks(&recent).is_none_or(|ready| ready < blocked);
+        return last_ready(agent, &recent).is_none_or(|ready| ready < blocked);
     }
     // Once the ring wraps, the startup frames are gone and only blockers can be judged.
-    require_ready && bytes_len < SCROLLBACK_BYTES && marks(&recent).is_none()
+    require_ready && bytes_len < SCROLLBACK_BYTES && last_ready(agent, &recent).is_none()
+}
+
+/// True when a selection marker sits directly before a "yes" option at or after `from`.
+fn affirmative_selected(text: &str, from: usize) -> bool {
+    text.char_indices()
+        .filter(|(at, mark)| *at >= from && matches!(mark, '❯' | '›' | '>'))
+        .any(|(at, mark)| {
+            let rest = text[at + mark.len_utf8()..].trim_start();
+            let rest = rest.strip_prefix("1.").map_or(rest, str::trim_start);
+            rest.starts_with("yes")
+        })
+}
+
+/// The screen a person has to answer before the agent takes chat input, if one is showing.
+/// A normal start-up that simply has not reached its prompt yet reports nothing.
+fn setup_blocker_from_rows(agent: &str, rows: &[String], bytes_len: usize) -> Option<SetupBlocker> {
+    if !startup_needs_setup_from_rows(agent, rows, bytes_len) {
+        return None;
+    }
+    let recent = screen_text_from_rows(rows);
+    let blocked = last_of(&recent, setup_marks(agent).0)?;
+    // The trust question must be the screen showing now, not one already answered.
+    let trust = last_of(&recent, trust_marks(agent)).filter(|trust| {
+        last_ready(agent, &recent).is_none_or(|ready| ready < *trust)
+            && !recent[blocked..].contains("switch model?")
+    });
+    Some(if trust.is_some() {
+        SetupBlocker::TrustFolder
+    } else {
+        SetupBlocker::Setup
+    })
+}
+
+/// Whether the trust question is showing, and whether its "yes" answer is the highlighted one.
+fn trust_prompt_state(agent: &str, rows: &[String], bytes_len: usize) -> Option<bool> {
+    (setup_blocker_from_rows(agent, rows, bytes_len) == Some(SetupBlocker::TrustFolder)).then(
+        || {
+            let recent = screen_text_from_rows(rows);
+            let from = last_of(&recent, trust_marks(agent)).map_or(0, |at| at.saturating_sub(240));
+            affirmative_selected(&recent, from)
+        },
+    )
 }
 
 #[cfg(test)]
@@ -1022,11 +1147,15 @@ fn authorize_loopback(headers: &HeaderMap, expected_token: &str) -> Result<(), S
 }
 
 async fn send_enter_with_ack(state: &HostState) -> StatusCode {
+    send_keys_with_ack(state, b"\r").await
+}
+
+async fn send_keys_with_ack(state: &HostState, keys: &[u8]) -> StatusCode {
     let (written, acknowledged) = tokio::sync::oneshot::channel();
     if state
         .input_tx
         .send(PtyInput {
-            bytes: b"\r".to_vec(),
+            bytes: keys.to_vec(),
             written: Some(written),
         })
         .is_err()
@@ -1094,6 +1223,39 @@ async fn host_confirm_model_switch_handler(
         return StatusCode::NO_CONTENT;
     }
     send_enter_with_ack(&state).await
+}
+
+/// Answers the folder-trust question for one explicit click by the person; never on
+/// Gnomcode's initiative. Claude Code highlights "No, exit" first, so this moves the
+/// highlight and presses Enter only once the screen shows "yes" as the selected answer.
+async fn host_confirm_trust_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+) -> StatusCode {
+    if let Err(status) = authorize_loopback(&headers, &state.token) {
+        return status;
+    }
+    if state.protocol {
+        return StatusCode::CONFLICT;
+    }
+    for _ in 0..4 {
+        let prompt = state.scrollback.lock().ok().and_then(|output| {
+            trust_prompt_state(&state.agent, &output.screen_rows(), output.len())
+        });
+        match prompt {
+            None => return StatusCode::CONFLICT,
+            Some(true) => return send_enter_with_ack(&state).await,
+            Some(false) => {
+                // Down arrow, then let the agent redraw before reading the screen again.
+                let moved = send_keys_with_ack(&state, b"\x1b[B").await;
+                if moved != StatusCode::OK {
+                    return moved;
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        }
+    }
+    StatusCode::CONFLICT
 }
 
 async fn host_stop_handler(
@@ -1414,6 +1576,49 @@ async fn confirm_claude_model_switch(record: &SessionRecord) {
     }
 }
 
+fn host_client() -> Result<reqwest::Client, Error> {
+    reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(|error| Error::Process(error.to_string()))
+}
+
+/// The setup screen a hosted agent is waiting on, if any (`None` also when the host cannot
+/// be reached: an unknown state is never shown as a trust question).
+pub async fn setup_blocker(record: &SessionRecord) -> Option<SetupBlocker> {
+    let health: serde_json::Value = host_client()
+        .ok()?
+        .get(format!("http://127.0.0.1:{}/health", record.port))
+        .bearer_auth(&record.token)
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    serde_json::from_value(health.get("setup")?.clone()).ok()
+}
+
+/// Confirms the agent's folder-trust question for the person who just clicked "Trust folder".
+/// `Ok(false)` when that question is not (or no longer) the screen showing.
+///
+/// # Errors
+/// Returns [`Error`] if the host cannot be reached or rejects authentication.
+pub async fn confirm_trust(record: &SessionRecord) -> Result<bool, Error> {
+    let response = host_client()?
+        .post(format!("http://127.0.0.1:{}/confirm-trust", record.port))
+        .bearer_auth(&record.token)
+        .send()
+        .await
+        .map_err(|error| Error::Process(error.to_string()))?;
+    match response.status() {
+        StatusCode::OK => Ok(true),
+        StatusCode::CONFLICT => Ok(false),
+        other => Err(Error::Process(format!("confirm-trust status {other}"))),
+    }
+}
+
 /// Queues terminal input through an authenticated endpoint independently of terminal output.
 ///
 /// # Errors
@@ -1554,6 +1759,47 @@ mod tests {
         include_bytes!("../../../fixtures/claude-code/v2.1.322/trust-dialog.pty");
     const CLAUDE_READY: &[u8] =
         include_bytes!("../../../fixtures/claude-code/v2.1.322/ready-composer.pty");
+
+    fn blocker(agent: &str, bytes: &[u8]) -> Option<SetupBlocker> {
+        setup_blocker_from_rows(agent, &render_screen_rows(bytes), bytes.len())
+    }
+
+    /// Issue 353: the trust question is reported so the console can offer one explicit click,
+    /// and only while "yes" is the highlighted answer that a bare Enter would pick.
+    #[test]
+    fn folder_trust_is_reported_only_while_yes_is_the_highlighted_answer() {
+        assert_eq!(
+            blocker("claude-code", CLAUDE_TRUST),
+            Some(SetupBlocker::TrustFolder)
+        );
+        assert_eq!(blocker("claude-code", CLAUDE_READY), None);
+        assert_eq!(blocker("claude", b""), None, "plain start-up is no blocker");
+        let agy = b"Do you trust the contents of this project?\r\n> Yes, I trust this folder\r\n  No, exit";
+        assert_eq!(blocker("antigravity", agy), Some(SetupBlocker::TrustFolder));
+        let trust = |agent: &str, bytes: &[u8]| {
+            trust_prompt_state(agent, &render_screen_rows(bytes), bytes.len())
+        };
+        assert_eq!(trust("antigravity", agy), Some(true));
+        // Claude Code 2.1.322 highlights "No, exit" first: Enter there would quit the agent.
+        assert_eq!(trust("claude-code", CLAUDE_TRUST), Some(false));
+        let moved = b"Quick safety check\r\n   No, exit\r\n > Yes, I trust this folder\r\n Enter to confirm";
+        assert_eq!(trust("claude-code", moved), Some(true));
+        assert_eq!(trust("claude-code", CLAUDE_READY), None);
+        let codex = "Do you trust the contents of this directory?\r\n\u{203a} 1. Yes, continue\r\n  2. No, quit";
+        assert_eq!(
+            blocker("codex", codex.as_bytes()),
+            Some(SetupBlocker::TrustFolder)
+        );
+        assert_eq!(
+            blocker("claude", b"Select login method:\r\n> 1. Claude account"),
+            Some(SetupBlocker::Setup),
+            "a login screen is never answered by the trust button"
+        );
+        assert_eq!(
+            blocker("codex", b"? for shortcuts\r\n2 hooks are new or changed."),
+            Some(SetupBlocker::Setup)
+        );
+    }
 
     #[test]
     fn claude_trust_dialog_holds_chat_until_the_composer_returns() {
@@ -1782,6 +2028,7 @@ mod tests {
             port,
             token: "input-test".into(),
             started_at: String::new(),
+            native_id: None,
         };
         let pending_record = record.clone();
         let pending = tokio::spawn(async move { send_input(&pending_record, b"hello\r").await });
@@ -1903,6 +2150,7 @@ mod tests {
             port: 0,
             token: String::new(),
             started_at: String::new(),
+            native_id: None,
         };
         assert!(save_session_record(&record).is_err());
         for id in [
@@ -1938,6 +2186,7 @@ mod tests {
             port,
             token: "test".to_owned(),
             started_at: String::new(),
+            native_id: None,
         };
         assert!(send_stop(&record).await.is_err());
     }
@@ -1960,6 +2209,7 @@ mod tests {
             port,
             token: "wrong".to_owned(),
             started_at: String::new(),
+            native_id: None,
         };
         assert!(send_stop(&record).await.is_err());
         server.abort();
@@ -1976,6 +2226,7 @@ mod tests {
             port: 1,
             token: "t".into(),
             started_at: String::new(),
+            native_id: None,
         }
     }
 

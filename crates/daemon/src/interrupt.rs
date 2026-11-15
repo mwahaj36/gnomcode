@@ -198,6 +198,7 @@ mod tests {
             port,
             token: "interrupt-host-token".into(),
             started_at: (now - chrono::Duration::seconds(1)).to_rfc3339(),
+            native_id: None,
         };
         gnomcode_pty::save_session_record(&record).expect("host record");
         let project = Project::from_origin(None, &record.repo_path, None);

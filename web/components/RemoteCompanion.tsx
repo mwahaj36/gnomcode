@@ -1,6 +1,6 @@
 'use client';
 
-import { sessionStateLabel } from "../lib/console-presentation.js";
+import { approvalCopy, sessionStateLabel } from "../lib/console-presentation.js";
 import { useEffect, useRef, useState } from 'react';
 import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
 import DesktopDevices from './DesktopDevices';
@@ -18,7 +18,8 @@ type FolderListing = {path:string; parent:string | null; roots:string[]; folders
 type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
-type Reply = { name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type SetupStatus = {session_id:string;blocker:'trust_folder'|'setup';agent:string;folder:string};
+type Reply = { blocker?:'trust_folder'|'setup'|null; folder?:string; agent?:string; name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 const REMOTE_DRAFTS_KEY = 'gnomcode-remote-drafts';
 function loadRemoteDrafts(): Map<string, string> {
@@ -98,6 +99,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [automationNotices,setAutomationNotices]=useState<AutomationNotice[]>([]);
   const [schedulePending,setSchedulePending]=useState(false);
   const [approvals,setApprovals]=useState<PendingApproval[]>([]);
+  const [setup,setSetup]=useState<SetupStatus|null>(null);
   const pendingSchedule=useRef<{id:string;session:string;text:string}|null>(null);
   const scheduleTimeout=useRef<ReturnType<typeof setTimeout>|null>(null);
   const [modelProviders,setModelProviders]=useState<ProviderCatalog[]>([]);
@@ -515,6 +517,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       void requestSessions().catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN)setError('Session refresh failed. Check the desktop connection and reconnect.');});
       if (selectedRef.current && !loadingHistory.current) loadChat(selectedRef.current);
       if(selectedRef.current)void send({type:'schedules',session_id:selectedRef.current}).catch(()=>{});
+      if(selectedRef.current)void send({type:'setup',session_id:selectedRef.current}).catch(()=>{});
       void send({type:'notices'}).catch(()=>{});
       void send({type:'approvals'}).catch(()=>{});
     }, 2000);
@@ -523,8 +526,9 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
 
   // Decisions are sent for one exact request id; the desktop decides whether it still applies.
   function decideApproval(id:string,decision:'approve'|'deny'){
+    const agent=approvals.find(item=>item.id===id)?.agent ?? 'claude-code';
     setApprovals(current=>current.filter(item=>item.id!==id));
-    void send({type:'approval',id,decision}).catch(()=>{setError('Could not reach your laptop. Claude will ask there instead.');});
+    void send({type:'approval',id,decision}).catch(()=>{setError(approvalCopy(agent).unreachable);});
   }
 
   async function handle(reply: Reply, epoch:number) {
@@ -542,6 +546,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       }
     }
     else if(reply.type==='approvals'){setApprovals(Array.isArray(reply.items)?reply.items:[]);}
+    else if(reply.type==='setup'){if(reply.session_id===selectedRef.current)setSetup(reply.blocker?{session_id:reply.session_id||'',blocker:reply.blocker,agent:reply.agent||'The agent',folder:reply.folder||''}:null);}
+    else if(reply.type==='trust_folder_ack'){setSetup(null);setNotice('Folder trusted. Your messages can go through now.');}
     else if(reply.type==='approval_ack'){setNotice(reply.decision==='deny'?'Denied.':'Approved once.');void send({type:'approvals'}).catch(()=>{});}
     else if(reply.type==='routing'){setRouting(reply.policy || 'ask_first');}
     else if(reply.type==='schedule_ack') {
@@ -946,9 +952,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       </aside>
       <div className="remote-conversation">
         {approvals.length>0 && <section className="sp-approvals" aria-label="Waiting for your approval">{approvals.map(item=><article key={item.id} className="sp-approval">
-          <div className="sp-approval-body"><p className="sp-approval-title">{item.agent==='claude-code'?'Claude Code':item.agent} wants to run <strong>{item.tool}</strong></p>{item.summary && <code className="sp-approval-summary">{item.summary}</code>}<p className="sp-approval-meta">Then Claude asks on your laptop if you do not answer.</p></div>
+          <div className="sp-approval-body"><p className="sp-approval-title">{approvalCopy(item.agent).agent} wants to run <strong>{item.tool}</strong></p>{item.summary && <code className="sp-approval-summary">{item.summary}</code>}<p className="sp-approval-meta">{approvalCopy(item.agent).unansweredPhone}</p></div>
           <div className="sp-approval-actions"><button type="button" disabled={!connected} aria-label={`Deny ${item.tool}`} onClick={()=>decideApproval(item.id,'deny')}>Deny</button><button type="button" disabled={!connected} aria-label={`Approve ${item.tool} once`} onClick={()=>decideApproval(item.id,'approve')}>Approve once</button></div>
         </article>)}</section>}
+        {setup && setup.session_id===selected && <section className="sp-approvals" aria-label="Agent setup needed"><article className="sp-approval">
+          <div className="sp-approval-body"><p className="sp-approval-title">{setup.blocker==='trust_folder'?`${setup.agent} asks whether to trust this folder`:`${setup.agent} is waiting on a setup step`}</p>{setup.blocker==='trust_folder' && setup.folder && <code className="sp-approval-summary">{setup.folder}</code>}<p className="sp-approval-meta">{setup.blocker==='trust_folder'?'Your messages wait until you answer. Trust only folders whose contents you know.':'Answer it in the agent terminal on your laptop. Your messages wait until then.'}</p></div>
+          {setup.blocker==='trust_folder' && <div className="sp-approval-actions"><button type="button" disabled={!connected} onClick={()=>{void send({type:'trust_folder',session_id:setup.session_id}).catch(()=>{setError('Could not reach your laptop. Answer in the agent terminal there.');});}}>Trust folder</button></div>}
+        </article></section>}
         {selected ? <>
         <div className="sp-remote-tools"><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void browseRepoFiles('')}>Files</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={() => void loadChanges()}>Changes</button><button type="button" className="sp-remote-tool-btn" disabled={!connected} onClick={()=>setArtifactsPanel(true)}>Artifacts</button></div>
         {(active?.worktree || active?.worktree_branch || active?.worktree_path) && <div className="sp-worktree-bar" role="region" aria-label="Session git worktree">

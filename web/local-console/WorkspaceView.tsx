@@ -41,8 +41,10 @@ import {
   type WorktreeDiffData,
 } from '../lib/worktree-presentation.mjs';
 import { collapseChatList, toggleChatList } from './chat-list';
+import { agentLabel } from '../lib/console-presentation.js';
 import { PaneResizer } from './pane-resizer';
 import { markWorkspaceReady, navigateTo } from './shell-bus';
+import { SetupPrompt } from './SetupPrompt';
 import {
   fetchLocalJson,
   fetchLocalMutation,
@@ -163,6 +165,19 @@ function createUuid(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * The automation endpoint answers HTTP 200 even when it refuses a request, with
+ * `{ type: 'error', message }`. Treat that as the failure it is, so a refused schedule is
+ * never reported as saved.
+ */
+async function automationCall<T = unknown>(options: { method: 'POST'; body: unknown }): Promise<T> {
+  const reply = await fetchLocalMutation<T & { type?: string; message?: string }>('/api/v1/automation', options);
+  if (reply && reply.type === 'error') {
+    throw new Error(reply.message || 'The request was refused.');
+  }
+  return reply;
+}
+
 function buildPtySocketUrl(sessionId: string): string {
   const url = new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/pty`, window.location.href);
   url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -274,7 +289,8 @@ export function WorkspaceView() {
   const [resumeBusy, setResumeBusy] = useState(false);
   const [continueHereBusy, setContinueHereBusy] = useState(false);
   // 'automation' is Workspace-only; the other panels belong to SessionTools.
-  const [sidePanel, setSidePanel] = useState<WorkspaceSidePanel | 'automation' | null>(null);
+  const [sidePanel, setSidePanel] =
+    useState<WorkspaceSidePanel | 'automation' | 'agent-terminal' | 'shell' | null>(null);
   const sidePanelRef = useRef(sidePanel);
   sidePanelRef.current = sidePanel;
   // Overview card beside the conversation; a per-viewer layout preference. Narrow windows start with it
@@ -323,6 +339,8 @@ export function WorkspaceView() {
   const [automationNotices, setAutomationNotices] = useState<AutomationNotice[]>([]);
   const [scheduleTime, setScheduleTime] = useState('');
   const [scheduleStatus, setScheduleStatus] = useState('');
+  // Scheduled messages are an opt-in feature (off until the person turns them on).
+  const [schedulingEnabled, setSchedulingEnabled] = useState<boolean | null>(null);
   const [schedulingBusy, setSchedulingBusy] = useState(false);
 
   const sessionListRef = useRef<HTMLDivElement | null>(null);
@@ -365,8 +383,13 @@ export function WorkspaceView() {
   }, [activeLive?.state]);
   const activityMarkup = renderActivityIndicator(activeLive, activeSession?.turn_started_at, liveTick);
   const activeHosted = useMemo(
-    () => hostedSessions.find((item) => item.session_id === activeSessionId) ?? null,
-    [hostedSessions, activeSessionId],
+    () =>
+      hostedSessions.find((item) => item.session_id === activeSessionId) ??
+      // A conversation is usually selected by its agent-native id, while the host keeps the
+      // id Gnomcode launched it under; the row carries the link between the two.
+      hostedSessions.find((item) => item.session_id === activeSession?.host_id) ??
+      null,
+    [hostedSessions, activeSessionId, activeSession?.host_id],
   );
 
   const toggleChatSidebar = toggleChatList;
@@ -441,20 +464,23 @@ export function WorkspaceView() {
     if (!sessionId) return;
     try {
       const [schedules, routing, notices] = await Promise.all([
-        fetchLocalMutation<{ messages?: ScheduledMessage[]; reset_armed?: boolean }>(
-          '/api/v1/automation',
-          { method: 'POST', body: { type: 'schedules', session_id: sessionId } },
-        ),
-        fetchLocalMutation<{ policy?: string }>('/api/v1/automation', {
+        automationCall<{ messages?: ScheduledMessage[]; reset_armed?: boolean }>({
+          method: 'POST',
+          body: { type: 'schedules', session_id: sessionId },
+        }),
+        automationCall<{ policy?: string }>({
           method: 'POST',
           body: { type: 'routing' },
         }),
-        fetchLocalMutation<{ notices?: AutomationNotice[] }>('/api/v1/automation', {
+        automationCall<{ notices?: AutomationNotice[] }>({
           method: 'POST',
           body: { type: 'notices' },
         }),
       ]);
       if (activeSessionIdRef.current !== sessionId) return;
+      void fetchLocalJson<{ scheduled_messages_enabled?: boolean }>('/api/v1/settings/features')
+        .then((features) => setSchedulingEnabled(Boolean(features?.scheduled_messages_enabled)))
+        .catch(() => undefined);
       setScheduledMessages(Array.isArray(schedules?.messages) ? schedules.messages : []);
       setResetArmed(Boolean(schedules?.reset_armed));
       setRoutingDirty((dirty) => {
@@ -469,7 +495,8 @@ export function WorkspaceView() {
             .slice(0, 8)
         : [];
       setAutomationNotices(relevantNotices);
-      setScheduleStatus('');
+      // This runs on every poll: only clear its own failure note, never a schedule result.
+      setScheduleStatus((current) => (current.startsWith('Schedule status unavailable') ? '' : current));
     } catch (error) {
       if (activeSessionIdRef.current !== sessionId) return;
       const msg = error instanceof Error ? error.message : 'unavailable';
@@ -790,9 +817,7 @@ export function WorkspaceView() {
       const id = activeSessionIdRef.current;
       if (id) {
         void refreshAutomation(id);
-        if (!terminalStreamOpen) {
-          void loadChat(id, { silent: true });
-        }
+        void loadChat(id, { silent: true });
       }
     }, POLL_INTERVAL_MS);
 
@@ -1018,15 +1043,30 @@ export function WorkspaceView() {
     window.requestAnimationFrame(resize);
   }, []);
 
-  const handleToggleAgentTerminal = () => {
-    if (!activeSessionId) return;
+  const closeRightPane = () => {
     if (terminalStreamOpen) {
       setTerminalStreamOpen(false);
       closeAgentTerminal();
-    } else {
-      setTerminalStreamOpen(true);
-      window.requestAnimationFrame(() => connectAgentTerminal(activeSessionId));
     }
+    setWorkspaceTerminalOpen(false);
+    setSidePanel(null);
+  };
+
+  const handleToggleAgentTerminal = () => {
+    if (!activeSessionId) return;
+    if (sidePanel === 'agent-terminal') {
+      setTerminalStreamOpen(false);
+      closeAgentTerminal();
+      setSidePanel(null);
+      return;
+    }
+    setSidePanel('agent-terminal');
+    if (terminalStreamOpen) return;
+    setTerminalStreamOpen(true);
+    // The pane mounts the terminal host first; two frames so its width is real before fit().
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => connectAgentTerminal(activeSessionId)),
+    );
   };
   toggleAgentTerminalRef.current = handleToggleAgentTerminal;
 
@@ -1225,7 +1265,11 @@ export function WorkspaceView() {
 
   const handleOpenWorkspaceTerminal = async () => {
     const source = activeSessionId;
-    if (!source || workspaceTerminalBusyRef.current || !workspaceTerminalScreenRef.current) return;
+    if (!source || workspaceTerminalBusyRef.current) return;
+    setSidePanel('shell');
+    // The screen element lives in the pane that just opened.
+    await new Promise((done) => window.requestAnimationFrame(() => done(null)));
+    if (!workspaceTerminalScreenRef.current) return;
     workspaceTerminalBusyRef.current = true;
     try {
       let entry = workspaceTerminalsRef.current.get(source);
@@ -1587,7 +1631,7 @@ export function WorkspaceView() {
     }
     setSchedulingBusy(true);
     try {
-      await fetchLocalMutation('/api/v1/automation', {
+      await automationCall({
         method: 'POST',
         body: {
           type: 'schedule',
@@ -1602,16 +1646,30 @@ export function WorkspaceView() {
       await refreshAutomation(sessionId);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Schedule error';
-      setScheduleStatus(`Schedule not confirmed. Check saved messages before retrying. ${msg}`);
+      setScheduleStatus(`Not scheduled. ${msg}`);
     } finally {
       setSchedulingBusy(false);
+    }
+  };
+
+  const handleEnableScheduling = async () => {
+    try {
+      const current = await fetchLocalJson<Record<string, boolean>>('/api/v1/settings/features');
+      await fetchLocalMutation('/api/v1/settings/features', {
+        method: 'POST',
+        body: { ...current, scheduled_messages_enabled: true },
+      });
+      setSchedulingEnabled(true);
+      setScheduleStatus('');
+    } catch (error) {
+      setScheduleStatus(error instanceof Error ? error.message : 'Could not turn on scheduled messages.');
     }
   };
 
   const handleCancelSchedule = async (id: string) => {
     if (!activeSessionId) return;
     try {
-      await fetchLocalMutation('/api/v1/automation', {
+      await automationCall({
         method: 'POST',
         body: { type: 'cancel_schedule', session_id: activeSessionId, id },
       });
@@ -1623,7 +1681,7 @@ export function WorkspaceView() {
 
   const handleSaveRouting = async () => {
     try {
-      await fetchLocalMutation('/api/v1/automation', {
+      await automationCall({
         method: 'POST',
         body: { type: 'routing', policy: routingPolicy },
       });
@@ -1637,7 +1695,7 @@ export function WorkspaceView() {
   const handleResetReconnect = async (enabled: boolean) => {
     if (!activeSessionId) return;
     try {
-      await fetchLocalMutation('/api/v1/automation', {
+      await automationCall({
         method: 'POST',
         body: { type: 'resume_on_reset', session_id: activeSessionId, enabled },
       });
@@ -1847,7 +1905,7 @@ export function WorkspaceView() {
       if (event.key !== 'Escape') return;
       if (sidePanel) {
         event.preventDefault();
-        setSidePanel(null);
+        closeRightPane();
         toolsTriggerRef.current?.focus();
       } else if (usagePopoverOpen) {
         event.preventDefault();
@@ -2089,6 +2147,30 @@ export function WorkspaceView() {
               }}
             >
               Focus agent window
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="sp-menu-danger"
+              onClick={() => {
+                const { id: target, title } = sessionContextMenu.session;
+                setSessionContextMenu(null);
+                // Deleting cannot be undone, so it always asks first.
+                const sure = window.confirm(
+                  `Delete "${title || 'this conversation'}" from Gnomcode?\n\nThis stops the agent if Gnomcode is running it and erases Gnomcode's copy of the chat. The agent's own history files are not touched.`,
+                );
+                if (!sure) return;
+                void fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(target)}`, { method: 'DELETE' })
+                  .then(() => {
+                    if (activeSessionIdRef.current === target) window.location.hash = '#sessions';
+                    return loadConversations();
+                  })
+                  .catch((error: unknown) =>
+                    setDeliveryStatus(error instanceof Error ? error.message : 'Could not delete the conversation.'),
+                  );
+              }}
+            >
+              Delete conversation
             </button>
             {sessionContextMenu.session.repo_path ? (
               <button
@@ -2586,7 +2668,8 @@ export function WorkspaceView() {
                   {activeSession?.title || activeHosted?.title || 'New conversation'}
                 </h2>
                 <p>
-                  {activeHosted?.agent || activeSession?.agent || 'Agent'}
+                  {activeSession?.surface_label ||
+                    agentLabel(activeSession?.agent || activeHosted?.agent || '')}
                   {imported ? ' · Observed' : ''}
                   {activeLive ? (
                     <span
@@ -2657,7 +2740,7 @@ export function WorkspaceView() {
                   aria-pressed={overviewOpen || Boolean(sidePanel)}
                   onClick={() => {
                     if (sidePanel) {
-                      setSidePanel(null);
+                      closeRightPane();
                       setOverviewOpen(false);
                     } else setOverviewOpen(!overviewOpen);
                   }}
@@ -2894,7 +2977,7 @@ export function WorkspaceView() {
               </button>
             ) : null}
 
-            {hasEarlier && !terminalStreamOpen ? (
+            {hasEarlier ? (
               <div className="ide-chat-controls">
                 <button
                   type="button"
@@ -2912,10 +2995,9 @@ export function WorkspaceView() {
               aria-label="Conversation"
               aria-live="polite"
               tabIndex={0}
-              hidden={terminalStreamOpen}
               onClick={handleChatStreamClick}
             />
-            {activeLive?.state === 'working' && !terminalStreamOpen ? (
+            {activeLive?.state === 'working' ? (
               <div className="sp-activity-inline" role="status" aria-label="Agent activity">
                 <span dangerouslySetInnerHTML={{ __html: activityMarkup }} />
                 {canInterruptActive ? (
@@ -2930,14 +3012,14 @@ export function WorkspaceView() {
                 ) : null}
               </div>
             ) : null}
-            <div
-              ref={chatTerminalRef}
-              className="sp-chat-terminal-box"
-              role="log"
-              aria-label="Agent terminal"
-              tabIndex={0}
-              hidden={!terminalStreamOpen}
-            />
+            {!imported && activeSessionId ? (
+              <SetupPrompt
+                sessionId={activeSessionId}
+                onOpenTerminal={() => {
+                  if (sidePanel !== 'agent-terminal') handleToggleAgentTerminal();
+                }}
+              />
+            ) : null}
 
             {queuedPrompts.length > 0 ? (
               <div className="sp-queued-list" role="region" aria-label="Queued messages">
@@ -3173,16 +3255,35 @@ export function WorkspaceView() {
                     <PaneResizer cssVar="--inspector-w" label="Resize tools panel" min={360} max={960} initial={560} direction={-1} />
                     <div className="sp-workspace-modal-head">
                       <div className="sp-header-panel-toggles" role="tablist" aria-label="Inspector views">
-                        {(['files', 'changes', 'artifacts', 'automation'] as const).map((tab) => (
+                        {(
+                          [
+                            ['files', 'Files'],
+                            ['changes', 'Changes'],
+                            ['artifacts', 'Artifacts'],
+                            ['automation', 'Automation'],
+                            ...((imported ? [] : [['agent-terminal', 'Agent terminal']]) as [string, string][]),
+                            ['shell', 'Terminal'],
+                          ] as const
+                        ).map(([tab, label]) => (
                           <button
                             key={tab}
                             type="button"
                             role="tab"
                             aria-selected={sidePanel === tab}
                             className={`btn-control${sidePanel === tab ? ' is-active' : ''}`}
-                            onClick={() => setSidePanel(tab)}
+                            onClick={() => {
+                              if (tab === 'agent-terminal') {
+                                if (sidePanel !== 'agent-terminal') handleToggleAgentTerminal();
+                                return;
+                              }
+                              if (tab === 'shell') {
+                                void handleOpenWorkspaceTerminal();
+                                return;
+                              }
+                              setSidePanel(tab as WorkspaceSidePanel | 'automation');
+                            }}
                           >
-                            {tab === 'files' ? 'Files' : tab === 'changes' ? 'Changes' : tab === 'artifacts' ? 'Artifacts' : 'Automation'}
+                            {label}
                           </button>
                         ))}
                       </div>
@@ -3191,7 +3292,7 @@ export function WorkspaceView() {
                         className="btn-control sp-workspace-modal-close"
                         aria-label="Close workspace inspector"
                         onClick={() => {
-                          setSidePanel(null);
+                          closeRightPane();
                           toolsTriggerRef.current?.focus();
                         }}
                       >
@@ -3199,7 +3300,25 @@ export function WorkspaceView() {
                       </button>
                     </div>
                     <div className="sp-workspace-modal-body">
-                      {sidePanel === 'automation' ? (
+                      <div
+                        ref={chatTerminalRef}
+                        className="sp-chat-terminal-box"
+                        role="log"
+                        aria-label="Agent terminal"
+                        tabIndex={0}
+                        hidden={sidePanel !== 'agent-terminal'}
+                      />
+                      <section
+                        className="sp-workspace-terminal"
+                        hidden={sidePanel !== 'shell'}
+                        aria-label="Workspace terminal"
+                      >
+                        <div className="workspace-terminal-heading">
+                          <span>{workspaceTerminalPath || 'Terminal'}</span>
+                        </div>
+                        <div ref={workspaceTerminalScreenRef} className="sp-workspace-terminal-screen" />
+                      </section>
+                      {sidePanel === 'agent-terminal' || sidePanel === 'shell' ? null : sidePanel === 'automation' ? (
                         <section className="sp-automation-panel" aria-label="Schedule and automation">
                         <div className="sp-auto">
                           <section className="sp-auto-section" aria-labelledby="auto-later">
@@ -3208,6 +3327,15 @@ export function WorkspaceView() {
                               Sends this message to the agent at the time you pick. Gnomcode must be running and this computer awake. The saved
                               text is redacted.
                             </p>
+                            {schedulingEnabled === false ? (
+                              <div className="sp-auto-row">
+                                <p className="sp-auto-help">Scheduled messages are off. Turn them on to send messages later from this computer.</p>
+                                <button type="button" className="btn-control" onClick={() => void handleEnableScheduling()}>
+                                  Turn on scheduled messages
+                                </button>
+                              </div>
+                            ) : (
+                              <>
                             <label className="sp-auto-field">
                               <span>Message</span>
                               <textarea
@@ -3226,6 +3354,8 @@ export function WorkspaceView() {
                                 Schedule
                               </button>
                             </div>
+                              </>
+                            )}
                             <div role="status">
                               {scheduleStatus ? <p className="sp-auto-help">{scheduleStatus}</p> : null}
                             </div>
@@ -3333,24 +3463,6 @@ export function WorkspaceView() {
                   </aside>
               ) : null}
             </div>
-
-            <section
-              className="sp-workspace-terminal"
-              hidden={!workspaceTerminalOpen}
-              aria-label="Workspace terminal"
-            >
-              <div className="workspace-terminal-heading">
-                <span>{workspaceTerminalPath || 'Terminal'}</span>
-                <button
-                  type="button"
-                  className="btn-control"
-                  onClick={() => setWorkspaceTerminalOpen(false)}
-                >
-                  Hide
-                </button>
-              </div>
-              <div ref={workspaceTerminalScreenRef} className="sp-workspace-terminal-screen" />
-            </section>
           </section>
         ) : null}
       </div>

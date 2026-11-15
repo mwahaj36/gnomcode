@@ -12,8 +12,8 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use gnomcode_core::approval::{
-    Applied, Approval, ApprovalBook, CreateError, DecideError, Decider, Decision, HOLD_SECS,
-    NewApproval, State as ApprovalState,
+    Applied, Approval, ApprovalBook, CreateError, DecideError, Decider, Decision, Grant, HOLD_SECS,
+    NewApproval, Scope, State as ApprovalState,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -110,6 +110,36 @@ impl Approvals {
         result
     }
 
+    /// Makes an allowed request a standing grant for its session (console only, in memory).
+    pub fn grant(&self, id: &str, scope: Scope) -> Option<Grant> {
+        let grant = self.book().grant(id, scope, now());
+        if let Some(grant) = &grant {
+            tracing::info!(
+                agent = %grant.agent,
+                all_tools = grant.tool.is_none(),
+                "session approval grant recorded"
+            );
+        }
+        grant
+    }
+
+    /// Whether a standing grant already covers this tool in this session.
+    #[must_use]
+    pub fn granted(&self, session_id: &str, tool: &str) -> bool {
+        self.book().granted(session_id, tool)
+    }
+
+    /// Ends the standing grants of a session (it stopped, or the person revoked them).
+    pub fn revoke(&self, session_id: &str) -> bool {
+        self.book().revoke(session_id)
+    }
+
+    /// Standing grants.
+    #[must_use]
+    pub fn grants(&self) -> Vec<Grant> {
+        self.book().grants(now()).to_vec()
+    }
+
     /// Marks a pending request cancelled because the agent stopped waiting.
     pub fn cancel(&self, id: &str) {
         self.book().cancel(id, now());
@@ -191,7 +221,9 @@ pub(crate) async fn create_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let registry = global();
-    if !(registry.console_watching() || state.remote.reachable().await) {
+    // A standing grant needs nobody watching: the person already answered for this session.
+    let granted = registry.granted(&body.session_id, &body.tool);
+    if !(granted || registry.console_watching() || state.remote.reachable().await) {
         return Ok(Json(json!({"hold": false, "reason": "no_listener"})));
     }
     let Ok(approval) = registry.create(
@@ -203,12 +235,14 @@ pub(crate) async fn create_handler(
     ) else {
         return Ok(Json(json!({"hold": false, "reason": "busy"})));
     };
-    // Notification I/O must not delay the hook's short hold response.
-    let db = state.db.clone();
-    let held = approval.clone();
-    tokio::spawn(async move {
-        crate::automation::notify_held_approval(&db, &held.agent, &held.session_id).await;
-    });
+    if approval.state == ApprovalState::Pending {
+        // Notification I/O must not delay the hook's short hold response.
+        let db = state.db.clone();
+        let held = approval.clone();
+        tokio::spawn(async move {
+            crate::automation::notify_held_approval(&db, &held.agent, &held.session_id).await;
+        });
+    }
     Ok(Json(
         json!({"hold": true, "id": approval.id, "wait_secs": HOLD_SECS}),
     ))
@@ -237,7 +271,21 @@ pub(crate) async fn list_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     global().touch_console();
-    Ok(Json(json!({"items": global().pending()})))
+    Ok(Json(
+        json!({"items": global().pending(), "grants": global().grants()}),
+    ))
+}
+
+/// `DELETE /api/v1/approvals/grants/{session_id}`: ends a session's standing grants.
+pub(crate) async fn revoke_grants_handler(
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    Ok(Json(
+        json!({"ok": true, "revoked": global().revoke(&session_id)}),
+    ))
 }
 
 /// Decision body from the console.
@@ -245,6 +293,9 @@ pub(crate) async fn list_handler(
 pub struct DecisionBody {
     /// `allow` or `deny`.
     pub decision: String,
+    /// `once` (default), `tool` or `session`: how far an allow reaches.
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 /// `POST /api/v1/approvals/{id}/decision`.
@@ -256,10 +307,25 @@ pub(crate) async fn decision_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let decision = Decision::parse(&body.decision).ok_or(StatusCode::BAD_REQUEST)?;
+    let scope = match body.scope.as_deref() {
+        None => Scope::Once,
+        Some(value) => Scope::parse(value).ok_or(StatusCode::BAD_REQUEST)?,
+    };
+    if scope != Scope::Once && decision != Decision::Allow {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     match global().decide(&id, decision, Decider::Console) {
-        Ok(applied) => Ok(Json(
-            json!({"ok": true, "repeated": applied == Applied::Repeated}),
-        )),
+        Ok(applied) => {
+            // Only the local console may widen an allow; a phone answer is always one call.
+            let grant = (decision == Decision::Allow)
+                .then(|| global().grant(&id, scope))
+                .flatten();
+            Ok(Json(json!({
+                "ok": true,
+                "repeated": applied == Applied::Repeated,
+                "grant": grant,
+            })))
+        }
         Err(DecideError::NotFound) => Err(StatusCode::NOT_FOUND),
         Err(DecideError::Conflict) => Err(StatusCode::CONFLICT),
         Err(DecideError::Gone) => Err(StatusCode::GONE),
