@@ -1260,9 +1260,9 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-heat[data-level="2"] { background: var(--sp-heat-2); }
 .sp-heat[data-level="3"] { background: var(--sp-heat-3); }
 .sp-heat[data-level="4"] { background: var(--sp-heat-4); }
-.sp-heat--before { visibility: hidden; }
+.sp-heat--before { opacity: .55; }
 .sp-heatmap-grid .sp-heat:not(.sp-heat--before) { cursor: pointer; }
-.sp-heatmap-grid .sp-heat:hover { outline: 1px solid var(--sp-text-2); }
+.sp-heatmap-grid .sp-heat:not(.sp-heat--before):hover { outline: 1px solid var(--sp-text-2); }
 .sp-heatmap-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: var(--sp-3); font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
 .sp-heatmap-legend span { margin: 0 var(--sp-1); }
 .sp-heatmap-legend .sp-heat { flex: 0 0 10px; width: 10px; height: 10px; min-height: 0; }

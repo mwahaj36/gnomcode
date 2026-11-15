@@ -1602,9 +1602,6 @@ export function SettingsView() {
           <a href={`${baseUrl}/docs`} target="_blank" rel="noopener noreferrer">
             Documentation
           </a>
-          <a href={`${baseUrl}/pricing`} target="_blank" rel="noopener noreferrer">
-            Pricing
-          </a>
         </div>
       </section>
     </div>
