@@ -29,6 +29,49 @@ pub(super) async fn sync_status_handler(
     Ok(Json(crate::sync::cloud_sync_status().await))
 }
 
+pub(super) async fn usage_sync_status_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let db = Arc::clone(&state.db);
+    let local_usage_count =
+        tokio::task::spawn_blocking(move || db.blocking_lock().local_usage_record_count())
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let status = crate::sync::usage_sync_status().await;
+    let mut value = serde_json::to_value(status).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    value["local_usage_count"] = json!(local_usage_count);
+    Ok(Json(value))
+}
+
+pub(super) async fn usage_sync_restore_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    validate_auth(&headers, &state.bearer_token)
+        .map_err(|s| (s, Json(json!({ "ok": false, "message": "Unauthorized." }))))?;
+    let summary = crate::sync::restore_usage_history(&state.db)
+        .await
+        .map_err(|(s, msg)| (s, Json(json!({ "ok": false, "message": msg }))))?;
+    Ok(Json(summary))
+}
+
+pub(super) async fn usage_sync_delete_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    validate_auth(&headers, &state.bearer_token)
+        .map_err(|s| (s, Json(json!({ "ok": false, "message": "Unauthorized." }))))?;
+    crate::sync::delete_cloud_usage_history(&state.db)
+        .await
+        .map_err(|(s, msg)| (s, Json(json!({ "ok": false, "message": msg }))))?;
+    Ok(Json(
+        json!({ "ok": true, "message": "Cloud usage history deleted." }),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
