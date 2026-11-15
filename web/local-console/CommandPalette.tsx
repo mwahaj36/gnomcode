@@ -130,6 +130,7 @@ export function CommandPalette() {
           setActive(0);
         }}
         onKeyDown={(event) => {
+          if (!results.length) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
             setActive((i) => Math.min(i + 1, results.length - 1));
@@ -138,7 +139,7 @@ export function CommandPalette() {
             setActive((i) => Math.max(i - 1, 0));
           } else if (event.key === 'Enter') {
             event.preventDefault();
-            run(results[active]);
+            run(results[Math.min(active, results.length - 1)]);
           }
         }}
       />
