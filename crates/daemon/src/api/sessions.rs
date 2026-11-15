@@ -91,7 +91,16 @@ pub(super) async fn launch_session_handler(
     let repo = std::path::Path::new(&payload.repo_path);
     let starting = match crate::wsl_launch::preflight(&payload.agent, repo).await {
         Ok(starting) => starting,
-        Err(crate::wsl_launch::Refusal::BadFolder) => return Err(StatusCode::BAD_REQUEST),
+        Err(crate::wsl_launch::Refusal::BadFolder) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "ok": false,
+                    "message": "That folder could not be opened. Check the path and that the drive or distro is available.",
+                })),
+            )
+                .into_response());
+        }
         Err(crate::wsl_launch::Refusal::Missing(message)) => {
             return Ok((
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -145,11 +154,29 @@ pub(super) async fn launch_session_handler(
             crate::wsl_launch::annotate(&mut body, repo, starting);
             Ok(Json(body).into_response())
         }
-        Err(_) => {
+        Err(error) => {
             if let Some(isolated) = &isolated {
                 crate::worktree_api::abort_launch(isolated).await;
             }
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            // An agent Gnomcode does not support, or a folder it cannot use, is the caller's
+            // request being wrong, and the person is told which it is.
+            let (status, message) = match error {
+                gnomcode_pty::Error::UnsupportedAgent(name) => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Gnomcode 1.0 runs Claude Code, Codex and Antigravity. It cannot launch {name}."
+                    ),
+                ),
+                gnomcode_pty::Error::SessionNotFound(_) => (
+                    StatusCode::BAD_REQUEST,
+                    "That folder cannot be used for a session. Choose another one.".to_owned(),
+                ),
+                other => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("The agent could not be started: {other}"),
+                ),
+            };
+            Ok((status, Json(json!({"ok": false, "message": message}))).into_response())
         }
     }
 }

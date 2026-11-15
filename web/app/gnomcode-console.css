@@ -2407,3 +2407,10 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-native-console .sp-inspector .sp-workspace-terminal[hidden]{display:none}
 .sp-native-console .sp-inspector .sp-workspace-terminal-screen{flex:1 1 auto;height:auto;min-height:0}
 .sp-session-context-menu .sp-menu-danger{color:var(--sp-danger)}
+/* Touch targets: every control a finger has to hit is at least 44px on a phone. */
+@media (max-width:767px){
+  .sp-native-console .ide-session-more,.sp-native-console .sp-chat-column .ide-session-more{min-height:44px;min-width:44px;opacity:1}
+  .sp-native-console .sp-quick-action,.sp-native-console .sp-quick-action--manage{min-height:44px;height:44px}
+  .sp-native-console .btn-primary,.sp-native-console .btn-control,.sp-native-console .sp-icon-btn{min-height:44px}
+  .sp-native-console .sp-chat-composer .btn-primary{min-height:44px}
+}
