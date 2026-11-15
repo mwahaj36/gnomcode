@@ -1382,8 +1382,19 @@ mod tests {
                 break;
             }
         }
+        // One write can raise several OS events (create, then modify) that arrive apart, more
+        // so under load. Let the log write's own events finish before measuring the db write,
+        // or a late one is blamed on it.
+        let mut settled = count.load(Ordering::SeqCst);
+        for _ in 0..50 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let now = count.load(Ordering::SeqCst);
+            if now == settled {
+                break;
+            }
+            settled = now;
+        }
         // SQLite writes in a watched dir must not retrigger (feedback loop).
-        let settled = count.load(Ordering::SeqCst);
         std::fs::write(dir.path().join("state.db-wal"), "x").expect("db write");
         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         let after_db = count.load(Ordering::SeqCst);

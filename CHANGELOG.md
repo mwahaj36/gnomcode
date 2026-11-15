@@ -7,6 +7,26 @@
 - Let the quota-triggered context relay hand off to Antigravity, not just Claude Code and Codex.
 - Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
 
+## 1.0.1 — 2026-11-15
+
+Everything here was reproduced in the running app before it was fixed.
+
+- Launching Codex or Antigravity no longer splits the session into a second sidebar row, and the agent terminal no longer opens empty.
+- Both terminals open in the right-hand panel beside the conversation instead of under it.
+- Stop now ends a running Codex or Antigravity turn; the console shows that such a session is working.
+- Approvals can be widened to a whole session, per tool or for every tool. Grants live only in memory, last at most eight hours, end with the session, and never cover permission changes. Approval cards name the right agent.
+- A launched agent waiting on "trust this folder" is shown in the console and phone, with a one-click Trust folder button.
+- The conversation list loads on large histories (it could stay empty or show "Could not load conversations") and builds four times faster.
+- Messages typed while an agent is working are kept in the transcript; chats are no longer titled `<spawnt_context>`; a launched Claude session is no longer labelled "Unsupported agent".
+- Conversations can be deleted. Gnomcode's own copy is erased; the agent's history files are never touched.
+- Scheduled messages are listed after saving and every one is delivered, not only the first.
+- Usage "All Time" no longer starts in January 1970: Antigravity turns without a recorded time are dated properly, and existing records are repaired on upgrade.
+- Changes and diffs work in a repository with no commits; refused launches explain why; switching by provider name works.
+- A lapsed Claude sign-in is retried after 45 seconds instead of 15 minutes.
+- Message time and Copy appear on hover or tap, hours and minutes only.
+- Phone controls are at least 44 px.
+- Gnomcode is free: the licence system, price tiers and paid-services terms are gone. Scheduled messages and the account snapshot are on by default and switchable in Settings.
+
 ## 0.9.4 — 2026-11-12
 
 - Read every Claude Code, Codex and Antigravity surface: Codex archived and compressed (`.jsonl.zst`) sessions, the legacy Antigravity IDE history folder, and Claude subagents as linked child sessions. Fix Codex double-counted turns, forked-session identity and inverted Antigravity subagent links.

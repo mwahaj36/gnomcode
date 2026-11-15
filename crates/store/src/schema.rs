@@ -349,6 +349,13 @@ impl Database {
             )?;
         }
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS desktop_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
+        // Older builds dated Antigravity turns with no recorded time at the Unix epoch, which
+        // showed "All Time" as starting in 1970. Date them by their session instead. Safe to
+        // repeat: it only touches rows still at the epoch.
+        self.conn.execute_batch(
+            "UPDATE usage_record SET timestamp = (SELECT COALESCE(s.last_event_at, s.started_at) FROM session s WHERE s.id = usage_record.session_id)
+             WHERE timestamp < '1971-01-01' AND EXISTS (SELECT 1 FROM session s WHERE s.id = usage_record.session_id);",
+        )?;
         // Conversations the person deleted from Gnomcode. The agent keeps its own history, so
         // this marker is what stops a re-read of that history from listing them again.
         self.conn.execute_batch("CREATE TABLE IF NOT EXISTS hidden_conversation (id TEXT PRIMARY KEY, hidden_at INTEGER NOT NULL);")?;
@@ -380,5 +387,42 @@ impl Database {
             UPDATE session SET title = NULL WHERE title = 'Subagent' AND parent_session_id IS NULL;
         "#)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod epoch_repair_tests {
+    use crate::Database;
+
+    /// Usage once stored at the Unix epoch made "All Time" start in January 1970.
+    #[test]
+    fn usage_stored_at_the_epoch_is_redated_by_its_session() {
+        let mut db = Database::open_in_memory().expect("database");
+        db.conn
+            .execute_batch(
+                "INSERT INTO project(id,canonical_key,repo_root,name) VALUES ('p','k','/repo','repo');
+                 INSERT INTO session(id,agent,surface,project_id,state,started_at,last_event_at)
+                   VALUES ('antigravity:a','antigravity','cli','p','idle','2026-11-10T09:00:00+00:00','2026-11-10T10:00:00+00:00');
+                 INSERT INTO usage_record(dedup_key,session_id,timestamp,model,input_tokens,output_tokens,reasoning_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,context_tokens,cost_usd,cache_savings_usd,cost_basis,pricing_version)
+                   VALUES ('old','antigravity:a','1970-01-01T00:00:00+00:00','m',1,1,0,0,0,0,0,0,0,'estimated','t'),
+                          ('new','antigravity:a','2026-11-10T09:30:00+00:00','m',1,1,0,0,0,0,0,0,0,'estimated','t');",
+            )
+            .expect("seed");
+        db.migrate().expect("migrate again");
+        let dated = |key: &str| -> String {
+            db.conn
+                .query_row(
+                    "SELECT timestamp FROM usage_record WHERE dedup_key=?1",
+                    [key],
+                    |row| row.get(0),
+                )
+                .expect("row")
+        };
+        assert_eq!(dated("old"), "2026-11-10T10:00:00+00:00");
+        assert_eq!(
+            dated("new"),
+            "2026-11-10T09:30:00+00:00",
+            "real times are untouched"
+        );
     }
 }
