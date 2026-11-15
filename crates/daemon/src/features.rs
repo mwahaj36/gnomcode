@@ -93,11 +93,13 @@ mod tests {
         assert_eq!(initial["type"], "features");
         assert_eq!(initial["features"]["scheduled_messages_enabled"], true);
         assert_eq!(initial["features"]["account_sync_enabled"], true);
+        assert_eq!(initial["features"]["usage_history_sync_enabled"], false);
 
         // Turning one off is saved, and turning it back on is saved too.
         let off = FeatureToggles {
             scheduled_messages_enabled: false,
             account_sync_enabled: false,
+            usage_history_sync_enabled: false,
         };
         let stored = handle_remote(&db, &json!({ "type": "features.set", "features": off })).await;
         assert_eq!(stored["features"]["scheduled_messages_enabled"], false);
@@ -110,6 +112,7 @@ mod tests {
         let updated = FeatureToggles {
             scheduled_messages_enabled: true,
             account_sync_enabled: true,
+            usage_history_sync_enabled: true,
         };
         let remote_set =
             handle_remote(&db, &json!({ "type": "features.set", "features": updated })).await;

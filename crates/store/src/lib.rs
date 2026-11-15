@@ -33,6 +33,7 @@ mod schema;
 mod sessions;
 mod settings;
 mod trajectory;
+mod usage_sync;
 
 pub use automation::{AutomationNotice, PendingPushNotice, ScheduledMessage};
 
@@ -47,6 +48,7 @@ pub use rules::*;
 pub use sessions::*;
 pub use settings::*;
 pub use trajectory::{TrajectoryRows, read_trajectory, trajectory_max_generation};
+pub use usage_sync::{CloudSessionMeta, CloudUsageRecord, UsageSyncWatermark};
 
 /// Storage layer error type.
 #[derive(Debug, Error)]

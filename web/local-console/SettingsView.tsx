@@ -10,6 +10,7 @@ import {
 import { fetchLocalJson, fetchLocalMutation, getConsoleBaseUrl } from './local-api';
 import {
   applyThemeMode,
+  confirmAction,
   currentThemeMode,
   navigateTo,
   revealSection,
@@ -229,9 +230,13 @@ export function SettingsView() {
   // Account, Data, Updates, Guide state
   const [cloudSyncStatus, setCloudSyncStatus] = useState('Checking desktop publication status...');
   // Both are on unless the person turns them off here (E3, ADR 0049).
-  const [features, setFeatures] = useState<{ scheduled_messages_enabled: boolean; account_sync_enabled: boolean } | null>(
-    null,
-  );
+  const [features, setFeatures] = useState<{
+    scheduled_messages_enabled: boolean;
+    account_sync_enabled: boolean;
+    usage_history_sync_enabled: boolean;
+  } | null>(null);
+  const [usageSyncMsg, setUsageSyncMsg] = useState<string>('');
+  const [usageSyncBusy, setUsageSyncBusy] = useState<'restore' | 'delete' | null>(null);
   const [lastUpdatedText, setLastUpdatedText] = useState('Last successful update: not yet');
   const [dataBusy, setDataBusy] = useState(false);
   const [updateStatusText, setUpdateStatusText] = useState('Checking update status...');
@@ -302,17 +307,29 @@ export function SettingsView() {
   const loadFeatures = useCallback(async () => {
     try {
       setFeatures(
-        await fetchLocalJson<{ scheduled_messages_enabled: boolean; account_sync_enabled: boolean }>(
-          '/api/v1/settings/features',
-        ),
+        await fetchLocalJson<{
+          scheduled_messages_enabled: boolean;
+          account_sync_enabled: boolean;
+          usage_history_sync_enabled: boolean;
+        }>('/api/v1/settings/features'),
       );
     } catch {
       setFeatures(null);
     }
   }, []);
 
-  const saveFeature = async (key: 'scheduled_messages_enabled' | 'account_sync_enabled', on: boolean) => {
-    const next = { ...(features ?? { scheduled_messages_enabled: true, account_sync_enabled: true }), [key]: on };
+  const saveFeature = async (
+    key: 'scheduled_messages_enabled' | 'account_sync_enabled' | 'usage_history_sync_enabled',
+    on: boolean,
+  ) => {
+    const next = {
+      ...(features ?? {
+        scheduled_messages_enabled: true,
+        account_sync_enabled: true,
+        usage_history_sync_enabled: false,
+      }),
+      [key]: on,
+    };
     setFeatures(next);
     try {
       await fetchLocalMutation('/api/v1/settings/features', { method: 'POST', body: next });
@@ -720,6 +737,95 @@ export function SettingsView() {
             <span>Publish snapshot</span>
           </label>
         </div>
+        <div className="sp-setting-row">
+          <div>
+            <p className="sp-setting-label">Back up usage history to your account</p>
+            <p className="sp-setting-desc">
+              Opt-in. Syncs per-turn usage rows (dedup_key, session_id, timestamp, model, token counts, context_window, cost_usd, cache_savings_usd, cost_basis, pricing_version) and session metadata (agent, surface, project folder name, started_at, last_event_at) so a fresh install can restore your Usage page. Never syncs chat content, session titles, or full file paths.
+            </p>
+            {usageSyncMsg ? (
+              <p className="sp-setting-desc" role="status">
+                {usageSyncMsg}
+              </p>
+            ) : null}
+          </div>
+          <label className="sp-notify-toggle" htmlFor="settings-usage-history-sync">
+            <input
+              id="settings-usage-history-sync"
+              type="checkbox"
+              checked={features?.usage_history_sync_enabled ?? false}
+              disabled={!features}
+              onChange={(event) => void saveFeature('usage_history_sync_enabled', event.target.checked)}
+            />
+            <span>Back up usage history</span>
+          </label>
+        </div>
+        {accountState?.paired ? (
+          <div className="sp-setting-row">
+            <div>
+              <p className="sp-setting-label">Restore or delete cloud usage history</p>
+              <p className="sp-setting-desc">
+                Pull backed-up usage records into this install (safe to run multiple times), or permanently delete all backed-up usage rows from your account.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                id="settings-usage-restore"
+                className="btn-control"
+                type="button"
+                disabled={usageSyncBusy !== null}
+                onClick={async () => {
+                  setUsageSyncBusy('restore');
+                  setUsageSyncMsg('Restoring usage history from cloud...');
+                  try {
+                    const res = await fetchLocalMutation<{ restored_records: number; cloud_records: number }>(
+                      '/api/v1/sync/usage/restore',
+                      { method: 'POST', timeoutMs: 60000 },
+                    );
+                    setUsageSyncMsg(
+                      `Restored ${res.restored_records} new record${res.restored_records === 1 ? '' : 's'} (${res.cloud_records} total in cloud).`,
+                    );
+                  } catch (error) {
+                    setUsageSyncMsg(error instanceof Error ? error.message : 'Restore failed.');
+                  } finally {
+                    setUsageSyncBusy(null);
+                  }
+                }}
+              >
+                {usageSyncBusy === 'restore' ? 'Restoring...' : 'Restore usage history'}
+              </button>
+              <button
+                id="settings-usage-delete"
+                className="btn-control sp-btn-danger"
+                type="button"
+                disabled={usageSyncBusy !== null}
+                onClick={async () => {
+                  if (
+                    !(await confirmAction(
+                      'This permanently deletes all backed-up usage records and session metadata from your cloud account and turns off usage history backup on this device. Local history on this computer is not deleted.',
+                      'Delete my cloud usage history',
+                    ))
+                  ) {
+                    return;
+                  }
+                  setUsageSyncBusy('delete');
+                  setUsageSyncMsg('Deleting cloud usage history...');
+                  try {
+                    await fetchLocalMutation('/api/v1/sync/usage', { method: 'DELETE', timeoutMs: 30000 });
+                    setFeatures((prev) => (prev ? { ...prev, usage_history_sync_enabled: false } : prev));
+                    setUsageSyncMsg('Cloud usage history deleted and backup turned off.');
+                  } catch (error) {
+                    setUsageSyncMsg(error instanceof Error ? error.message : 'Delete failed.');
+                  } finally {
+                    setUsageSyncBusy(null);
+                  }
+                }}
+              >
+                {usageSyncBusy === 'delete' ? 'Deleting...' : 'Delete my cloud usage history'}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="sp-setting-row">
           <div>
             <p className="sp-setting-label">Scheduled messages</p>

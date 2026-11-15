@@ -38,6 +38,27 @@ pub(crate) async fn cloud_sync_status() -> CloudSyncStatus {
     SYNC_STATUS.lock().await.clone()
 }
 
+#[derive(Clone, Serialize)]
+pub(crate) struct UsageSyncStatus {
+    state: &'static str,
+    last_attempt_at: Option<String>,
+    last_success_at: Option<String>,
+    pushed_records: u64,
+    message: &'static str,
+}
+
+static USAGE_SYNC_STATUS: Mutex<UsageSyncStatus> = Mutex::const_new(UsageSyncStatus {
+    state: "off",
+    last_attempt_at: None,
+    last_success_at: None,
+    pushed_records: 0,
+    message: "Usage history backup is off.",
+});
+
+pub(crate) async fn usage_sync_status() -> UsageSyncStatus {
+    USAGE_SYNC_STATUS.lock().await.clone()
+}
+
 /// Synchronized hourly usage record for multi-device mirroring and team rollups.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HourlyUsageSync {
@@ -160,6 +181,8 @@ pub fn spawn_cloud_sync(
         };
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
         let mut devices_ticker = tokio::time::interval(Duration::from_secs(5));
+        let mut usage_backoff_secs = 0u64;
+        let mut next_usage_attempt = tokio::time::Instant::now();
         loop {
             tokio::select! {
                 _ = ticker.tick() => {},
@@ -184,30 +207,55 @@ pub fn spawn_cloud_sync(
                 status.state = "frozen";
                 status.message =
                     "Account sync is turned off in Settings, so the web console has no snapshot.";
-                continue;
-            }
-            {
+            } else {
+                {
+                    let mut status = SYNC_STATUS.lock().await;
+                    status.state = "publishing";
+                    status.last_attempt_at = Some(Utc::now().to_rfc3339());
+                    status.message = "Publishing the latest metadata snapshot.";
+                }
+                let result = push_snapshot(&client, &db, &remote).await;
                 let mut status = SYNC_STATUS.lock().await;
-                status.state = "publishing";
-                status.last_attempt_at = Some(Utc::now().to_rfc3339());
-                status.message = "Publishing the latest metadata snapshot.";
+                match result {
+                    Ok(true) => {
+                        status.state = "connected";
+                        status.last_success_at = Some(Utc::now().to_rfc3339());
+                        status.message = "Cloud snapshot published successfully.";
+                    }
+                    Ok(false) => {
+                        status.state = "unpaired";
+                        status.message = "Connect an account to publish desktop snapshots.";
+                    }
+                    Err(error) => {
+                        status.state = "error";
+                        status.message = "Cloud publication failed. Check connectivity and reconnect account pairing if needed.";
+                        tracing::warn!("cloud sync failed: {error}");
+                    }
+                }
             }
-            let result = push_snapshot(&client, &db, &remote).await;
-            let mut status = SYNC_STATUS.lock().await;
-            match result {
-                Ok(true) => {
-                    status.state = "connected";
-                    status.last_success_at = Some(Utc::now().to_rfc3339());
-                    status.message = "Cloud snapshot published successfully.";
-                }
-                Ok(false) => {
-                    status.state = "unpaired";
-                    status.message = "Connect an account to publish desktop snapshots.";
-                }
-                Err(error) => {
-                    status.state = "error";
-                    status.message = "Cloud publication failed. Check connectivity and reconnect account pairing if needed.";
-                    tracing::warn!("cloud sync failed: {error}");
+
+            if tokio::time::Instant::now() >= next_usage_attempt {
+                match push_usage_history_step(&client, &db, &remote).await {
+                    Ok(true) => {
+                        usage_backoff_secs = 0;
+                        next_usage_attempt = tokio::time::Instant::now();
+                    }
+                    Ok(false) => {
+                        usage_backoff_secs = 0;
+                        next_usage_attempt = tokio::time::Instant::now();
+                    }
+                    Err(error) => {
+                        usage_backoff_secs = if usage_backoff_secs == 0 {
+                            120
+                        } else {
+                            (usage_backoff_secs * 2).min(900)
+                        };
+                        next_usage_attempt =
+                            tokio::time::Instant::now() + Duration::from_secs(usage_backoff_secs);
+                        tracing::warn!(
+                            "usage history sync failed (backing off {usage_backoff_secs}s): {error}"
+                        );
+                    }
                 }
             }
         }
@@ -311,6 +359,372 @@ async fn push_snapshot(
         .await?
         .error_for_status()?;
     Ok(true)
+}
+
+const USAGE_SYNC_BATCH: usize = 500;
+
+/// Builds privacy-bounded Supabase row payloads for `gnomcode_session_meta` and `gnomcode_usage_record`.
+pub(crate) fn build_usage_sync_payloads(
+    user_id: &str,
+    desktop_id: &str,
+    sessions: &[gnomcode_store::CloudSessionMeta],
+    records: &[gnomcode_store::CloudUsageRecord],
+) -> (Vec<Value>, Vec<Value>) {
+    let session_rows = sessions
+        .iter()
+        .map(|s| {
+            json!({
+                "user_id": user_id,
+                "session_id": s.session_id,
+                "agent": s.agent,
+                "surface": s.surface,
+                "model": s.model,
+                "project_name": s.project_name,
+                "started_at": s.started_at,
+                "last_event_at": s.last_event_at,
+            })
+        })
+        .collect();
+    let usage_rows = records
+        .iter()
+        .map(|r| {
+            json!({
+                "user_id": user_id,
+                "desktop_id": desktop_id,
+                "dedup_key": r.dedup_key,
+                "session_id": r.session_id,
+                "timestamp": r.timestamp,
+                "model": r.model,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "reasoning_tokens": r.reasoning_tokens,
+                "cache_read_tokens": r.cache_read_tokens,
+                "cache_write_5m_tokens": r.cache_write_5m_tokens,
+                "cache_write_1h_tokens": r.cache_write_1h_tokens,
+                "context_tokens": r.context_tokens,
+                "context_window": r.context_window,
+                "cost_usd": r.cost_usd,
+                "cache_savings_usd": r.cache_savings_usd,
+                "cost_basis": r.cost_basis,
+                "pricing_version": r.pricing_version,
+            })
+        })
+        .collect();
+    (session_rows, usage_rows)
+}
+
+async fn push_usage_history_step(
+    client: &reqwest::Client,
+    db: &Arc<Mutex<Database>>,
+    remote: &crate::remote::RemoteManager,
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let enabled = {
+        let shared = Arc::clone(db);
+        tokio::task::spawn_blocking(move || {
+            shared
+                .blocking_lock()
+                .get_feature_toggles()
+                .map(|toggles| toggles.usage_history_sync_enabled)
+        })
+        .await??
+    };
+    if !enabled {
+        let mut status = USAGE_SYNC_STATUS.lock().await;
+        status.state = "off";
+        status.message = "Usage history backup is off.";
+        return Ok(false);
+    }
+
+    let session_path = gnomcode_platform::gnomcode_home().join("session.json");
+    let Some(auth) = read_cloud_auth(client, &session_path).await? else {
+        let mut status = USAGE_SYNC_STATUS.lock().await;
+        status.state = "unpaired";
+        status.message = "Connect an account to back up usage history.";
+        return Ok(false);
+    };
+
+    let desktop_id = remote.devices.snapshot_desktop_id(&auth.user_id).await?;
+    {
+        let mut status = USAGE_SYNC_STATUS.lock().await;
+        status.state = "syncing";
+        status.last_attempt_at = Some(Utc::now().to_rfc3339());
+        status.message = "Backing up usage records.";
+    }
+
+    let result = push_usage_batches(client, db, &auth, &desktop_id).await;
+    let mut status = USAGE_SYNC_STATUS.lock().await;
+    match result {
+        Ok(pushed) => {
+            status.state = "connected";
+            status.last_success_at = Some(Utc::now().to_rfc3339());
+            status.pushed_records = status.pushed_records.saturating_add(pushed);
+            status.message = "Usage history is backed up.";
+            Ok(true)
+        }
+        Err(error) => {
+            status.state = "error";
+            status.message = "Usage history backup failed; will retry automatically.";
+            Err(error)
+        }
+    }
+}
+
+pub(crate) async fn push_usage_batches(
+    client: &reqwest::Client,
+    db: &Arc<Mutex<Database>>,
+    auth: &CloudAuth,
+    desktop_id: &str,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let mut total_pushed = 0u64;
+    loop {
+        let shared = Arc::clone(db);
+        let (mut watermark, sessions, records) = tokio::task::spawn_blocking(move || {
+            let guard = shared.blocking_lock();
+            let wm = guard.get_usage_sync_watermark()?;
+            let sessions = guard
+                .read_session_meta_batch(wm.last_session_event_at.as_deref(), USAGE_SYNC_BATCH)?;
+            let records = guard.read_usage_sync_batch(wm.last_usage_rowid, USAGE_SYNC_BATCH)?;
+            Ok::<_, gnomcode_store::Error>((wm, sessions, records))
+        })
+        .await??;
+
+        if sessions.is_empty() && records.is_empty() {
+            break;
+        }
+
+        let raw_records: Vec<gnomcode_store::CloudUsageRecord> =
+            records.iter().map(|(_, r)| r.clone()).collect();
+        let (session_rows, usage_rows) =
+            build_usage_sync_payloads(&auth.user_id, desktop_id, &sessions, &raw_records);
+
+        if !session_rows.is_empty() {
+            client
+                .post(format!(
+                    "{}/rest/v1/gnomcode_session_meta?on_conflict=user_id,session_id",
+                    auth.base_url
+                ))
+                .header("apikey", &auth.public_key)
+                .bearer_auth(&auth.access_token)
+                .header("Prefer", "resolution=merge-duplicates,return=minimal")
+                .json(&session_rows)
+                .send()
+                .await?
+                .error_for_status()?;
+            if let Some(last) = sessions.last() {
+                watermark.last_session_event_at = Some(last.last_event_at.clone());
+            }
+        }
+
+        if !usage_rows.is_empty() {
+            client
+                .post(format!(
+                    "{}/rest/v1/gnomcode_usage_record?on_conflict=user_id,dedup_key",
+                    auth.base_url
+                ))
+                .header("apikey", &auth.public_key)
+                .bearer_auth(&auth.access_token)
+                .header("Prefer", "resolution=merge-duplicates,return=minimal")
+                .json(&usage_rows)
+                .send()
+                .await?
+                .error_for_status()?;
+            if let Some((last_rowid, _)) = records.last() {
+                watermark.last_usage_rowid = *last_rowid;
+            }
+            total_pushed = total_pushed.saturating_add(usage_rows.len() as u64);
+        }
+
+        let shared = Arc::clone(db);
+        tokio::task::spawn_blocking(move || {
+            shared.blocking_lock().set_usage_sync_watermark(&watermark)
+        })
+        .await??;
+
+        if sessions.len() < USAGE_SYNC_BATCH && records.len() < USAGE_SYNC_BATCH {
+            break;
+        }
+    }
+    Ok(total_pushed)
+}
+
+#[derive(Serialize)]
+pub(crate) struct RestoreUsageSummary {
+    pub ok: bool,
+    pub restored_records: usize,
+    pub restored_sessions: usize,
+    pub cloud_records: usize,
+}
+
+pub(crate) async fn restore_usage_history(
+    db: &Arc<Mutex<Database>>,
+) -> Result<RestoreUsageSummary, (axum::http::StatusCode, String)> {
+    use axum::http::StatusCode;
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let session_path = gnomcode_platform::gnomcode_home().join("session.json");
+    let auth = read_cloud_auth(&client, &session_path)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?
+        .ok_or((
+            StatusCode::PRECONDITION_REQUIRED,
+            "Sign in to your account before restoring usage history.".to_owned(),
+        ))?;
+
+    let mut sessions = Vec::new();
+    let mut offset = 0usize;
+    loop {
+        let page: Vec<gnomcode_store::CloudSessionMeta> = client
+            .get(format!(
+                "{}/rest/v1/gnomcode_session_meta?user_id=eq.{}&select=session_id,agent,surface,model,project_name,started_at,last_event_at&order=started_at.asc&limit=1000&offset={offset}",
+                auth.base_url, auth.user_id
+            ))
+            .header("apikey", &auth.public_key)
+            .bearer_auth(&auth.access_token)
+            .send()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Could not fetch cloud sessions: {e}")))?
+            .error_for_status()
+            .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Cloud session query failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Invalid cloud session payload: {e}")))?;
+        let len = page.len();
+        sessions.extend(page);
+        if len < 1000 {
+            break;
+        }
+        offset += 1000;
+    }
+
+    let mut records = Vec::new();
+    let mut offset = 0usize;
+    loop {
+        let page: Vec<gnomcode_store::CloudUsageRecord> = client
+            .get(format!(
+                "{}/rest/v1/gnomcode_usage_record?user_id=eq.{}&select=dedup_key,session_id,timestamp,model,input_tokens,output_tokens,reasoning_tokens,cache_read_tokens,cache_write_5m_tokens,cache_write_1h_tokens,context_tokens,context_window,cost_usd,cache_savings_usd,cost_basis,pricing_version&order=timestamp.asc&limit=1000&offset={offset}",
+                auth.base_url, auth.user_id
+            ))
+            .header("apikey", &auth.public_key)
+            .bearer_auth(&auth.access_token)
+            .send()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Could not fetch cloud usage records: {e}")))?
+            .error_for_status()
+            .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Cloud usage query failed: {e}")))?
+            .json()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Invalid cloud usage payload: {e}")))?;
+        let len = page.len();
+        records.extend(page);
+        if len < 1000 {
+            break;
+        }
+        offset += 1000;
+    }
+
+    let cloud_records = records.len();
+    let shared = Arc::clone(db);
+    let (restored_records, restored_sessions) = tokio::task::spawn_blocking(move || {
+        shared
+            .blocking_lock()
+            .restore_cloud_usage_history(&sessions, &records)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(RestoreUsageSummary {
+        ok: true,
+        restored_records,
+        restored_sessions,
+        cloud_records,
+    })
+}
+
+pub(crate) async fn delete_cloud_usage_history(
+    db: &Arc<Mutex<Database>>,
+) -> Result<(), (axum::http::StatusCode, String)> {
+    use axum::http::StatusCode;
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let session_path = gnomcode_platform::gnomcode_home().join("session.json");
+    let auth = read_cloud_auth(&client, &session_path)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?
+        .ok_or((
+            StatusCode::PRECONDITION_REQUIRED,
+            "Sign in to your account before deleting cloud usage history.".to_owned(),
+        ))?;
+
+    client
+        .delete(format!(
+            "{}/rest/v1/gnomcode_usage_record?user_id=eq.{}",
+            auth.base_url, auth.user_id
+        ))
+        .header("apikey", &auth.public_key)
+        .bearer_auth(&auth.access_token)
+        .send()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("Failed to delete cloud usage records: {e}"),
+            )
+        })?
+        .error_for_status()
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("Cloud delete rejected: {e}"),
+            )
+        })?;
+
+    client
+        .delete(format!(
+            "{}/rest/v1/gnomcode_session_meta?user_id=eq.{}",
+            auth.base_url, auth.user_id
+        ))
+        .header("apikey", &auth.public_key)
+        .bearer_auth(&auth.access_token)
+        .send()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("Failed to delete cloud session metadata: {e}"),
+            )
+        })?
+        .error_for_status()
+        .map_err(|e| {
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("Cloud session delete rejected: {e}"),
+            )
+        })?;
+
+    let shared = Arc::clone(db);
+    tokio::task::spawn_blocking(move || {
+        let guard = shared.blocking_lock();
+        guard.reset_usage_sync_watermark()?;
+        let mut toggles = guard.get_feature_toggles()?;
+        toggles.usage_history_sync_enabled = false;
+        guard.set_feature_toggles(&toggles)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut status = USAGE_SYNC_STATUS.lock().await;
+    status.state = "off";
+    status.pushed_records = 0;
+    status.message = "Cloud usage history deleted and backup turned off.";
+    Ok(())
 }
 
 pub(crate) struct CloudAuth {
@@ -501,7 +915,11 @@ pub(crate) fn cloud_config() -> (String, String) {
 
 #[cfg(test)]
 mod tests {
-    use super::hash_project_key;
+    use super::*;
+    use gnomcode_core::{
+        AgentId, Project, Session, SessionState, Surface, TrustLevel, UsageRecord,
+    };
+    use gnomcode_store::SourceCheckpoint;
 
     #[test]
     fn saved_credentials_exclude_oauth_provider_tokens() {
@@ -710,6 +1128,140 @@ mod tests {
                 snapshot["generated_at"].as_str().expect("source timestamp")
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn usage_sync_payload_excludes_titles_and_chat_content() {
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "C:\\private\\secret-project", None);
+        let session = Session {
+            id: "codex:payload-check".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::DesktopApp,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gpt-5".to_owned()),
+            title: Some("Top secret user prompt title".to_owned()),
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+        let cp = SourceCheckpoint {
+            file_path: "rollout.jsonl".to_owned(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fp".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        let record = UsageRecord {
+            dedup_key: "codex:payload-check:1".to_owned(),
+            session_id: "codex:payload-check".to_owned(),
+            timestamp: Utc::now(),
+            model: "gpt-5".to_owned(),
+            input_tokens: 42,
+            output_tokens: 18,
+            reasoning_tokens: 0,
+            cache_read_tokens: 10,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 60,
+            context_window: Some(200_000),
+            cost_usd: 0.004,
+            cache_savings_usd: 0.001,
+            cost_basis: TrustLevel::Exact,
+            pricing_version: "v1".to_owned(),
+        };
+        db.commit_batch(&[project], &[session], &[record], &[], &[], &cp)
+            .expect("commit");
+
+        let sessions = db.read_session_meta_batch(None, 10).expect("sessions");
+        let records: Vec<_> = db
+            .read_usage_sync_batch(0, 10)
+            .expect("records")
+            .into_iter()
+            .map(|(_, r)| r)
+            .collect();
+        let (session_rows, usage_rows) =
+            build_usage_sync_payloads("user-1", "desk-1", &sessions, &records);
+        let encoded = serde_json::to_string(&json!({
+            "sessions": session_rows,
+            "records": usage_rows,
+        }))
+        .expect("json");
+        assert!(!encoded.contains("Top secret user prompt title"));
+        assert!(!encoded.contains("\"title\""));
+        assert!(!encoded.contains("C:\\private\\secret-project"));
+        assert!(encoded.contains("secret-project"));
+        assert!(encoded.contains("codex:payload-check:1"));
+    }
+
+    #[tokio::test]
+    async fn failed_usage_sync_push_fails_open_and_does_not_advance_watermark() {
+        let mut db = Database::open_in_memory().expect("db");
+        let project = Project::from_origin(None, "C:\\work\\failopen", None);
+        let session = Session {
+            id: "codex:failopen".to_owned(),
+            agent: AgentId::Codex,
+            surface: Surface::Cli,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: Some("gpt-5".to_owned()),
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: Utc::now(),
+            last_event_at: Utc::now(),
+        };
+        let cp = SourceCheckpoint {
+            file_path: "rollout.jsonl".to_owned(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fp".to_owned(),
+            last_ingested_at: Utc::now(),
+        };
+        let record = UsageRecord {
+            dedup_key: "codex:failopen:1".to_owned(),
+            session_id: "codex:failopen".to_owned(),
+            timestamp: Utc::now(),
+            model: "gpt-5".to_owned(),
+            input_tokens: 10,
+            output_tokens: 5,
+            reasoning_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_5m_tokens: 0,
+            cache_write_1h_tokens: 0,
+            context_tokens: 15,
+            context_window: None,
+            cost_usd: 0.001,
+            cache_savings_usd: 0.0,
+            cost_basis: TrustLevel::Exact,
+            pricing_version: "v1".to_owned(),
+        };
+        db.commit_batch(&[project], &[session], &[record], &[], &[], &cp)
+            .expect("commit");
+        let shared = Arc::new(Mutex::new(db));
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(200))
+            .build()
+            .expect("client");
+        let auth = CloudAuth {
+            user_id: "00000000-0000-0000-0000-000000000000".to_owned(),
+            access_token: "token".to_owned(),
+            base_url: "https://127.0.0.1:9".to_owned(),
+            public_key: "key".to_owned(),
+        };
+        let res = push_usage_batches(&client, &shared, &auth, "desk-1").await;
+        assert!(res.is_err());
+        assert_eq!(
+            shared
+                .lock()
+                .await
+                .get_usage_sync_watermark()
+                .expect("wm")
+                .last_usage_rowid,
+            0
         );
     }
 }
