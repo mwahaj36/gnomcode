@@ -515,8 +515,8 @@ mod tests {
     #[test]
     fn project_key_hashing_is_deterministic_and_prefixes_proj() {
         let salt = b"gnomcode-test-org-salt-123456";
-        let h1 = hash_project_key(salt, "github.com/mwahaj36/spawnt");
-        let h2 = hash_project_key(salt, "github.com/mwahaj36/spawnt");
+        let h1 = hash_project_key(salt, "github.com/mwahaj36/gnomcode");
+        let h2 = hash_project_key(salt, "github.com/mwahaj36/gnomcode");
         let h3 = hash_project_key(salt, "github.com/other/project");
 
         assert_eq!(h1, h2);

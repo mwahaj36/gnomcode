@@ -8,19 +8,19 @@
   "license": "BUSL-1.1",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/mwahaj36/spawnt-releases/releases/download/vPLACEHOLDER/Gnomcode-vPLACEHOLDER-windows-x64.zip",
+      "url": "https://github.com/mwahaj36/gnomcode-releases/releases/download/vPLACEHOLDER/Gnomcode-vPLACEHOLDER-windows-x64.zip",
       "hash": "PLACEHOLDER_SHA256_WIN32_X64",
       "extract_dir": "."
     }
   },
   "bin": "gnomcode.exe",
   "checkver": {
-    "github": "https://github.com/mwahaj36/spawnt-releases"
+    "github": "https://github.com/mwahaj36/gnomcode-releases"
   },
   "autoupdate": {
     "architecture": {
       "64bit": {
-        "url": "https://github.com/mwahaj36/spawnt-releases/releases/download/v$version/Gnomcode-v$version-windows-x64.zip"
+        "url": "https://github.com/mwahaj36/gnomcode-releases/releases/download/v$version/Gnomcode-v$version-windows-x64.zip"
       }
     }
   }

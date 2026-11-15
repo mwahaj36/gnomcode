@@ -868,18 +868,18 @@ mod tests {
     #[test]
     fn project_from_git_remote_merges_ssh_and_https_clones() {
         let ssh = Project::from_origin(
-            Some("git@github.com:mwahaj36/Spawnt.git"),
+            Some("git@github.com:mwahaj36/Gnomcode.git"),
             "C:\\Users\\dev\\worktree-1",
             Some("feat/a"),
         );
         let https = Project::from_origin(
-            Some("https://github.com/mwahaj36/spawnt/"),
+            Some("https://github.com/mwahaj36/gnomcode/"),
             "/Users/dev/code/gnomcode",
             Some("main"),
         );
         assert_eq!(ssh.id, https.id);
-        assert_eq!(ssh.canonical_key, "github.com/mwahaj36/spawnt");
-        assert_eq!(ssh.name, "spawnt");
+        assert_eq!(ssh.canonical_key, "github.com/mwahaj36/gnomcode");
+        assert_eq!(ssh.name, "gnomcode");
     }
 
     #[test]
