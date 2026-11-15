@@ -1481,6 +1481,11 @@ export function renderArtifactsList(items = [], selectedId = '') {
 
 // The frame is sandboxed with no permissions; the CSP additionally blocks every network fetch.
 const ARTIFACT_HTML_CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">`;
+const ARTIFACT_HTML_BASE_STYLE = `<style>:root{color-scheme:dark light}html,body{margin:0;padding:12px 14px;background:#111317;color:#e6e8ec;font:13px/1.55 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow-wrap:anywhere}pre,code{font-family:ui-monospace,Consolas,monospace;font-size:12px}pre{white-space:pre-wrap;word-break:break-word;margin:0}a{color:#7eb6ff}@media(prefers-color-scheme:light){html,body{background:#fff;color:#111317}a{color:#0969da}}</style>`;
+
+export function sandboxArtifactHtml(content) {
+  return ARTIFACT_HTML_CSP + ARTIFACT_HTML_BASE_STYLE + String(content || '');
+}
 
 export function renderArtifactPreview(artifact) {
   if (!artifact || typeof artifact !== 'object') {
@@ -1489,7 +1494,7 @@ export function renderArtifactPreview(artifact) {
   const kind = classifyArtifactKind(artifact);
   const title = String(artifact.title || artifact.path || 'Artifact preview');
   if (kind === 'html') {
-    return `<div class="sp-artifact-html-wrap"><p class="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe class="sp-artifact-frame" title="${escape(title)}" sandbox="" referrerpolicy="no-referrer" srcdoc="${escape(ARTIFACT_HTML_CSP + String(artifact.content || ''))}"></iframe></div>`;
+    return `<div class="sp-artifact-html-wrap"><p class="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe class="sp-artifact-frame" title="${escape(title)}" sandbox="" referrerpolicy="no-referrer" srcdoc="${escape(sandboxArtifactHtml(artifact.content))}"></iframe></div>`;
   }
   if (kind === 'markdown') {
     return `<div class="sp-artifact-markdown sp-chat-body">${chatMarkdown(String(artifact.content || ''))}</div>`;

@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import {
-  updateHeatmap,
   updateHomeSessions,
   updateProviderCards,
   updateTodayTiles,
-  type ActivityHeatmap,
   type ProviderOverview,
 } from '../lib/console-presentation.js';
+import { ActivityGrid } from './ActivityGrid';
 import {
   fetchLocalJson,
   type LocalReportResponse,
@@ -17,18 +16,15 @@ import {
 
 const POLL_INTERVAL_MS = 15_000;
 const TODAY_TTL_MS = 10_000;
-const HEATMAP_TTL_MS = 60_000;
 
 export function HomeView() {
   const limitsRef = useRef<HTMLElement | null>(null);
   const sessionsRef = useRef<HTMLElement | null>(null);
   const todayRef = useRef<HTMLElement | null>(null);
-  const activityRef = useRef<HTMLDivElement | null>(null);
 
   const lastQuotaKeyRef = useRef('');
   const lastTodayAtRef = useRef(0);
   const lastTodayReportRef = useRef<unknown>(null);
-  const lastHeatmapAtRef = useRef(0);
   const activeCountRef = useRef<number | null>(null);
   const inFlightRef = useRef(false);
 
@@ -62,24 +58,6 @@ export function HomeView() {
     },
     [renderToday],
   );
-
-  const loadHeatmap = useCallback(async (force = false) => {
-    if (!force && Date.now() - lastHeatmapAtRef.current < HEATMAP_TTL_MS) return;
-    lastHeatmapAtRef.current = Date.now();
-    try {
-      const data = await fetchLocalJson<ActivityHeatmap>('/api/v1/activity/heatmap');
-      if (activityRef.current) {
-        updateHeatmap(activityRef.current, data, {
-          weeks: 53,
-          stats: true,
-          legend: true,
-          months: true,
-        });
-      }
-    } catch {
-      lastHeatmapAtRef.current = Date.now() - 50000;
-    }
-  }, []);
 
   const loadQuota = useCallback(async () => {
     try {
@@ -124,34 +102,34 @@ export function HomeView() {
   }, [loadToday]);
 
   const refreshHome = useCallback(
-    async (force = false) => {
-      if (inFlightRef.current && !force) return;
+    async () => {
+      if (inFlightRef.current) return;
       inFlightRef.current = true;
       try {
-        await Promise.all([loadQuota(), loadSessions(), loadHeatmap(force)]);
+        await Promise.all([loadQuota(), loadSessions()]);
       } finally {
         inFlightRef.current = false;
       }
     },
-    [loadHeatmap, loadQuota, loadSessions],
+    [loadQuota, loadSessions],
   );
 
   useEffect(() => {
-    void refreshHome(true);
+    void refreshHome();
     const timer = window.setInterval(() => {
       const activeView = document.body?.dataset?.consoleView || 'overview';
       if (!document.hidden && activeView === 'overview') {
-        void refreshHome(false);
+        void refreshHome();
       }
     }, POLL_INTERVAL_MS);
 
     const onReload = () => {
-      void refreshHome(true);
+      void refreshHome();
     };
     const onViewChange = (event: Event) => {
       const detail = (event as CustomEvent<{ view?: string }>).detail;
       if (!detail || detail.view === 'overview') {
-        void refreshHome(false);
+        void refreshHome();
       }
     };
 
@@ -168,7 +146,7 @@ export function HomeView() {
     <div className="sp-home-react">
       <section className="sp-section" id="home-limits" ref={limitsRef} />
       <div className="sp-home-grid">
-        <div id="home-activity" ref={activityRef} />
+        <ActivityGrid id="home-activity" viewName="overview" />
         <section className="sp-section" id="home-today" ref={todayRef} />
         <section className="sp-section" id="home-sessions" ref={sessionsRef} />
       </div>

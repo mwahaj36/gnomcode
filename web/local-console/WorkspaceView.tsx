@@ -1380,11 +1380,11 @@ export function WorkspaceView() {
       if (entry.element.parentElement !== workspaceTerminalScreenRef.current) {
         workspaceTerminalScreenRef.current.append(entry.element);
       }
-      workspaceTerminalScreenRef.current
-        .querySelectorAll<HTMLDivElement>('div')
-        .forEach((node) => {
+      Array.from(workspaceTerminalScreenRef.current.children).forEach((node) => {
+        if (node instanceof HTMLElement) {
           node.hidden = node !== entry?.element;
-        });
+        }
+      });
       setWorkspaceTerminalPath(entry.repoPath);
       setWorkspaceTerminalOpen(true);
       window.requestAnimationFrame(() => {
@@ -1403,6 +1403,17 @@ export function WorkspaceView() {
       workspaceTerminalBusyRef.current = false;
     }
   };
+
+  useEffect(() => {
+    if (sidePanel !== 'shell' || !workspaceTerminalOpen || !activeSessionId) return;
+    const entry = workspaceTerminalsRef.current.get(activeSessionId);
+    if (!entry) return;
+    const frame = window.requestAnimationFrame(() => {
+      entry.resize();
+      entry.terminal.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [sidePanel, workspaceTerminalOpen, activeSessionId]);
 
   const loadQueue = useCallback(async (sessionId: string) => {
     if (!sessionId) {
