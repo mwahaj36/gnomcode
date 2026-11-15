@@ -18,6 +18,6 @@ workers/
 **/.next/
 **/.env*
 
-# Desktop release binaries are hosted by the binary-only releases repository.
+# Installers are served from this repository's GitHub release; web/app/downloads/[asset] redirects there.
 web/public/downloads/*.exe
 web/public/downloads/*.zip
