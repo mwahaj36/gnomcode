@@ -22,6 +22,11 @@ pub(crate) enum ContinueHereError {
     // Kept for agent names stored by older builds.
     #[error("{0} sessions cannot be resumed from Gnomcode yet. Start a new conversation instead.")]
     UnsupportedAgent(String),
+    /// The session was started on a non-CLI surface (e.g. Antigravity 2.0 IDE or desktop app).
+    #[error(
+        "Sessions started in {0} cannot be resumed from Gnomcode. Start a new conversation here instead."
+    )]
+    UnsupportedSurface(String),
     /// The session never recorded a working folder, or the folder is gone.
     #[error(
         "This session has no recorded working folder on this computer, so Gnomcode cannot resume it safely. Start a new conversation in the project instead."
@@ -47,9 +52,10 @@ impl ContinueHereError {
         use axum::http::StatusCode;
         match self {
             Self::NotFound => StatusCode::NOT_FOUND,
-            Self::UnsupportedAgent(_) | Self::NoFolder | Self::NoResumeId => {
-                StatusCode::UNPROCESSABLE_ENTITY
-            }
+            Self::UnsupportedAgent(_)
+            | Self::UnsupportedSurface(_)
+            | Self::NoFolder
+            | Self::NoResumeId => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Store => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Launch => StatusCode::BAD_GATEWAY,
         }
@@ -79,6 +85,12 @@ pub(crate) fn plan(db: &Database, id: &str) -> Result<ResumePlan, ContinueHereEr
         "codex" | "claude-code" | "antigravity"
     ) {
         return Err(ContinueHereError::UnsupportedAgent(target.agent));
+    }
+    if target.surface != "cli" {
+        let label = gnomcode_core::surface_label(&target.agent, &target.surface)
+            .unwrap_or(&target.surface)
+            .to_owned();
+        return Err(ContinueHereError::UnsupportedSurface(label));
     }
     let folder = target
         .repo_root
@@ -278,6 +290,41 @@ mod tests {
         let command = gnomcode_pty::resume_command("antigravity", folder.path(), &plan.native_id)
             .expect("cmd");
         assert!(command.arguments.join(" ").ends_with("--mode plan"));
+    }
+
+    #[test]
+    fn plan_rejects_non_cli_external_surfaces() {
+        use gnomcode_core::{AgentId, Project, Session, SessionState, Surface};
+        let folder = tempfile::tempdir().expect("folder");
+        let project = Project::from_origin(None, &folder.path().to_string_lossy(), None);
+        let now = chrono::Utc::now();
+        let session = Session {
+            id: "antigravity:ide-1".into(),
+            agent: AgentId::Antigravity,
+            surface: Surface::Ide,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: SessionState::Idle,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let checkpoint = gnomcode_store::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        let mut db = Database::open_in_memory().expect("db");
+        db.commit_batch(&[project], &[session], &[], &[], &[], &checkpoint)
+            .expect("commit");
+        assert!(matches!(
+            plan(&db, "antigravity:ide-1"),
+            Err(ContinueHereError::UnsupportedSurface(_))
+        ));
     }
 
     #[test]

@@ -152,11 +152,13 @@ fn build_remote_snapshot(db: &Database) -> Result<Value, gnomcode_store::Error> 
         db.list_sessions_paginated_with_hosts(None, Some("ongoing"), &live_hosted, 0, 1)?;
     let (_, active_count) =
         db.list_sessions_paginated_with_hosts(None, Some("active"), &live_hosted, 0, 1)?;
+    let activity_heatmap = db.activity_heatmap(Utc::now().date_naive())?;
     Ok(json!({
         "generated_at": Utc::now().to_rfc3339(),
         "timeline": today,
         "roi_by_timeline":roi_by_timeline,
         "timelines": { "today": today, "7d": week, "30d": month, "month": calendar_month, "all": all },
+        "activity_heatmap": activity_heatmap,
         "sessions": sessions,
         "quota": crate::api::quota_views(db.get_latest_quota_snapshots()?),
         "active_count": active_count,
@@ -1041,6 +1043,7 @@ mod tests {
             keys,
             [
                 "active_count",
+                "activity_heatmap",
                 "generated_at",
                 "ongoing_count",
                 "quota",

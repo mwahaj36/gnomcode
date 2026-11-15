@@ -7,6 +7,14 @@
 - Let the quota-triggered context relay hand off to Antigravity, not just Claude Code and Codex.
 - Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
 
+## 1.0.3 — 2026-11-16
+
+- Reject `Continue here` for non-CLI external sessions (e.g., Antigravity 2.0 IDE) in Rust (`continue_here::plan`) and expose `can_continue_here` so unresumable external sessions stay cleanly read-only with a `New conversation` action instead of silently failing.
+- Fix workspace xterm.js terminal rendering (`WorkspaceView` was hiding inner `.xterm` divs via `querySelectorAll('div')`) and re-fit/focus on tab activation.
+- Share `ActivityGrid` across Overview and Usage, render the Rust-computed UTC activity heatmap in the web console (`Home` and `Usage` via cloud snapshot `activity_heatmap`), keep empty pre-history grid squares, and enforce 1:1 square cells with aligned month labels.
+- Open the Conversations sidebar beside the chat pane by default on desktop web Workspace (`RemoteCompanion`), matching the desktop layout.
+- Style sandboxed HTML artifact previews for dark/light mode (`sandboxArtifactHtml`), stack inspector artifacts to one column with a taller preview frame, and truncate subagent sidebar rows cleanly.
+
 ## 1.0.2 — 2026-11-16
 
 - Opt-in per-record usage history backup to Supabase (`gnomcode_usage_record` and `gnomcode_session_meta` with account-scoped RLS): incremental watermark push, idempotent restore on fresh installs, and "Delete my cloud usage history" in Settings and Account. Never syncs chat content, prompts, or session titles.
