@@ -504,6 +504,9 @@ pub struct FeatureToggles {
     pub scheduled_messages_enabled: bool,
     /// Publish the account metadata snapshot that the web console reads.
     pub account_sync_enabled: bool,
+    /// Back up per-record usage history to the paired Supabase account (opt-in, off by default).
+    #[serde(default)]
+    pub usage_history_sync_enabled: bool,
 }
 
 impl Default for FeatureToggles {
@@ -511,6 +514,7 @@ impl Default for FeatureToggles {
         Self {
             scheduled_messages_enabled: true,
             account_sync_enabled: true,
+            usage_history_sync_enabled: false,
         }
     }
 }

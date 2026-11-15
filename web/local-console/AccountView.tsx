@@ -51,13 +51,17 @@ export function AccountView() {
   const [busy, setBusy] = useState<'signin' | 'pair' | 'unpair' | null>(null);
   const [status, setStatus] = useState<{ text: string; tone: Tone } | null>(null);
   const [onboardingPaused, setOnboardingPaused] = useState(() => isOnboardingPausedForAuth());
+  const [localUsageCount, setLocalUsageCount] = useState<number | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState('');
   const busyRef = useRef(false);
   const cloudStatusRef = useRef<HTMLParagraphElement | null>(null);
 
   const check = useCallback(async (): Promise<boolean> => {
-    const [session, sync] = await Promise.allSettled([
+    const [session, sync, usageSync] = await Promise.allSettled([
       fetchLocalJson<AccountState>('/api/v1/auth/session'),
       fetchLocalJson<SyncStatus>('/api/v1/sync/status'),
+      fetchLocalJson<{ local_usage_count?: number }>('/api/v1/sync/usage/status'),
     ]);
     if (session.status !== 'fulfilled') {
       setCloudStatus('Account connection unavailable. Retry Reload view.');
@@ -74,6 +78,9 @@ export function AccountView() {
     );
     setCloudStatus(value.paired ? 'Connected to your account' : 'Not connected. Local monitoring is ready.');
     setAccount({ paired: Boolean(value.paired), email: value.email });
+    if (usageSync.status === 'fulfilled' && typeof usageSync.value.local_usage_count === 'number') {
+      setLocalUsageCount(usageSync.value.local_usage_count);
+    }
     if (value.paired && isOnboardingPausedForAuth()) {
       clearOnboardingPausedForAuth();
       setOnboardingPaused(false);
@@ -236,6 +243,38 @@ export function AccountView() {
             <button id="auth-disconnect-button" type="button" className="btn-control" disabled={busy === 'unpair'} onClick={() => void unpair()}>
               {busy === 'unpair' ? 'Signing out...' : 'Sign out'}
             </button>
+            {localUsageCount === 0 ? (
+              <div style={{ marginTop: '16px' }}>
+                <p>No local usage history yet. Pull backed-up usage records from your account if you have any.</p>
+                <button
+                  id="auth-restore-usage-button"
+                  type="button"
+                  className="btn-control"
+                  disabled={restoreBusy}
+                  onClick={async () => {
+                    setRestoreBusy(true);
+                    setRestoreMsg('Restoring usage history...');
+                    try {
+                      const res = await fetchLocalMutation<{ restored_records: number; cloud_records: number }>(
+                        '/api/v1/sync/usage/restore',
+                        { method: 'POST', timeoutMs: 60000 },
+                      );
+                      setRestoreMsg(
+                        `Restored ${res.restored_records} record${res.restored_records === 1 ? '' : 's'} (${res.cloud_records} in cloud).`,
+                      );
+                      if (res.restored_records > 0) setLocalUsageCount(res.restored_records);
+                    } catch (error) {
+                      setRestoreMsg(error instanceof Error ? error.message : 'Restore failed.');
+                    } finally {
+                      setRestoreBusy(false);
+                    }
+                  }}
+                >
+                  {restoreBusy ? 'Restoring...' : 'Restore usage history'}
+                </button>
+                {restoreMsg ? <p role="status">{restoreMsg}</p> : null}
+              </div>
+            ) : null}
           </div>
           <div id="auth-unpaired-card" hidden={!unpaired}>
             <h3>Sign in on this desktop</h3>

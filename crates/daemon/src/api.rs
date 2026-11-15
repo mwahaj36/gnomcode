@@ -239,6 +239,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/live", get(live_snapshot_handler))
         .route("/api/v1/reconcile", post(reconcile_handler))
         .route("/api/v1/sync/status", get(sync_status_handler))
+        .route("/api/v1/sync/usage/status", get(usage_sync_status_handler))
+        .route(
+            "/api/v1/sync/usage/restore",
+            post(usage_sync_restore_handler),
+        )
+        .route(
+            "/api/v1/sync/usage",
+            axum::routing::delete(usage_sync_delete_handler),
+        )
         .route(
             "/api/v1/rules",
             get(rules_get_handler).post(rules_post_handler),
