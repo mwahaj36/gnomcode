@@ -5,6 +5,8 @@ interface SetupStatus {
   blocker?: 'trust_folder' | 'setup' | null;
   agent?: string;
   folder?: string;
+  /** True while a protocol-mode agent works on a turn; null when only its transcript can say. */
+  busy?: boolean | null;
 }
 
 const POLL_MS = 2000;
@@ -15,19 +17,31 @@ const POLL_MS = 2000;
  * trust can be confirmed here with one explicit click (never automatically), and any other
  * screen (sign-in, key, update) is only pointed to in the agent terminal.
  */
-export function SetupPrompt({ sessionId, onOpenTerminal }: { sessionId: string; onOpenTerminal: () => void }) {
+export function SetupPrompt({
+  sessionId,
+  onOpenTerminal,
+  onStatus,
+}: {
+  sessionId: string;
+  onOpenTerminal: () => void;
+  /** Reports what the host said, so the workspace can show a running turn it owns. */
+  onStatus?: (status: SetupStatus) => void;
+}) {
   const [status, setStatus] = useState<SetupStatus>({});
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setStatus(await fetchLocalJson<SetupStatus>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/setup`));
+      const next = await fetchLocalJson<SetupStatus>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/setup`);
+      setStatus(next);
+      onStatus?.(next);
     } catch {
       // Unknown is never shown as a question; the next poll shows the real state.
       setStatus({});
+      onStatus?.({});
     }
-  }, [sessionId]);
+  }, [sessionId, onStatus]);
 
   useEffect(() => {
     setStatus({});

@@ -56,6 +56,8 @@ pub(crate) async fn status(db: &Arc<Mutex<Database>>, id: &str) -> Value {
         "blocker": gnomcode_pty::setup_blocker(&record).await,
         "agent": agent_name(&record.agent),
         "folder": record.repo_path,
+        // Only a protocol host reports this; null means "ask the transcript", as before.
+        "busy": gnomcode_pty::turn_busy(&record).await,
     })
 }
 

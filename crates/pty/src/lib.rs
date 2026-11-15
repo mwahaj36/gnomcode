@@ -405,6 +405,17 @@ struct WsQuery {
     token: Option<String>,
 }
 
+/// What a protocol-mode driver lets the host do while a turn is in flight: see that one is
+/// running, and ask the agent to stop it. A PTY host has neither (its agent is interrupted
+/// with an Esc keystroke through `/input`).
+#[derive(Clone)]
+pub(crate) struct TurnControl {
+    /// True while the agent is working on a prompt.
+    pub(crate) busy: Arc<AtomicBool>,
+    /// Asks the driver to cancel the running turn.
+    pub(crate) cancel: std::sync::mpsc::Sender<()>,
+}
+
 /// Shared state for the session host server.
 struct HostState {
     agent: String,
@@ -417,6 +428,7 @@ struct HostState {
     stopping: Arc<AtomicBool>,
     resize: Arc<dyn Fn(u16, u16) + Send + Sync>,
     protocol: bool,
+    turn: Option<TurnControl>,
 }
 
 pub(crate) struct PtyInput {
@@ -647,6 +659,7 @@ pub async fn run_pty_host_resuming(
         resize,
         protocol: false,
         native_id: resume_id.map(|id| compose_native_id(agent, id)),
+        turn: None,
     })
     .await
 }
@@ -668,6 +681,8 @@ pub(crate) struct HostParts<'a> {
     pub(crate) protocol: bool,
     /// Composite native session ID already known at start-up (a resumed session).
     pub(crate) native_id: Option<String>,
+    /// Live turn state and cancellation, for a protocol-mode host.
+    pub(crate) turn: Option<TurnControl>,
 }
 
 /// Binds the authenticated loopback listener, records the session and serves until the child exits.
@@ -686,6 +701,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
         resize,
         protocol,
         native_id,
+        turn,
     } = parts;
     // Bind loopback HTTP/WebSocket listener
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
@@ -717,6 +733,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
         stopping: Arc::clone(&stopping),
         resize,
         protocol,
+        turn,
     });
 
     let app = Router::new()
@@ -729,6 +746,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
             post(host_confirm_model_switch_handler),
         )
         .route("/confirm-trust", post(host_confirm_trust_handler))
+        .route("/interrupt", post(host_interrupt_handler))
         .layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
         .route("/stop", post(host_stop_handler))
         .with_state(state);
@@ -799,6 +817,12 @@ async fn host_health_handler(
         "session_id": state.session_id,
         "child_pid": state.child_pid,
         "setup": setup,
+        // Only a protocol host knows this for certain; a PTY host reports null and the
+        // daemon keeps reading the transcript for it.
+        "busy": state
+            .turn
+            .as_ref()
+            .map(|turn| turn.busy.load(Ordering::Relaxed)),
     }))
     .into_response()
 }
@@ -1258,6 +1282,27 @@ async fn host_confirm_trust_handler(
     StatusCode::CONFLICT
 }
 
+/// Cancels the turn a protocol-mode agent is working on. `409` when no turn is running,
+/// and `404` on a PTY host, whose agent is interrupted with an Esc keystroke instead.
+async fn host_interrupt_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+) -> StatusCode {
+    if let Err(status) = authorize_loopback(&headers, &state.token) {
+        return status;
+    }
+    let Some(turn) = state.turn.as_ref() else {
+        return StatusCode::NOT_FOUND;
+    };
+    if !turn.busy.load(Ordering::Relaxed) {
+        return StatusCode::CONFLICT;
+    }
+    match turn.cancel.send(()) {
+        Ok(()) => StatusCode::OK,
+        Err(_) => StatusCode::GONE,
+    }
+}
+
 async fn host_stop_handler(
     headers: HeaderMap,
     State(state): State<Arc<HostState>>,
@@ -1619,6 +1664,41 @@ pub async fn confirm_trust(record: &SessionRecord) -> Result<bool, Error> {
     }
 }
 
+/// Asks a protocol-mode host to cancel the turn its agent is working on. `Ok(false)` when no
+/// turn is running, and `Err` when the host has no protocol driver or cannot be reached.
+///
+/// # Errors
+/// Returns [`Error`] if the host rejects the request or cannot be contacted.
+pub async fn interrupt_turn(record: &SessionRecord) -> Result<bool, Error> {
+    let response = host_client()?
+        .post(format!("http://127.0.0.1:{}/interrupt", record.port))
+        .bearer_auth(&record.token)
+        .send()
+        .await
+        .map_err(|error| Error::Process(error.to_string()))?;
+    match response.status() {
+        StatusCode::OK => Ok(true),
+        StatusCode::CONFLICT => Ok(false),
+        other => Err(Error::Process(format!("interrupt status {other}"))),
+    }
+}
+
+/// Whether the hosted agent is working on a turn right now. `None` when the host cannot say
+/// (a PTY host) or cannot be reached.
+pub async fn turn_busy(record: &SessionRecord) -> Option<bool> {
+    let health: serde_json::Value = host_client()
+        .ok()?
+        .get(format!("http://127.0.0.1:{}/health", record.port))
+        .bearer_auth(&record.token)
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    health.get("busy")?.as_bool()
+}
+
 /// Queues terminal input through an authenticated endpoint independently of terminal output.
 ///
 /// # Errors
@@ -1647,6 +1727,50 @@ pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Erro
 mod tests {
     use super::*;
 
+    /// Stop on a protocol session once did nothing: only a running turn is cancelled, and
+    /// the driver hears about it; a PTY host leaves interruption to the Esc keystroke.
+    #[tokio::test]
+    async fn interrupt_cancels_only_a_running_protocol_turn() {
+        let (input_tx, _input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let (cancel_tx, cancel_rx) = std::sync::mpsc::channel();
+        let busy = Arc::new(AtomicBool::new(false));
+        let state = |turn: Option<TurnControl>| {
+            Arc::new(HostState {
+                protocol: true,
+                agent: "antigravity".into(),
+                token: "turn-test".into(),
+                session_id: "turn-test".into(),
+                child_pid: 0,
+                scrollback: Arc::new(Mutex::new(Scrollback::new(1024))),
+                output_tx: output_tx.clone(),
+                input_tx: input_tx.clone(),
+                stopping: Arc::new(AtomicBool::new(false)),
+                resize: Arc::new(|_, _| {}),
+                turn,
+            })
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+        headers.insert("authorization", "Bearer turn-test".parse().expect("token"));
+        let protocol = state(Some(TurnControl {
+            busy: Arc::clone(&busy),
+            cancel: cancel_tx,
+        }));
+
+        let idle = host_interrupt_handler(headers.clone(), State(Arc::clone(&protocol))).await;
+        assert_eq!(idle, StatusCode::CONFLICT, "nothing to stop");
+        assert!(cancel_rx.try_recv().is_err());
+
+        busy.store(true, Ordering::Relaxed);
+        let running = host_interrupt_handler(headers.clone(), State(protocol)).await;
+        assert_eq!(running, StatusCode::OK);
+        assert!(cancel_rx.try_recv().is_ok(), "the driver is told to cancel");
+
+        let pty = host_interrupt_handler(headers, State(state(None))).await;
+        assert_eq!(pty, StatusCode::NOT_FOUND);
+    }
+
     #[tokio::test]
     async fn cold_codex_does_not_accept_or_queue_a_chat_prompt() {
         let (input_tx, input_rx) = std::sync::mpsc::channel();
@@ -1662,6 +1786,7 @@ mod tests {
             input_tx,
             stopping: Arc::new(AtomicBool::new(false)),
             resize: Arc::new(|_, _| {}),
+            turn: None,
         });
         let mut headers = HeaderMap::new();
         headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
@@ -1727,6 +1852,7 @@ mod tests {
             input_tx,
             stopping: Arc::new(AtomicBool::new(false)),
             resize: Arc::new(|_, _| {}),
+            turn: None,
         });
         let mut headers = HeaderMap::new();
         headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
@@ -1890,6 +2016,7 @@ mod tests {
                 input_tx,
                 stopping: Arc::new(AtomicBool::new(false)),
                 resize: Arc::new(|_, _| {}),
+                turn: None,
             });
             let mut headers = HeaderMap::new();
             headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
@@ -1925,6 +2052,7 @@ mod tests {
             input_tx,
             stopping: Arc::new(AtomicBool::new(false)),
             resize: Arc::new(|_, _| {}),
+            turn: None,
         });
         let mut headers = HeaderMap::new();
         headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
@@ -2004,6 +2132,7 @@ mod tests {
             input_tx,
             stopping: Arc::new(AtomicBool::new(false)),
             resize: Arc::new(|_, _| {}),
+            turn: None,
         });
         state
             .scrollback
@@ -2451,6 +2580,7 @@ mod tests {
             input_tx,
             stopping: Arc::new(AtomicBool::new(false)),
             resize: Arc::new(|_, _| {}),
+            turn: None,
         });
         let mut headers = HeaderMap::new();
         headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
