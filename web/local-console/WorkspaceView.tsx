@@ -41,7 +41,7 @@ import {
   type WorktreeDiffData,
 } from '../lib/worktree-presentation.mjs';
 import { collapseChatList, toggleChatList } from './chat-list';
-import { agentLabel } from '../lib/console-presentation.js';
+import { agentLabel, toggleChatMeta } from '../lib/console-presentation.js';
 import { PaneResizer } from './pane-resizer';
 import { markWorkspaceReady, navigateTo } from './shell-bus';
 import { SetupPrompt } from './SetupPrompt';
@@ -375,6 +375,8 @@ export function WorkspaceView() {
     [sessions, selectedCache, activeSessionId],
   );
   const activeLive = activeSession?.live || null;
+  // A protocol host reports its own turn; its transcript may not be ingested yet.
+  const [hostBusy, setHostBusy] = useState<boolean | null>(null);
   const [liveTick, setLiveTick] = useState(() => Date.now());
   useEffect(() => {
     if (activeLive?.state !== 'working') return;
@@ -811,13 +813,25 @@ export function WorkspaceView() {
     void loadInstalledAgents();
     void loadConversations();
 
+    // A poll never starts while its previous one is still running. Each load keeps only the
+    // newest response, so with a large history (a request slower than the interval) every
+    // answer used to arrive already superseded and the list never rendered at all.
+    const running = new Set<string>();
+    const poll = (key: string, load: () => Promise<unknown>) => {
+      if (running.has(key)) return;
+      running.add(key);
+      void load().finally(() => running.delete(key));
+    };
+    // The list is rebuilt from the whole history on each request, so it refreshes every third
+    // tick; the open conversation stays on every tick.
+    let tick = 0;
     const timer = window.setInterval(() => {
       if (!isWorkspaceVisible()) return;
-      void loadConversations();
+      if (tick++ % 3 === 0) poll('conversations', loadConversations);
       const id = activeSessionIdRef.current;
       if (id) {
-        void refreshAutomation(id);
-        void loadChat(id, { silent: true });
+        poll('automation', () => refreshAutomation(id));
+        poll('chat', () => loadChat(id, { silent: true }));
       }
     }, POLL_INTERVAL_MS);
 
@@ -1398,6 +1412,7 @@ export function WorkspaceView() {
     setTerminalStreamOpen(false);
     closeAgentTerminal();
     setWorkspaceTerminalOpen(false);
+    setHostBusy(null);
     setEditingQueueId(null);
     setEditingQueueText('');
     void loadQueue(activeSessionId);
@@ -1802,6 +1817,7 @@ export function WorkspaceView() {
   };
 
   const handleChatStreamClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    toggleChatMeta(event.target);
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-permission-action]');
     if (!target || !activeSessionId) return;
     const action = target.dataset.permissionAction;
@@ -1821,10 +1837,11 @@ export function WorkspaceView() {
   };
 
   const imported = activeSession?.source === 'imported';
+  const working = activeLive?.state === 'working' || hostBusy === true;
   const canInterruptActive =
     !imported &&
     (activeHosted !== null || (activeSession as { hosted?: boolean } | null)?.hosted !== false) &&
-    (activeLive?.state === 'working' || isSessionRunningState(activeSession?.state || ''));
+    (working || isSessionRunningState(activeSession?.state || ''));
   activeCopyPathRef.current = activeHosted?.repo_path || activeSession?.repo_path || copyPath || '';
 
   useEffect(() => {
@@ -3015,7 +3032,7 @@ export function WorkspaceView() {
               tabIndex={0}
               onClick={handleChatStreamClick}
             />
-            {activeLive?.state === 'working' ? (
+            {working ? (
               <div className="sp-activity-inline" role="status" aria-label="Agent activity">
                 <span dangerouslySetInnerHTML={{ __html: activityMarkup }} />
                 {canInterruptActive ? (
@@ -3036,6 +3053,7 @@ export function WorkspaceView() {
                 onOpenTerminal={() => {
                   if (sidePanel !== 'agent-terminal') handleToggleAgentTerminal();
                 }}
+                onStatus={(status) => setHostBusy(status.busy ?? null)}
               />
             ) : null}
 
@@ -3197,7 +3215,7 @@ export function WorkspaceView() {
                   </button>
                 ) : (
                   <button type="submit" className="btn-primary" disabled={sendBusy}>
-                    {activeLive?.state === 'working' ? 'Queue' : 'Send'}
+                    {working ? 'Queue' : 'Send'}
                   </button>
                 )}
               </div>

@@ -2414,3 +2414,20 @@ body.sp-resizing{cursor:col-resize;user-select:none}
   .sp-native-console .btn-primary,.sp-native-console .btn-control,.sp-native-console .sp-icon-btn{min-height:44px}
   .sp-native-console .sp-chat-composer .btn-primary{min-height:44px}
 }
+/* Message time and Copy stay out of the way: they appear on hover, keyboard focus, or a
+   click/tap on the message. The time sits at the right edge of the header, so in your own
+   bubble it lines up with the bubble's right side. */
+.sp-chat-card header time{margin-left:auto;font-variant-numeric:tabular-nums}
+.sp-native-console .sp-chat-card header time,.sp-native-console .sp-chat-card .sp-chat-copy,
+.sp-remote-chat .sp-chat-card header time,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0;transition:opacity .12s ease}
+.sp-native-console .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) header time,
+.sp-native-console .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) .sp-chat-copy,
+.sp-native-console .sp-chat-card .sp-chat-copy[data-copy-state],
+.sp-remote-chat .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) header time,
+.sp-remote-chat .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) .sp-chat-copy,
+.sp-remote-chat .sp-chat-card .sp-chat-copy[data-copy-state]{opacity:1}
+@media (hover:none){
+  .sp-native-console .sp-chat-card .sp-chat-copy,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0}
+  .sp-native-console .sp-chat-card[data-meta="shown"] .sp-chat-copy,.sp-remote-chat .sp-chat-card[data-meta="shown"] .sp-chat-copy{opacity:1}
+}
+@media (prefers-reduced-motion:reduce){.sp-chat-card header time,.sp-chat-card .sp-chat-copy{transition:none}}

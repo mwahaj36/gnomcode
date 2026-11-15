@@ -1045,7 +1045,7 @@ export function renderChatCards(events) {
       <header>
         <strong>${escape(roleLabel)}</strong>
         ${statusBadge}
-        <time>${escape(new Date(evt.created_at).toLocaleTimeString())}</time>
+        <time datetime="${escape(evt.created_at || '')}" title="${escape(new Date(evt.created_at).toLocaleString())}">${escape(new Date(evt.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time>
         ${copyBtn}
       </header>
       <div class="sp-chat-body">${role === 'assistant' ? chatMarkdown(evt.content) : renderUserBody(evt.content)}</div>
@@ -1054,6 +1054,18 @@ export function renderChatCards(events) {
     </article>`);
   }
   return `<div class="sp-chat-stream">${chunks.join('')}</div>`;
+}
+
+/** Shows or hides the time and Copy of the message a person clicked; other messages hide theirs. */
+export function toggleChatMeta(target) {
+  if (!target?.closest || target.closest('a, button, summary, input, textarea, .sp-code')) return false;
+  if (globalThis.getSelection?.()?.toString()) return false;
+  const card = target.closest('.sp-chat-card');
+  if (!card) return false;
+  const shown = card.dataset.meta === 'shown';
+  card.parentElement?.querySelectorAll('.sp-chat-card[data-meta="shown"]').forEach(other => { delete other.dataset.meta; });
+  if (!shown) card.dataset.meta = 'shown';
+  return true;
 }
 
 export function reconcileChat(events, pending, state = '') {

@@ -1,6 +1,6 @@
 'use client';
 
-import { approvalCopy, sessionStateLabel } from "../lib/console-presentation.js";
+import { approvalCopy, sessionStateLabel, toggleChatMeta } from "../lib/console-presentation.js";
 import { useEffect, useRef, useState } from 'react';
 import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
 import DesktopDevices from './DesktopDevices';
@@ -981,7 +981,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};
           loadingHistory.current = true; setHistoryLoading(true); loadChat(selectedRef.current, events[0]?.event_id);
         }}>Load earlier messages</button>}
-        <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" />
+        <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" onClick={event=>{toggleChatMeta(event.target);}} />
         {active?.live?.state === 'working' && <div className="sp-activity" role="status" aria-label="Agent activity"><span dangerouslySetInnerHTML={{__html:renderActivityIndicator(active.live, active.turn_started_at, liveTick)}} />{isSessionRunningState(active.state) && <button type="button" className="btn-control sp-activity-stop" disabled={!connected || interrupting} onClick={()=>void requestInterrupt()}>Stop</button>}</div>}
         <details hidden={active?.source === 'imported'} className="remote-automation sp-chat-automation"><summary>Schedule and automation</summary>
           <div className="sp-auto">
