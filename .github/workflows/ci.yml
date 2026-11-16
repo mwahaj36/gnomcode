@@ -97,7 +97,7 @@ jobs:
           cargo run -q -p gnomcode -- evals handoff --no-save | tee "$RUNNER_TEMP/handoff-evals.txt"
           cargo run -q -p gnomcode -- evals handoff --no-save --json > "$RUNNER_TEMP/handoff-evals.json"
           { echo '### Handoff quality evals (estimated, synthetic cases)'; echo '```'; cat "$RUNNER_TEMP/handoff-evals.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: handoff-evals
           path: ${{ runner.temp }}/handoff-evals.json
@@ -190,7 +190,7 @@ jobs:
       - name: Drive the real console against a fixture daemon
         working-directory: web
         run: npm run test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: console-e2e-traces-${{ matrix.os }}
