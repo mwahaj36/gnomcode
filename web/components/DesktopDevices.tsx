@@ -14,13 +14,17 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
   const [requests,setRequests]=useState<Request[]>([]);
   const [status,setStatus]=useState('Checking your devices...');
   const [busy,setBusy]=useState(false);
+  const [loaded,setLoaded]=useState(false);
+  const [removeTarget,setRemoveTarget]=useState<Desktop|null>(null);
+  const [removeError,setRemoveError]=useState('');
+  const removeDialog=useRef<HTMLDialogElement|null>(null);
   const [waiting,setWaiting]=useState<{desktop:string;request:string}|null>(null);
   const [mineIds,setMineIds]=useState<string[]>([]);
   const [now,setNow]=useState(()=>Date.now());
   const autoStarted=useRef(false);
   const [disableTarget,setDisableTarget]=useState<Desktop|null>(null);
   const disableDialog=useRef<HTMLDialogElement|null>(null);
-  useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{setOwner(session?.user.id||null);setDesktops([]);setRequests([]);});return()=>subscription.unsubscribe();},[]);
+  useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{setOwner(session?.user.id||null);setDesktops([]);setRequests([]);setLoaded(false);});return()=>subscription.unsubscribe();},[]);
   useEffect(()=>{
     if(!owner){if(owner===null)setStatus('Sign in with the same account as your desktop.');return;}
     let active=true,running=false;
@@ -33,7 +37,7 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
           supabase.from('spawnt_device_requests').select('desktop_id,id,name,state,revoked,offer').eq('user_id',owner!).abortSignal(AbortSignal.any([controller.signal,AbortSignal.timeout(10000)])),
         ]);
         if(hosts.error || clients.error)throw new Error('Directory unavailable');
-        if(active){setDesktops([...(hosts.data||[])].sort((a,b)=>Date.parse(b.last_seen_at)-Date.parse(a.last_seen_at)));setRequests(clients.data||[]);setStatus(hosts.data?.length?'Select a desktop to open its conversations.':'Sign in to the native app to add your desktop.');}
+        if(active){setLoaded(true);setDesktops([...(hosts.data||[])].sort((a,b)=>Date.parse(b.last_seen_at)-Date.parse(a.last_seen_at)));setRequests(clients.data||[]);setStatus(hosts.data?.length?'Select a desktop to open its conversations.':'Sign in to the native app to add your desktop.');}
       }catch{if(active)setStatus('Your device list is unavailable. Check your connection; the list will retry automatically.');}
       finally{running=false;}
     }
@@ -91,6 +95,21 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
     }catch{setStatus('Could not disable account access. Check your connection and retry.');}
     finally{setBusy(false);}
   }
+  useEffect(()=>{if(removeTarget&&!removeDialog.current?.open)removeDialog.current?.showModal();},[removeTarget]);
+  async function removeDesktop(desktop:Desktop) {
+    if(!owner || busy)return;
+    setBusy(true);setRemoveError('');
+    try {
+      const {data,error}=await supabase.from('spawnt_desktops').delete().eq('user_id',owner).eq('id',desktop.id).select('id');
+      if(error || !data?.some(row=>row.id===desktop.id))throw new Error('Not removed');
+      setDesktops(current=>current.filter(host=>host.id!==desktop.id));
+      setRequests(current=>current.filter(request=>request.desktop_id!==desktop.id));
+      await forgetDevice(owner,desktop.id).catch(()=>{});
+      setStatus(`Removed ${desktop.name}. Local sessions were kept.`);
+      removeDialog.current?.close();
+    } catch { setRemoveError('Could not remove this desktop. Check your connection and retry.'); }
+    finally { setBusy(false); }
+  }
   async function removeRequest(req: Request) {
     if (!owner || busy) return;
     setBusy(true);
@@ -107,7 +126,13 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
     }
   }
   return <>
-    <DevicesView owner={owner} status={status} busy={busy} desktops={desktops} requests={requests} mineIds={mineIds} now={now} onOpen={host=>void connect(host)} onDisable={setDisableTarget} onRemove={req=>void removeRequest(req)}/>
+    <DevicesView owner={owner} status={status} busy={busy} desktops={desktops} requests={requests} mineIds={mineIds} now={now} onOpen={host=>void connect(host)} onDisable={setDisableTarget} onRemove={req=>void removeRequest(req)} onRemoveDesktop={host=>{setRemoveError('');setRemoveTarget(host);}} loaded={loaded}/>
+    {removeTarget&&<dialog ref={removeDialog} className="remote-sheet sp-account-access-dialog" aria-labelledby="remove-desktop-heading" onClose={()=>setRemoveTarget(null)}>
+      <h2 id="remove-desktop-heading">Remove desktop?</h2>
+      <p>Remove {removeTarget.name} and its browser connections from this account. Local sessions and files stay on the desktop. A desktop still signed in may appear again when it reconnects.</p>
+      {removeError&&<p role="alert">{removeError}</p>}
+      <div className="web-profile-actions"><button type="button" autoFocus disabled={busy} onClick={()=>removeDialog.current?.close()}>Cancel</button><button type="button" disabled={busy} onClick={()=>void removeDesktop(removeTarget)}>Remove desktop</button></div>
+    </dialog>}
     {disableTarget&&<dialog ref={disableDialog} className="remote-sheet sp-account-access-dialog" aria-labelledby="disable-account-heading" onClose={()=>setDisableTarget(null)}><h2 id="disable-account-heading">Disable account access?</h2><p>Every device signed in to your account will lose access to {disableTarget.name} when that desktop next reaches the account service. Local sessions keep running. You can enable access again in the native app.</p><div className="web-profile-actions"><button type="button" disabled={busy} onClick={()=>disableDialog.current?.close()}>Cancel</button><button type="button" disabled={busy} onClick={()=>void disableAccess(disableTarget)}>Disable account access</button></div></dialog>}
   </>;
 }

@@ -32,6 +32,7 @@ struct ArtifactItem {
     /// Highlighter language for code artifacts, from `core::file_preview`.
     language: &'static str,
     status: &'static str,
+    truncated: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -251,6 +252,7 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
                     mime_type,
                     language,
                     status: status_label,
+                    truncated: false,
                     content: None,
                     data_url: Some(format!("data:{mime_type};base64,{encoded}")),
                 });
@@ -266,6 +268,7 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
                 mime_type,
                 language,
                 status: status_label,
+                truncated: false,
                 content: Some(content),
                 data_url: None,
             });
@@ -274,61 +277,197 @@ async fn collect_artifacts(workspace: &Path) -> Result<(Vec<ArtifactItem>, usize
     Ok((artifacts, changes_count))
 }
 
-/// Returns read-only artifacts and change count for a session's workspace.
+struct ReferencedFile {
+    path: String,
+    root: std::path::PathBuf,
+    relative: String,
+}
+
+fn referenced_workspace_files(
+    db: &Database,
+    session_id: &str,
+    workspace: &Path,
+) -> Vec<ReferencedFile> {
+    let roots = gnomcode_platform::agent_document_roots();
+    referenced_files_with_roots(db, session_id, workspace, &roots)
+}
+
+fn referenced_files_with_roots(
+    db: &Database,
+    session_id: &str,
+    workspace: &Path,
+    roots: &[std::path::PathBuf],
+) -> Vec<ReferencedFile> {
+    let Ok(root) = workspace.canonicalize() else {
+        return Vec::new();
+    };
+    let Ok(events) = db.conversation_chat(session_id, Some(5000), None) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<ReferencedFile> = Vec::new();
+    let document_roots: Vec<_> = roots
+        .iter()
+        .cloned()
+        .filter_map(|path| path.canonicalize().ok())
+        .collect();
+    for event in events {
+        if event.role != gnomcode_core::ChatRole::Assistant {
+            continue;
+        }
+        for raw in gnomcode_core::file_preview::linked_file_paths(&event.content) {
+            let candidate = if raw.starts_with("file:") {
+                let Ok(url) = reqwest::Url::parse(&raw) else {
+                    continue;
+                };
+                let Ok(path) = url.to_file_path() else {
+                    continue;
+                };
+                path
+            } else {
+                root.join(&raw)
+            };
+            let Ok(file) = candidate.canonicalize() else {
+                continue;
+            };
+            let allowed = if file.starts_with(&root) {
+                Some(&root)
+            } else {
+                document_roots
+                    .iter()
+                    .find(|allowed| file.starts_with(allowed))
+            };
+            let Some(allowed) = allowed else {
+                continue;
+            };
+            let Ok(relative) = file.strip_prefix(allowed) else {
+                continue;
+            };
+            let relative = relative.to_string_lossy().replace('\\', "/");
+            let path = if allowed == &root {
+                relative.clone()
+            } else {
+                raw
+            };
+            if file.is_file() && !paths.iter().any(|item| item.path == path) {
+                paths.push(ReferencedFile {
+                    path,
+                    root: allowed.clone(),
+                    relative,
+                });
+            }
+            if paths.len() >= MAX_ARTIFACTS {
+                return paths;
+            }
+        }
+    }
+    paths
+}
+
+fn include_referenced_files(
+    artifacts: &mut Vec<ArtifactItem>,
+    _workspace: &Path,
+    paths: Vec<ReferencedFile>,
+) {
+    for reference in paths.into_iter().rev() {
+        let path = reference.path;
+        if artifacts.iter().any(|item| item.path == path) {
+            continue;
+        }
+        let Ok(preview) =
+            crate::workspace_files::preview_workspace_file(&reference.root, &reference.relative)
+        else {
+            continue;
+        };
+        let (kind, mime_type) = classify_path(&path);
+        artifacts.insert(
+            0,
+            ArtifactItem {
+                id: path.clone(),
+                title: Path::new(&path)
+                    .file_name()
+                    .map_or_else(|| path.clone(), |name| name.to_string_lossy().into_owned()),
+                language: gnomcode_core::file_preview::classify(&path, b"").language,
+                path,
+                kind,
+                mime_type,
+                status: "referenced",
+                truncated: preview
+                    .get("truncated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                content: preview
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                data_url: preview
+                    .get("data_url")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            },
+        );
+    }
+    artifacts.truncate(MAX_ARTIFACTS);
+}
+
+async fn session_artifacts(
+    db: &Arc<Mutex<Database>>,
+    session_id: &str,
+) -> Result<(Vec<ArtifactItem>, usize), (StatusCode, &'static str)> {
+    let db = Arc::clone(db);
+    let id = session_id.to_owned();
+    let (workspace, references) = tokio::task::spawn_blocking(move || {
+        let guard = db.blocking_lock();
+        let workspace = resolve_session_workspace(&guard, &id)
+            .map_err(|message| (StatusCode::NOT_FOUND, message))?;
+        let references = referenced_workspace_files(&guard, &id, &workspace);
+        Ok::<_, (StatusCode, &'static str)>((workspace, references))
+    })
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Could not resolve session files",
+        )
+    })??;
+    let (mut artifacts, count) = collect_artifacts(&workspace)
+        .await
+        .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    tokio::task::spawn_blocking(move || {
+        include_referenced_files(&mut artifacts, &workspace, references);
+        (artifacts, count)
+    })
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Could not inspect session documents",
+        )
+    })
+}
+
+/// Returns read-only workspace artifacts, including documents referenced in this conversation.
 pub(crate) async fn get_handler(
     headers: HeaderMap,
     AxumPath(session_id): AxumPath<String>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
-    let workspace = {
-        let db = state.db.lock().await;
-        match resolve_session_workspace(&db, &session_id) {
-            Ok(path) => path,
-            Err(message) => {
-                return Ok((
-                    StatusCode::NOT_FOUND,
-                    Json(json!({"ok": false, "message": message})),
-                )
-                    .into_response());
-            }
-        }
-    };
-    match collect_artifacts(&workspace).await {
-        Ok((artifacts, changes_count)) => Ok(Json(json!({
-            "session_id": session_id,
-            "artifacts": artifacts,
-            "changes_count": changes_count,
-        }))
-        .into_response()),
-        Err(message) => Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "message": message})),
-        )
-            .into_response()),
-    }
+    Ok(match session_artifacts(&state.db, &session_id).await {
+        Ok((artifacts, changes_count)) => Json(json!({"session_id": session_id, "artifacts": artifacts, "changes_count": changes_count})).into_response(),
+        Err((status, message)) => (status, Json(json!({"ok": false, "message": message}))).into_response(),
+    })
 }
 
-/// Handles E2EE Remote `artifacts` requests for a session's workspace.
+/// Handles E2EE Remote artifacts with the same session and filesystem checks as the local API.
 pub(crate) async fn remote_command(db: &Arc<Mutex<Database>>, request: &Value) -> Value {
     let Some(session_id) = request.get("session_id").and_then(Value::as_str) else {
         return json!({"type": "error", "message": "Missing session"});
     };
-    let workspace = {
-        let db = db.lock().await;
-        match resolve_session_workspace(&db, session_id) {
-            Ok(path) => path,
-            Err(message) => return json!({"type": "error", "message": message}),
+    match session_artifacts(db, session_id).await {
+        Ok((artifacts, changes_count)) => {
+            json!({"type": "artifacts", "session_id": session_id, "artifacts": artifacts, "changes_count": changes_count})
         }
-    };
-    match collect_artifacts(&workspace).await {
-        Ok((artifacts, changes_count)) => json!({
-            "type": "artifacts",
-            "session_id": session_id,
-            "artifacts": artifacts,
-            "changes_count": changes_count,
-        }),
-        Err(message) => json!({"type": "error", "message": message}),
+        Err((_, message)) => json!({"type": "error", "message": message}),
     }
 }
 
@@ -366,6 +505,56 @@ mod tests {
         db.record_session_cwd(session_id, &repo.to_string_lossy())
             .expect("cwd");
         Arc::new(Mutex::new(db))
+    }
+
+    #[test]
+    fn conversation_documents_are_listed_for_every_provider_without_reading_outside_workspace() {
+        let repo = tempfile::tempdir().expect("workspace");
+        std::fs::create_dir(repo.path().join("localdocs")).expect("docs");
+        std::fs::write(
+            repo.path().join("localdocs").join("handoff.md"),
+            "# Handoff",
+        )
+        .expect("document");
+        let outside = tempfile::NamedTempFile::new().expect("outside");
+        let agent_docs = tempfile::tempdir().expect("agent docs");
+        let plan = agent_docs.path().join("plan.md");
+        std::fs::write(&plan, "# Agent plan").expect("plan");
+        let plan_url = reqwest::Url::from_file_path(&plan).expect("file URL");
+        for provider in ["claude-code", "codex", "antigravity"] {
+            let id = format!("{provider}:documents");
+            let db = seeded_db_with_session(&id, repo.path());
+            let guard = db.blocking_lock();
+            guard
+                .insert_chat_event(&gnomcode_core::ChatEvent {
+                    event_id: format!("{provider}-document"),
+                    session_id: id.clone(),
+                    turn_index: 1,
+                    role: gnomcode_core::ChatRole::Assistant,
+                    content: format!(
+                        "[Handoff](localdocs/handoff.md) [Plan]({plan_url}) [outside]({})",
+                        outside.path().display()
+                    ),
+                    tool_name: None,
+                    status: None,
+                    created_at: chrono::Utc::now(),
+                })
+                .expect("event");
+            let paths = referenced_files_with_roots(
+                &guard,
+                &id,
+                repo.path(),
+                &[agent_docs.path().to_path_buf()],
+            );
+            assert_eq!(paths.len(), 2);
+            assert_eq!(paths[0].path, "localdocs/handoff.md");
+            assert_eq!(paths[1].path, plan_url.as_str());
+            let mut artifacts = Vec::new();
+            include_referenced_files(&mut artifacts, repo.path(), paths);
+            assert_eq!(artifacts[0].content.as_deref(), Some("# Handoff"));
+            assert_eq!(artifacts[0].status, "referenced");
+            assert_eq!(artifacts[1].content.as_deref(), Some("# Agent plan"));
+        }
     }
 
     #[tokio::test]

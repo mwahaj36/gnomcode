@@ -16,7 +16,7 @@ const BrowserIcon=()=><svg {...icon}><rect x="3" y="4" width="18" height="16" rx
 const stateText:Record<string,string>={this:'Signed in on this browser',approved:'Can open your desktop',pending:'Waiting for your desktop to accept',revoked:'Access removed'};
 
 /** Presentation only: data and actions come from DesktopDevices. */
-export default function DevicesView({owner,status,busy,desktops,requests,mineIds,now,onOpen,onDisable,onRemove}:{owner:string|null|undefined;status:string;busy:boolean;desktops:Desktop[];requests:Request[];mineIds:string[];now:number;onOpen:(desktop:Desktop)=>void;onDisable:(desktop:Desktop)=>void;onRemove:(request:Request)=>void}) {
+export default function DevicesView({owner,status,busy,desktops,requests,mineIds,now,onOpen,onDisable,onRemove,onRemoveDesktop,loaded=true}:{owner:string|null|undefined;status:string;busy:boolean;desktops:Desktop[];requests:Request[];mineIds:string[];now:number;onOpen:(desktop:Desktop)=>void;onDisable:(desktop:Desktop)=>void;onRemove:(request:Request)=>void;onRemoveDesktop?:(desktop:Desktop)=>void;loaded?:boolean}) {
   const [confirming,setConfirming]=useState<string|null>(null);
   const groups=groupDevices(requests,mineIds) as {key:string;label:string;rows:Request[]}[];
   const lead=desktops.find(host=>host.remote_enabled);
@@ -25,7 +25,7 @@ export default function DevicesView({owner,status,busy,desktops,requests,mineIds
     {owner===null && <div className="sp-empty"><p>Sign in with the same account as your desktop to see it here.</p><Link className="sp-dev-primary" href="/auth">Sign in</Link></div>}
     {owner!==null && <>
       <h3 className="sp-group-label">Your desktops {desktops.length>0&&<span>{desktops.length}</span>}</h3>
-      {desktops.length===0 ? <div className="sp-empty"><p>No desktop is linked to this account yet. Sign in to the native app with the same account to add it.</p></div> :
+      {desktops.length===0 ? !loaded ? null : <div className="sp-empty"><p>No desktop is linked to this account yet. Sign in to the native app with the same account to add it.</p></div> :
         <div className="sp-dev-cards">{desktops.map(desktop=>{
           const online=isOnline(desktop.last_seen_at,now),seen=relativeTime(desktop.last_seen_at,now),on=desktop.remote_enabled;
           return <article className="sp-card sp-dev-card" key={desktop.id} aria-label={desktop.name}>
@@ -36,11 +36,12 @@ export default function DevicesView({owner,status,busy,desktops,requests,mineIds
             <div className="sp-dev-actions">
               <button type="button" className={desktop.id===lead?.id?'sp-dev-primary':'sp-dev-secondary'} disabled={busy||!on} onClick={()=>onOpen(desktop)}>Open desktop</button>
               {on ? <button type="button" className="sp-dev-quiet-danger" disabled={busy} onClick={()=>onDisable(desktop)}>Disable account access</button> : <span className="sp-section-meta">Turn access back on in the native app.</span>}
+              {onRemoveDesktop && <button type="button" className="sp-dev-quiet-danger" disabled={busy} onClick={()=>onRemoveDesktop(desktop)}>Remove desktop</button>}
             </div>
           </article>;
         })}</div>}
       <h3 className="sp-group-label sp-dev-browsers">Connected browsers {requests.length>0&&<span>{requests.length}</span>}</h3>
-      {requests.length===0 ? <div className="sp-empty"><p>No browsers or phones are enrolled yet. Open a desktop from this browser to add it.</p></div> :
+      {requests.length===0 ? !loaded ? null : <div className="sp-empty"><p>No browsers or phones are enrolled yet. Open a desktop from this browser to add it.</p></div> :
         groups.map(group=><div key={group.key} className="sp-dev-group"><h4 className="sp-group-label">{group.label} <span>{group.rows.length}</span></h4>
           <ul className="sp-session-list" role="list">{group.rows.map(req=>{
             const kind=deviceKind(req.name),asking=confirming===req.id;

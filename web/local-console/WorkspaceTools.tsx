@@ -1,162 +1,28 @@
 'use client';
 
 // Workspace tools carried over from the legacy console so the React Workspace keeps parity:
-// quick prompts (ADR 0043), attachments (ADR 0041), interrupt (ADR 0035) and the read-only
+// attachments (ADR 0041), interrupt (ADR 0035) and the read-only
 // Changes, Files and Artifacts panels (ADR 0037, 0050, 0039). Rendering and validation come from
 // console-presentation.js; the daemon remains the authority for every limit.
-import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
+  artifactForLink,
   copyTextToClipboard,
   createInterruptRequestId,
-  DEFAULT_QUICK_ACTIONS,
   formatInterruptAckMessage,
-  loadStoredQuickActions,
-  MAX_QUICK_ACTIONS,
-  normalizeQuickAction,
   normalizeWorkspaceRelPath,
   renderArtifactPreview,
   renderArtifactsList,
   renderAttachmentPills,
   renderChangesView,
-  renderFileEntries,
   renderFileViewer,
-  saveStoredQuickActions,
-  toWireQuickActions,
   validateAttachmentCandidate,
   type ArtifactItem,
   type AttachmentItem,
-  type QuickAction,
+  type RepoFileListing,
 } from '../lib/console-presentation.js';
 import { fetchLocalJson, fetchLocalMutation } from './local-api';
-
-/* ---------- Quick prompts ---------- */
-
-export function QuickActionsBar({ disabled, onSend }: { disabled: boolean; onSend: (text: string) => void }) {
-  const [items, setItems] = useState<QuickAction[]>(() => loadStoredQuickActions());
-  const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [error, setError] = useState('');
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchLocalJson<{ actions?: unknown }>('/api/v1/quick-actions')
-      .then((res) => {
-        if (!cancelled && Array.isArray(res?.actions)) setItems(saveStoredQuickActions(res.actions));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-
-  const persist = useCallback(async (next: QuickAction[]) => {
-    try {
-      const saved = await fetchLocalMutation<{ actions?: unknown }>('/api/v1/quick-actions', {
-        method: 'PUT',
-        body: { actions: toWireQuickActions(next) },
-      });
-      setItems(saveStoredQuickActions(Array.isArray(saved?.actions) ? saved.actions : next));
-      setError('');
-      return true;
-    } catch (err) {
-      setError(`Could not save quick prompts: ${err instanceof Error ? err.message : 'unknown error'}`);
-      return false;
-    }
-  }, []);
-
-  const add = (event: FormEvent) => {
-    event.preventDefault();
-    const clean = normalizeQuickAction({ id: `custom-${crypto.randomUUID().slice(0, 8)}`, label, prompt, builtin: false });
-    if (!clean) {
-      setError('Enter a label and a plain prompt (up to 4000 characters, never starting with /).');
-      return;
-    }
-    if (items.length >= MAX_QUICK_ACTIONS) {
-      setError(`Up to ${MAX_QUICK_ACTIONS} quick prompts. Remove one first.`);
-      return;
-    }
-    void persist([...items, clean]).then((saved) => {
-      if (saved) {
-        setLabel('');
-        setPrompt('');
-      }
-    });
-  };
-
-  return (
-    <>
-      <div id="chat-quick-actions">
-        <div className="sp-quick-actions" role="toolbar" aria-label="Quick prompts">
-          {items.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              className="sp-quick-action"
-              title={action.prompt}
-              disabled={disabled}
-              onClick={() => onSend(action.prompt)}
-            >
-              {action.label}
-            </button>
-          ))}
-          <button type="button" className="sp-quick-action sp-quick-action--manage" aria-label="Manage quick prompts" onClick={() => setOpen(true)}>
-            Customize
-          </button>
-        </div>
-      </div>
-      <dialog ref={dialogRef} className="sp-dialog" aria-labelledby="quick-actions-heading" onClose={() => setOpen(false)}>
-        <div className="onboarding-header">
-          <h2 id="quick-actions-heading">Quick prompts</h2>
-          <button type="button" className="btn-control" onClick={() => setOpen(false)}>
-            Close
-          </button>
-        </div>
-        <p className="sp-field-note">Canned prompts are sent as plain chat messages, never shell commands.</p>
-        <div className="sp-quick-actions-list">
-          {items.map((item) => (
-            <div key={item.id} className="sp-quick-action-row">
-              <div>
-                <strong>{item.label}</strong>
-                <p>{item.prompt}</p>
-              </div>
-              <button type="button" className="btn-control" disabled={items.length <= 1} onClick={() => void persist(items.filter((row) => row.id !== item.id))}>
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-        <form className="sp-quick-actions-form" onSubmit={add}>
-          <label htmlFor="quick-action-label">Button label</label>
-          <input id="quick-action-label" type="text" maxLength={40} required placeholder="Review tests" value={label} onChange={(event) => setLabel(event.target.value)} />
-          <label htmlFor="quick-action-prompt">Prompt message</label>
-          <textarea id="quick-action-prompt" rows={3} maxLength={4000} required placeholder="Run the test suite and summarize any failures." value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-          {error ? (
-            <p className="sp-field-note sp-tone-red" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="dialog-actions">
-            <button type="button" className="btn-control" onClick={() => void persist([...DEFAULT_QUICK_ACTIONS])}>
-              Reset defaults
-            </button>
-            <button type="submit" className="btn-primary">
-              Add prompt
-            </button>
-          </div>
-        </form>
-      </dialog>
-    </>
-  );
-}
+import { WorkspaceFileTree } from '../components/WorkspaceFileTree';
 
 /* ---------- Attachments ---------- */
 
@@ -256,6 +122,7 @@ export type WorkspaceSidePanel = PanelKey;
 
 export function SessionTools({
   sessionId,
+  artifactLink = '',
   repoPath,
   canInterrupt,
   panel: controlledPanel,
@@ -263,6 +130,7 @@ export function SessionTools({
   hideToolbar = false,
 }: {
   sessionId: string;
+  artifactLink?: string;
   repoPath: string;
   canInterrupt: boolean;
   panel?: PanelKey | null;
@@ -283,7 +151,7 @@ export function SessionTools({
   const [hasDiffText, setHasDiffText] = useState(false);
   // The last changes payload, so picking a file re-renders without another git call.
   const changesData = useRef<unknown>(null);
-  const [filesHtml, setFilesHtml] = useState('');
+  const [fileListing, setFileListing] = useState<RepoFileListing>(null);
   const [fileBodyHtml, setFileBodyHtml] = useState('');
   const [filePath, setFilePath] = useState('');
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
@@ -301,7 +169,7 @@ export function SessionTools({
     setChangesHtml('');
     setHasDiffText(false);
     setDiffCopied(false);
-    setFilesHtml('');
+    setFileListing(null);
     setFileBodyHtml('');
     setFilePath('');
     setArtifacts([]);
@@ -336,21 +204,17 @@ export function SessionTools({
   const loadFiles = useCallback(
     async (subpath = '') => {
       if (!repoPath) {
-        setFilesHtml(renderFileEntries({ error: 'Workspace repository path is unavailable for this session.' }));
+        setFileListing({ error: 'Workspace repository path is unavailable for this session.' });
         return;
       }
-      setFilesHtml(renderFileEntries({ loading: true }));
+      setFileListing({ loading: true });
       try {
         const listing = await fetchLocalJson<Record<string, unknown>>(
           `/api/v1/repos/files?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(subpath)}`,
         );
-        setFilesHtml(renderFileEntries(listing as never));
+        setFileListing(listing as RepoFileListing);
       } catch (err) {
-        setFilesHtml(
-          renderFileEntries({
-            error: httpStatusOf(err).includes('404') ? 'Folder not found inside the workspace.' : 'Could not list this workspace folder.',
-          }),
-        );
+        setFileListing({ error: httpStatusOf(err).includes('404') ? 'Folder not found inside the workspace.' : 'Could not list this workspace folder.' });
       }
     },
     [repoPath],
@@ -399,7 +263,9 @@ export function SessionTools({
       if (sessionRef.current !== target) return;
       const list = Array.isArray(data.artifacts) ? data.artifacts : [];
       setArtifacts(list);
-      setSelectedArtifact(list[0] ? String(list[0].id || list[0].path || 0) : '');
+      const linked = artifactLink ? artifactForLink(list, artifactLink) : null;
+      const first = artifactLink ? linked : list[0];
+      setSelectedArtifact(first ? String(first.id || first.path || 0) : '');
       setArtifactsBadge(
         typeof data.changes_count === 'number' ? `${data.changes_count} workspace change${data.changes_count === 1 ? '' : 's'}` : 'Artifacts',
       );
@@ -409,7 +275,7 @@ export function SessionTools({
         setArtifactsBadge('Artifacts unavailable for this conversation');
       }
     }
-  }, [sessionId]);
+  }, [sessionId, artifactLink]);
 
   useEffect(() => {
     if (panel === 'changes') void loadChanges();
@@ -549,8 +415,10 @@ export function SessionTools({
               Open
             </button>
           </form>
-          <div dangerouslySetInnerHTML={{ __html: filesHtml }} />
-          <div dangerouslySetInnerHTML={{ __html: fileBodyHtml }} />
+          <div className="sp-files-layout">
+            <WorkspaceFileTree key={sessionId} listing={fileListing} onBrowse={path => void loadFiles(path)} onRead={path => void readFile(path)} selected={filePath} />
+            <div className="sp-file-viewer" dangerouslySetInnerHTML={{ __html: fileBodyHtml }} />
+          </div>
         </section>
       ) : null}
 

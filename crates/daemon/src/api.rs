@@ -304,6 +304,14 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/approvals/grants/{session_id}",
             axum::routing::delete(crate::approvals::revoke_grants_handler),
         )
+        .route(
+            "/api/v1/approvals/projects",
+            axum::routing::delete(crate::approvals::revoke_project_handler),
+        )
+        .route(
+            "/api/v1/sessions/{id}/trust-project",
+            post(crate::approvals::trust_project_handler),
+        )
         .route("/api/v1/repos/file", get(repo_file_get_handler))
         .route(
             "/api/v1/repos/files",

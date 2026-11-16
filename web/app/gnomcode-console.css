@@ -658,7 +658,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console #chat-switch-btn:disabled{display:none}
 .sp-native-console #chat-status{font-size:var(--sp-fs-meta);color:var(--sp-text-3);margin-top:8px}
 .sp-native-console #chat-send-btn{border-radius:10px;min-width:64px;font:600 var(--sp-fs-body)/1.4 var(--sp-font-sans)}
-.sp-native-console .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+:is(.sp-native-console,.sp-console-app,.sp-remote) .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .sp-chat-user{background:var(--sp-surface-2);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:14px 14px 4px 14px;width:fit-content;max-width:min(76ch,85%);margin-left:auto}
 .sp-chat-user header,.sp-chat-user header strong,.sp-chat-user time{color:var(--sp-text-2)}
 .sp-chat-assistant{background:transparent;border:0;border-radius:0;padding:4px 0}
@@ -1364,7 +1364,7 @@ html{touch-action:manipulation}
 .sp-remote .remote-sheet .sp-card-grid{grid-template-columns:minmax(0,1fr)}
 @media(max-width:767px){
  .sp-console-app.sp-web-app,.sp-console-app.sp-web-app.web-navigation-expanded{padding:max(var(--sp-4),env(safe-area-inset-top)) max(var(--sp-4),env(safe-area-inset-right)) calc(68px + env(safe-area-inset-bottom)) max(var(--sp-4),env(safe-area-inset-left))!important}
- .sp-console-app.sp-web-app:has(.sp-remote:is(.is-paired,.is-reconnecting)){padding-top:0!important}
+ .sp-console-app.sp-web-app:has(:not([hidden]) > .sp-remote:is(.is-paired,.is-reconnecting)){padding-top:0!important}
  .sp-console-app.sp-web-app .sp-console-workspace>.sp-console-nav{inset:auto 0 0 0;width:100%!important;height:calc(56px + env(safe-area-inset-bottom));flex-direction:row;align-items:stretch;gap:var(--sp-1);padding:0 max(var(--sp-2),env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--sp-2),env(safe-area-inset-left));border-right:0;border-bottom:0;border-top:1px solid var(--sp-border);overflow:visible;z-index:40}
  .sp-console-app.sp-web-app .sp-console-nav :is(.web-rail-brand,.web-download-link,.web-rail-toggle){display:none}
  .sp-console-app.sp-web-app .sp-console-nav button{flex:1;justify-content:center;min-height:48px;padding:0;margin:0!important}
@@ -2315,7 +2315,7 @@ body.sp-resizing{cursor:col-resize;user-select:none}
  .sp-console-app.sp-web-app.web-navigation-expanded{padding-left:216px!important}
  .sp-console-app.sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;background:var(--sp-bg);border-right:0}
  .sp-console-app.sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
- .sp-console-app.sp-web-app .sp-console-content{max-width:none;margin:0;min-height:calc(100dvh - 16px);padding:0 var(--sp-gutter) var(--sp-6);background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:12px}
+ .sp-console-app.sp-web-app .sp-console-content{max-width:none;margin:0;min-height:calc(100dvh - 16px);padding:var(--sp-5) var(--sp-gutter) var(--sp-6);background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:12px}
 }
 /* Pool rows: the value column sizes to its text and stacks the seen time under the percentage instead of spilling out */
 .sp-mini{grid-template-columns:minmax(48px,max-content) minmax(40px,1fr) minmax(0,max-content)}
@@ -2440,11 +2440,11 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-chat-card header time{margin-left:auto;font-variant-numeric:tabular-nums}
 .sp-native-console .sp-chat-card header time,.sp-native-console .sp-chat-card .sp-chat-copy,
 .sp-remote-chat .sp-chat-card header time,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0;transition:opacity .12s ease}
-.sp-native-console .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) header time,
-.sp-native-console .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) .sp-chat-copy,
+.sp-native-console .sp-chat-card:is(:focus-within,[data-meta="shown"]) header time,
+.sp-native-console .sp-chat-card:is(:focus-within,[data-meta="shown"]) .sp-chat-copy,
 .sp-native-console .sp-chat-card .sp-chat-copy[data-copy-state],
-.sp-remote-chat .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) header time,
-.sp-remote-chat .sp-chat-card:is(:hover,:focus-within,[data-meta="shown"]) .sp-chat-copy,
+.sp-remote-chat .sp-chat-card:is(:focus-within,[data-meta="shown"]) header time,
+.sp-remote-chat .sp-chat-card:is(:focus-within,[data-meta="shown"]) .sp-chat-copy,
 .sp-remote-chat .sp-chat-card .sp-chat-copy[data-copy-state]{opacity:1}
 @media (hover:none){
   .sp-native-console .sp-chat-card .sp-chat-copy,.sp-remote-chat .sp-chat-card .sp-chat-copy{opacity:0}
@@ -2639,7 +2639,7 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
  .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>header{
   flex:none;padding:12px 16px;margin:0;border-bottom:1px solid var(--sp-border)
  }
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>:not(header):not(.sp-pane-resizer){
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>:not(header):not(.sp-pane-resizer):not(.sp-file-form){
   flex:1 1 auto;min-height:0;overflow:auto;padding:12px 16px
  }
  .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>.sp-pane-resizer{left:-5px;right:auto}
@@ -2716,3 +2716,98 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
  .sp-remote .remote-session-sidebar .ide-session-more,
  .sp-chat-column .ide-session-more{opacity:1;flex:0 0 44px;width:44px;min-width:44px;min-height:44px}
 }
+/* File inspection keeps navigation and document scrolling independent. */
+.sp-inspector .sp-files-panel{display:flex;flex-direction:column;min-height:0;height:100%;max-height:none;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;overflow:hidden}
+.sp-files-layout{display:grid;grid-template-columns:minmax(140px,30%) minmax(0,1fr);flex:1;min-height:320px;gap:16px}
+.sp-file-tree{min-width:0;overflow:auto;border-right:1px solid var(--sp-border);padding-right:8px}
+.sp-file-tree ul{list-style:none;margin:0;padding:0}
+.sp-file-tree-row{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:6px 8px;border:0;border-radius:var(--sp-control-radius);background:transparent;color:var(--sp-text-2);text-align:left;font:inherit;cursor:pointer}
+.sp-file-tree-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-file-tree-row svg{flex:none;color:var(--sp-text-3)}
+.sp-file-tree-row:hover,.sp-file-tree-row[aria-current=true]{background:var(--sp-surface-raised);color:var(--sp-text)}
+.sp-file-tree-row:active{background:var(--sp-border)}
+.sp-file-viewer{min-width:0;min-height:0;overflow:auto}
+.sp-file-viewer .sp-file-code{max-height:none}
+.sp-file-viewer .sp-code pre{max-height:none}
+.sp-file-viewer .sp-changes-meta{margin-top:0}
+.sp-files-sheet .sp-files-sheet-body{flex:1;min-height:0;max-height:none;display:flex;flex-direction:column;overflow:hidden}
+.sp-files-sheet .sp-files-layout{flex:1}
+.sp-file-viewfinder{width:calc(100vw - 48px);height:calc(100dvh - 48px);max-width:none;max-height:none;margin:auto;padding:20px;border:1px solid var(--sp-border-strong);border-radius:var(--sp-radius-card);background:var(--sp-surface);color:var(--sp-text);overflow:hidden}
+.sp-file-viewfinder[open]{display:flex;flex-direction:column;gap:16px}
+.sp-file-viewfinder::backdrop{background:rgb(0 0 0 / .65)}
+.sp-file-viewfinder>form{display:flex;justify-content:flex-end;margin:0}
+.sp-file-viewfinder>.sp-file-viewer{flex:1}
+.sp-file-viewfinder .sp-preview-image{width:100%}
+.sp-file-viewfinder .sp-preview-image img{max-height:calc(100dvh - 180px)}
+.sp-file-viewfinder .sp-preview-csv{max-height:none}
+.sp-file-viewfinder .sp-code-btn{min-height:40px}
+@media(max-width:760px){
+ .sp-files-layout{grid-template-columns:1fr;grid-template-rows:minmax(88px,24dvh) minmax(200px,1fr);gap:12px}
+ .sp-file-tree{border-right:0;border-bottom:1px solid var(--sp-border);padding:0 0 8px}
+ .sp-file-tree-row{min-height:44px}
+ .sp-file-viewfinder{width:100vw;height:100dvh;padding:12px;border-radius:0}
+ .sp-file-viewfinder .sp-code-btn{min-height:44px}
+}
+.sp-project-trust{padding:8px 0;color:var(--sp-text-2);font-size:var(--sp-fs-control)}
+.sp-project-trust>summary{cursor:pointer;min-height:36px;align-content:center}
+.sp-project-trust-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0}
+.sp-project-trust-row code{min-width:0;overflow-wrap:anywhere}
+@media(max-width:760px){.sp-project-trust>summary{min-height:44px}}
+
+/* Compact file paths never inherit the general account/setup form layout. */
+.sp-remote .remote-sheet form.sp-file-form{display:flex;flex:0 0 auto;align-items:center;gap:8px;margin:0;padding:12px 16px;border-top:0;overflow:visible}
+.sp-remote .remote-sheet .sp-file-form input{flex:1;min-width:0;width:auto;margin:0}
+.sp-remote .remote-sheet .sp-file-form button{flex:none;margin:0;background:var(--sp-surface-raised);color:var(--sp-text);border:1px solid var(--sp-border);font-family:var(--sp-font-sans)}
+.sp-remote .sp-chat-card header strong{flex:none;white-space:nowrap}
+.sp-remote .sp-chat-card header{flex-wrap:wrap;gap:4px 12px}
+.sp-remote .sp-chat-card header time{white-space:nowrap}
+.sp-remote .remote-session-sidebar .ide-sidebar{min-width:0;overflow-x:hidden}
+.sp-remote .remote-session-sidebar .remote-session-list{min-width:0}
+@media(min-width:768px) and (max-width:1279px){
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting)>.remote-heading{padding-right:24px}
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting) .remote-conversation{padding-right:0}
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]{width:min(var(--inspector-w,560px),calc(100vw - 72px));box-shadow:var(--sp-shadow-popover)}
+}
+.sp-remote .remote-sheet nav.sp-file-tree{display:block}
+.sp-remote .sp-file-tree .sp-file-tree-row{display:flex;gap:8px;min-height:36px;padding-block:6px;padding-inline-end:8px;margin:0;border:0;background:transparent;font:400 var(--sp-fs-control)/1.4 var(--sp-font-sans);border-radius:var(--sp-control-radius)}
+.sp-remote .sp-file-tree .sp-file-tree-row:hover,.sp-remote .sp-file-tree .sp-file-tree-row[aria-current=true]{background:var(--sp-surface-raised)}
+.sp-remote .remote-heading{flex-wrap:wrap}
+.sp-remote.is-embedded .remote-heading>div{flex:1 1 180px;display:flex;flex-wrap:wrap;min-width:0;gap:4px 8px}
+.sp-remote.is-embedded .remote-heading>div>:is(h1,h2){flex:1 1 160px;min-width:0}
+.sp-remote.is-embedded .remote-heading .sp-conversation-limits{margin-left:0}
+@media(max-width:760px){.sp-remote .sp-file-tree .sp-file-tree-row{min-height:44px}}
+.sp-files-panel,.sp-files-sheet-body{container-type:inline-size}
+@container(max-width:480px){
+ .sp-files-layout{grid-template-columns:1fr;grid-template-rows:minmax(100px,22dvh) minmax(200px,1fr);gap:12px}
+ .sp-file-tree{border-right:0;border-bottom:1px solid var(--sp-border);padding:0 0 8px}
+}
+.sp-file-viewfinder .sp-artifact-frame{height:calc(100dvh - 180px)}
+.sp-remote .remote-session-sidebar{overflow-x:hidden}
+.sp-dev-actions{flex-wrap:wrap}
+/* Phone chrome has one title row and one row of reachable controls. */
+@media(max-width:767px){
+ .sp-remote.is-embedded .remote-heading{display:grid;grid-template-columns:44px auto minmax(0,1fr) repeat(3,44px);gap:4px;padding:8px 12px!important;align-items:center}
+ .sp-remote.is-embedded .remote-heading>div{display:contents}
+ .sp-remote.is-embedded .remote-heading>div>:is(h1,h2){grid-column:1 / -1;grid-row:1;margin:0;max-width:100%;font-size:15px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .sp-remote.is-embedded .remote-heading .remote-sidebar-toggle{grid-column:1;grid-row:2}
+ .sp-remote.is-embedded .remote-heading .sp-conversation-live{grid-column:2;grid-row:2;max-width:52px;overflow:hidden;margin:0;font-size:11px}
+ .sp-remote.is-embedded .remote-heading .sp-conversation-limits{grid-column:3;grid-row:2;min-width:0;max-width:100%;min-height:44px;padding:0;margin:0;font-size:11px}
+ .sp-remote.is-embedded .remote-heading .sp-overview-toggle{grid-column:4;grid-row:2}
+ .sp-remote.is-embedded .remote-heading .remote-notif-button{grid-column:5;grid-row:2}
+ .sp-remote.is-embedded .remote-heading .remote-desktop-button{grid-column:6;grid-row:2}
+ .sp-remote.is-embedded .remote-heading>:is(button,a){width:44px;min-width:44px;margin:0;padding:0;justify-content:center}
+ .sp-remote .remote-composer .remote-model-button{flex:1;min-width:0;max-width:calc(100% - 140px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+}
+
+.sp-web-usage-overview{display:grid;gap:var(--sp-6);margin-bottom:var(--sp-6)}
+
+/* The message owns the bubble; metadata floats on request without adding an empty row. */
+:is(.sp-native-console,.sp-remote) .sp-chat-card{position:relative;padding:12px 16px}
+:is(.sp-native-console,.sp-remote) .sp-chat-card>header{position:absolute;top:-10px;right:8px;transform:translateY(-50%);z-index:2;display:flex;align-items:center;flex-wrap:nowrap;gap:8px;margin:0;padding:0 4px;border:1px solid transparent;border-radius:var(--sp-control-radius);font-size:var(--sp-fs-meta)}
+:is(.sp-native-console,.sp-remote) .sp-chat-card:is(:focus-within,[data-meta="shown"])>header{background:var(--sp-surface-raised);border-color:var(--sp-border)}
+:is(.sp-native-console,.sp-remote) .sp-chat-card>header time{white-space:nowrap}
+:is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-body>:first-child{margin-top:0}
+:is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-body>:last-child{margin-bottom:0}
+
+:is(.sp-native-console,.sp-remote) .sp-chat-card>header{width:max-content;max-width:calc(100vw - 48px)}
+:is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-copy{display:inline-flex;flex:0 0 auto;align-items:center;gap:6px;white-space:nowrap;width:auto;min-width:64px;margin:0}
