@@ -330,6 +330,28 @@ pub(super) fn window_rank(window: gnomcode_core::QuotaWindow) -> u8 {
     }
 }
 
+/// Provider usage for every configured provider, exactly as `/api/v1/providers/overview` returns
+/// it. Remote clients have no local API, so the Workspace limits sheet reads this over the
+/// protocol instead of showing only the open conversation's provider.
+///
+/// # Errors
+/// Returns an error when the usage tables cannot be read.
+pub(crate) fn provider_usage_overviews(
+    db: &gnomcode_store::Database,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<ProviderOverview>, gnomcode_store::Error> {
+    let quota = db.get_latest_quota_snapshots()?;
+    let today = db.generate_usage_report_timeline("today", None, None)?;
+    let last_30_days = db.generate_usage_report_timeline("30d", None, None)?;
+    Ok(provider_overviews(
+        quota_views_at(quota, now),
+        provider_costs(&today, &last_30_days),
+        crate::vendor_limits::enabled("claude"),
+        claude_statusline_enabled(),
+        crate::vendor_limits::enabled("antigravity"),
+    ))
+}
+
 pub(super) async fn providers_overview_handler(
     headers: HeaderMap,
     State(state): State<AppState>,

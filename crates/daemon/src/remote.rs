@@ -636,6 +636,23 @@ pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value
         Some("models") => {
             json!({"type":"models","providers":crate::model_catalog::discover().await})
         }
+        // Limits for every provider, not just the open conversation's: the console reads these
+        // from the local API, which a Remote client cannot reach.
+        Some("provider_usage") => {
+            let now = chrono::Utc::now();
+            let overviews = {
+                let guard = db.lock().await;
+                crate::api::providers::provider_usage_overviews(&guard, now)
+            };
+            match overviews {
+                Ok(providers) => json!({"type":"provider_usage","providers":providers}),
+                Err(_) => json!({
+                    "type":"provider_usage",
+                    "providers":[],
+                    "message":"Usage could not be read on your desktop."
+                }),
+            }
+        }
         // "Run in" picker on the phone (ADR 0060): registry plus running list, never boots.
         Some("wsl_distros") => {
             let distros = tokio::task::spawn_blocking(|| {
@@ -1816,6 +1833,21 @@ fn pick_unique_binding_candidate<'s>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn provider_usage_reports_every_provider_not_just_the_open_conversation() {
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("db")));
+        let reply = dispatch(&db, json!({"type": "provider_usage"})).await;
+        assert_eq!(reply["type"], "provider_usage");
+        let providers = reply["providers"].as_array().expect("providers array");
+        let names: Vec<&str> = providers
+            .iter()
+            .filter_map(|p| p["provider"].as_str())
+            .collect();
+        for expected in ["claude-code", "codex", "antigravity"] {
+            assert!(names.contains(&expected), "missing {expected} in {names:?}");
+        }
+    }
 
     #[test]
     fn external_surfaces_are_read_only() {

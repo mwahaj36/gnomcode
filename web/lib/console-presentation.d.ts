@@ -1,3 +1,4 @@
+export function cleanSessionTitle(title?: string | null): string;
 export function sessionStateLabel(state: string): string;
 export function agentLabel(id: string | undefined): string;
 export function toggleChatMeta(target: EventTarget | null): boolean;
