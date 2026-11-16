@@ -1,0 +1,3 @@
+1d0c5f6f9dc19bac1afb114d8d51024077f263d582bed8821a1155011cff2b37  Gnomcode-Setup.exe
+a667fb6b2a7bb5e65a633c8e86b00dcad9adf9823c7fde7cc6fc711547654b11  Gnomcode-v1.0.2-windows-x64.zip
+7e534c4a19de1bea65177e5f749f387c255a908d7f24185b0ddb6b1548eb3dd0  gnomcode.exe
