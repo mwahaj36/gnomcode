@@ -285,6 +285,26 @@ pub fn user_home_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
+/// Provider-owned document output folders, never credential or configuration roots.
+#[must_use]
+pub fn agent_document_roots() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for root in discover_agent_roots() {
+        match root.agent {
+            AgentId::ClaudeCode | AgentId::Codex => {
+                if let Some(home) = root.path.parent() {
+                    paths.push(home.join("plans"));
+                    paths.push(home.join("artifacts"));
+                }
+            }
+            AgentId::Antigravity => paths.push(root.path),
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 /// Resolves the current machine's hostname, or returns "local" if unknown.
 #[must_use]
 pub fn hostname() -> String {

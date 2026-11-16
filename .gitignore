@@ -7,6 +7,8 @@ node_modules/
 dist/
 web/build/
 web/.next/
+web/.next-review/
+web/web-test-results/
 
 # Tauri
 apps/tray/src-tauri/target/

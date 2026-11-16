@@ -446,7 +446,7 @@ export function ConsoleShell() {
               </svg>
             </button>
           </div>
-          <ApprovalsCard />
+          <ApprovalsCard showGrants={view === 'sessions'} />
           <main
             id="view-console"
             className={`view-content${CONSOLE_VIEWS.includes(view) ? ' active' : ''}`}

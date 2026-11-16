@@ -53,7 +53,7 @@ import {
   type LocalSessionsResponse,
   type LocalTerminalInstance,
 } from './local-api';
-import { AttachmentsBar, QuickActionsBar, SessionTools, useSessionAttachments, type WorkspaceSidePanel } from './WorkspaceTools';
+import { AttachmentsBar, SessionTools, useSessionAttachments, type WorkspaceSidePanel } from './WorkspaceTools';
 
 interface HostedSession {
   session_id: string;
@@ -292,6 +292,7 @@ export function WorkspaceView() {
   // 'automation' is Workspace-only; the other panels belong to SessionTools.
   const [sidePanel, setSidePanel] =
     useState<WorkspaceSidePanel | 'automation' | 'agent-terminal' | 'shell' | null>(null);
+  const [artifactLink, setArtifactLink] = useState('');
   const sidePanelRef = useRef(sidePanel);
   sidePanelRef.current = sidePanel;
   // Overview card beside the conversation; a per-viewer layout preference. Narrow windows start with it
@@ -1845,6 +1846,13 @@ export function WorkspaceView() {
   };
 
   const handleChatStreamClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const fileLink = (event.target as HTMLElement).closest<HTMLElement>('[data-workspace-file]');
+    if (fileLink) {
+      event.preventDefault();
+      setArtifactLink(fileLink.dataset.workspaceFile || '');
+      setSidePanel('artifacts');
+      return;
+    }
     toggleChatMeta(event.target);
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-permission-action]');
     if (!target || !activeSessionId) return;
@@ -3194,7 +3202,6 @@ export function WorkspaceView() {
               </div>
             ) : (
               <>
-                <QuickActionsBar disabled={sendBusy} onSend={(text) => void sendPromptText(text, false)} />
                 <form className="sp-chat-composer" onSubmit={handleSendPrompt}>
                   <AttachmentsBar items={attachments.items} status={attachments.status} onRemove={attachments.remove} />
                   <input
@@ -3568,6 +3575,7 @@ export function WorkspaceView() {
                       ) : (
                         <SessionTools
                           sessionId={activeSessionId}
+                          artifactLink={artifactLink}
                           repoPath={activeHosted?.repo_path || activeSession?.repo_path || copyPath}
                           canInterrupt={canInterruptActive}
                           panel={sidePanel}

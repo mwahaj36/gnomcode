@@ -1,14 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import {
   DEFAULT_QUICK_ACTIONS,
   mergeQuickActions,
   normalizeQuickAction,
   renderQuickActionsStrip,
 } from '../lib/console-presentation.js';
-
-const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 test('default quick actions are curated canned prompts without slash commands or raw argv', () => {
   assert.ok(Array.isArray(DEFAULT_QUICK_ACTIONS) && DEFAULT_QUICK_ACTIONS.length >= 3);
@@ -65,20 +62,6 @@ test('renderQuickActionsStrip escapes content and respects disabled state', () =
   assert.match(markup, /data-action="quick-action"/);
   assert.match(markup, /data-action="manage-quick-actions"/);
   assert.match(markup, /disabled/);
-});
-
-test('quick actions wire into remote using plain prompt delivery only', () => {
-  const remote = read('../components/RemoteCompanion.tsx');
-  const css = read('../app/gnomcode-console.css');
-
-  assert.match(remote, /sp-quick-actions/);
-  assert.match(remote, /submitQuickAction/);
-  assert.match(remote, /Manage quick prompts/);
-
-  const cssSlice = css.slice(css.indexOf('.sp-quick-actions{'));
-  assert.ok(css.includes('.sp-quick-actions{'));
-  assert.doesNotMatch(cssSlice, /#[0-9a-f]{3,6}\b/i);
-  assert.match(cssSlice, /max-height:450px/);
 });
 
 test('toWireQuickActions sends only id, label and prompt and caps the list at the daemon limit', async () => {

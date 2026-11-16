@@ -96,10 +96,17 @@ test('UI overhaul fixes Antigravity mark, Home full-width sessions, Settings iso
   assert.match(css, /@container \(max-width: 600px\)/);
   assert.match(css, /\.sp-workspace-modal/);
 
-  const globals = read('../app/globals.css');
-  assert.match(globals, /:not\(\[hidden\]\) > \.sp-remote:is\(\.is-paired,\.is-reconnecting\)/);
+  assert.match(css, /:not\(\[hidden\]\) > \.sp-remote:is\(\.is-paired,\.is-reconnecting\)/);
 
   const settings = read('../local-console/SettingsView.tsx');
   assert.match(settings, /id="settings-pricing"[^>]*hidden=\{!shown\('settings-pricing'\)\}/);
   assert.doesNotMatch(settings, /Offline license/);
+});
+
+
+test('local document links open the session viewer while network links stay external', async () => {
+  const { renderChatCards } = await import('../lib/console-presentation.js');
+  const html = renderChatCards([{ event_id: 'link', role: 'assistant', content: '[Handoff](localdocs/handoff.md) [Site](https://example.org)', created_at: '2026-11-16T00:00:00Z' }]);
+  assert.match(html, /data-workspace-file="localdocs\/handoff.md"/);
+  assert.match(html, /href="https:\/\/example.org" target="_blank"/);
 });

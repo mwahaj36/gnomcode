@@ -99,41 +99,13 @@ test.describe('read-only workspace panels on an observed session', () => {
 });
 
 test.describe('composer on a conversation Gnomcode manages', () => {
-  test('quick prompts send plain text through the prompt endpoint', async ({ page, openConsole }) => {
-    await reshapeConversations(page, { source: 'managed' });
-    const sent: { url: string; body: string | null }[] = [];
-    await page.route('**/api/v1/sessions/*/prompt', async (route) => {
-      sent.push({ url: route.request().url(), body: route.request().postData() });
-      await route.fulfill({ json: { ok: true } });
-    });
+  test('the composer has no suggestion strip or customization control', async ({ page, openConsole }) => {
+    await reshapeConversations(page, { source: 'managed', can_prompt: true, hosted: true, state: 'working' });
     await openConsole('#sessions');
     await openClaudeConversation(page);
-    const bar = page.getByRole('toolbar', { name: 'Quick prompts' });
-    await expect(bar.getByRole('button', { name: 'Run tests' })).toBeVisible();
-    await bar.getByRole('button', { name: 'Run tests' }).click();
-    await expect.poll(() => sent.length).toBe(1);
-    expect(sent[0].url).toMatch(/\/api\/v1\/sessions\/claude-code%3A[^/]+\/prompt$/);
-    const payload = JSON.parse(sent[0].body ?? '{}');
-    expect(payload).toMatchObject({ queue_if_busy: true });
-    expect(typeof payload.id).toBe('string');
-    expect(String(payload.text)).toMatch(/test/i);
-  });
-
-  test('quick prompts can be added, removed and reset in the management dialog', async ({ page, openConsole }) => {
-    await reshapeConversations(page, { source: 'managed' });
-    await openConsole('#sessions');
-    await openClaudeConversation(page);
-    await page.getByRole('button', { name: 'Manage quick prompts' }).click();
-    const dialog = page.locator('dialog.sp-dialog');
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel('Button label').fill('Lint');
-    await dialog.getByLabel('Prompt message').fill('Run the linter and fix what it reports.');
-    await dialog.getByRole('button', { name: 'Add prompt' }).click();
-    await expect(dialog).toContainText('Lint');
-    await dialog.getByRole('button', { name: 'Reset defaults' }).click();
-    await expect(dialog).not.toContainText('Lint');
-    await dialog.getByRole('button', { name: 'Close' }).first().click();
-    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('toolbar', { name: 'Quick prompts' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Manage quick prompts' })).toHaveCount(0);
+    await expect(page.locator('#chat-prompt')).toBeVisible();
   });
 
   test('Attach uploads an allowed file and rejects an unsupported one before any request', async ({ page, openConsole }) => {

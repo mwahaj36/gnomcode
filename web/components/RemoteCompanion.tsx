@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from 'react';
 import { createChannel, generateKeyPair } from '../lib/remote-crypto.mjs';
 import DesktopDevices from './DesktopDevices';
 import ModelChoices, {type ModelChoice, type ProviderCatalog} from './ModelChoices';
+import { WorkspaceFileTree } from './WorkspaceFileTree';
 import { PaneResizer } from '../local-console/pane-resizer';
 import {supabase} from '../lib/supabase';
 import {deviceProof,forgetDevice,rememberDevice,savedDevice,type DeviceOffer} from '../lib/remote-device';
-import { parentWorkspacePath, DEFAULT_QUICK_ACTIONS, loadStoredQuickActions, MAX_QUICK_ACTIONS, toWireQuickActions, normalizeQuickAction, type QuickAction, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, renderProviderCards, type ProviderOverview, cleanSessionTitle, saveStoredQuickActions, type ConversationLimit, type PendingChat, updateChat, hydrateAttachmentThumbs, bindPreviewInteractions, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, sandboxArtifactHtml, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, renderLiveBadge, renderActivityIndicator, type LiveStatus, middleTruncate, wslFolder } from '../lib/console-presentation';
+import { artifactForLink, parentWorkspacePath, reconcileChat, renderChangesView, renderConversationLimitCard, renderConversationLimits, renderProviderCards, type ProviderOverview, cleanSessionTitle, type ConversationLimit, type PendingChat, updateChat, hydrateAttachmentThumbs, bindPreviewInteractions, normalizeWorkspaceRelPath, renderFileViewer, type RepoFileData, type RepoFileEntry, type RepoFileListing, classifyArtifactKind, renderArtifactPreview, type ArtifactItem, formatPromptWithAttachments, type AttachmentItem, validateAttachmentCandidate, createInterruptRequestId, formatInterruptAckMessage, isSessionRunningState, renderLiveBadge, renderActivityIndicator, type LiveStatus, middleTruncate, wslFolder } from '../lib/console-presentation';
 import { formatWorktreeBadge, renderWorktreeDiffMarkup, type WorktreeDiffData } from '../lib/worktree-presentation.mjs';
 import { disableDeviceNotifications, getNotificationPermission, requestNotificationPermission, sendAppNotification, subscribeToPushServer, triggerServerPushTest } from '../lib/notifications';
 
@@ -28,7 +29,7 @@ type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
 type SetupStatus = {session_id:string;blocker:'trust_folder'|'setup';agent:string;folder:string};
-type Reply = { blocker?:'trust_folder'|'setup'|null; folder?:string; agent?:string; name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean; actions?:QuickAction[]; items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]|ProviderOverview[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { blocker?:'trust_folder'|'setup'|null; folder?:string; agent?:string; name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean;  items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]|ProviderOverview[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 const REMOTE_DRAFTS_KEY = 'gnomcode-remote-drafts';
 function loadRemoteDrafts(): Map<string, string> {
@@ -75,6 +76,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [liveTick, setLiveTick] = useState(() => Date.now());
   const [artifactsPanel, setArtifactsPanel] = useState(false);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
+  const artifactLink = useRef('');
   const [selectedArtifactId, setSelectedArtifactId] = useState('');
   const [artifactsLoading, setArtifactsLoading] = useState(false);
   const [artifactsError, setArtifactsError] = useState('');
@@ -142,11 +144,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [notice, setNotice] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [quickActions, setQuickActions] = useState<QuickAction[]>(() => [...DEFAULT_QUICK_ACTIONS]);
-  const [quickActionsPanel, setQuickActionsPanel] = useState(false);
-  const [newQuickLabel, setNewQuickLabel] = useState('');
-  const [newQuickPrompt, setNewQuickPrompt] = useState('');
-  const [quickActionError, setQuickActionError] = useState('');
   const [interrupting, setInterrupting] = useState(false);
   const [hasEarlier, setHasEarlier] = useState(false);
   const [folderBrowser, setFolderBrowser] = useState<FolderListing | null>(null);
@@ -200,7 +197,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const desktopDialog=useRef<HTMLDialogElement|null>(null);
   const modelDialog=useRef<HTMLDialogElement|null>(null);
   const limitsDialog=useRef<HTMLDialogElement|null>(null);
-  const quickActionsDialog=useRef<HTMLDialogElement|null>(null);
   const changesDialog=useRef<HTMLDialogElement|null>(null);
   const artifactsDialog=useRef<HTMLDialogElement|null>(null);
   const artifactsRequest=useRef(false);
@@ -216,9 +212,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     // The sheet lists every provider, as the desktop app does; a Remote client has no local API.
     void send({type:'provider_usage'}).catch(()=>setProviderUsage([]));
   },[limitsPanel]);
-  useEffect(()=>{if(quickActionsPanel)quickActionsDialog.current?.showModal();},[quickActionsPanel]);
   useEffect(()=>{if(changesPanel)changesDialog.current?.show();},[changesPanel]);
-  useEffect(()=>{setQuickActions(loadStoredQuickActions());},[]);
   const filesDialog=useRef<HTMLDialogElement|null>(null);
   useEffect(()=>{if(filesPanel)filesDialog.current?.show();},[filesPanel]);
   const sidebarToggle=useRef<HTMLButtonElement|null>(null);
@@ -410,31 +404,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     }
   }
 
-  function persistQuickActions(items: QuickAction[]) {
-    setQuickActions(saveStoredQuickActions(items));
-    void send({ type: 'quick_actions', action: 'set', actions: toWireQuickActions(items) }).catch(() => setQuickActionError('Saved on this phone only. Reconnect to sync quick prompts with your laptop.'));
-  }
-
   function submitPrompt() { return submitPromptText(promptRef.current, true); }
-
-  function submitQuickAction(action: QuickAction) {
-    const clean = normalizeQuickAction(action);
-    if (clean) void submitPromptText(clean.prompt, false);
-  }
-
-  function addRemoteQuickAction(event: React.FormEvent) {
-    event.preventDefault();
-    const clean = normalizeQuickAction({ id: `custom-${crypto.randomUUID().slice(0, 8)}`, label: newQuickLabel, prompt: newQuickPrompt, builtin: false });
-    if (!clean) {
-      setQuickActionError('Enter a label and plain prompt (up to 4000 characters, never starting with /).');
-      return;
-    }
-    setQuickActionError('');
-    if (quickActions.length >= MAX_QUICK_ACTIONS) { setQuickActionError(`Up to ${MAX_QUICK_ACTIONS} quick prompts. Remove one first.`); return; }
-    persistQuickActions([...quickActions, clean]);
-    setNewQuickLabel('');
-    setNewQuickPrompt('');
-  }
 
   async function requestInterrupt() {
     const activeSession = sessions.find(session => session.id === selectedRef.current);
@@ -532,7 +502,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(!result.ok)setNotice(result.error || 'Background notification setup could not be confirmed. Use the notification button to retry.');
     });
     await requestSessions();
-    void send({type:'quick_actions',action:'get'}).catch(()=>{});
     await send({type:'routing'});
     if(epoch!==connectionEpoch.current)return;
     if (poll.current) clearInterval(poll.current);
@@ -633,7 +602,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       }
     }
     else if (reply.type === 'resume_session_ack') { setNotice('Ready to continue.'); await requestSessions(); if(reply.session_id) loadChat(reply.session_id); }
-    else if (reply.type === 'quick_actions' && Array.isArray(reply.actions)) { setQuickActionError(''); setQuickActions(saveStoredQuickActions(reply.actions)); }
     else if (reply.type === 'changes') {
       changesRequested.current = false;
       setChangesLoading(false);
@@ -670,7 +638,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       setArtifactsError('');
       const list = Array.isArray(reply.artifacts) ? reply.artifacts : [];
       setArtifacts(list);
-      setSelectedArtifactId(list[0] ? String(list[0].id || list[0].path || 0) : '');
+      const linked = artifactLink.current ? artifactForLink(list, artifactLink.current) : null;
+      const first = artifactLink.current ? linked : list[0];
+      setSelectedArtifactId(first ? String(first.id || first.path || 0) : '');
+      artifactLink.current = '';
       setArtifactsChangesCount(typeof reply.changes_count === 'number' ? reply.changes_count : null);
     }
     else if (reply.type === 'switch_ack') { setNotice('Switching model...'); await requestSessions(); }
@@ -911,19 +882,6 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     {desktopPanel && <dialog ref={desktopDialog} className="remote-sheet" aria-labelledby="remote-desktop-heading" onClose={()=>setDesktopPanel(false)}><header><h2 id="remote-desktop-heading">Your desktop</h2><button type="button" aria-label="Close desktop connection" onClick={()=>desktopDialog.current?.close()}>Close</button></header><p>{connected ? 'Connected securely.' : proofKey.current ? 'Your connection is recovering. Your device is still remembered.' : 'Open any linked desktop through your signed-in account.'}</p><nav aria-label="Remote navigation"><a href="/console">Dashboard</a><a href="/console?view=settings">Profile</a><button type="button" onClick={()=>{desktopDialog.current?.close();void connect(true);}}>Try again</button><button type="button" onClick={()=>{desktopDialog.current?.close();disconnect();}}>Forget this desktop</button></nav></dialog>}
     {limitsPanel && <dialog ref={limitsDialog} className="remote-sheet" aria-labelledby="remote-limits-heading" onClose={()=>setLimitsPanel(false)}><header><h2 id="remote-limits-heading">Limits</h2><button type="button" aria-label="Close limits" onClick={()=>limitsDialog.current?.close()}>Close</button></header><div dangerouslySetInnerHTML={{__html: providerUsage && providerUsage.length ? renderProviderCards(providerUsage, {cost:false}) : renderConversationLimitCard(active?.limits || [], active?.agent || '')}} /></dialog>}
     {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><ModelChoices providers={modelProviders} loading={modelsLoading} error={modelsError} disabled={!connected} onRefresh={()=>void loadModels()} onSelect={selectModel}/></dialog>}
-    {quickActionsPanel && <dialog ref={quickActionsDialog} className="remote-sheet" aria-labelledby="remote-quick-actions-heading" onClose={()=>setQuickActionsPanel(false)}>
-      <header><h2 id="remote-quick-actions-heading">Quick prompts</h2><button type="button" aria-label="Close quick prompts" onClick={()=>quickActionsDialog.current?.close()}>Close</button></header>
-      <p className="sp-field-note">Canned prompts are sent as plain chat messages, never shell commands.</p>
-      <div className="sp-quick-actions-list">{quickActions.map(item=><div key={item.id} className="sp-quick-action-row"><div><strong>{item.label}</strong><p>{item.prompt}</p></div><button type="button" disabled={quickActions.length<=1} onClick={()=>persistQuickActions(quickActions.filter(row=>row.id!==item.id))}>Remove</button></div>)}</div>
-      <form className="sp-quick-actions-form" onSubmit={addRemoteQuickAction}>
-        <label htmlFor="remote-quick-label">Button label</label>
-        <input id="remote-quick-label" value={newQuickLabel} onChange={event=>setNewQuickLabel(event.target.value)} maxLength={40} required placeholder="Review tests" />
-        <label htmlFor="remote-quick-prompt">Prompt message</label>
-        <textarea id="remote-quick-prompt" value={newQuickPrompt} onChange={event=>setNewQuickPrompt(event.target.value)} maxLength={4000} rows={3} required placeholder="Run the test suite and summarize any failures." />
-        {quickActionError && <p className="remote-feedback" role="alert">{quickActionError}</p>}
-        <div className="dialog-actions"><button type="button" onClick={()=>{setQuickActionError('');persistQuickActions([...DEFAULT_QUICK_ACTIONS]);}}>Reset defaults</button><button type="submit" className="sp-primary-action">Add prompt</button></div>
-      </form>
-    </dialog>}
     {changesPanel && <dialog ref={changesDialog} className="remote-sheet sp-changes-sheet" aria-labelledby="remote-changes-heading" onClose={()=>setChangesPanel(false)}><PaneResizer cssVar="--inspector-w" label="Resize workspace panel" min={360} max={960} initial={560} direction={-1} />
       <header><h2 id="remote-changes-heading">Workspace changes</h2><div className="sp-changes-actions"><button type="button" disabled={!connected || changesLoading} onClick={()=>void loadChanges()}>Refresh</button><button type="button" aria-label="Close workspace changes" onClick={()=>changesDialog.current?.close()}>Close</button></div></header>
       <div className="sp-changes-sheet-body" dangerouslySetInnerHTML={{__html:renderChangesView(changesLoading ? { loading: true } : changesState)}} />
@@ -936,16 +894,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
         <button type="submit" disabled={!connected}>Open</button>
       </form>
       <div className="sp-files-sheet-body">
-        {fileListState?.loading && <p className="sp-provider-empty" role="status">Loading workspace files...</p>}
-        {fileListState?.error && <p className="sp-field-note sp-tone-red" role="alert">{fileListState.error}</p>}
-        {fileListState && !fileListState.loading && !fileListState.error && <div className="sp-file-entries">
-          {typeof fileListState.parent === 'string' && <button type="button" className="sp-file-entry sp-file-entry--dir" onClick={()=>void browseRepoFiles(fileListState.parent || '')}>Up one folder</button>}
-          {(fileListState.entries || []).map(entry => <button key={entry.path} type="button" className={`sp-file-entry ${entry.kind === 'dir' ? 'sp-file-entry--dir' : 'sp-file-entry--file'}`} onClick={() => entry.kind === 'dir' ? void browseRepoFiles(entry.path) : void readRepoFile(entry.path)}><code>{entry.name}</code><span>{entry.kind === 'dir' ? 'Folder' : 'File'}</span></button>)}
-        </div>}
-        <div dangerouslySetInnerHTML={{__html:renderFileViewer(fileData)}} />
+        <div className="sp-files-layout">
+          <WorkspaceFileTree key={selected} listing={fileListState} onBrowse={path => void browseRepoFiles(path)} onRead={path => void readRepoFile(path)} selected={fileData?.path || ''} />
+          <div className="sp-file-viewer" dangerouslySetInnerHTML={{__html:renderFileViewer(fileData)}} />
+        </div>
       </div>
     </dialog>}
-    {artifactsPanel && <dialog ref={artifactsDialog} className="remote-sheet sp-artifacts-sheet" aria-labelledby="remote-artifacts-heading" onClose={()=>setArtifactsPanel(false)}><PaneResizer cssVar="--inspector-w" label="Resize workspace panel" min={360} max={960} initial={560} direction={-1} /><header><h2 id="remote-artifacts-heading">Artifacts{artifactsChangesCount !== null ? ` (${artifactsChangesCount} changes)` : ''}</h2><button type="button" disabled={!connected || artifactsLoading} onClick={()=>void loadArtifacts()}>Refresh</button><button type="button" aria-label="Close artifacts" onClick={()=>artifactsDialog.current?.close()}>Close</button></header><div className="sp-artifacts-sheet-body">{artifactsLoading ? <p role="status">Loading artifacts...</p> : artifactsError ? <p className="sp-empty" role="status">{artifactsError}</p> : !artifacts.length ? <p className="sp-empty">No artifacts recorded for this session yet.</p> : <><div className="sp-artifacts-list">{artifacts.map((item, idx) => { const id = String(item.id || item.path || idx); const kind = classifyArtifactKind(item); const isSelected = id === selectedArtifactId; return <button key={id} type="button" className={`sp-artifact-item${isSelected ? ' is-selected' : ''}`} aria-pressed={isSelected} onClick={()=>setSelectedArtifactId(id)}><span className="sp-artifact-badge">{kind === 'html' ? '[HTML]' : kind === 'markdown' ? '[MD]' : kind === 'image' ? '[IMG]' : '[FILE]'}</span><span className="sp-artifact-name">{item.title || item.path}</span>{item.status && <span className="sp-artifact-status">{item.status}</span>}</button>; })}</div><div className="sp-artifact-preview">{currentArtifact && classifyArtifactKind(currentArtifact) === 'html' ? <div className="sp-artifact-html-wrap"><p className="sp-artifact-meta">Sandboxed preview (scripts disabled)</p><iframe className="sp-artifact-frame" title={currentArtifact.title || currentArtifact.path} sandbox="" referrerPolicy="no-referrer" srcDoc={sandboxArtifactHtml(currentArtifact.content)} /></div> : <div dangerouslySetInnerHTML={{ __html: renderArtifactPreview(currentArtifact) }} />}</div></>}</div></dialog>}
+    {artifactsPanel && <dialog ref={artifactsDialog} className="remote-sheet sp-artifacts-sheet" aria-labelledby="remote-artifacts-heading" onClose={()=>setArtifactsPanel(false)}><PaneResizer cssVar="--inspector-w" label="Resize workspace panel" min={360} max={960} initial={560} direction={-1} /><header><h2 id="remote-artifacts-heading">Artifacts{artifactsChangesCount !== null ? ` (${artifactsChangesCount} changes)` : ''}</h2><button type="button" disabled={!connected || artifactsLoading} onClick={()=>void loadArtifacts()}>Refresh</button><button type="button" aria-label="Close artifacts" onClick={()=>artifactsDialog.current?.close()}>Close</button></header><div className="sp-artifacts-sheet-body">{artifactsLoading ? <p role="status">Loading artifacts...</p> : artifactsError ? <p className="sp-empty" role="status">{artifactsError}</p> : !artifacts.length ? <p className="sp-empty">No artifacts recorded for this session yet.</p> : <><div className="sp-artifacts-list">{artifacts.map((item, idx) => { const id = String(item.id || item.path || idx); const kind = classifyArtifactKind(item); const isSelected = id === selectedArtifactId; return <button key={id} type="button" className={`sp-artifact-item${isSelected ? ' is-selected' : ''}`} aria-pressed={isSelected} onClick={()=>setSelectedArtifactId(id)}><span className="sp-artifact-badge">{kind === 'html' ? '[HTML]' : kind === 'markdown' ? '[MD]' : kind === 'image' ? '[IMG]' : '[FILE]'}</span><span className="sp-artifact-name">{item.title || item.path}</span>{item.status && <span className="sp-artifact-status">{item.status}</span>}</button>; })}</div><div className="sp-artifact-preview" dangerouslySetInnerHTML={{ __html: renderArtifactPreview(currentArtifact) }} /></>}</div></dialog>}
 
     {error && <p className="remote-feedback" role="alert">{error}</p>}
     {notice && <p className="remote-feedback" role="status">{notice}</p>}
@@ -1043,19 +998,19 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
           if (chatContainer.current) historyAnchor.current = {top:chatContainer.current.scrollTop,height:chatContainer.current.scrollHeight};
           loadingHistory.current = true; setHistoryLoading(true); loadChat(selectedRef.current, events[0]?.event_id);
         }}>Load earlier messages</button>}
-        <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" onClick={event=>{toggleChatMeta(event.target);}} />
+        <div className="sp-remote-chat" style={{display:'block'}} ref={chatContainer} role="log" aria-label="Conversation" aria-live="polite" onClick={event=>{
+          const link = (event.target as HTMLElement).closest<HTMLElement>('[data-workspace-file]');
+          if (link) { event.preventDefault(); artifactLink.current = link.dataset.workspaceFile || ''; setFilesPanel(false); setChangesPanel(false); setArtifactsPanel(true); void loadArtifacts(); }
+          else toggleChatMeta(event.target);
+        }} />
         {active?.live?.state === 'working' && <div className="sp-activity" role="status" aria-label="Agent activity"><span dangerouslySetInnerHTML={{__html:renderActivityIndicator(active.live, active.turn_started_at, liveTick)}} />{isSessionRunningState(active.state) && <button type="button" className="btn-control sp-activity-stop" disabled={!connected || interrupting} onClick={()=>void requestInterrupt()}>Stop</button>}</div>}
         {readOnly ? <div className="remote-readonly sp-readonly-banner" role="region" aria-label="Observed session actions"><p>{active?.can_resume ? 'Continue where you left off.' : active?.can_continue_here ? 'Imported CLI session history.' : 'Observed external session history (read-only).'}</p><div className="sp-imported-actions">{active?.source === 'imported' && active?.can_continue_here && <button type="button" className="sp-primary-action" disabled={!connected || continueHereBusy} onClick={() => { setContinueHereBusy(true); setNotice('Continuing imported session in Gnomcode...'); void send({type:'continue_here',session_id:selected}).catch(() => { setContinueHereBusy(false); setError('Continue here requires desktop support.'); }); }}>{continueHereBusy ? 'Continuing...' : 'Continue here'}</button>}{active?.can_resume ? <button type="button" disabled={!connected} onClick={() => { setNotice('Resuming conversation...'); void send({type:'resume_session',session_id:selected}).catch(() => setError('Could not resume. Check your laptop connection and try again.')); }}>Resume conversation</button> : <button type="button" onClick={startNew}>New conversation</button>}</div></div> : <>
-          <div className="sp-quick-actions" role="toolbar" aria-label="Quick prompts">
-            {quickActions.map(action => <button key={action.id} type="button" className="sp-quick-action" title={action.prompt} disabled={!connected || sending || !active?.can_prompt} onClick={() => submitQuickAction(action)}>{action.label}</button>)}
-            <button type="button" className="sp-quick-action sp-quick-action--manage" aria-label="Manage quick prompts" onClick={() => setQuickActionsPanel(true)}>Customize</button>
-          </div>
           <form className="remote-composer" onSubmit={event => { event.preventDefault(); void submitPrompt(); }}>
           {(attachments.length > 0 || attachError) && <div className="sp-attachments-bar" role="region" aria-label="Staged attachments">{attachments.map(item => <span key={item.id} className={`sp-attachment-pill sp-attachment-pill--${item.status}`}><span className="sp-attachment-name">{item.filename}</span><span className="sp-attachment-meta">{item.status === 'saved' ? 'Saved' : item.status === 'error' ? 'Failed' : 'Uploading'}</span><button type="button" className="sp-attachment-remove" aria-label={`Remove ${item.filename}`} onClick={() => setAttachments(current => current.filter(entry => entry.id !== item.id))}>Remove</button></span>)}{attachError && <span className="sp-attach-status" role="status">{attachError}</span>}</div>}
           <label htmlFor="remote-prompt">Message the agent</label>
           <textarea placeholder="Message the agent..." onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submitPrompt(); } }} ref={promptInput} id="remote-prompt" value={prompt} onChange={event => changePrompt(event.target.value)} maxLength={4000} rows={1} />
           <input ref={attachInput} type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.log,.json,.csv,.pdf" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void pickPhoneAttachment(file); }} />
-          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? "Switching model..." : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="sp-attach-trigger" disabled={!connected} onClick={()=>attachInput.current?.click()} aria-label="Attach file">Attach</button>{active && isSessionRunningState(active.state) && active?.live?.state !== 'working' && <button type="button" className="sp-interrupt-btn" disabled={!connected || interrupting} aria-label="Interrupt running turn" title="Sends Esc to interrupt the active turn without closing the session" onClick={()=>void requestInterrupt()}>{interrupting ? 'Interrupting...' : 'Interrupt'}</button>}<button type="submit" disabled={!connected || sending || (!prompt.trim() && !hasSavedAttachments) || readOnly}>{active?.can_prompt ? (sending ? 'Sending...' : 'Send') : (sending ? 'Queueing...' : 'Queue')}</button></div>
+          <div className="remote-composer-toolbar"><button type="button" className="remote-model-button" disabled={!connected} onClick={()=>setModelPanel(true)} aria-label="Change model">{active?.requested_model ? `${active.requested_model} (requested)` : active?.model || "Agent default"}<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button><button type="button" className="sp-attach-trigger" disabled={!connected} onClick={()=>attachInput.current?.click()} aria-label="Attach file">Attach</button>{active && isSessionRunningState(active.state) && active?.live?.state !== 'working' && <button type="button" className="sp-interrupt-btn" disabled={!connected || interrupting} aria-label="Interrupt running turn" title="Sends Esc to interrupt the active turn without closing the session" onClick={()=>void requestInterrupt()}>{interrupting ? 'Interrupting...' : 'Interrupt'}</button>}<button type="submit" disabled={!connected || sending || (!prompt.trim() && !hasSavedAttachments) || readOnly}>{active?.can_prompt ? (sending ? 'Sending...' : 'Send') : (sending ? 'Queueing...' : 'Queue')}</button></div>
           {!connected ? <p>Reconnect to send. Your draft stays here.</p> : !active?.can_prompt && <p>{active?.state === 'waiting_for_history' ? 'Send the first message here. Complete any login or trust prompt on your desktop if needed.' : active?.state === 'idle' ? 'This session is read-only or cannot be uniquely matched to a Gnomcode terminal.' : 'Busy: messages you send now queue for the next turn.'}</p>}
         </form></>}
       </> : <div className="remote-empty"><h2>Your conversations</h2><p>Choose a conversation or start an agent to begin.</p><button type="button" className="sp-primary-action" onClick={startNew}>New conversation</button><button type="button" onClick={() => setShowSessions(true)}>Browse history</button></div>}</div>

@@ -39,6 +39,39 @@ impl Default for UserProfile {
 }
 
 impl Database {
+    /// Lists explicitly trusted canonical workspace paths, stored locally only.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on storage or invalid preference data.
+    pub fn trusted_projects(&self) -> Result<Vec<String>, Error> {
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM desktop_preferences WHERE key = 'trusted_projects'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        raw.map_or_else(|| Ok(Vec::new()), |value| Ok(serde_json::from_str(&value)?))
+    }
+
+    /// Remembers or revokes one exact canonical workspace path.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on storage or invalid preference data.
+    pub fn set_project_trusted(&self, path: &str, trusted: bool) -> Result<(), Error> {
+        let mut paths = self.trusted_projects()?;
+        paths.retain(|held| held != path);
+        if trusted {
+            paths.push(path.to_owned());
+        }
+        self.conn.execute(
+            "INSERT INTO desktop_preferences(key,value) VALUES ('trusted_projects',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [serde_json::to_string(&paths)?],
+        )?;
+        Ok(())
+    }
+
     /// Returns the current global routing and failover policy.
     ///
     /// # Errors
@@ -189,5 +222,28 @@ impl Database {
             Utc::now().to_rfc3339()
         ])?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod project_trust_tests {
+    use super::*;
+
+    #[test]
+    fn project_trust_survives_reopen_and_revokes_exact_path_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("trust.db");
+        {
+            let db = Database::open(&path).expect("database");
+            assert!(db.trusted_projects().expect("list").is_empty());
+            db.set_project_trusted("project-a", true).expect("trust");
+        }
+        let db = Database::open(&path).expect("reopen");
+        assert_eq!(db.trusted_projects().expect("list"), vec!["project-a"]);
+        db.set_project_trusted("project-a/child", false)
+            .expect("unrelated revoke");
+        assert_eq!(db.trusted_projects().expect("list"), vec!["project-a"]);
+        db.set_project_trusted("project-a", false).expect("revoke");
+        assert!(db.trusted_projects().expect("list").is_empty());
     }
 }
