@@ -458,9 +458,10 @@ body {
 .sp-mobile-theme{display:none}
 @media(max-width:760px){.sp-site-login,.sp-site-actions .sp-nav-theme{display:none}.sp-site-links .sp-mobile-theme{display:inline-flex;align-self:flex-start}.sp-site-menu{flex:0 0 44px}.sp-site-download{padding-inline:14px}.sp-site-actions{gap:8px}}
 
-/* The desktop rail opens above embedded Remote; phones use Remote's own toolbar. */
+/* The rail opens above embedded Remote. On phones Remote stops short of the tab bar (see
+   gnomcode-console.css), so the console keeps its four-tab navigation there as the app does,
+   rather than hiding it behind Remote's own toolbar. */
 .sp-web-app .sp-console-workspace>.sp-console-nav{z-index:45}
-@media(max-width:760px){.sp-web-app:has(> .sp-console-workspace > .sp-console-content > div:not([hidden]) > .sp-remote:is(.is-paired,.is-reconnecting)) .sp-console-workspace>.sp-console-nav{visibility:hidden}}
 
 /* Reading surfaces share the established documentation typography. */
 .sp-guide-page { max-width: 880px; }
