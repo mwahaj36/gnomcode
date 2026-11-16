@@ -374,11 +374,11 @@ export function renderOngoing(sessions) {
 
 const LIVE_LABELS = { working: 'Working', waiting_for_you: 'Waiting for you', idle: 'Idle', stopped: 'Stopped' };
 
-/** Live chat state from the daemon: text plus a shape, never color alone. Inferred states say so. */
+/** Live chat state uses text and a shape; source details stay in its tooltip. */
 export function renderLiveBadge(live) {
   if (!live || !LIVE_LABELS[live.state]) return '';
-  const inferred = live.basis === 'exact' ? '' : '<span class="sp-live-basis" title="Inferred from recent log activity, not confirmed by a running process">Inferred</span>';
-  return `<span class="sp-live" data-live="${escape(live.state)}"><span class="sp-live-shape" aria-hidden="true"></span><span class="sp-live-label">${LIVE_LABELS[live.state]}</span>${inferred}</span>`;
+  const source = live.basis === 'exact' ? 'Confirmed by the agent' : 'Inferred from recent log activity, not confirmed by a running process';
+  return `<span class="sp-live" title="${source}" data-live="${escape(live.state)}"><span class="sp-live-shape" aria-hidden="true"></span><span class="sp-live-label">${LIVE_LABELS[live.state]}</span></span>`;
 }
 
 export function formatElapsed(fromIso, nowMs = Date.now()) {
@@ -394,8 +394,8 @@ export function formatElapsed(fromIso, nowMs = Date.now()) {
 export function renderActivityIndicator(live, turnStartedAt, nowMs = Date.now()) {
   if (live?.state !== 'working') return '';
   const elapsed = formatElapsed(turnStartedAt, nowMs);
-  const inferred = live.basis === 'exact' ? '' : '<span class="sp-live-basis">Inferred</span>';
-  return `<span class="sp-live" data-live="working"><span class="sp-live-shape" aria-hidden="true"></span><span class="sp-live-label">${escape(live.step || 'Working')}</span></span>${elapsed ? `<time class="sp-activity-elapsed">${escape(elapsed)}</time>` : ''}${inferred}`;
+  const source = live.basis === 'exact' ? 'Confirmed by the agent' : 'Inferred from recent log activity, not confirmed by a running process';
+  return `<span class="sp-live" title="${source}" data-live="working"><span class="sp-live-shape" aria-hidden="true"></span><span class="sp-live-label">${escape(live.step || 'Working')}</span></span>${elapsed ? `<time class="sp-activity-elapsed">${escape(elapsed)}</time>` : ''}`;
 }
 
 export function updateOngoing(element, sessions) { updateMarkup(element, renderOngoing(sessions)); }

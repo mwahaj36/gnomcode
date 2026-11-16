@@ -11,6 +11,7 @@ test('each live state has text and a shape; inferred states say so', () => {
     assert.doesNotMatch(html, /Inferred/);
   }
   assert.match(renderLiveBadge({ state: 'idle', basis: 'estimated', step: '' }), /Inferred/);
+  assert.doesNotMatch(renderLiveBadge({ state: 'idle', basis: 'estimated', step: '' }), /sp-live-basis/);
   assert.equal(renderLiveBadge(null), '');
 });
 

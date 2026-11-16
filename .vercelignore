@@ -17,3 +17,12 @@ workers/
 # Installers are served from this repository's GitHub release; web/app/downloads/[asset] redirects there.
 web/public/downloads/*.exe
 web/public/downloads/*.zip
+
+# Keep maintainer records and local visual-review output off the deployment.
+localdocs/
+.claude/
+.impeccable/
+web/.next-review/
+web/test-results/
+web/web-test-results/
+test-results/
