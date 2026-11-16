@@ -1864,6 +1864,7 @@ export function WorkspaceView() {
     }
   };
 
+  // The daemon marks a desktop-app or IDE session without a live Gnomcode host as `imported`.
   const imported = activeSession?.source === 'imported';
   const working = activeLive?.state === 'working' || hostBusy === true;
   const canInterruptActive =
@@ -2789,7 +2790,7 @@ export function WorkspaceView() {
                   </div>
                 ) : null}
               </div>
-              {activeSession?.can_resume ? (
+              {activeSession?.can_resume && !imported ? (
                 <button
                   type="button"
                   className="btn-control"
@@ -3090,7 +3091,7 @@ export function WorkspaceView() {
               />
             ) : null}
 
-            {queuedPrompts.length > 0 ? (
+            {queuedPrompts.length > 0 && !imported ? (
               <div className="sp-queued-list" role="region" aria-label="Queued messages">
                 <p className="sp-queued-head">
                   {`${queuedPrompts.length} queued ${queuedPrompts.length === 1 ? 'message' : 'messages'} · sends on next safe turn`}
@@ -3332,14 +3333,6 @@ export function WorkspaceView() {
                   <div className="sp-overview-sep" />
                   <button type="button" className="sp-overview-item sp-overview-sub" onClick={() => openTool('automation')}>
                     Schedule and automation
-                  </button>
-                  <div className="sp-overview-sep" />
-                  <div
-                    className="sp-overview-limits"
-                    dangerouslySetInnerHTML={{ __html: renderProviderCards(providerOverviews, { cost: false }) }}
-                  />
-                  <button type="button" className="sp-overview-item sp-overview-sub" onClick={() => navigateTo('usage')}>
-                    View usage
                   </button>
                 </aside>
               ) : null}

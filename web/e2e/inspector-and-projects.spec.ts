@@ -71,6 +71,42 @@ test.describe('workspace inspector tabs, observed sessions, and usage projects',
     await expect(banner.getByRole('button', { name: 'New conversation' })).toBeVisible();
   });
 
+  test('Antigravity 2.0 desktop-app session with stale launch state stays read-only', async ({ page, openConsole }) => {
+    await reshapeConversations(page, {
+      agent: 'antigravity',
+      surface_label: 'Antigravity 2.0',
+      source: 'imported',
+      host_id: null,
+      can_prompt: false,
+      can_resume: true,
+      delivery_capability: { mode: 'observed_read_only', can_queue: false, queued_count: 0 },
+    });
+    await openConsole('#sessions');
+    await page.locator('.ide-session', { hasText: 'Antigravity' }).first().click();
+
+    await expect(page.locator('.sp-readonly-banner')).toBeVisible();
+    await expect(page.locator('.sp-chat-composer')).toHaveCount(0);
+    await expect(page.locator('.sp-queued-list')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Resume conversation' })).toHaveCount(0);
+  });
+
+  test('desktop rail fits the viewport and + New stays on one line', async ({ page, openConsole }) => {
+    for (const size of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }, { width: 1280, height: 560 }]) {
+      await page.setViewportSize(size);
+      await openConsole('#sessions');
+      const toggle = page.locator('#navigation-toggle');
+      await expect(toggle).toBeVisible();
+      const box = await toggle.boundingBox();
+      expect(box!.y + box!.height).toBeLessThanOrEqual(size.height);
+      const nav = page.locator('.sp-console-nav');
+      expect(await nav.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+      const newBtn = await page.locator('.sp-sidebar-new-btn').boundingBox();
+      expect(newBtn!.height).toBeLessThanOrEqual(32);
+      expect(await page.locator('.sp-console-nav').evaluate((el) => getComputedStyle(el).borderRightWidth)).toBe('1px');
+      expect(await page.locator('.sp-chat-column').evaluate((el) => getComputedStyle(el).borderRightWidth)).toBe('1px');
+    }
+  });
+
   test('observed CLI session with continue support shows Continue here without fake composer', async ({ page, openConsole }) => {
     await reshapeConversations(page, {
       agent: 'claude-code',

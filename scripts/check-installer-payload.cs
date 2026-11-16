@@ -21,7 +21,7 @@ public static class CheckInstallerPayload {
         Verify(installer, "gnomcode.exe", args[1]);
         Verify(installer, "THIRD_PARTY_NOTICES.html", args[2]);
         if (args.Length == 5) Verify(installer, "LICENSE", args[4]);
-        foreach (string name in new [] { "LICENSE", "tray.ps1", "run-tray.vbs", "open-console.vbs", "open-dashboard.vbs", "open-folder.ps1", "gnomcode.ico", "gnomcode-tray.ico", "gnomcode-mark.png" }) {
+        foreach (string name in new [] { "gnomcode-hook.exe", "LICENSE", "tray.ps1", "run-tray.vbs", "open-console.vbs", "open-dashboard.vbs", "open-folder.ps1", "gnomcode.ico", "gnomcode-tray.ico", "gnomcode-mark.png" }) {
             using (Stream resource = installer.GetManifestResourceStream(name)) {
                 if (resource == null || resource.Length == 0) throw new Exception("Missing installer resource: " + name);
             }

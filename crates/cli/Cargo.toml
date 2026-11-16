@@ -12,6 +12,10 @@ publish.workspace = true
 name = "gnomcode"
 path = "src/main.rs"
 
+[[bin]]
+name = "gnomcode-hook"
+path = "src/bin/gnomcode-hook.rs"
+
 [dependencies]
 gnomcode-core = { workspace = true }
 gnomcode-adapters = { workspace = true }

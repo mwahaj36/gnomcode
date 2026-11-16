@@ -19,7 +19,7 @@ export interface LocalSessionSummary {
   worktree_path?: string;
   limits?: unknown[];
   header_limit?: unknown;
-  delivery_capability?: string;
+  delivery_capability?: { mode?: string; reason?: string; can_queue?: boolean; queued_count?: number } | string;
   project_name?: string;
   surface_label?: string;
   /** Id of the live PTY or protocol host Gnomcode runs for this conversation, if any. */
