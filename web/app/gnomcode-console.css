@@ -2627,3 +2627,92 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 /* Quiet header controls at every width, not just desktop. */
 .sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):not(.sp-primary-action){background:transparent;border-color:transparent}
 .sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):hover{background:var(--sp-surface-raised)}
+/* Workspace panels are a docked pane, not an overlay: the conversation reflows beside them and
+   the edge is draggable, matching the desktop app's inspector. */
+@media(min-width:768px){
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]{
+  position:fixed;top:var(--remote-viewport-top,0px);bottom:0;right:0;left:auto;
+  width:clamp(360px,var(--inspector-w,560px),72vw);max-width:none;max-height:none;height:auto;
+  margin:0;padding:0;border:0;border-left:1px solid var(--sp-border);border-radius:0;
+  background:var(--sp-surface);display:flex;flex-direction:column;z-index:30;overflow:hidden
+ }
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>header{
+  flex:none;padding:12px 16px;margin:0;border-bottom:1px solid var(--sp-border)
+ }
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>:not(header):not(.sp-pane-resizer){
+  flex:1 1 auto;min-height:0;overflow:auto;padding:12px 16px
+ }
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>.sp-pane-resizer{left:-5px;right:auto}
+ /* The conversation gives up the pane's width instead of being covered by it. */
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]) .remote-workspace{
+  padding-right:clamp(360px,var(--inspector-w,560px),72vw)
+ }
+ /* Both panes are draggable, as in the app. */
+ .sp-remote.is-embedded .remote-workspace.show-sessions{grid-template-columns:clamp(220px,var(--chat-w,280px),440px) minmax(0,1fr)}
+ .sp-remote.is-embedded .remote-session-sidebar{position:relative}
+ .sp-remote.is-embedded .remote-session-sidebar>.sp-pane-resizer{right:-4px;left:auto}
+}
+@media(max-width:767px){
+ /* On a phone the panel is a full-height sheet; there is no room to dock it. */
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]{
+  position:fixed;left:0;right:0;top:auto;width:100%;max-width:none;margin:0;
+  bottom:calc(var(--rail-h,56px) + env(safe-area-inset-bottom));border-radius:16px 16px 0 0;
+  max-height:min(85dvh,var(--remote-viewport-height,100dvh));z-index:50
+ }
+ .sp-remote.is-embedded dialog[open]>.sp-pane-resizer{display:none}
+}
+/* An open panel highlights the control that opened it, so the way to close it is visible. */
+.sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):not(.sp-primary-action)[aria-pressed="true"],
+.sp-remote.is-embedded .remote-sidebar-toggle[aria-pressed="true"]{
+ background:var(--sp-surface-raised);color:var(--sp-text);box-shadow:inset 0 0 0 1px var(--sp-border-strong)
+}
+.sp-remote .sp-overview-item[aria-pressed="true"]{background:var(--sp-surface-2);color:var(--sp-text);font-weight:500}
+/* The conversation column runs the full height and the title bar belongs to the chat only, as in
+   the desktop app. `display:contents` lets the sidebar, header and conversation share one grid
+   even though the sidebar is nested inside .remote-workspace. */
+@media(min-width:768px){
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){
+  display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
+  align-items:stretch;min-height:0
+ }
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting) .remote-workspace{display:contents}
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting)>.remote-heading{
+  grid-column:2;grid-row:1;border-bottom:1px solid var(--sp-border);margin:0
+ }
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting) .remote-session-sidebar{
+  grid-column:1;grid-row:1 / -1;width:clamp(220px,var(--chat-w,280px),440px);height:auto;min-height:0
+ }
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting) .remote-conversation{
+  grid-column:2;grid-row:2;min-height:0
+ }
+ /* Banners and notices stay full width above the panes. */
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting)>:is(.remote-feedback,.remote-reconnect){
+  grid-column:1 / -1;grid-row:auto
+ }
+ /* With the column closed the chat takes the whole width. */
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting):has(.remote-workspace:not(.show-sessions)){
+  grid-template-columns:minmax(0,1fr)
+ }
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting):has(.remote-workspace:not(.show-sessions))>.remote-heading,
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting):has(.remote-workspace:not(.show-sessions)) .remote-conversation{
+  grid-column:1
+ }
+ /* The docked panel takes room from the chat, not from the whole shell. */
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]) .remote-workspace{padding-right:0}
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting)>.remote-heading,
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting) .remote-conversation{
+  padding-right:clamp(360px,var(--inspector-w,560px),72vw)
+ }
+}
+/* Checkboxes keep a comfortable hit region: HIG asks 28px on desktop, 44px on touch. */
+.sp-remote .subagent-filter,.sp-chat-column .subagent-filter{display:flex;align-items:center;gap:8px;min-height:28px}
+.sp-remote .subagent-filter input[type="checkbox"],.sp-chat-column .subagent-filter input[type="checkbox"]{width:16px;height:16px;margin:6px;flex:none}
+@media(max-width:767px){
+ .sp-remote .subagent-filter,.sp-chat-column .subagent-filter{min-height:44px}
+ .sp-remote .subagent-filter input[type="checkbox"],.sp-chat-column .subagent-filter input[type="checkbox"]{width:20px;height:20px;margin:12px}
+}
+/* Touch has no hover, so the row's pin is always visible there and takes a full 44px target. */
+@media(max-width:767px),(pointer:coarse){
+ .sp-remote .remote-session-sidebar .ide-session-more,
+ .sp-chat-column .ide-session-more{opacity:1;flex:0 0 44px;width:44px;min-width:44px;min-height:44px}
+}

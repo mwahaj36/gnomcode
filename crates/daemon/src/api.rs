@@ -36,7 +36,7 @@ mod handoff;
 mod models;
 mod pricing;
 mod projects;
-mod providers;
+pub(crate) mod providers;
 mod quota;
 mod remote;
 mod report;

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
@@ -108,5 +110,28 @@ test.describe('provider limit cards render intact on every surface', () => {
     await expect(trigger).toBeVisible();
     await trigger.click();
     await assertCardsAreIntact(page, '.sp-usage-popover');
+  });
+});
+
+// The web Workspace panels are a docked pane, not a modal overlay: a modal dialog sits in the top
+// layer behind a backdrop, which covers the conversation instead of letting it reflow.
+test.describe('web workspace panels are docked, not overlays', () => {
+  test('the panel markup opts out of modal presentation', () => {
+    const source = readFileSync(join(__dirname, '..', 'components', 'RemoteCompanion.tsx'), 'utf8');
+    for (const panel of ['changesDialog', 'filesDialog', 'artifactsDialog']) {
+      expect(source, `${panel} must open non-modally`).not.toContain(`${panel}.current?.showModal()`);
+      expect(source, `${panel} must open`).toContain(`${panel}.current?.show()`);
+    }
+    // Both panes carry a resizer, as the desktop app's do.
+    expect(source).toContain('cssVar="--chat-w"');
+    expect(source).toContain('cssVar="--inspector-w"');
+  });
+
+  test('the stylesheet reflows the conversation around the docked panel', () => {
+    const css = readFileSync(join(__dirname, '..', 'app', 'gnomcode-console.css'), 'utf8');
+    expect(css).toContain('.sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]) .remote-workspace');
+    // The phone tab bar is never hidden behind Remote again.
+    const globals = readFileSync(join(__dirname, '..', 'app', 'globals.css'), 'utf8');
+    expect(globals).not.toContain('visibility:hidden');
   });
 });
