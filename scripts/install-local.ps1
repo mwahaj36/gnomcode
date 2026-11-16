@@ -8,6 +8,7 @@ if (Test-Path $InstallDir) {
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
 Copy-Item "target/release/gnomcode.exe" (Join-Path $InstallDir "gnomcode.exe") -Force
+Copy-Item "target/release/gnomcode-hook.exe" (Join-Path $InstallDir "gnomcode-hook.exe") -Force
 Copy-Item "web/public/downloads/Gnomcode-Setup.exe" (Join-Path $InstallDir "Gnomcode-Uninstall.exe") -Force
 Copy-Item "LICENSE" (Join-Path $InstallDir "LICENSE") -Force
 Copy-Item "web/public/downloads/THIRD_PARTY_NOTICES.html" (Join-Path $InstallDir "THIRD_PARTY_NOTICES.html") -Force

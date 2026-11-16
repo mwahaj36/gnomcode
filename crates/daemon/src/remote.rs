@@ -1402,6 +1402,12 @@ fn displayed_state(session: &Session, hosted: bool) -> &'static str {
     }
 }
 
+/// True for host surfaces that run outside Gnomcode (desktop apps, IDEs), whose sessions are
+/// observed read-only unless a live Gnomcode host owns them.
+fn external_surface(surface: &str) -> bool {
+    matches!(surface, "desktop_app" | "ide")
+}
+
 pub(crate) fn conversation_sessions(
     db: &Database,
     sessions: &[Session],
@@ -1467,7 +1473,11 @@ pub(crate) fn conversation_sessions(
                 .or_else(|| launch.as_ref().map(|launch| launch.agent.as_str()))
                 .unwrap_or_default(),
         );
-        let managed = host.is_some() || launch.is_some();
+        // A desktop-app or IDE session runs outside Gnomcode: a stale launch row must not make
+        // it resumable or promptable unless a Gnomcode host owns it right now.
+        let external_surface = host.is_none()
+            && observed.is_some_and(|session| external_surface(session.surface.as_str()));
+        let managed = (host.is_some() || launch.is_some()) && !external_surface;
         row["source"] = json!(if managed { "managed" } else { "imported" });
         row["host_id"] = json!(host.map(|record| record.session_id.as_str()));
         let can_resume = managed
@@ -1806,6 +1816,73 @@ fn pick_unique_binding_candidate<'s>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn external_surfaces_are_read_only() {
+        assert!(external_surface("desktop_app"));
+        assert!(external_surface("ide"));
+        assert!(!external_surface("cli"));
+    }
+
+    #[test]
+    fn desktop_app_session_with_stale_launch_is_observed_read_only() {
+        let mut db = Database::open_in_memory().expect("db");
+        let now = chrono::Utc::now();
+        let project = Project::from_origin(None, "fixture", None);
+        let session = Session {
+            id: "agy-desktop".into(),
+            agent: gnomcode_core::AgentId::Antigravity,
+            surface: gnomcode_core::Surface::DesktopApp,
+            project_id: project.id.clone(),
+            parent_session_id: None,
+            model: None,
+            title: None,
+            state: gnomcode_core::SessionState::Ended,
+            pid: None,
+            started_at: now,
+            last_event_at: now,
+        };
+        let cp = gnomcode_store::SourceCheckpoint {
+            file_path: "fixture".into(),
+            last_read_offset: 0,
+            file_size: 0,
+            fingerprint: "fixture".into(),
+            last_ingested_at: now,
+        };
+        db.commit_batch(
+            &[project],
+            std::slice::from_ref(&session),
+            &[],
+            &[],
+            &[],
+            &cp,
+        )
+        .expect("session");
+        db.save_conversation_launch("agy-desktop", "antigravity", "fixture", None)
+            .expect("stale launch");
+        db.insert_chat_event(&gnomcode_core::ChatEvent {
+            event_id: "m1".into(),
+            session_id: "agy-desktop".into(),
+            turn_index: 0,
+            role: gnomcode_core::ChatRole::User,
+            content: "hello".into(),
+            created_at: now,
+            tool_name: None,
+            status: None,
+        })
+        .expect("chat");
+        let rows = conversation_sessions(&db, std::slice::from_ref(&session), &[]).expect("rows");
+        let row = rows
+            .iter()
+            .find(|row| row["id"] == "agy-desktop")
+            .expect("desktop app row");
+        assert_eq!(row["surface_label"], "Antigravity 2.0");
+        assert_eq!(row["source"], "imported");
+        assert_eq!(row["can_resume"], false);
+        assert_eq!(row["can_prompt"], false);
+        assert_eq!(row["delivery_capability"]["mode"], "observed_read_only");
+        assert_eq!(row["delivery_capability"]["can_queue"], false);
+    }
 
     #[test]
     fn stale_observed_execution_is_not_shown_as_running() {

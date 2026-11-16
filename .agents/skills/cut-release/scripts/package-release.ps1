@@ -22,6 +22,8 @@ if ($env:GNOMCODE_UPDATE_PUBLIC_KEY -notmatch '^[0-9a-fA-F]{64}$') { throw "GNOM
 if ($LASTEXITCODE -ne 0) { throw "Native Rust release build failed" }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $RepoRoot "target" }
 $NativeExe = Join-Path $TargetDir "release/gnomcode.exe"
+$HookExe = Join-Path $TargetDir "release/gnomcode-hook.exe"
+if (!(Test-Path $HookExe)) { throw "Windowless hook launcher missing" }
 if ((& $NativeExe --version) -ne "gnomcode $Version") { throw "Binary version mismatch" }
 Push-Location (Join-Path $RepoRoot "web")
 try {
@@ -42,10 +44,12 @@ $FontNotices = Get-ChildItem "$RepoRoot/web/public/fonts/*-LICENSE.txt" | ForEac
 $NoticeLines = [IO.File]::ReadAllText("$Out/THIRD_PARTY_NOTICES.html") -split "`n" | ForEach-Object { $_.TrimEnd() }
 [IO.File]::WriteAllText("$Out/THIRD_PARTY_NOTICES.html", ($NoticeLines -join "`n"), (New-Object Text.UTF8Encoding($false)))
 Copy-Item $NativeExe "$Out/gnomcode.exe" -Force
+Copy-Item $HookExe "$Out/gnomcode-hook.exe" -Force
 Copy-Item "LICENSE" "$Out/LICENSE" -Force
 $DesktopStaging = Join-Path $RepoRoot "apps/desktop/staging"
 New-Item -ItemType Directory -Path (Join-Path $DesktopStaging "bin") -Force | Out-Null
 Copy-Item $NativeExe (Join-Path $DesktopStaging "bin/gnomcode.exe") -Force
+Copy-Item $HookExe (Join-Path $DesktopStaging "bin/gnomcode-hook.exe") -Force
 Copy-Item "LICENSE" (Join-Path $DesktopStaging "LICENSE") -Force
 Copy-Item "$Out/THIRD_PARTY_NOTICES.html" (Join-Path $DesktopStaging "THIRD_PARTY_NOTICES.html") -Force
 & node apps/desktop/desktop-notices.cjs
@@ -58,7 +62,7 @@ Compress-Archive -Path (Join-Path $DesktopPackage "*") -DestinationPath $Desktop
 $CompilerArgs = @(
     "/target:winexe", "/platform:x64", "/optimize+", "/win32icon:$RepoRoot/scripts/gnomcode.ico",
     "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll", "/reference:System.IO.Compression.dll",
-    "/resource:$NativeExe,gnomcode.exe",
+    "/resource:$NativeExe,gnomcode.exe", "/resource:$HookExe,gnomcode-hook.exe",
     "/resource:$DesktopZip,desktop.zip",
     "/resource:$RepoRoot/scripts/tray.ps1,tray.ps1", "/resource:$RepoRoot/scripts/gnomcode.ico,gnomcode.ico", "/resource:$RepoRoot/scripts/gnomcode-tray.ico,gnomcode-tray.ico",
     "/resource:$RepoRoot/web/public/icons/gnomcode-512.png,gnomcode-mark.png",

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   mountProjectList,
   updateActivity,
+  updatePeriodTiles,
   updateProviderCards,
   updateProviders,
   updateValue,
@@ -31,6 +32,18 @@ const PERIOD_LABELS: Record<string, string> = {
   all: 'All time',
 };
 
+/** Grid columns that cover a reporting period; the full year for All time. */
+function gridWeeks(range: string): number {
+  if (range === '7d') return 2;
+  if (range === '30d') return 5;
+  if (range === 'month') {
+    const now = new Date();
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    return Math.ceil((now.getUTCDate() + ((first.getUTCDay() + 6) % 7)) / 7);
+  }
+  return 53;
+}
+
 function buildRangeUrl(basePath: string, range: string, extra?: string): string {
   let url = `${basePath}?range=${encodeURIComponent(range)}`;
   if (extra) url += `&${extra}`;
@@ -56,6 +69,7 @@ export function UsageView() {
 
   const quotaRef = useRef<HTMLDivElement | null>(null);
   const activityRef = useRef<HTMLDivElement | null>(null);
+  const periodTilesRef = useRef<HTMLDivElement | null>(null);
   const providersRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef<HTMLElement | null>(null);
   const projectsRef = useRef<HTMLDivElement | null>(null);
@@ -126,6 +140,9 @@ export function UsageView() {
       }
       setTimelineLabel(label);
 
+      if (periodTilesRef.current) {
+        updatePeriodTiles(periodTilesRef.current, tl);
+      }
       if (activityRef.current) {
         updateActivity(activityRef.current, tl, { totals: false });
       }
@@ -321,10 +338,21 @@ export function UsageView() {
       </div>
 
       {exportStatus ? <p role="status">{exportStatus}</p> : null}
+      {/* Totals follow the reporting period here; Home always speaks for today. */}
+      <section ref={periodTilesRef} className="sp-section sp-usage-totals" aria-label="Totals for the selected period" />
       <div ref={quotaRef}>
         <p>Loading provider limits...</p>
       </div>
-      <ActivityGrid viewName="usage" onDaySelect={handleDaySelect} />
+      {/* One activity chart follows the period: Today shows the hour strip below, other periods
+          narrow the grid to their weeks (year-only stats appear just for All time). */}
+      {range === 'today' ? null : (
+        <ActivityGrid
+          key={range}
+          viewName="usage"
+          weeks={gridWeeks(range)}
+          onDaySelect={handleDaySelect}
+        />
+      )}
       <div ref={activityRef} className="sp-usage-daily">
         <p>Loading daily activity...</p>
       </div>

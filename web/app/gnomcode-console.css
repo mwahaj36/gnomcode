@@ -603,7 +603,7 @@ body.sp-native-console{max-width:none;margin:0;padding:0;font-family:var(--sp-fo
 .sp-native-console .sp-console-workspace{display:block;padding-left:64px;min-height:100dvh}
 .sp-native-console .sp-console-workspace>.sp-console-nav{position:fixed;inset:0 auto 0 0;z-index:30;width:64px;padding:12px 8px;gap:6px;border-right:1px solid var(--sp-border);background:var(--sp-surface);overflow:hidden;transition:width .18s cubic-bezier(.16,1,.3,1);align-self:stretch}
 .sp-native-console .sp-console-nav button,.sp-native-console .sp-console-nav .app-brand{display:flex;align-items:center;gap:14px;flex:none;min-height:44px;width:100%;padding:10px 12px;border-radius:8px;white-space:nowrap;font:500 var(--sp-fs-body)/1.4 var(--sp-font-sans);color:var(--sp-text-2);text-decoration:none}
-.sp-native-console .sp-console-nav #account-entry[hidden]{display:none}
+.sp-native-console .sp-console-nav :is(#account-entry,#account-sign-out)[hidden]{display:none}
 .sp-native-console .sp-console-nav .app-brand{margin-bottom:12px;color:var(--sp-text);font-size:18px}
 .sp-native-console .sp-console-nav svg,.sp-native-console .sp-console-nav .sp-brand-mark{width:20px;height:20px;flex:0 0 20px}
 .sp-native-console .sp-console-nav svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -2212,7 +2212,8 @@ body.sp-resizing{cursor:col-resize;user-select:none}
  body.sp-native-console{--rail-w:56px}
  body.sp-native-console[data-rail="expanded"]{--rail-w:208px}
  body.sp-native-console .sp-console-workspace{grid-template-columns:var(--rail-w) auto minmax(0,1fr);height:100dvh;min-height:0;align-items:stretch;background:var(--sp-bg)}
- body.sp-native-console .sp-console-workspace>.sp-console-nav{background:var(--sp-bg);border-right:0;padding:var(--sp-3) var(--sp-2);align-items:stretch}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{background:var(--sp-bg);border-right:1px solid var(--sp-border);padding:var(--sp-3) var(--sp-2);align-items:stretch;overflow:hidden}
+ body.sp-native-console .sp-chat-column{border-right:1px solid var(--sp-border)}
  body.sp-native-console[data-rail="collapsed"] .sp-console-nav{align-items:center}
  body.sp-native-console[data-rail="collapsed"] .sp-console-nav :is(.tab-btn,#navigation-toggle,.app-brand){width:40px;min-height:40px;padding:0;justify-content:center;border-radius:10px}
  body.sp-native-console .sp-console-nav .tab-btn.active::before{content:"";position:absolute;left:-8px;top:11px;bottom:11px;width:2px;border-radius:2px;background:var(--sp-text)}
@@ -2279,7 +2280,7 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-chat-column .ide-sidebar-title h2{font-size:var(--sp-fs-control);font-weight:600;color:var(--sp-text-2)}
 .sp-chat-column .ide-sidebar-actions{display:flex;align-items:center;gap:4px}
 .sp-chat-column .ide-sidebar-title .btn-control{min-height:28px;min-width:28px;padding:0;border:0;background:transparent}
-.sp-chat-column .ide-sidebar-title .sp-sidebar-new-btn{min-height:28px;padding:0 10px;border:1px solid var(--sp-border);border-radius:7px;background:var(--sp-surface-raised);color:var(--sp-text);font-size:var(--sp-fs-meta);font-weight:500}
+.sp-chat-column .ide-sidebar-title .sp-sidebar-new-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;flex-shrink:0;width:auto;min-width:0;min-height:28px;padding:0 10px;border:1px solid var(--sp-border);border-radius:7px;background:var(--sp-surface-raised);color:var(--sp-text);font-size:var(--sp-fs-meta);font-weight:500}
 .sp-chat-column .ide-sidebar-title .sp-sidebar-new-btn:hover{border-color:var(--sp-border-strong)}
 .sp-chat-column .ide-sidebar>input[type="search"]{min-height:32px;height:32px;margin:0;font-size:var(--sp-fs-control);border-radius:8px;background:var(--sp-surface);border:1px solid var(--sp-border)}
 .sp-chat-column .conversation-filters>summary{font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:2px 4px;cursor:pointer}
@@ -2453,3 +2454,120 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-onb-wsl>summary{cursor:pointer;padding:4px 0;color:var(--sp-text-3)}
 .sp-onb-wsl[open]>summary{margin-bottom:8px;color:var(--sp-text-2)}
 @media (prefers-reduced-motion:reduce){.sp-chat-card header time,.sp-chat-card .sp-chat-copy{transition:none}}
+
+/* Desktop rail fits the viewport: tabs and footer never clip the navigation toggle. */
+@media(min-width:768px){
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{height:100dvh;max-height:100dvh;min-height:0;box-sizing:border-box}
+ body.sp-native-console .sp-console-nav .app-brand{margin-bottom:var(--sp-2)}
+ body.sp-native-console .sp-console-nav :is(.tab-btn,#navigation-toggle){min-height:36px}
+ body.sp-native-console .sp-nav-footer{margin-top:auto;padding-bottom:0}
+}
+@media(min-width:768px) and (max-height:560px){
+ body.sp-native-console .sp-console-nav :is(.tab-btn,#navigation-toggle,.app-brand){min-height:32px}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{padding-block:var(--sp-2);gap:2px}
+}
+/* Conversation column polish: subagents sit inline under their parent row, not as a tall block. */
+.sp-chat-column .sp-subagents{margin:-6px 0 2px 10px;padding:0;border:0;background:transparent}
+.sp-chat-column .sp-subagents>summary{display:inline-flex;align-items:center;gap:4px;min-height:22px;padding:0 6px;font:500 var(--sp-fs-meta)/1.2 var(--sp-font-sans);color:var(--sp-text-3);list-style:none;border-radius:6px}
+.sp-chat-column .sp-subagents>summary::-webkit-details-marker{display:none}
+.sp-chat-column .sp-subagents>summary::before{content:"";width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .12s}
+.sp-chat-column .sp-subagents[open]>summary::before{transform:rotate(45deg)}
+.sp-chat-column .sp-subagents>summary:hover{color:var(--sp-text-2);background:var(--sp-surface-raised)}
+.sp-chat-column .sp-subagents[open]>ul{margin:2px 0 4px 6px;padding-left:8px;border-left:1px solid var(--sp-border)}
+.sp-chat-column .sp-sidebar-quick-pills{flex:none}
+.sp-chat-column .sp-sidebar-quick-pill{min-height:24px}
+.sp-chat-column .ide-session{min-height:38px;padding-block:5px}
+.sp-chat-column .pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--sp-border)}
+.sp-chat-column .pagination button{min-height:26px;padding:0 8px}
+.sp-chat-column .sp-all-chats-trigger{min-height:32px;padding:0 10px;font-size:var(--sp-fs-control);border-radius:8px}
+/* Web console mirrors the desktop shell: 56/208px rail, 280px conversation column, inset work pane, 1px dividers. */
+@media(min-width:768px){
+ .sp-web-app{padding-left:80px!important}
+ .sp-web-app.web-navigation-expanded{padding-left:232px!important}
+ .sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;padding:var(--sp-3) var(--sp-2);gap:var(--sp-1);background:var(--sp-bg);border-right:1px solid var(--sp-border);overflow:hidden;box-sizing:border-box;height:100dvh}
+ .sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
+ .sp-web-app .sp-console-nav :is(button,a){min-height:36px;padding:8px 10px;border-radius:10px;color:var(--sp-text-3);background:transparent}
+ .sp-web-app .sp-console-nav :is(button,a):hover{color:var(--sp-text-2);background:var(--sp-surface-raised)}
+ .sp-web-app .sp-console-nav button[aria-current="page"]{color:var(--sp-text);background:var(--sp-surface-raised)}
+ .sp-web-app .sp-console-nav .web-download-link{margin-top:auto}
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:56px}
+ .web-navigation-expanded .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:208px}
+ .sp-remote.is-embedded .remote-workspace{grid-template-columns:280px minmax(0,1fr)}
+ .sp-remote.is-embedded .remote-session-sidebar{display:flex;flex-direction:column;padding:var(--sp-3) var(--sp-2);background:var(--sp-bg);border-right:1px solid var(--sp-border)}
+ .sp-remote.is-embedded .remote-session-sidebar .ide-sidebar{display:flex;flex-direction:column;gap:8px;min-height:0;height:100%;overflow:auto}
+ .sp-remote.is-embedded .remote-heading .remote-new{display:none}
+ .sp-remote.is-embedded .remote-conversation{max-width:none;position:relative}
+}
+.sp-remote .remote-session-sidebar.sp-chat-column button{margin:0}
+.sp-remote .remote-session-sidebar .ide-session{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:5px 6px 5px 10px;min-height:38px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:var(--sp-font-sans)}
+.sp-remote .remote-session-sidebar .ide-session-row{display:flex;align-items:center;gap:2px;border-radius:8px}
+.sp-remote .remote-session-sidebar .ide-session-row:hover,.sp-remote .remote-session-sidebar .ide-session-row:has([aria-current="true"]){background:var(--sp-surface-raised)}
+.sp-remote .remote-session-sidebar .ide-session-more{min-width:28px;min-height:28px;padding:0;border:0;background:transparent;color:var(--sp-text-3);display:inline-flex;align-items:center;justify-content:center}
+.sp-remote .remote-session-sidebar .ide-session-more[aria-pressed="false"]{opacity:0}
+.sp-remote .remote-session-sidebar .ide-session-row:is(:hover,:focus-within) .ide-session-more{opacity:1}
+.sp-remote .remote-session-sidebar .remote-session-list{display:grid;gap:2px}
+.sp-remote .remote-session-sidebar input[type="search"]{min-height:32px;height:32px;margin:0;font-size:var(--sp-fs-control);border-radius:8px;background:var(--sp-surface);border:1px solid var(--sp-border)}
+.sp-remote .remote-session-sidebar .conversation-filters .filters{display:grid;gap:6px;padding:6px 4px}
+.sp-remote .remote-session-sidebar .conversation-filters label{margin:0;font-size:var(--sp-fs-meta)}
+.sp-remote .remote-new-conversation:not([open]){display:none}
+.sp-remote .remote-new-conversation[open]{border:1px solid var(--sp-border);border-radius:10px;padding:8px 10px;background:var(--sp-surface)}
+.sp-remote .remote-new-conversation label{margin:8px 0 4px}
+.sp-remote .remote-session-sidebar .pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:8px 4px 2px;border-top:1px solid var(--sp-border);margin-top:auto}
+.sp-remote .remote-session-sidebar .pagination button{min-height:26px;padding:0 8px;font:500 var(--sp-fs-meta)/1 var(--sp-font-sans)}
+.sp-remote .remote-overview{position:absolute;top:8px;right:12px;z-index:12;margin:0;width:320px;max-height:calc(100% - 24px)}
+.sp-remote .remote-overview .sp-overview-item{margin:0;min-height:34px;justify-content:flex-start}
+.sp-remote .remote-overview .remote-automation{margin:0;padding:4px 8px}
+.sp-remote .sp-readonly-banner{margin:8px 0 0}
+/* One disclosure style everywhere: no browser triangle, a quiet rotating chevron. */
+details>summary{list-style:none;cursor:pointer}
+details>summary::-webkit-details-marker{display:none}
+details>summary:not(.visually-hidden)::before{content:"";display:inline-block;width:6px;height:6px;margin:0 8px 2px 1px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .14s ease;opacity:.7;vertical-align:middle;flex:none}
+details[open]>summary:not(.visually-hidden)::before{transform:rotate(45deg);margin-bottom:4px}
+details>summary:focus-visible{outline:2px solid var(--sp-accent);outline-offset:2px;border-radius:6px}
+@media(prefers-reduced-motion:reduce){details>summary::before{transition:none}}
+/* The app shell owns the viewport at every width: the document never scrolls, so there is exactly
+   one scrollbar (the work pane's) and the fixed rail or tab bar always sits on screen. */
+html:has(body.sp-native-console){height:100%;overflow:hidden}
+body.sp-native-console{height:100dvh;max-height:100dvh;overflow:hidden}
+body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min-height:0;overflow:hidden}
+@media(max-width:767px){
+ body.sp-native-console .sp-console-workspace{grid-template-rows:minmax(0,1fr)}
+ body.sp-native-console .sp-console-content{min-height:0;height:100%;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+ body.sp-native-console[data-console-view="sessions"] .sp-console-content{height:100%}
+}
+/* One select style across the console: no OS dropdown chrome, a drawn chevron, theme-aware. */
+:is(.sp-native-console,.sp-console-app,.sp-remote) select{
+ -webkit-appearance:none;appearance:none;
+ min-height:32px;padding:0 30px 0 10px;
+ border:1px solid var(--sp-border);border-radius:8px;
+ background-color:var(--sp-surface);color:var(--sp-text);
+ background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+ background-position:calc(100% - 15px) calc(50% + 1px),calc(100% - 10px) calc(50% + 1px);
+ background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+ font:500 var(--sp-fs-control)/1.4 var(--sp-font-sans);cursor:pointer;
+}
+:is(.sp-native-console,.sp-console-app,.sp-remote) select:hover{border-color:var(--sp-border-strong)}
+:is(.sp-native-console,.sp-console-app,.sp-remote) select:focus-visible{outline:2px solid var(--sp-accent);outline-offset:2px}
+:is(.sp-native-console,.sp-console-app,.sp-remote) select:disabled{opacity:.5;cursor:default}
+.timeline-bar select,.sp-console-timeline-filter select{min-height:36px;padding:0 32px 0 12px}
+@media(max-width:767px){:is(.sp-native-console,.sp-console-app,.sp-remote) select{min-height:44px;font-size:16px}}
+/* The period line is prose, not a code sample, and the limit cards share one baseline height. */
+.sp-native-console .timeline-label{font-family:var(--sp-font-sans);font-size:var(--sp-fs-control);color:var(--sp-text-2)}
+.sp-native-console .timeline-bar select{font-family:var(--sp-font-sans)}
+.sp-native-console :is(.sp-card-grid,.sp-provider-grid){align-items:stretch}
+.sp-native-console :is(.sp-card-grid,.sp-provider-grid)>:is(.sp-card,.sp-provider-card){height:100%}
+/* Activity is one card: the grid, its figures, and the period note with its details read as a
+   single surface instead of two stacked boxes saying the same thing. */
+.sp-usage-view .sp-heatmap:has(+ .sp-usage-daily .sp-activity--merged) .sp-heatmap-card{
+ border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:0;margin-bottom:0
+}
+.sp-usage-view > .sp-usage-daily:has(.sp-activity--merged){margin-top:0}
+.sp-usage-daily .sp-activity--merged{
+ margin:0;padding:var(--sp-3) var(--sp-5) var(--sp-4);
+ border:1px solid var(--sp-border);border-top:1px solid var(--sp-border);
+ border-top-left-radius:0;border-top-right-radius:0;
+ border-bottom-left-radius:var(--sp-r-card,12px);border-bottom-right-radius:var(--sp-r-card,12px);
+ background:var(--sp-surface)
+}
+.sp-usage-daily .sp-activity--merged .sp-activity-note{margin:0 0 var(--sp-2)}
+.sp-usage-daily .sp-activity--merged .sp-activity-breakdown{margin:0}

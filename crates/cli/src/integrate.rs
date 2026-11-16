@@ -16,7 +16,15 @@ fn is_gnomcode_handler(handler: &Value, exe: &str) -> bool {
         || std::path::Path::new(command)
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| ["gnomcode", "gnomcode.exe"].contains(&name));
+            .is_some_and(|name| {
+                [
+                    "gnomcode",
+                    "gnomcode.exe",
+                    "gnomcode-hook",
+                    "gnomcode-hook.exe",
+                ]
+                .contains(&name)
+            });
     ours && handler.get("args") == Some(&json!(["hook"]))
 }
 

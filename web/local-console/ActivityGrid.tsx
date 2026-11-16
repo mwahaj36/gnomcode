@@ -10,11 +10,13 @@ const POLL_INTERVAL_MS = 15_000;
 interface ActivityGridProps {
   id?: string;
   viewName: 'overview' | 'usage';
+  /** Weeks of columns to show; year-only stats and month labels appear only at 53. */
+  weeks?: number;
   onDaySelect?: (date: string) => void;
 }
 
 /** Shared trailing-year UTC activity grid used by Overview and Usage views. */
-export function ActivityGrid({ id, viewName, onDaySelect }: ActivityGridProps) {
+export function ActivityGrid({ id, viewName, weeks = 53, onDaySelect }: ActivityGridProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastFetchedAtRef = useRef(0);
 
@@ -32,10 +34,10 @@ export function ActivityGrid({ id, viewName, onDaySelect }: ActivityGridProps) {
       const data = await fetchLocalJson<ActivityHeatmap>('/api/v1/activity/heatmap');
       if (containerRef.current) {
         updateHeatmap(containerRef.current, data, {
-          weeks: 53,
-          stats: true,
+          weeks,
+          stats: weeks >= 53,
           legend: true,
-          months: true,
+          months: weeks >= 53,
         });
       }
     } catch {
@@ -45,7 +47,7 @@ export function ActivityGrid({ id, viewName, onDaySelect }: ActivityGridProps) {
           '<div class="sp-empty"><p>Activity could not be loaded.</p></div>';
       }
     }
-  }, []);
+  }, [weeks]);
 
   useEffect(() => {
     void loadHeatmap(true).then(() => scrollToToday());
