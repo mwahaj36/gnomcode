@@ -333,6 +333,8 @@ pub struct Scrollback {
     capacity: usize,
     bytes: VecDeque<u8>,
     parser: vt100::Parser,
+    limit_message: Option<String>,
+    total_bytes: u64,
 }
 
 impl std::fmt::Debug for Scrollback {
@@ -352,11 +354,19 @@ impl Scrollback {
             capacity,
             bytes: VecDeque::new(),
             parser: vt100::Parser::new(24, 160, 0),
+            limit_message: None,
+            total_bytes: 0,
         }
     }
 
     /// Appends output to the buffer and advances the rendered VT100 screen.
     pub fn append(&mut self, data: &[u8]) {
+        self.total_bytes = self.total_bytes.saturating_add(data.len() as u64);
+        if let Some(message) =
+            gnomcode_core::quota::terminal_limit_message(&String::from_utf8_lossy(data))
+        {
+            self.limit_message = Some(message);
+        }
         self.parser.process(data);
         let keep = data.len().min(self.capacity);
         let remove = self
@@ -366,6 +376,17 @@ impl Scrollback {
             .saturating_sub(self.capacity);
         self.bytes.drain(..remove);
         self.bytes.extend(&data[data.len() - keep..]);
+    }
+
+    /// Returns retained terminal bytes after a cursor, resetting when that cursor fell out of history.
+    #[must_use]
+    pub fn output_since(&self, after: Option<u64>) -> serde_json::Value {
+        let oldest = self.total_bytes.saturating_sub(self.bytes.len() as u64);
+        let valid = after.filter(|cursor| *cursor >= oldest && *cursor <= self.total_bytes);
+        let start = valid.unwrap_or(oldest);
+        let skip = (start - oldest) as usize;
+        let data: Vec<u8> = self.bytes.iter().skip(skip).take(32768).copied().collect();
+        serde_json::json!({"cursor":start + data.len() as u64,"reset":valid.is_none(),"data":data})
     }
 
     /// Resizes the tracked VT100 screen.
@@ -738,6 +759,7 @@ pub(crate) async fn serve_host(parts: HostParts<'_>) -> Result<(), Error> {
 
     let app = Router::new()
         .route("/health", get(host_health_handler))
+        .route("/screen", get(host_screen_handler))
         .route("/stream", get(host_stream_handler))
         .route("/input", post(host_input_handler))
         .route("/retry-enter", post(host_retry_enter_handler))
@@ -791,6 +813,47 @@ fn valid_loopback_headers(headers: &HeaderMap) -> bool {
     }
 }
 
+#[derive(Default, Deserialize)]
+struct TerminalQuery {
+    after: Option<u64>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+}
+
+async fn host_screen_handler(
+    headers: HeaderMap,
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<TerminalQuery>,
+) -> impl IntoResponse {
+    if let Err(status) = authorize_loopback(&headers, &state.token) {
+        return status.into_response();
+    }
+    if let (Some(cols), Some(rows)) = (query.cols, query.rows) {
+        if !(20..=500).contains(&cols) || !(4..=200).contains(&rows) {
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+        let changed = state
+            .scrollback
+            .lock()
+            .is_ok_and(|output| output.parser.screen().size() != (rows, cols));
+        if changed {
+            (state.resize)(rows, cols);
+            if let Ok(mut output) = state.scrollback.lock() {
+                output.resize(rows, cols);
+            }
+        }
+    }
+    let screen = match state.scrollback.lock() {
+        Ok(output) => {
+            let mut value = output.output_since(query.after);
+            value["screen"] = serde_json::json!(output.screen_rows().join("\n"));
+            value
+        }
+        Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    Json(screen).into_response()
+}
+
 async fn host_health_handler(
     headers: HeaderMap,
     State(state): State<Arc<HostState>>,
@@ -817,6 +880,7 @@ async fn host_health_handler(
         "session_id": state.session_id,
         "child_pid": state.child_pid,
         "setup": setup,
+        "limit_message": state.scrollback.lock().ok().and_then(|output| output.limit_message.clone()),
         // Only a protocol host knows this for certain; a PTY host reports null and the
         // daemon keeps reading the transcript for it.
         "busy": state
@@ -1043,6 +1107,9 @@ async fn host_input_handler(
         })
     {
         return StatusCode::CONFLICT;
+    }
+    if let Ok(mut output) = state.scrollback.lock() {
+        output.limit_message = None;
     }
     let (written, acknowledged) = tokio::sync::oneshot::channel();
     if state
@@ -1699,6 +1766,51 @@ pub async fn turn_busy(record: &SessionRecord) -> Option<bool> {
     health.get("busy")?.as_bool()
 }
 
+/// Returns the latest explicit quota rejection for the current host turn, if one was observed.
+pub async fn limit_message(record: &SessionRecord) -> Option<String> {
+    let health: serde_json::Value = host_client()
+        .ok()?
+        .get(format!("http://127.0.0.1:{}/health", record.port))
+        .bearer_auth(&record.token)
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    health.get("limit_message")?.as_str().map(str::to_owned)
+}
+
+/// Reads the current native agent terminal screen without retaining its contents.
+///
+/// # Errors
+/// Returns [`Error`] when the host is unavailable, unauthenticated or has no native screen.
+pub async fn terminal_output(
+    record: &SessionRecord,
+    after: Option<u64>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+) -> Result<serde_json::Value, Error> {
+    let mut url = format!("http://127.0.0.1:{}/screen?", record.port);
+    if let Some(after) = after {
+        url.push_str(&format!("after={after}&"));
+    }
+    if let (Some(cols), Some(rows)) = (cols, rows) {
+        url.push_str(&format!("cols={cols}&rows={rows}"));
+    }
+    host_client()?
+        .get(url)
+        .bearer_auth(&record.token)
+        .send()
+        .await
+        .map_err(|error| Error::Process(error.to_string()))?
+        .error_for_status()
+        .map_err(|error| Error::Process(error.to_string()))?
+        .json()
+        .await
+        .map_err(|error| Error::Process(error.to_string()))
+}
+
 /// Queues terminal input through an authenticated endpoint independently of terminal output.
 ///
 /// # Errors
@@ -1726,6 +1838,71 @@ pub async fn send_input(record: &SessionRecord, input: &[u8]) -> Result<(), Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_cursor_keeps_history_and_returns_only_new_bytes() {
+        let mut output = Scrollback::new(10);
+        output.append(b"history");
+        assert_eq!(
+            output.output_since(None)["data"],
+            serde_json::json!(b"history".to_vec())
+        );
+        output.append(b" next");
+        let next = output.output_since(Some(7));
+        assert_eq!(next["data"], serde_json::json!(b" next".to_vec()));
+        assert_eq!(next["reset"], false);
+        assert_eq!(output.output_since(Some(0))["reset"], true);
+        assert_eq!(output.output_since(Some(12))["data"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn terminal_screen_is_authenticated_and_protocol_output_is_visible() {
+        let (input_tx, _input_rx) = std::sync::mpsc::channel();
+        let (output_tx, _) = broadcast::channel(8);
+        let mut output = Scrollback::new(1024);
+        output.append(b"Individual quota reached. Resets in 2 hours.\r\n");
+        assert!(
+            output
+                .limit_message
+                .as_deref()
+                .is_some_and(|message| message.contains("2 hours"))
+        );
+        let state = Arc::new(HostState {
+            protocol: true,
+            agent: "antigravity".into(),
+            token: "terminal-test".into(),
+            session_id: "terminal-test".into(),
+            child_pid: 0,
+            scrollback: Arc::new(Mutex::new(output)),
+            output_tx,
+            input_tx,
+            stopping: Arc::new(AtomicBool::new(false)),
+            resize: Arc::new(|_, _| {}),
+            turn: None,
+        });
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:41738".parse().expect("host"));
+        let rejected = host_screen_handler(
+            headers.clone(),
+            State(Arc::clone(&state)),
+            Query(TerminalQuery::default()),
+        )
+        .await
+        .into_response();
+        assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+        headers.insert(
+            "authorization",
+            "Bearer terminal-test".parse().expect("token"),
+        );
+        let accepted = host_screen_handler(headers, State(state), Query(TerminalQuery::default()))
+            .await
+            .into_response();
+        assert_eq!(accepted.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(accepted.into_body(), 65536)
+            .await
+            .expect("body");
+        assert!(String::from_utf8_lossy(&body).contains("Individual quota reached"));
+    }
 
     /// Stop on a protocol session once did nothing: only a running turn is cancelled, and
     /// the driver hears about it; a PTY host leaves interruption to the Esc keystroke.

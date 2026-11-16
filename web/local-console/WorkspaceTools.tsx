@@ -43,6 +43,7 @@ export function useSessionAttachments(sessionId: string) {
   const [bySession, setBySession] = useState<Record<string, AttachmentItem[]>>({});
   const [status, setStatus] = useState('');
   const items = bySession[sessionId] || [];
+  const pending = useRef(new Map<string, string>());
 
   useEffect(() => setStatus(''), [sessionId]);
 
@@ -58,6 +59,7 @@ export function useSessionAttachments(sessionId: string) {
       const id = crypto.randomUUID();
       const update = (fn: (list: AttachmentItem[]) => AttachmentItem[]) =>
         setBySession((prev) => ({ ...prev, [sessionId]: fn(prev[sessionId] || []) }));
+      pending.current.set(id, sessionId);
       update((list) => [...list, { id, filename: checked.filename, size: checked.size, mime_type: checked.mime_type, status: 'uploading' }]);
       try {
         const data_base64 = await readFileAsBase64(file);
@@ -72,6 +74,8 @@ export function useSessionAttachments(sessionId: string) {
         const message = err instanceof Error ? err.message : 'Upload failed.';
         update((list) => list.map((entry) => (entry.id === id ? { ...entry, status: 'error', error: message } : entry)));
         setStatus(message);
+      } finally {
+        pending.current.delete(id);
       }
     },
     [sessionId],
@@ -85,7 +89,7 @@ export function useSessionAttachments(sessionId: string) {
     setBySession((prev) => ({ ...prev, [target]: (prev[target] || []).filter((entry) => entry.status !== 'saved') }));
     setStatus('');
   }, []);
-  return { items, status, pick, remove, clearSaved };
+  return { items, status, pick, remove, clearSaved, blocked: () => [...pending.current.values()].includes(sessionId) || items.some(item => item.status !== 'saved' || !item.workspace_path) };
 }
 
 export function AttachmentsBar({ items, status, onRemove }: { items: AttachmentItem[]; status: string; onRemove: (id: string) => void }) {

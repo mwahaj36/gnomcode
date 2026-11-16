@@ -208,6 +208,9 @@ export function SettingsView() {
   const [notifyTurnMinutes, setNotifyTurnMinutes] = useState('2');
   const [notifyLimitLow, setNotifyLimitLow] = useState(true);
   const [notifyLimitReset, setNotifyLimitReset] = useState(true);
+  const [notifyStopped, setNotifyStopped] = useState(true);
+  const [notifyErrors, setNotifyErrors] = useState(true);
+  const [notifyManagedOnly, setNotifyManagedOnly] = useState(false);
   const [notifySaved, setNotifySaved] = useState('');
 
   // Pricing & local profile state
@@ -372,6 +375,9 @@ export function SettingsView() {
             turn_finished_min_minutes?: number;
             limit_low?: boolean;
             limit_reset?: boolean;
+            session_stopped?: boolean;
+            needs_attention?: boolean;
+            managed_only?: boolean;
           }>('/api/v1/settings/notifications').catch(() => null),
           fetchLocalJson<UpdateStatusResponse>('/api/v1/update/status').catch(() => null),
           fetchLocalJson<{ message?: string; last_success_at?: string }>('/api/v1/sync/status').catch(
@@ -408,6 +414,9 @@ export function SettingsView() {
         );
         setNotifyLimitLow(Boolean(notifyCfg.limit_low));
         setNotifyLimitReset(Boolean(notifyCfg.limit_reset));
+        setNotifyStopped(notifyCfg.session_stopped ?? Boolean(notifyCfg.turn_finished));
+        setNotifyErrors(notifyCfg.needs_attention ?? Boolean(notifyCfg.approval_waiting));
+        setNotifyManagedOnly(!!notifyCfg.managed_only);
       }
 
       if (updateStatus) {
@@ -563,6 +572,9 @@ export function SettingsView() {
           : 2,
         limit_low: notifyLimitLow,
         limit_reset: notifyLimitReset,
+        session_stopped: notifyStopped,
+        needs_attention: notifyErrors,
+        managed_only: notifyManagedOnly,
       },
     });
     setNotifySaved('Saved notification preferences.');
@@ -1332,6 +1344,11 @@ export function SettingsView() {
           name, session title, and event.
         </p>
         <div className="sp-notify-list">
+          <label className="sp-notify-toggle"><input type="checkbox" checked={notifyManagedOnly} onChange={event=>setNotifyManagedOnly(event.target.checked)} /><span>Only Gnomcode-managed conversations</span></label>
+          <p className="sp-field-note">This scope applies to conversation alerts. Provider-wide limit warnings are selected separately below.</p>
+          <label className="sp-notify-toggle"><input type="checkbox" checked={notifyErrors} onChange={event=>setNotifyErrors(event.target.checked)} /><span>Agent errors</span></label>
+          <label className="sp-notify-toggle"><input type="checkbox" checked={notifyStopped} onChange={event=>setNotifyStopped(event.target.checked)} /><span>Session stopped</span></label>
+
           <label className="sp-notify-toggle">
             <input
               type="checkbox"

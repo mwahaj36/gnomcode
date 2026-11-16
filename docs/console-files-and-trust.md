@@ -7,3 +7,7 @@ Local document links in assistant replies open Artifacts. Documents referenced b
 On desktop, Trust this project remembers folder and tool approval for future sessions in that exact workspace, including after Gnomcode restarts. Permission and sandbox changes still ask individually. No permission bypass flags are enabled. Workspace lists trusted projects with a Revoke control. Revoking does not undo a tool call already approved. Remote approval remains approve-once.
 
 Devices offers Remove desktop for old account listings. Confirming removes that listing and its associated browser connections, while preserving local sessions and files. A desktop still signed in can register again when it reconnects.
+
+Remote attachment transfers retain the 15 MiB per-file limit. Send waits for saved-file acknowledgement; failures and timeouts require removing or reattaching the failed selection. Encrypted frames stay below the relay size ceiling.
+
+Remote Agent terminal shows the live hosted agent terminal with retained scrollback and accepts direct keyboard input; arbitrary workspace shells remain local. Login links open on the current device, and one-time codes can be entered directly in the terminal. Desktop localhost OAuth callbacks may still require the desktop browser. No credentials or terminal output are added to cloud metadata or persisted by the Remote terminal feature.

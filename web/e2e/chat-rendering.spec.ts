@@ -57,6 +57,21 @@ for (const [name, viewport] of [['desktop', { width: 1280, height: 900 }], ['pho
       await expect(page.locator('.sp-chat-user')).toHaveCount(1);
     });
 
+    test('message footer tools are compact and user tools reveal on hover or tap', async ({ page, openConsole }) => {
+      await openChat(page, openConsole);
+      const user = page.locator('.sp-chat-user');
+      const assistant = page.locator('.sp-chat-assistant').first();
+      await expect(assistant.locator('.sp-chat-copy')).toHaveCSS('opacity', '1');
+      await expect(user.locator('.sp-chat-copy')).toHaveCSS('opacity', '0');
+      if (name === 'desktop') await user.hover();
+      else await user.locator('.sp-chat-body').click();
+      await expect(user.locator('.sp-chat-copy')).toHaveCSS('opacity', '1');
+      const body = await assistant.locator('.sp-chat-body').boundingBox();
+      const footer = await assistant.locator('header').boundingBox();
+      expect(footer!.y).toBeGreaterThanOrEqual(body!.y + body!.height);
+      await expect(assistant.locator('header .sp-copy-label')).toBeHidden();
+    });
+
     test('image thumbnails open full size and external images stay unloaded', async ({ page, openConsole }) => {
       await openChat(page, openConsole);
       await expect(page.locator('img[src^="https://"]')).toHaveCount(0);

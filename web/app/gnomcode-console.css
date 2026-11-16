@@ -1250,11 +1250,11 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-heatmap-stats span { font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
 .sp-heatmap-scroll { width: fit-content; max-width: 100%; overflow-x: auto; overflow-y: visible; padding-bottom: var(--sp-2); }
 .sp-heatmap-scroll:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; border-radius: var(--sp-1); }
-.sp-heatmap-months { position: relative; height: 18px; margin-left: 32px; font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
-.sp-heatmap-months span { position: absolute; top: 0; left: calc(var(--col) / var(--cols, 53) * 100%); white-space: nowrap; }
+.sp-heatmap-months { display:grid; grid-template-columns:repeat(var(--cols,53),14px);column-gap:2px;width:max-content; position: relative; height: 18px; margin-left: 32px; font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
+.sp-heatmap-months span { position:static;grid-column:calc(var(--col) + 1); white-space: nowrap; }
 .sp-heatmap-body { display: flex; gap: var(--sp-2); width: 100%; min-width: max-content; align-items: stretch; }
 .sp-heatmap-days { display: grid; grid-template-rows: repeat(7, 1fr); row-gap: 2px; width: 24px; flex: none; font-size: 10px; line-height: 1; align-items: center; color: var(--sp-text-3); }
-.sp-heatmap-grid { display: grid; flex: 1 1 auto; min-width: 0; width: 100%; grid-template-rows: repeat(7, auto); grid-template-columns: repeat(var(--cols, 53), minmax(10px, 14px)); grid-auto-flow: column; gap: 2px; }
+.sp-heatmap-grid { display: grid; flex: 1 1 auto; min-width: 0; width: 100%; grid-template-rows: repeat(7, auto); grid-template-columns: repeat(var(--cols, 53), 14px); grid-auto-flow: column; gap: 2px; }
 .sp-heat { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: 2px; background: var(--sp-heat-0); outline: 1px solid rgb(255 255 255 / .03); outline-offset: -1px; }
 .sp-heat[data-level="1"] { background: var(--sp-heat-1); }
 .sp-heat[data-level="2"] { background: var(--sp-heat-2); }
@@ -2799,7 +2799,7 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
  .sp-remote .remote-composer .remote-model-button{flex:1;min-width:0;max-width:calc(100% - 140px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 }
 
-.sp-web-usage-overview{display:grid;gap:var(--sp-6);margin-bottom:var(--sp-6)}
+.sp-web-usage-overview{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-6);margin-bottom:var(--sp-6)}
 
 /* The message owns the bubble; metadata floats on request without adding an empty row. */
 :is(.sp-native-console,.sp-remote) .sp-chat-card{position:relative;padding:12px 16px}
@@ -2811,3 +2811,40 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 
 :is(.sp-native-console,.sp-remote) .sp-chat-card>header{width:max-content;max-width:calc(100vw - 48px)}
 :is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-copy{display:inline-flex;flex:0 0 auto;align-items:center;gap:6px;white-space:nowrap;width:auto;min-width:64px;margin:0}
+
+.sp-web-usage-overview>*{min-width:0;max-width:100%}
+
+/* Message tools read as a quiet footer, never a popover over the text. */
+:is(.sp-native-console,.sp-remote) .sp-chat-card{display:flex;flex-direction:column}
+:is(.sp-native-console,.sp-remote) .sp-chat-card>header{position:static;order:2;align-self:flex-end;transform:none;width:auto;max-width:100%;margin:6px 0 0;padding:0;border:0;background:transparent!important;gap:8px;font-size:12px}
+:is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-copy{min-width:32px;width:32px;min-height:32px;height:32px;padding:6px;justify-content:center;border:0;background:transparent}
+:is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-copy .sp-copy-label{display:none}
+:is(.sp-native-console,.sp-remote) .sp-chat-assistant>header :is(time,.sp-chat-copy){opacity:1}
+@media(hover:hover) and (pointer:fine){
+ :is(.sp-native-console,.sp-remote) .sp-chat-user:hover>header :is(time,.sp-chat-copy){opacity:1}
+}
+@media(pointer:coarse){:is(.sp-native-console,.sp-remote) .sp-chat-card .sp-chat-copy{min-width:44px;width:44px;min-height:44px;height:44px}}
+
+.remote-agent-terminal{flex:0 0 auto;max-height:65dvh;overflow:auto;min-width:0;padding:16px;border-block:1px solid var(--sp-border)}
+.remote-agent-terminal>header,.remote-agent-terminal form,.remote-terminal-keys{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.remote-agent-terminal>header{justify-content:space-between}
+.remote-agent-terminal h3{margin:0;font-size:14px}
+.remote-agent-terminal pre{max-height:38dvh;overflow:auto;background:var(--sp-bg);color:var(--sp-text);font:12px/1.4 var(--sp-font-mono);padding:12px;white-space:pre;tab-size:4}
+.remote-agent-terminal form{padding:0!important;border:0!important;flex-direction:row!important}
+.remote-agent-terminal label{flex:1;min-width:160px}
+.remote-agent-terminal input{width:100%;box-sizing:border-box}
+.remote-terminal-keys{margin-top:8px}
+.remote-composer-toolbar{flex-wrap:wrap}
+
+.sp-limit-reached{padding:12px 16px;background:var(--sp-surface-raised);border:1px solid var(--sp-border-strong);border-radius:10px;margin-block:12px;color:var(--sp-text)}
+.sp-limit-reached p{margin:4px 0 8px;overflow-wrap:anywhere}
+
+:is(.sp-native-console,.sp-remote) .sp-chat-card.sp-chat-user{padding:0;border:0;background:transparent;border-radius:0;overflow:visible}
+:is(.sp-native-console,.sp-remote) .sp-chat-card.sp-chat-user>.sp-chat-body{align-self:flex-end;max-width:100%;box-sizing:border-box;padding:12px 16px;border:1px solid var(--sp-border);border-radius:16px;background:var(--sp-surface-2);color:var(--sp-text)}
+.sp-native-console .sp-chat-card .sp-chat-copy,.sp-remote .sp-remote-chat .sp-chat-card .sp-chat-copy,.sp-remote .sp-remote-chat .sp-chat-card.sp-chat-user .sp-chat-copy:is(:hover,:focus-visible,[data-copy-state]){color:var(--sp-text-2);background:transparent;border-color:transparent}
+.sp-native-console .sp-chat-card .sp-chat-copy svg,.sp-remote .sp-remote-chat .sp-chat-card .sp-chat-copy svg{stroke:currentColor;fill:none;width:16px;height:16px;opacity:1}
+
+/* The terminal is a full conversation view; its own scrollback owns history scrolling. */
+.sp-remote .remote-conversation.has-agent-terminal>.remote-agent-terminal{display:flex;flex-direction:column;flex:1 1 0;min-height:0;max-height:none;overflow:hidden}
+.sp-remote .remote-conversation.has-agent-terminal>:not(.remote-agent-terminal):not(.sp-limit-reached){display:none!important}
+.remote-agent-terminal>header,.remote-agent-terminal>.sp-field-note,.remote-agent-terminal>.remote-terminal-keys{flex:none}

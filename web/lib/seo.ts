@@ -47,14 +47,6 @@ export function buildSoftwareAppJsonLd() {
     "description": "Local-first runtime, model handoff orchestrator, and encrypted remote control for AI coding agents including Claude Code, OpenAI Codex and Antigravity.",
     "url": branding.baseUrl,
     "softwareVersion": packageInfo.version,
-    "offers": [
-      {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD",
-        "description": "Local features are free without an account."
-      }
-    ],
     "featureList": [
       "Switch models mid-conversation across Claude Code, Codex and Antigravity",
       "Control agents from your phone over an end-to-end encrypted channel",

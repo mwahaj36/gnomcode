@@ -71,7 +71,7 @@ export const faqGroups = [
       },
       {
         "question": "What can I do from my phone?",
-        "answer": "Read available chat history, receive replies, launch supported CLIs, choose a workspace, send eligible initial/follow-up prompts, interrupt a turn, browse the session's changes, files and artifacts read-only, and attach files to a prompt. Imported history stays read-only until you choose Continue here, which reopens it through the agent's own resume command."
+        "answer": "Read chat history, launch supported CLIs, choose a workspace, send prompts, interrupt a turn, browse changes, files and artifacts, and attach files up to 15 MiB. Open the agent terminal for live output, retained history, keyboard input and login links. Imported history stays read-only until you choose Continue here. Provider login flows that require a desktop localhost callback may still need the desktop browser."
       },
       {
         "question": "Can I approve permission prompts from my phone?",
@@ -91,12 +91,8 @@ export const faqGroups = [
     "title": "Cost and privacy",
     "questions": [
       {
-        "question": "What is free and what is paid?",
-        "answer": "Everything in 1.0 is free and open source under Apache-2.0, including Remote. There is no paid tier and no Teams product."
-      },
-      {
-        "question": "Does Gnomcode charge per token?",
-        "answer": "Gnomcode reports estimated API-equivalent usage rather than reselling inference. Your agent provider determines its own subscription or usage charges."
+        "question": "What do usage costs represent?",
+        "answer": "Usage costs are estimated API-equivalent amounts, not a bill. Your agent provider determines its own subscription or usage charges."
       },
       {
         "question": "Does Gnomcode read my agent API keys?",

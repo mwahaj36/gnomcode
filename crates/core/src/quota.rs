@@ -464,3 +464,41 @@ mod tests {
         assert_eq!(severities, vec![4, 3, 2, 1, 0]);
     }
 }
+
+/// Recognizes an explicit provider rejection without guessing quota from generic errors.
+#[must_use]
+pub fn terminal_limit_message(text: &str) -> Option<String> {
+    text.lines().rev().find_map(|line| {
+        let lower = line.to_ascii_lowercase();
+        [
+            "individual quota reached",
+            "usage limit reached",
+            "you've hit your limit",
+            "rate limit exceeded",
+            "quota exceeded",
+            "rate_limit_exceeded",
+            "resource_exhausted",
+        ]
+        .iter()
+        .any(|marker| lower.contains(marker))
+        .then(|| {
+            format!(
+                "Limit reached. {}",
+                line.trim().chars().take(400).collect::<String>()
+            )
+        })
+    })
+}
+
+#[cfg(test)]
+mod terminal_limit_tests {
+    #[test]
+    fn explicit_rejection_keeps_reset_but_generic_errors_are_not_quota() {
+        let message =
+            super::terminal_limit_message("Individual quota reached. Resets in 110h28m58s.")
+                .expect("limit");
+        assert!(message.contains("Resets in 110h28m58s"));
+        assert!(super::terminal_limit_message("Network error").is_none());
+        assert!(super::terminal_limit_message("Context window 80% used").is_none());
+    }
+}

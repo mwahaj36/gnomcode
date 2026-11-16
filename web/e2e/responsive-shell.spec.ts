@@ -89,3 +89,34 @@ test.describe('desktop rail footer', () => {
     }
   });
 });
+
+
+test('Electron title bar leaves the entire rail footer inside the client area', async ({ page, openConsole }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openConsole('#overview');
+  // Apply the real preload chrome, including its stylesheet order, without launching Electron.
+  const { readFileSync } = await import('node:fs');
+  const preload = readFileSync(require('node:path').resolve(__dirname, '../../apps/desktop/src/preload.ts'), 'utf8');
+  const css = preload.split('style.textContent=`')[1].split('`;')[0];
+  await page.evaluate(css => {
+    document.body.classList.add('sp-desktop-window');
+    const style = document.createElement('style'); style.textContent = css; document.head.append(style);
+  }, css);
+  for (const hash of ['#overview', '#usage', '#settings', '#sessions']) {
+    await page.goto(page.url().split('#')[0] + hash);
+    const pane = await page.locator('.sp-console-content').boundingBox();
+    expect(pane!.y + pane!.height, hash + ' work pane bottom').toBeLessThanOrEqual(720);
+    const column = page.locator('.sp-chat-column');
+    if (await column.isVisible()) { const box = await column.boundingBox(); expect(box!.y + box!.height).toBeLessThanOrEqual(720); }
+    const toggle = page.locator('#navigation-toggle');
+    for (let expanded = 0; expanded < 2; expanded++) {
+      const box = await toggle.boundingBox();
+      expect(box!.y + box!.height, hash).toBeLessThanOrEqual(720);
+      await toggle.click();
+    }
+  }
+  await page.setViewportSize({width:640,height:720});
+  const rail = await page.locator('.sp-console-nav').boundingBox();
+  expect(rail!.height).toBeLessThan(100);
+  expect(rail!.y + rail!.height).toBeLessThanOrEqual(720);
+});

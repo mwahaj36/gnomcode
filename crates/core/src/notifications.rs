@@ -87,6 +87,12 @@ pub struct NotificationSettings {
     pub limit_low: bool,
     /// Notify when a provider quota window passes reset and receives a fresh reading.
     pub limit_reset: bool,
+    /// Notify when a session stops.
+    pub session_stopped: bool,
+    /// Notify when a session reports an error.
+    pub needs_attention: bool,
+    /// Restrict conversation alerts to Gnomcode-managed conversations; quota alerts stay separate.
+    pub managed_only: bool,
 }
 
 impl Default for NotificationSettings {
@@ -97,6 +103,9 @@ impl Default for NotificationSettings {
             turn_finished_min_minutes: 2,
             limit_low: true,
             limit_reset: true,
+            session_stopped: true,
+            needs_attention: true,
+            managed_only: false,
         }
     }
 }
@@ -110,9 +119,9 @@ impl NotificationSettings {
             NotificationEventKind::TurnFinished => self.turn_finished,
             NotificationEventKind::LimitLow => self.limit_low,
             NotificationEventKind::LimitReset => self.limit_reset,
-            // Stops share the turn-finished preference; errors share the needs-you preference.
-            NotificationEventKind::SessionStopped => self.turn_finished,
-            NotificationEventKind::NeedsAttention => self.approval_waiting,
+            // Conversation lifecycle events can be configured independently.
+            NotificationEventKind::SessionStopped => self.session_stopped,
+            NotificationEventKind::NeedsAttention => self.needs_attention,
         }
     }
 
@@ -274,7 +283,7 @@ struct SessionWatchState {
     busy_since: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct QuotaWatchState {
     saw_reset_passed: bool,
     last_resets_at: Option<DateTime<Utc>>,
@@ -296,6 +305,17 @@ impl NotificationEngine {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Metadata-only quota warning state for preserving warning episodes across daemon restarts.
+    #[must_use]
+    pub fn quota_checkpoint(&self) -> serde_json::Value {
+        serde_json::to_value(&self.quotas).unwrap_or_default()
+    }
+
+    /// Restores quota warning metadata; malformed checkpoints leave the engine empty.
+    pub fn restore_quota_checkpoint(&mut self, value: serde_json::Value) {
+        self.quotas = serde_json::from_value(value).unwrap_or_default();
     }
 
     /// Evaluates active sessions and latest quota snapshots at `now`.
@@ -541,7 +561,7 @@ impl NotificationEngine {
         out: &mut Vec<NotificationDecision>,
     ) {
         let fresh = Duration::seconds(MAX_FRESH_EVENT_SECS);
-        let mut next_quotas = HashMap::with_capacity(quotas.len());
+        let mut next_quotas = self.quotas.clone();
 
         for quota in quotas.iter().filter(|q| {
             q.basis != TrustLevel::Unknown
@@ -590,11 +610,12 @@ impl NotificationEngine {
             }
 
             let mut low_cycle = prev.and_then(|p| p.last_low_cycle);
+            if passed_since_prev && fresh_reading {
+                low_cycle = None;
+            }
             if qstate == QuotaState::Low && now.signed_duration_since(quota.observed_at) <= fresh {
-                let cycle = quota
-                    .resets_at
-                    .map_or_else(|| now.date_naive().to_string(), |t| t.to_rfc3339());
-                if low_cycle.as_deref() != Some(cycle.as_str()) {
+                let cycle = quota.observed_at.to_rfc3339();
+                if low_cycle.is_none() {
                     low_cycle = Some(cycle.clone());
                     if settings.is_enabled(NotificationEventKind::LimitLow) {
                         let dedup_id = format!("quota-low:{key}:{cycle}");
@@ -613,7 +634,7 @@ impl NotificationEngine {
                         }
                     }
                 }
-            } else if qstate != QuotaState::Low {
+            } else if qstate == QuotaState::Ok && fresh_reading {
                 low_cycle = None;
             }
 
@@ -904,6 +925,7 @@ mod tests {
         let mut quiet = NotificationEngine::new();
         let off = NotificationSettings {
             approval_waiting: false,
+            needs_attention: false,
             ..NotificationSettings::default()
         };
         quiet.evaluate(&[at(SessionState::Tool, t0)], &[], &off, t0);
@@ -1034,6 +1056,85 @@ mod tests {
             engine
                 .evaluate(&[waiting], &[], &settings, t0 + Duration::seconds(10))
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn error_and_stop_preferences_are_independent_of_approval_and_finish() {
+        let settings = NotificationSettings {
+            approval_waiting: true,
+            turn_finished: false,
+            needs_attention: false,
+            session_stopped: true,
+            ..Default::default()
+        };
+        assert!(settings.is_enabled(NotificationEventKind::ApprovalWaiting));
+        assert!(!settings.is_enabled(NotificationEventKind::NeedsAttention));
+        assert!(settings.is_enabled(NotificationEventKind::SessionStopped));
+        assert!(!settings.is_enabled(NotificationEventKind::TurnFinished));
+    }
+
+    #[test]
+    fn low_warning_survives_stale_polls_reset_jitter_and_restart() {
+        let mut engine = NotificationEngine::new();
+        let settings = NotificationSettings::default();
+        let t0 = base_time();
+        let first = make_quota("claude-code", 90.0, t0, Some(t0 + Duration::hours(2)));
+        assert!(
+            engine
+                .evaluate(&[], std::slice::from_ref(&first), &settings, t0)
+                .is_some()
+        );
+        assert!(
+            engine
+                .evaluate(&[], &[first], &settings, t0 + Duration::minutes(4))
+                .is_none()
+        );
+        let repeated = make_quota(
+            "claude-code",
+            91.0,
+            t0 + Duration::minutes(5),
+            Some(t0 + Duration::hours(2) + Duration::seconds(3)),
+        );
+        assert!(
+            engine
+                .evaluate(
+                    &[],
+                    std::slice::from_ref(&repeated),
+                    &settings,
+                    t0 + Duration::minutes(5)
+                )
+                .is_none()
+        );
+        let checkpoint = engine.quota_checkpoint();
+        let mut restarted = NotificationEngine::new();
+        restarted.restore_quota_checkpoint(checkpoint);
+        assert!(
+            restarted
+                .evaluate(&[], &[repeated], &settings, t0 + Duration::minutes(5))
+                .is_none()
+        );
+        let healthy = make_quota(
+            "claude-code",
+            10.0,
+            t0 + Duration::minutes(11),
+            Some(t0 + Duration::hours(2)),
+        );
+        assert!(
+            restarted
+                .evaluate(&[], &[healthy], &settings, t0 + Duration::minutes(11))
+                .is_none()
+        );
+        let low_again = make_quota(
+            "claude-code",
+            90.0,
+            t0 + Duration::minutes(17),
+            Some(t0 + Duration::hours(2)),
+        );
+        assert!(
+            restarted
+                .evaluate(&[], &[low_again], &settings, t0 + Duration::minutes(17))
+                .is_some()
         );
     }
 
@@ -1227,6 +1328,7 @@ mod tests {
             turn_finished_min_minutes: 2,
             limit_low: false,
             limit_reset: false,
+            ..Default::default()
         };
         let t0 = base_time();
         let waiting = make_session(

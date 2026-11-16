@@ -378,6 +378,7 @@ export function WorkspaceView() {
   );
   const activeLive = activeSession?.live || null;
   // A protocol host reports its own turn; its transcript may not be ingested yet.
+  const [limitReached, setLimitReached] = useState(false);
   const [hostBusy, setHostBusy] = useState<boolean | null>(null);
   const [liveTick, setLiveTick] = useState(() => Date.now());
   useEffect(() => {
@@ -765,7 +766,8 @@ export function WorkspaceView() {
   useEffect(() => {
     if (!chatStreamRef.current || !activeSessionId) return;
     const sessionPending = pendingBySession[activeSessionId] || [];
-    const result = reconcileChat(chatEvents, sessionPending, activeSession?.state || '');
+    const result = reconcileChat(chatEvents, sessionPending, limitReached ? 'error' : activeSession?.state || '');
+    if (limitReached) result.events = result.events.filter(event=>!(event as {waiting?:boolean}).waiting);
     updateChat(chatStreamRef.current, result.events);
     const repo = activeSession?.repo_path;
     hydrateAttachmentThumbs(chatStreamRef.current, (path) => {
@@ -777,7 +779,7 @@ export function WorkspaceView() {
       }
       return fetchLocalJson(`/api/v1/repos/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`);
     });
-  }, [activeSessionId, chatEvents, pendingBySession, activeSession?.state, activeSession?.repo_path]);
+  }, [activeSessionId, chatEvents, pendingBySession, activeSession?.state, activeSession?.repo_path, limitReached]);
 
   // Keep model switcher value aligned with active session/hosted model
   const allCatalogModels = useMemo(
@@ -1442,12 +1444,14 @@ export function WorkspaceView() {
     setWorkspaceTerminalOpen(false);
     setWorkspaceTerminalError(null);
     setHostBusy(null);
+    setLimitReached(false);
     setEditingQueueId(null);
     setEditingQueueText('');
     void loadQueue(activeSessionId);
   }, [activeSessionId, closeAgentTerminal, loadQueue]);
 
   const sendPromptText = async (rawText: string, fromComposer: boolean) => {
+    if (fromComposer && attachments.blocked()) return;
     const sessionId = activeSessionId;
     const draft = rawText.trim();
     const ready = fromComposer ? attachments.items.filter((item) => item.status === 'saved' && item.workspace_path) : [];
@@ -1874,7 +1878,7 @@ export function WorkspaceView() {
 
   // The daemon marks a desktop-app or IDE session without a live Gnomcode host as `imported`.
   const imported = activeSession?.source === 'imported';
-  const working = activeLive?.state === 'working' || hostBusy === true;
+  const working = !limitReached && (activeLive?.state === 'working' || hostBusy === true);
   const canInterruptActive =
     !imported &&
     (activeHosted !== null || (activeSession as { hosted?: boolean } | null)?.hosted !== false) &&
@@ -3095,7 +3099,7 @@ export function WorkspaceView() {
                 onOpenTerminal={() => {
                   if (sidePanel !== 'agent-terminal') handleToggleAgentTerminal();
                 }}
-                onStatus={(status) => setHostBusy(status.busy ?? null)}
+                onStatus={(status) => { setHostBusy(status.busy ?? null); setLimitReached(!!status.limit_message); }}
               />
             ) : null}
 
@@ -3280,7 +3284,7 @@ export function WorkspaceView() {
                     <button type="button" className="btn-control" onClick={() => attachInputRef.current?.click()}>
                       Attach
                     </button>
-                    <button type="submit" className="btn-primary" disabled={sendBusy}>
+                    <button type="submit" className="btn-primary" disabled={sendBusy || attachments.blocked()}>
                       {working ? 'Queue' : 'Send'}
                     </button>
                   </div>

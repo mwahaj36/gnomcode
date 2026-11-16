@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.6 - 2026-11-17
+
+- Suppress repeated low-limit warnings through stale polls and restarts until recovery or reset.
+- Fit the full desktop work pane, conversation column and navigation above the client-area bottom after title-bar layout.
+- Align activity month labels to their actual week columns.
+- Add independent notification types and Gnomcode-managed-only conversation scope.
+- Keep mobile web Usage within the screen while its activity chart scrolls independently.
+- Add encrypted Remote xterm terminal with retained history, live output and direct keyboard input, with clickable login links.
+- Surface provider limit rejections in the conversation and stop the pending reply indicator.
+- Clarify that an expired limits credential is not proof every Claude session is logged out.
+- Hide internally injected handoff context even when an agent wraps it as pasted content.
+- Keep Send blocked until attachments are saved; add encrypted Remote chunking up to 15 MiB and explicit upload timeouts.
+- Show compact message time/copy footers, with user tools on desktop hover or mobile tap.
+- Refocus marketing on workflows and keep the interactive tour within the viewport without tab or disclosure jumps.
+- Refresh public guides for file previews, project trust and removing old desktops.
+
 ## Unreleased
 
 - Relicense Gnomcode under the Apache License 2.0: free and open source with no paid tier, Remote included. Remove the closed-source string obfuscation, the Pro/Remote license gate and the EULA; add CONTRIBUTING (DCO), TRADEMARKS, CODE_OF_CONDUCT.

@@ -29,3 +29,26 @@ for (const theme of ['light', 'dark']) {
     });
   }
 }
+
+
+test('activity month labels share the date grid columns at every scroll position', async ({ page, openConsole }) => {
+  const days = Array.from({length:365}, (_,i)=>({date:new Date(Date.UTC(2025,10,17+i)).toISOString().slice(0,10),total_tokens:1000,cost_usd:0,cost_basis:'estimated',turns:1,level:1}));
+  await page.route('**/api/v1/activity/heatmap',route=>route.fulfill({json:{from:'2025-11-17',to:'2026-11-16',first_recorded:'2025-11-17',days,stats:{total_tokens:365000,active_days:365,current_streak:365,longest_streak:365,busiest:null}}}));
+  await openConsole('#overview');
+  for (const width of [1440,390]) {
+    await page.setViewportSize({width,height:900});
+    const grid = page.locator('#home-activity .sp-heatmap-scroll');
+    await expect(grid.locator('.sp-heatmap-months span').first()).toBeAttached();
+    for (const end of [false,true]) {
+      const offsets = await grid.evaluate((el,end)=>{
+        el.scrollLeft = end ? el.scrollWidth : 0;
+        const cells = el.querySelectorAll('.sp-heatmap-grid>.sp-heat');
+        return [...el.querySelectorAll<HTMLElement>('.sp-heatmap-months span')].map(label=>{
+          const col=Number(label.style.getPropertyValue('--col'));
+          return Math.abs(label.getBoundingClientRect().left-cells[col*7].getBoundingClientRect().left);
+        });
+      },end);
+      for(const offset of offsets)expect(offset).toBeLessThanOrEqual(1);
+    }
+  }
+});
