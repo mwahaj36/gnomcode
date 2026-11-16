@@ -251,3 +251,44 @@ mod tests {
         assert_eq!(encode_base64(b"foobar"), "Zm9vYmFy");
     }
 }
+
+/// Local Markdown link destinations referenced by a conversation, independent of provider.
+/// Network links and fragment-only links never become file access requests.
+#[must_use]
+pub fn linked_file_paths(text: &str) -> Vec<String> {
+    text.split("](")
+        .skip(1)
+        .filter_map(|part| {
+            let target = if let Some(angle) = part.strip_prefix('<') {
+                angle.split_once('>')?.0
+            } else {
+                part.split_once(')')?.0.split_whitespace().next()?
+            };
+            let target = target.split('#').next()?.trim();
+            if target.is_empty() || target.starts_with("//") {
+                return None;
+            }
+            if let Some((scheme, _)) = target.split_once(':')
+                && scheme != "file"
+                && !(scheme.len() == 1 && scheme.as_bytes()[0].is_ascii_alphabetic())
+            {
+                return None;
+            }
+            Some(target.to_owned())
+        })
+        .take(100)
+        .collect()
+}
+
+#[cfg(test)]
+mod reference_tests {
+    #[test]
+    fn linked_files_are_provider_independent_and_ignore_network_links() {
+        assert_eq!(
+            super::linked_file_paths(
+                "[Handoff](localdocs/handoff.md) [web](https://example.org) [File](<docs/a b.md>)"
+            ),
+            vec!["localdocs/handoff.md", "docs/a b.md"]
+        );
+    }
+}

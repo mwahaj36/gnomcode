@@ -1,6 +1,6 @@
 {
   "name": "gnomcode",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Local agent console and standalone CLI",
   "license": "Apache-2.0",
   "bin": {
@@ -15,13 +15,13 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@gnomcode/cli-win32-x64": "1.0.4",
-    "@gnomcode/cli-win32-arm64": "1.0.4",
-    "@gnomcode/cli-darwin-x64": "1.0.4",
-    "@gnomcode/cli-darwin-arm64": "1.0.4",
-    "@gnomcode/cli-linux-x64": "1.0.4",
-    "@gnomcode/cli-linux-arm64": "1.0.4",
-    "@gnomcode/cli-linux-x64-musl": "1.0.4"
+    "@gnomcode/cli-win32-x64": "1.0.5",
+    "@gnomcode/cli-win32-arm64": "1.0.5",
+    "@gnomcode/cli-darwin-x64": "1.0.5",
+    "@gnomcode/cli-darwin-arm64": "1.0.5",
+    "@gnomcode/cli-linux-x64": "1.0.5",
+    "@gnomcode/cli-linux-arm64": "1.0.5",
+    "@gnomcode/cli-linux-x64-musl": "1.0.5"
   },
   "scripts": {
     "prepack": "node ../check-release.cjs",

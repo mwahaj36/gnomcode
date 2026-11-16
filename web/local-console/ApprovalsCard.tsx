@@ -16,7 +16,7 @@ interface Grant {
   tool: string | null;
 }
 
-type Scope = 'once' | 'tool' | 'session';
+type Scope = 'once' | 'tool' | 'session' | 'project';
 
 const POLL_MS = 2000;
 /** The daemon never lets a standing grant answer a request to widen the agent's own permissions. */
@@ -28,16 +28,19 @@ const ESCALATION_TOOL = 'Permissions';
  * person's choice for one exact id. Nothing is ever inferred or auto-approved here: a wider
  * allow is an explicit button, lasts for that session only, and stays listed with a Revoke.
  */
-export function ApprovalsCard() {
+export function ApprovalsCard({ showGrants = false }: { showGrants?: boolean }) {
   const [items, setItems] = useState<Approval[]>([]);
+  const [projects, setProjects] = useState<string[]>([]);
+  const [error, setError] = useState('');
   const [grants, setGrants] = useState<Grant[]>([]);
   const [deciding, setDeciding] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const body = await fetchLocalJson<{ items?: Approval[]; grants?: Grant[] }>('/api/v1/approvals');
+      const body = await fetchLocalJson<{ items?: Approval[]; grants?: Grant[]; projects?: string[] }>('/api/v1/approvals');
       setItems(body.items ?? []);
       setGrants(body.grants ?? []);
+      setProjects(body.projects ?? []);
     } catch {
       // Keep what is on screen; the next poll shows the real state.
     }
@@ -50,6 +53,7 @@ export function ApprovalsCard() {
   }, [load]);
 
   const decide = async (id: string, decision: 'allow' | 'deny', scope: Scope = 'once') => {
+    setError('');
     setDeciding((current) => [...current, id]);
     try {
       await fetchLocalMutation(`/api/v1/approvals/${encodeURIComponent(id)}/decision`, {
@@ -57,7 +61,7 @@ export function ApprovalsCard() {
         body: scope === 'once' ? { decision } : { decision, scope },
       });
     } catch {
-      // The list shows the real state.
+      setError('Could not save this choice. Try again or answer in the agent terminal.');
     }
     setDeciding((current) => current.filter((value) => value !== id));
     await load();
@@ -73,15 +77,16 @@ export function ApprovalsCard() {
   };
 
   // One row per session: the daemon keeps either its per-tool grants or one for every tool.
-  const sessions = [...new Set(grants.map((grant) => grant.session_id))];
+  const sessions = showGrants ? [...new Set(grants.map((grant) => grant.session_id))] : [];
 
   return (
     <section
       id="approvals"
       className="sp-approvals"
       aria-label="Waiting for your approval"
-      hidden={items.length === 0 && grants.length === 0}
+      hidden={items.length === 0 && sessions.length === 0 && !(showGrants && projects.length)}
     >
+      {error && <p role="alert" className="sp-field-note sp-tone-red">{error}</p>}
       {items.map((item) => {
         const copy = approvalCopy(item.agent);
         const busy = deciding.includes(item.id);
@@ -135,12 +140,28 @@ export function ApprovalsCard() {
                   >
                     Allow all this session
                   </button>
+                  <button type="button" className="btn-control" disabled={busy}
+                    title="Remember tool and folder approval for future sessions in this exact project. Permission changes still ask."
+                    onClick={() => void decide(item.id, 'allow', 'project')}>
+                    Trust this project
+                  </button>
                 </>
               ) : null}
             </div>
           </article>
         );
       })}
+      {showGrants && projects.length > 0 && <details className="sp-project-trust">
+        <summary>Trusted projects ({projects.length})</summary>
+        <p className="sp-field-note">Tool and folder approvals are remembered for future sessions. Permission changes still ask.</p>
+        {projects.map(path => <div className="sp-project-trust-row" key={path}>
+          <code>{path}</code>
+          <button type="button" className="btn-control" aria-label={`Revoke trust for ${path}`} onClick={() => {
+            void fetchLocalMutation('/api/v1/approvals/projects', { method: 'DELETE', body: { path } })
+              .then(load).catch(() => setError('Could not revoke project trust. Try again.'));
+          }}>Revoke</button>
+        </div>)}
+      </details>}
       {sessions.map((sessionId) => {
         const held = grants.filter((grant) => grant.session_id === sessionId);
         const tools = held.some((grant) => grant.tool === null)

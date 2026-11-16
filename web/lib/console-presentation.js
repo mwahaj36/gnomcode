@@ -1001,6 +1001,9 @@ export function openImageViewer(src, alt = 'Image') {
 
 // Raw HTML and remote image fetching stay disabled for agent-supplied Markdown.
 const markdown = new MarkdownIt({html:false,breaks:true,linkify:false});
+const safeMarkdownLink = markdown.validateLink.bind(markdown);
+// Local file links become viewer actions below; they never navigate to the filesystem.
+markdown.validateLink = href => /^file:|^[a-z]:[\\/]/i.test(href) || safeMarkdownLink(href);
 // Raster data-URL images render as thumbnails; external images need a click that names the host.
 markdown.renderer.rules.image = (tokens,index) => {
   const src=tokens[index].attrGet('src')||'',alt=tokens[index].content||'image';
@@ -1017,7 +1020,13 @@ markdown.renderer.rules.table_open = (tokens,index,options,env) => {
 };
 markdown.renderer.rules.table_close = () => '</table></div>';
 markdown.renderer.rules.link_open = (tokens,index,options,env,self) => {
-  tokens[index].attrSet('target','_blank');tokens[index].attrSet('rel','noopener noreferrer');
+  const href = tokens[index].attrGet('href') || '';
+  if (href && !href.startsWith('#') && !href.startsWith('//') && (!/^[a-z][a-z0-9+.-]*:/i.test(href) || /^file:|^[a-z]:[\\/]/i.test(href))) {
+    tokens[index].attrSet('data-workspace-file', href);
+    tokens[index].attrSet('href', '#');
+  } else {
+    tokens[index].attrSet('target','_blank');tokens[index].attrSet('rel','noopener noreferrer');
+  }
   return self.renderToken(tokens,index,options);
 };
 markdown.renderer.rules.tr_open = (tokens,index,options,env,self) => {env.chatTableColumn=0;return self.renderToken(tokens,index,options);};
@@ -1057,13 +1066,12 @@ export function renderChatCards(events) {
     if (evt.role === 'system' && SYSTEM_EVENT_TYPES.has(evt.status)) { chunks.push(renderSystemEvent(evt)); continue; }
     if (evt.role === 'system') { chunks.push(`<div class="sp-chat-notice" role="status">${escape(evt.content)}<time datetime="${escape(evt.created_at)}">${escape(new Date(evt.created_at).toLocaleString())}</time></div>`); continue; }
     const role = evt.role || 'system';
-    const roleLabel = role === 'user' ? 'You' : 'Agent';
+    const roleLabel = role === 'user' ? 'Your message' : 'Agent reply';
     const statusBadge = evt.status ? `<span class="sp-chat-badge sp-badge-${escape(evt.status)}">${escape(evt.status.toUpperCase())}</span>` : '';
     const approvalPrompt = evt.status === 'pending' ? `<p class="sp-approval-banner">Approval is pending in the agent.</p>` : '';
     const copyBtn = evt.waiting ? '' : `<button type="button" class="sp-code-btn sp-copy-btn sp-chat-copy" data-chat-copy="${escape(evt.content)}" aria-label="Copy ${role === 'user' ? 'your message' : 'assistant reply'}" title="Copy message">${COPY_ICON_SVG}<span class="sp-copy-label">Copy</span></button>`;
-    chunks.push(`<article data-chat-id="${escape(evt.event_id || '')}" class="sp-chat-card sp-chat-${escape(role)}${evt.waiting ? ' sp-chat-waiting' : ''}">
+    chunks.push(`<article aria-label="${roleLabel}" data-chat-id="${escape(evt.event_id || '')}" class="sp-chat-card sp-chat-${escape(role)}${evt.waiting ? ' sp-chat-waiting' : ''}">
       <header>
-        <strong>${escape(roleLabel)}</strong>
         ${statusBadge}
         <time datetime="${escape(evt.created_at || '')}" title="${escape(new Date(evt.created_at).toLocaleString())}">${escape(new Date(evt.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</time>
         ${copyBtn}
@@ -1404,7 +1412,7 @@ export function renderFileViewer(fileData) {
     fileData.path ? `<code class="sp-file-path">${escape(fileData.path)}</code>` : '',
     href ? `<a class="sp-code-btn sp-file-download" href="${escape(href)}" download="${escape(name)}">Download</a>` : '',
   ].filter(Boolean).join('');
-  return `<div class="sp-changes-meta">${badges}</div><div class="sp-file-preview" data-kind="${escape(fileData.kind || 'text')}">${previewBody(fileData, content)}</div>`;
+  return `<div class="sp-changes-meta">${badges}<button type="button" class="sp-code-btn" data-preview-expand>Expand preview</button></div><div class="sp-file-preview" data-kind="${escape(fileData.kind || 'text')}">${previewBody(fileData, content)}</div>`;
 }
 
 /** Opens a PDF data URL in a new tab through a blob URL, so no network request is made. */
@@ -1422,10 +1430,30 @@ export function bindPreviewInteractions(element) {
   if (!element || element.dataset.previewBound) return;
   element.dataset.previewBound = 'true';
   element.addEventListener('click', event => {
+    const expand = event.target?.closest?.('[data-preview-expand]');
+    if (expand) {
+      event.stopPropagation();
+      const viewer = expand.closest('.sp-file-viewer');
+      if (!viewer) return;
+      const dialog = document.createElement('dialog');
+      dialog.className = 'sp-file-viewfinder';
+      dialog.setAttribute('aria-label', 'File preview');
+      dialog.innerHTML = '<form method="dialog"><button type="submit" class="sp-code-btn" autofocus>Close preview</button></form>';
+      const content = viewer.cloneNode(true);
+      content.querySelector('[data-preview-expand]')?.remove();
+      dialog.append(content);
+      dialog.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); dialog.close(); } });
+      dialog.addEventListener('close', () => { dialog.remove(); expand.focus(); });
+      document.body.append(dialog);
+      bindChatInteractions(dialog);
+      bindPreviewInteractions(dialog);
+      dialog.showModal();
+      return;
+    }
     const image = event.target?.closest?.('[data-image-open]');
-    if (image) { openImageViewer(image.dataset.imageOpen, image.querySelector('img')?.alt || 'Image'); return; }
+    if (image) { event.stopPropagation(); openImageViewer(image.dataset.imageOpen, image.querySelector('img')?.alt || 'Image'); return; }
     const pdf = event.target?.closest?.('[data-pdf-open]');
-    if (pdf) openPdfPreview(pdf.dataset.pdfOpen);
+    if (pdf) { event.stopPropagation(); openPdfPreview(pdf.dataset.pdfOpen); }
   });
 }
 
@@ -1485,6 +1513,13 @@ export function isSafeArtifactImageSrc(src) {
 
 const ARTIFACT_BADGE = { html: '[HTML]', markdown: '[MD]', image: '[IMG]', other: '[FILE]' };
 
+/** Matches a chat link to an artifact already authorized and returned by the daemon. */
+export function artifactForLink(items, href) {
+  let path = String(href || '').replaceAll('\\', '/').split('#')[0];
+  try { path = decodeURIComponent(path); } catch { return null; }
+  return items.find(item => path === item.path || path.endsWith(`/${item.path}`)) || null;
+}
+
 export function renderArtifactsList(items = [], selectedId = '') {
   if (!Array.isArray(items) || !items.length) {
     return '<p class="sp-empty">No artifacts recorded for this session yet.</p>';
@@ -1507,7 +1542,7 @@ export function sandboxArtifactHtml(content) {
   return ARTIFACT_HTML_CSP + ARTIFACT_HTML_BASE_STYLE + String(content || '');
 }
 
-export function renderArtifactPreview(artifact) {
+function renderArtifactBody(artifact) {
   if (!artifact || typeof artifact !== 'object') {
     return '<p class="sp-empty">Select an artifact to preview.</p>';
   }
@@ -1528,6 +1563,14 @@ export function renderArtifactPreview(artifact) {
   }
   return `<div class="sp-chat-body">${renderCodeBlock(String(artifact.content || 'Preview unavailable.'), artifact.language || 'text')}</div>`;
 }
+export function renderArtifactPreview(artifact) {
+  if (!artifact) return renderArtifactBody(artifact);
+  const name = String(artifact.path || 'artifact').split('/').pop();
+  const href = downloadHref(artifact);
+  const download = href ? `<a class="sp-code-btn sp-file-download" href="${escape(href)}" download="${escape(name)}">Download</a>` : '';
+  return `<div class="sp-file-viewer"><div class="sp-changes-meta"><code class="sp-file-path">${escape(artifact.path)}</code>${download}<button type="button" class="sp-code-btn" data-preview-expand>Expand preview</button></div>${renderArtifactBody(artifact)}</div>`;
+}
+
 export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.md', '.log', '.json', '.csv', '.pdf']);
 

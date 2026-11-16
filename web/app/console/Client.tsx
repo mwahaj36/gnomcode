@@ -471,8 +471,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         <HomeSessionsPanel sessions={homeSessions} onAction={homeAction} />
         <section className="sp-section"><TodayPanel report={todayReport} activeCount={activeCount} /></section>
       </div>}
-      {activeView === "usage" && <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />}
-      {activeView === "usage" && <HeatmapPanel heatmap={activityHeatmap} />}
+      {activeView === "usage" && <div className="sp-web-usage-overview"><QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} /><HeatmapPanel heatmap={activityHeatmap} /></div>}
 
       {/* Timeline Filter Bar */}
       {user && desktopChoices.length>0 && activeView!=="chat" && <label className="sp-console-timeline-filter">Desktop<select value={desktopId || desktopChoices[0].id} onChange={event=>{lastDesktopSnapshot.current=null;setDesktopId(event.target.value);setPage(1);}}>{desktopChoices.map(desktop=><option key={desktop.id} value={desktop.id}>{desktop.name}</option>)}</select></label>}

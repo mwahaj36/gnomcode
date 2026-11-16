@@ -43,3 +43,11 @@ test('attachment references become thumbnail placeholders and messages carry cop
   assert.match(html, /data-attachment-path=".gnomcode\/attachments\/s.png"/);
   assert.match(html, /aria-label="Copy (?:your |assistant )?message"/);
 });
+
+
+test('message bubbles omit visible role labels', async () => {
+  const { renderChatCards } = await import('../lib/console-presentation.js');
+  const html = renderChatCards([{ event_id: 'compact', role: 'user', content: 'hi', created_at: '2026-11-16T00:00:00Z' }]);
+  assert.doesNotMatch(html, /<strong>You<\/strong>|<strong>Agent<\/strong>/);
+  assert.match(html, /aria-label="Your message"/);
+});

@@ -50,10 +50,17 @@ pub(crate) async fn status(db: &Arc<Mutex<Database>>, id: &str) -> Value {
     let Some(record) = host_of(db, id).await else {
         return json!({"type": "setup", "session_id": id, "blocker": null});
     };
+    let mut blocker = gnomcode_pty::setup_blocker(&record).await;
+    if blocker == Some(SetupBlocker::TrustFolder)
+        && crate::approvals::project_trusted(db, id, &record.agent, "TrustFolder").await
+        && gnomcode_pty::confirm_trust(&record).await.unwrap_or(false)
+    {
+        blocker = None;
+    }
     json!({
         "type": "setup",
         "session_id": id,
-        "blocker": gnomcode_pty::setup_blocker(&record).await,
+        "blocker": blocker,
         "agent": agent_name(&record.agent),
         "folder": record.repo_path,
         // Only a protocol host reports this; null means "ask the transcript", as before.

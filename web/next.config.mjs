@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
+  distDir: process.env.GNOMCODE_NEXT_DIST_DIR || '.next',
   async rewrites() {
     return [
       {

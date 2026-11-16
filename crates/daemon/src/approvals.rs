@@ -213,6 +213,97 @@ pub struct CreateBody {
     pub summary: String,
 }
 
+/// Resolves the daemon-owned workspace identity; aliases and symlinks share one grant.
+pub(crate) fn project_path(db: &gnomcode_store::Database, session_id: &str) -> Option<String> {
+    crate::workspace_files::resolve_session_workspace(db, session_id)
+        .ok()?
+        .canonicalize()
+        .ok()?
+        .to_str()
+        .map(str::to_owned)
+}
+
+fn approval_project_path(
+    db: &gnomcode_store::Database,
+    agent: &str,
+    session_id: &str,
+) -> Option<String> {
+    let agent = gnomcode_core::canonical_agent(agent);
+    let prefix = format!("{agent}:");
+    let id = if session_id.starts_with(&prefix) {
+        session_id.to_owned()
+    } else {
+        format!("{prefix}{session_id}")
+    };
+    project_path(db, &id).or_else(|| project_path(db, session_id))
+}
+
+/// Checks persistent project coverage without ever answering permission escalation.
+pub(crate) async fn project_trusted(
+    db: &std::sync::Arc<tokio::sync::Mutex<gnomcode_store::Database>>,
+    session_id: &str,
+    agent: &str,
+    tool: &str,
+) -> bool {
+    if tool == gnomcode_core::approval::ESCALATION_TOOL {
+        return false;
+    }
+    let db = std::sync::Arc::clone(db);
+    let session_id = session_id.to_owned();
+    let agent = agent.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let guard = db.blocking_lock();
+        let Some(path) = approval_project_path(&guard, &agent, &session_id) else {
+            return false;
+        };
+        guard
+            .trusted_projects()
+            .is_ok_and(|paths| paths.contains(&path))
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// Explicitly remembers the current conversation workspace, never a supplied path.
+pub(crate) async fn trust_project_handler(
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let path = tokio::task::spawn_blocking(move || {
+        let guard = state.db.blocking_lock();
+        let path = project_path(&guard, &session_id).ok_or(StatusCode::CONFLICT)?;
+        guard
+            .set_project_trusted(&path, true)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok::<_, StatusCode>(path)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+    Ok(Json(json!({"ok": true, "path": path})))
+}
+
+/// Revokes a remembered project without changing agent configuration.
+pub(crate) async fn revoke_project_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<impl IntoResponse, StatusCode> {
+    validate_auth(&headers, &state.bearer_token)?;
+    let path = body
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty() && p.len() <= 32768)
+        .ok_or(StatusCode::BAD_REQUEST)?
+        .to_owned();
+    tokio::task::spawn_blocking(move || state.db.blocking_lock().set_project_trusted(&path, false))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({"ok": true})))
+}
+
 /// `POST /api/v1/approvals`: records a request and says whether the hook should wait.
 pub(crate) async fn create_handler(
     headers: HeaderMap,
@@ -222,7 +313,9 @@ pub(crate) async fn create_handler(
     validate_auth(&headers, &state.bearer_token)?;
     let registry = global();
     // A standing grant needs nobody watching: the person already answered for this session.
-    let granted = registry.granted(&body.session_id, &body.tool);
+    let project_granted =
+        project_trusted(&state.db, &body.session_id, &body.agent, &body.tool).await;
+    let granted = project_granted || registry.granted(&body.session_id, &body.tool);
     if !(granted || registry.console_watching() || state.remote.reachable().await) {
         return Ok(Json(json!({"hold": false, "reason": "no_listener"})));
     }
@@ -235,7 +328,10 @@ pub(crate) async fn create_handler(
     ) else {
         return Ok(Json(json!({"hold": false, "reason": "busy"})));
     };
-    if approval.state == ApprovalState::Pending {
+    if project_granted {
+        let _ = registry.decide(&approval.id, Decision::Allow, Decider::Console);
+    }
+    if !project_granted && approval.state == ApprovalState::Pending {
         // Notification I/O must not delay the hook's short hold response.
         let db = state.db.clone();
         let held = approval.clone();
@@ -271,8 +367,13 @@ pub(crate) async fn list_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     global().touch_console();
+    let db = state.db.clone();
+    let projects = tokio::task::spawn_blocking(move || db.blocking_lock().trusted_projects())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(
-        json!({"items": global().pending(), "grants": global().grants()}),
+        json!({"items": global().pending(), "grants": global().grants(), "projects": projects}),
     ))
 }
 
@@ -307,17 +408,48 @@ pub(crate) async fn decision_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
     let decision = Decision::parse(&body.decision).ok_or(StatusCode::BAD_REQUEST)?;
+    let project = body.scope.as_deref() == Some("project");
     let scope = match body.scope.as_deref() {
+        Some("project") => Scope::Session,
         None => Scope::Once,
         Some(value) => Scope::parse(value).ok_or(StatusCode::BAD_REQUEST)?,
     };
     if scope != Scope::Once && decision != Decision::Allow {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if project {
+        let db = state.db.clone();
+        let applied = tokio::task::spawn_blocking(move || {
+            let guard = db.blocking_lock();
+            let mut book = global().book();
+            let decided_at = now();
+            let approval = book
+                .pending(decided_at)
+                .into_iter()
+                .find(|item| item.id == id)
+                .ok_or(StatusCode::NOT_FOUND)?;
+            if approval.tool == gnomcode_core::approval::ESCALATION_TOOL {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            let path = approval_project_path(&guard, &approval.agent, &approval.session_id)
+                .ok_or(StatusCode::CONFLICT)?;
+            guard
+                .set_project_trusted(&path, true)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            book.decide(&id, decision, Decider::Console, decided_at)
+                .map_err(|_| StatusCode::CONFLICT)
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+        global().changed.notify_waiters();
+        return Ok(Json(
+            json!({"ok": true, "repeated": applied == Applied::Repeated, "grant": null}),
+        ));
+    }
     match global().decide(&id, decision, Decider::Console) {
         Ok(applied) => {
             // Only the local console may widen an allow; a phone answer is always one call.
-            let grant = (decision == Decision::Allow)
+            let grant = (decision == Decision::Allow && !project)
                 .then(|| global().grant(&id, scope))
                 .flatten();
             Ok(Json(json!({
@@ -477,6 +609,100 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex as AsyncMutex;
     use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn project_scope_is_recognized_before_looking_up_approval() {
+        let app = crate::api::build_router(state());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/approvals/missing-project1/decision")
+                    .header("host", "127.0.0.1")
+                    .header("authorization", "Bearer approval-test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"decision":"allow","scope":"project"}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn project_trust_covers_future_native_ids_but_not_other_folders_or_permissions() {
+        let state = state();
+        let folder = tempfile::tempdir().expect("workspace");
+        let other = tempfile::tempdir().expect("other workspace");
+        {
+            let db = state.db.lock().await;
+            for id in ["codex:project-old", "codex:project-future"] {
+                db.save_conversation_launch(
+                    id,
+                    "codex",
+                    folder.path().to_str().expect("path"),
+                    None,
+                )
+                .expect("launch");
+            }
+            db.save_conversation_launch(
+                "codex:other-project",
+                "codex",
+                other.path().to_str().expect("path"),
+                None,
+            )
+            .expect("launch");
+        }
+        let app = crate::api::build_router(state.clone());
+        let request = |method: &str, uri: &str, body: Value| {
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("host", "127.0.0.1")
+                .header("authorization", "Bearer approval-test-token")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request")
+        };
+        let response = app
+            .clone()
+            .oneshot(request(
+                "POST",
+                "/api/v1/sessions/codex:project-old/trust-project",
+                json!({}),
+            ))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(project_trusted(&state.db, "project-future", "codex", "Bash").await);
+        assert!(!project_trusted(&state.db, "other-project", "codex", "Bash").await);
+        assert!(!project_trusted(&state.db, "project-future", "codex", "Permissions").await);
+        assert!(!project_trusted(&state.db, "missing", "codex", "Bash").await);
+        let response = app.clone().oneshot(request("POST", "/api/v1/approvals", json!({"agent":"codex","session_id":"project-future","tool":"Edit","summary":"test"}))).await.expect("response");
+        let bytes = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .expect("body");
+        let reply: Value = serde_json::from_slice(&bytes).expect("json");
+        let id = reply["id"].as_str().expect("id");
+        assert_eq!(global().wait(id).await, Outcome::Allow);
+        let path = folder
+            .path()
+            .canonicalize()
+            .expect("canonical")
+            .to_str()
+            .expect("path")
+            .to_owned();
+        let response = app
+            .oneshot(request(
+                "DELETE",
+                "/api/v1/approvals/projects",
+                json!({"path":path}),
+            ))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(!project_trusted(&state.db, "project-future", "codex", "Bash").await);
+    }
 
     fn state() -> AppState {
         AppState {

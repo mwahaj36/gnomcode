@@ -14,7 +14,7 @@ const POLL_MS = 2000;
 /**
  * Tells the person when the launched agent is stopped on a setup screen instead of leaving
  * prompts silently waiting. The daemon reads the agent's screen and owns the rules: folder
- * trust can be confirmed here with one explicit click (never automatically), and any other
+ * trust can be confirmed here with one explicit click or a remembered project choice, and any other
  * screen (sign-in, key, update) is only pointed to in the agent terminal.
  */
 export function SetupPrompt({
@@ -53,11 +53,15 @@ export function SetupPrompt({
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const trust = async () => {
+  const trust = async (remember = false) => {
     setBusy(true);
     setFailed(false);
     try {
-      await fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(sessionId)}/trust-folder`, { method: 'POST' });
+      if (remember) {
+        await fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(sessionId)}/trust-project`, { method: 'POST' });
+      } else {
+        await fetchLocalMutation(`/api/v1/sessions/${encodeURIComponent(sessionId)}/trust-folder`, { method: 'POST' });
+      }
     } catch {
       setFailed(true);
     }
@@ -90,9 +94,14 @@ export function SetupPrompt({
             Open agent terminal
           </button>
           {isTrust ? (
+            <>
             <button type="button" className="btn-control" disabled={busy} onClick={() => void trust()}>
               Trust folder
             </button>
+            <button type="button" className="btn-control" disabled={busy} title="Remember folder and tool approvals for future sessions in this exact project" onClick={() => void trust(true)}>
+              Trust this project
+            </button>
+            </>
           ) : null}
         </div>
       </article>

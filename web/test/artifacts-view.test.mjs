@@ -67,7 +67,7 @@ test('artifacts view wires into Remote without raw hex CSS tokens', () => {
 
   assert.match(tsx, /sp-artifacts-sheet/);
   assert.match(tsx, /type:\s*['"]artifacts['"]/);
-  assert.match(tsx, /sandbox=""/);
+  assert.match(tsx, /renderArtifactPreview\(currentArtifact\)/);
   assert.match(tsx, /Unsupported remote command/);
 
   const marker = css.indexOf('/* Section C artifacts view */');
