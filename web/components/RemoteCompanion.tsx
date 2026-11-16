@@ -848,7 +848,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   reconnect.current=()=>void connect();
 
   function selectSession(id: string) {
-    setShowSessions(false);
+    // The conversation column is permanent on desktop, as in the app; only the phone drawer closes.
+    if (matchMedia('(max-width: 760px)').matches) setShowSessions(false);
     if (selectedRef.current) drafts.current.set(selectedRef.current, promptRef.current);
     changePrompt(drafts.current.get(id) || '');
     setHasEarlier(false); historyAnchor.current = null;
@@ -884,6 +885,11 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const readOnly=active?.hosted === false || active?.source === 'imported' || (typeof active?.delivery_capability === 'object' && active.delivery_capability?.mode === 'observed_read_only');
   const connected=phase==='paired';
   const workspace=connected || ((phase==='reconnecting'||phase==='unavailable') && sessions.length>0);
+  // The conversation column is part of the desktop layout, not a drawer: open it as soon as the
+  // workspace exists, since a mount-time check runs before the connection brings the panes up.
+  useEffect(() => {
+    if (workspace && window.matchMedia('(min-width: 761px)').matches) setShowSessions(true);
+  }, [workspace]);
   const startNew=()=>{setNewSession(true);setShowSessions(true);void send({type:'wsl_distros'}).catch(()=>setWslDistros([]));};
   const Heading = embedded ? 'h2' : 'h1';
   return <section ref={remoteRoot} className={`sp-remote ${embedded?'is-embedded':''} ${phase === 'paired' ? 'is-paired' : (phase==='reconnecting'||(phase==='unavailable'&&workspace))?'is-reconnecting':''}`} aria-label="Encrypted Remote conversation">
