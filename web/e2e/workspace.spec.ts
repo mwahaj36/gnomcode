@@ -105,7 +105,7 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     await openClaudeConversation(page);
     await expect(page.getByRole('toolbar', { name: 'Quick prompts' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Manage quick prompts' })).toHaveCount(0);
-    await expect(page.locator('#chat-prompt')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message the agent', exact: true })).toBeVisible();
   });
 
   test('Attach uploads an allowed file and rejects an unsupported one before any request', async ({ page, openConsole }) => {
