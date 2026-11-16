@@ -108,6 +108,35 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     await expect(page.getByRole('textbox', { name: 'Message the agent', exact: true })).toBeVisible();
   });
 
+  test('Send waits for attachment upload and recovers after failure', async ({ page, openConsole }) => {
+    await reshapeConversations(page, { source: 'managed', can_prompt: true, hosted: true, state: 'idle' });
+    let finish: (() => void) | undefined;
+    let fail = false;
+    await page.route('**/api/v1/sessions/*/attachments', async route => {
+      await new Promise<void>(resolve => { finish = resolve; });
+      await route.fulfill(fail ? { status: 500, json: { error: 'Upload failed' } } : { json: { workspace_path: '.gnomcode/attachments/notes.txt' } });
+    });
+    await openConsole('#sessions');
+    await openClaudeConversation(page);
+    await page.getByRole('textbox', { name: 'Message the agent', exact: true }).fill('Read this file');
+    const input = page.locator('#local-workspace-root input[type="file"]');
+    const send = page.locator('.sp-chat-composer button[type="submit"]');
+    await input.setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+    await expect(page.locator('#chat-attachments-bar')).toContainText('Uploading');
+    await expect(send).toBeDisabled();
+    await expect.poll(() => Boolean(finish)).toBeTruthy(); finish!();
+    await expect(page.locator('#chat-attachments-bar')).toContainText('Saved');
+    await expect(send).toBeEnabled();
+    fail = true; finish = undefined;
+    await input.setInputFiles({ name: 'bad.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+    await expect(send).toBeDisabled();
+    await expect.poll(() => Boolean(finish)).toBeTruthy(); finish!();
+    await expect(page.locator('#chat-attachments-bar')).toContainText(/Failed|Upload failed/);
+    await expect(send).toBeDisabled();
+    await page.getByRole('button', { name: 'Remove bad.txt', exact: true }).click();
+    await expect(send).toBeEnabled();
+  });
+
   test('Attach uploads an allowed file and rejects an unsupported one before any request', async ({ page, openConsole }) => {
     await reshapeConversations(page, { source: 'managed' });
     const uploads: Record<string, unknown>[] = [];

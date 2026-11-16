@@ -26,3 +26,6 @@ web/.next-review/
 web/test-results/
 web/web-test-results/
 test-results/
+
+# Local launch-video exports are not website deployment inputs.
+brag-output-*/

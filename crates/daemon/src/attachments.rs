@@ -350,6 +350,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn remote_accepts_full_fifteen_mib_and_rejects_one_byte_more() {
+        let repo = tempfile::tempdir().expect("repo");
+        let db = seeded_db_with_session("codex:large-attachment", repo.path());
+        let request = json!({"type":"upload_attachment","session_id":"codex:large-attachment","request_id":"large","filename":"large.txt","mime_type":"text/plain","size":MAX_FILE_BYTES,"data_base64":"A".repeat(MAX_FILE_BYTES / 3 * 4)});
+        let ack = remote_command(&db, &request).await;
+        assert_eq!(ack["type"], "attachment_ack");
+        let file = repo
+            .path()
+            .join(ack["workspace_path"].as_str().expect("path"));
+        let bytes = std::fs::read(file).expect("saved bytes");
+        assert_eq!(bytes.len(), MAX_FILE_BYTES);
+        assert!(bytes.iter().all(|byte| *byte == 0));
+        let mut oversized = request;
+        oversized["size"] = json!(MAX_FILE_BYTES + 1);
+        oversized["data_base64"] = json!(format!("{}AA==", "A".repeat(MAX_FILE_BYTES / 3 * 4)));
+        let rejected = remote_command(&db, &oversized).await;
+        assert_eq!(rejected["type"], "error");
+        assert!(
+            rejected["message"]
+                .as_str()
+                .expect("reason")
+                .contains("15 MiB")
+        );
+    }
+
+    #[tokio::test]
     async fn remote_upload_attachment_saves_sanitized_file_and_enforces_limits() {
         let repo = tempfile::tempdir().expect("repo");
         let db = seeded_db_with_session("codex:attach-test", repo.path());

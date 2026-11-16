@@ -10,7 +10,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, 
       }, theme);
       await page.route('https://*.supabase.co/**', route => {
         const url = new URL(route.request().url());
-        return route.fulfill({ json: url.pathname.endsWith('/spawnt_desktops') ? [{ id: '11111111111111111111111111111111', name: 'Offline desktop', last_seen_at: '2026-01-01T00:00:00Z', remote_enabled: false, live_snapshot: { generated_at: new Date().toISOString(), sessions: [], quota: [], timelines: {}, ongoing_count: 0 } }] : [] });
+        return route.fulfill({ json: url.pathname.endsWith('/spawnt_desktops') ? [{ id: '11111111111111111111111111111111', name: 'Offline desktop', last_seen_at: '2026-01-01T00:00:00Z', remote_enabled: false, live_snapshot: { generated_at: new Date().toISOString(), sessions: [], quota: [], timelines: {}, ongoing_count: 0, activity_heatmap: { from: '2025-11-17', to: '2026-11-16', first_recorded: '2025-11-17', days: Array.from({length:365}, (_,i) => ({date:new Date(Date.UTC(2025,10,17+i)).toISOString().slice(0,10),total_tokens:1000,cost_usd:0.1,cost_basis:'estimated',turns:1,level:1})), stats:{total_tokens:365000,active_days:365,current_streak:365,longest_streak:365,busiest:{date:'2026-11-16',total_tokens:1000}} } } }] : [] });
       });
       await page.goto('/console');
       for (const name of ['Home', 'Usage', 'Settings', 'Workspace']) {

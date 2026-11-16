@@ -47,7 +47,7 @@ export default function DocPage({
         <section>
           <h2>Try Gnomcode on Windows</h2>
           <p>
-            Download the unsigned Windows development build and use local features free, without a Gnomcode account.
+            Download the Windows x64 build, choose your workspace and launch an agent.
           </p>
           <p>
             <Link href="/downloads">Download for Windows</Link> · <Link href="/docs/getting-started">Installation guide</Link>

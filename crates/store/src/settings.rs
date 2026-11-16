@@ -39,6 +39,36 @@ impl Default for UserProfile {
 }
 
 impl Database {
+    /// Reads metadata-only quota notification episodes.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite query failure.
+    pub fn quota_notification_checkpoint(&self) -> Result<serde_json::Value, Error> {
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM desktop_preferences WHERE key='quota_notification_checkpoint'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(raw
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default())
+    }
+
+    /// Saves quota warning episodes without conversation or terminal content.
+    ///
+    /// # Errors
+    /// Returns [`Error`] on SQLite write or serialization failure.
+    pub fn save_quota_notification_checkpoint(
+        &self,
+        value: &serde_json::Value,
+    ) -> Result<(), Error> {
+        self.conn.execute("INSERT INTO desktop_preferences(key,value) VALUES ('quota_notification_checkpoint',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [serde_json::to_string(value)?])?;
+        Ok(())
+    }
+
     /// Lists explicitly trusted canonical workspace paths, stored locally only.
     ///
     /// # Errors
@@ -228,6 +258,25 @@ impl Database {
 #[cfg(test)]
 mod project_trust_tests {
     use super::*;
+
+    #[test]
+    fn quota_warning_checkpoint_survives_database_reopen() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("notifications.db");
+        let checkpoint =
+            serde_json::json!({"claude:weekly":{"last_low_cycle":"2026-11-16T10:00:00Z"}});
+        {
+            let db = Database::open(&path).expect("database");
+            assert!(db.quota_notification_checkpoint().expect("empty").is_null());
+            db.save_quota_notification_checkpoint(&checkpoint)
+                .expect("save");
+        }
+        let db = Database::open(&path).expect("reopen");
+        assert_eq!(
+            db.quota_notification_checkpoint().expect("load"),
+            checkpoint
+        );
+    }
 
     #[test]
     fn project_trust_survives_reopen_and_revokes_exact_path_only() {

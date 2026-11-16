@@ -264,10 +264,33 @@ impl Database {
                         .unwrap_or(2),
                     limit_low: row.get::<_, i64>(3)? != 0,
                     limit_reset: row.get::<_, i64>(4)? != 0,
+                    ..Default::default()
                 })
             })
             .optional()?;
-        Ok(row.unwrap_or_default())
+        let mut settings = row.unwrap_or_default();
+        settings.session_stopped = settings.turn_finished;
+        settings.needs_attention = settings.approval_waiting;
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM desktop_preferences WHERE key='notification_filters'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(value) =
+            raw.and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        {
+            settings.session_stopped = value["session_stopped"]
+                .as_bool()
+                .unwrap_or(settings.session_stopped);
+            settings.needs_attention = value["needs_attention"]
+                .as_bool()
+                .unwrap_or(settings.needs_attention);
+            settings.managed_only = value["managed_only"].as_bool().unwrap_or(false);
+        }
+        Ok(settings)
     }
 
     /// Saves notification preferences atomically.
@@ -279,7 +302,8 @@ impl Database {
         settings: &gnomcode_core::notifications::NotificationSettings,
     ) -> Result<(), Error> {
         let s = settings.clone().sanitized();
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             r#"INSERT INTO notification_settings(id, approval_waiting, turn_finished, turn_finished_min_minutes, limit_low, limit_reset, updated_at)
                    VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
                    ON CONFLICT(id) DO UPDATE SET
@@ -298,6 +322,9 @@ impl Database {
                 Utc::now().to_rfc3339()
             ],
         )?;
+        let filters = serde_json::json!({"session_stopped":s.session_stopped,"needs_attention":s.needs_attention,"managed_only":s.managed_only});
+        tx.execute("INSERT INTO desktop_preferences(key,value) VALUES ('notification_filters',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [filters.to_string()])?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -426,6 +453,9 @@ mod tests {
             approval_waiting: false,
             turn_finished: true,
             turn_finished_min_minutes: 5,
+            managed_only: true,
+            needs_attention: false,
+            session_stopped: false,
             limit_low: false,
             limit_reset: true,
         };
