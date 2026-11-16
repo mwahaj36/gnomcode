@@ -7,6 +7,8 @@ const SIZES = [
   { name: 'compact', width: 1280, height: 720 },
   { name: 'scaled-150', width: 853, height: 480 },
   { name: 'narrow', width: 760, height: 700 },
+  { name: 'tall-narrow', width: 900, height: 1400 },
+  { name: 'tall', width: 1024, height: 1200 },
   { name: 'phone', width: 390, height: 844 },
 ] as const;
 

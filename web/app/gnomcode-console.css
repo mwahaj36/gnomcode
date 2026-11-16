@@ -2212,7 +2212,7 @@ body.sp-resizing{cursor:col-resize;user-select:none}
  body.sp-native-console{--rail-w:56px}
  body.sp-native-console[data-rail="expanded"]{--rail-w:208px}
  body.sp-native-console .sp-console-workspace{grid-template-columns:var(--rail-w) auto minmax(0,1fr);height:100dvh;min-height:0;align-items:stretch;background:var(--sp-bg)}
- body.sp-native-console .sp-console-workspace>.sp-console-nav{background:var(--sp-bg);border-right:1px solid var(--sp-border);padding:var(--sp-3) var(--sp-2);align-items:stretch;overflow:hidden}
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{background:var(--sp-bg);border-right:1px solid var(--sp-border);padding:var(--sp-3) var(--sp-2);align-items:stretch}
  body.sp-native-console .sp-chat-column{border-right:1px solid var(--sp-border)}
  body.sp-native-console[data-rail="collapsed"] .sp-console-nav{align-items:center}
  body.sp-native-console[data-rail="collapsed"] .sp-console-nav :is(.tab-btn,#navigation-toggle,.app-brand){width:40px;min-height:40px;padding:0;justify-content:center;border-radius:10px}
@@ -2480,49 +2480,14 @@ body.sp-resizing{cursor:col-resize;user-select:none}
 .sp-chat-column .pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--sp-border)}
 .sp-chat-column .pagination button{min-height:26px;padding:0 8px}
 .sp-chat-column .sp-all-chats-trigger{min-height:32px;padding:0 10px;font-size:var(--sp-fs-control);border-radius:8px}
-/* Web console mirrors the desktop shell: 56/208px rail, 280px conversation column, inset work pane, 1px dividers. */
-@media(min-width:768px){
- .sp-web-app{padding-left:80px!important}
- .sp-web-app.web-navigation-expanded{padding-left:232px!important}
- .sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;padding:var(--sp-3) var(--sp-2);gap:var(--sp-1);background:var(--sp-bg);border-right:1px solid var(--sp-border);overflow:hidden;box-sizing:border-box;height:100dvh}
- .sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
- .sp-web-app .sp-console-nav :is(button,a){min-height:36px;padding:8px 10px;border-radius:10px;color:var(--sp-text-3);background:transparent}
- .sp-web-app .sp-console-nav :is(button,a):hover{color:var(--sp-text-2);background:var(--sp-surface-raised)}
- .sp-web-app .sp-console-nav button[aria-current="page"]{color:var(--sp-text);background:var(--sp-surface-raised)}
- .sp-web-app .sp-console-nav .web-download-link{margin-top:auto}
- .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:56px}
- .web-navigation-expanded .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:208px}
- .sp-remote.is-embedded .remote-workspace{grid-template-columns:280px minmax(0,1fr)}
- .sp-remote.is-embedded .remote-session-sidebar{display:flex;flex-direction:column;padding:var(--sp-3) var(--sp-2);background:var(--sp-bg);border-right:1px solid var(--sp-border)}
- .sp-remote.is-embedded .remote-session-sidebar .ide-sidebar{display:flex;flex-direction:column;gap:8px;min-height:0;height:100%;overflow:auto}
- .sp-remote.is-embedded .remote-heading .remote-new{display:none}
- .sp-remote.is-embedded .remote-conversation{max-width:none;position:relative}
-}
-.sp-remote .remote-session-sidebar.sp-chat-column button{margin:0}
-.sp-remote .remote-session-sidebar .ide-session{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:5px 6px 5px 10px;min-height:38px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:var(--sp-font-sans)}
-.sp-remote .remote-session-sidebar .ide-session-row{display:flex;align-items:center;gap:2px;border-radius:8px}
-.sp-remote .remote-session-sidebar .ide-session-row:hover,.sp-remote .remote-session-sidebar .ide-session-row:has([aria-current="true"]){background:var(--sp-surface-raised)}
-.sp-remote .remote-session-sidebar .ide-session-more{min-width:28px;min-height:28px;padding:0;border:0;background:transparent;color:var(--sp-text-3);display:inline-flex;align-items:center;justify-content:center}
-.sp-remote .remote-session-sidebar .ide-session-more[aria-pressed="false"]{opacity:0}
-.sp-remote .remote-session-sidebar .ide-session-row:is(:hover,:focus-within) .ide-session-more{opacity:1}
-.sp-remote .remote-session-sidebar .remote-session-list{display:grid;gap:2px}
-.sp-remote .remote-session-sidebar input[type="search"]{min-height:32px;height:32px;margin:0;font-size:var(--sp-fs-control);border-radius:8px;background:var(--sp-surface);border:1px solid var(--sp-border)}
-.sp-remote .remote-session-sidebar .conversation-filters .filters{display:grid;gap:6px;padding:6px 4px}
-.sp-remote .remote-session-sidebar .conversation-filters label{margin:0;font-size:var(--sp-fs-meta)}
-.sp-remote .remote-new-conversation:not([open]){display:none}
-.sp-remote .remote-new-conversation[open]{border:1px solid var(--sp-border);border-radius:10px;padding:8px 10px;background:var(--sp-surface)}
-.sp-remote .remote-new-conversation label{margin:8px 0 4px}
-.sp-remote .remote-session-sidebar .pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:8px 4px 2px;border-top:1px solid var(--sp-border);margin-top:auto}
-.sp-remote .remote-session-sidebar .pagination button{min-height:26px;padding:0 8px;font:500 var(--sp-fs-meta)/1 var(--sp-font-sans)}
-.sp-remote .remote-overview{position:absolute;top:8px;right:12px;z-index:12;margin:0;width:320px;max-height:calc(100% - 24px)}
-.sp-remote .remote-overview .sp-overview-item{margin:0;min-height:34px;justify-content:flex-start}
-.sp-remote .remote-overview .remote-automation{margin:0;padding:4px 8px}
-.sp-remote .sp-readonly-banner{margin:8px 0 0}
 /* One disclosure style everywhere: no browser triangle, a quiet rotating chevron. */
 details>summary{list-style:none;cursor:pointer}
 details>summary::-webkit-details-marker{display:none}
-details>summary:not(.visually-hidden)::before{content:"";display:inline-block;width:6px;height:6px;margin:0 8px 2px 1px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .14s ease;opacity:.7;vertical-align:middle;flex:none}
-details[open]>summary:not(.visually-hidden)::before{transform:rotate(45deg);margin-bottom:4px}
+details>summary:not(.visually-hidden):not(:has(svg))::before{content:"";display:inline-block;width:6px;height:6px;margin:0 8px 2px 1px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .14s ease;opacity:.7;vertical-align:middle;flex:none}
+details[open]>summary:not(.visually-hidden):not(:has(svg))::before{transform:rotate(45deg);margin-bottom:4px}
+/* Summaries that lay themselves out in fixed tracks already draw their own chevron: a second
+   marker would spill into an extra grid cell and push the card past its column. */
+.sp-provider-card>summary::before,.sp-ongoing summary::before{content:none}
 details>summary:focus-visible{outline:2px solid var(--sp-accent);outline-offset:2px;border-radius:6px}
 @media(prefers-reduced-motion:reduce){details>summary::before{transition:none}}
 /* The app shell owns the viewport at every width: the document never scrolls, so there is exactly
@@ -2571,3 +2536,94 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 }
 .sp-usage-daily .sp-activity--merged .sp-activity-note{margin:0 0 var(--sp-2)}
 .sp-usage-daily .sp-activity--merged .sp-activity-breakdown{margin:0}
+/* The rail must not clip the active-tab indicator that sits just outside its padding box, and the
+   conversation column needs the same breathing room on both sides of its divider. */
+@media(min-width:768px){
+ body.sp-native-console .sp-console-workspace>.sp-console-nav{overflow:visible}
+ body.sp-native-console[data-rail="collapsed"] .sp-console-nav{padding-inline:var(--sp-3)}
+ body.sp-native-console .sp-chat-column{padding-left:var(--sp-2)}
+ body.sp-native-console .sp-chat-column .ide-sidebar{padding-inline:2px}
+}
+
+/* Web console mirrors the desktop shell: 56/208px rail, 280px conversation column, inset work pane, 1px dividers. */
+@media(min-width:768px){
+ .sp-web-app{padding-left:80px!important}
+ .sp-web-app.web-navigation-expanded{padding-left:232px!important}
+ .sp-web-app .sp-console-workspace>.sp-console-nav{width:56px!important;padding:var(--sp-3) var(--sp-2);gap:var(--sp-1);background:var(--sp-bg);border-right:1px solid var(--sp-border);overflow:hidden;box-sizing:border-box;height:100dvh}
+ .sp-web-app.web-navigation-expanded .sp-console-workspace>.sp-console-nav{width:208px!important}
+ .sp-web-app .sp-console-nav :is(button,a){min-height:36px;padding:8px 10px;border-radius:10px;color:var(--sp-text-3);background:transparent}
+ .sp-web-app .sp-console-nav :is(button,a):hover{color:var(--sp-text-2);background:var(--sp-surface-raised)}
+ .sp-web-app .sp-console-nav button[aria-current="page"]{color:var(--sp-text);background:var(--sp-surface-raised)}
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:56px}
+ .web-navigation-expanded .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){left:208px}
+ /* Only reserve the conversation column while the drawer is open: with it closed the sidebar is
+    display:none, so an unconditional track would strand the conversation in 280px. */
+ .sp-remote.is-embedded .remote-workspace.show-sessions{grid-template-columns:280px minmax(0,1fr)}
+ .sp-remote.is-embedded .remote-workspace:not(.show-sessions){grid-template-columns:minmax(0,1fr)}
+ .sp-remote.is-embedded .remote-session-sidebar{display:flex;flex-direction:column;padding:var(--sp-3) var(--sp-2);background:var(--sp-bg);border-right:1px solid var(--sp-border)}
+ .sp-remote.is-embedded .remote-session-sidebar .ide-sidebar{display:flex;flex-direction:column;gap:8px;min-height:0;height:100%;overflow:auto}
+ .sp-remote.is-embedded .remote-heading .remote-new{display:none}
+ .sp-remote.is-embedded .remote-conversation{max-width:none;position:relative}
+}
+.sp-remote .remote-session-sidebar.sp-chat-column button{margin:0}
+.sp-remote .remote-session-sidebar .ide-session{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;padding:5px 6px 5px 10px;min-height:38px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:var(--sp-font-sans)}
+.sp-remote .remote-session-sidebar .ide-session-row{display:flex;align-items:center;gap:2px;border-radius:8px}
+.sp-remote .remote-session-sidebar .ide-session-row:hover,.sp-remote .remote-session-sidebar .ide-session-row:has([aria-current="true"]){background:var(--sp-surface-raised)}
+.sp-remote .remote-session-sidebar .ide-session-more{min-width:28px;min-height:28px;padding:0;border:0;background:transparent;color:var(--sp-text-3);display:inline-flex;align-items:center;justify-content:center}
+.sp-remote .remote-session-sidebar .ide-session-more[aria-pressed="false"]{opacity:0}
+.sp-remote .remote-session-sidebar .ide-session-row:is(:hover,:focus-within) .ide-session-more{opacity:1}
+.sp-remote .remote-session-sidebar .remote-session-list{display:grid;gap:2px}
+.sp-remote .remote-session-sidebar input[type="search"]{min-height:32px;height:32px;margin:0;font-size:var(--sp-fs-control);border-radius:8px;background:var(--sp-surface);border:1px solid var(--sp-border)}
+.sp-remote .remote-session-sidebar .conversation-filters .filters{display:grid;gap:6px;padding:6px 4px}
+.sp-remote .remote-session-sidebar .conversation-filters label{margin:0;font-size:var(--sp-fs-meta)}
+.sp-remote .remote-new-conversation:not([open]){display:none}
+.sp-remote .remote-new-conversation[open]{border:1px solid var(--sp-border);border-radius:10px;padding:8px 10px;background:var(--sp-surface)}
+.sp-remote .remote-new-conversation label{margin:8px 0 4px}
+.sp-remote .remote-session-sidebar .pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--sp-fs-meta);color:var(--sp-text-3);padding:8px 4px 2px;border-top:1px solid var(--sp-border);margin-top:auto}
+.sp-remote .remote-session-sidebar .pagination button{min-height:26px;padding:0 8px;font:500 var(--sp-fs-meta)/1 var(--sp-font-sans)}
+.sp-remote .remote-overview{position:absolute;top:8px;right:12px;z-index:12;margin:0;width:320px;max-height:calc(100% - 24px)}
+.sp-remote .remote-overview .sp-overview-item{margin:0;min-height:34px;justify-content:flex-start}
+.sp-remote .remote-overview .remote-automation{margin:0;padding:4px 8px}
+.sp-remote .sp-readonly-banner{margin:8px 0 0}
+@media(min-width:768px){
+ /* The rail divider needs the same two-class specificity as the rule that zeroes it. */
+ .sp-console-app.sp-web-app .sp-console-workspace>.sp-console-nav{border-right:1px solid var(--sp-border)}
+ /* Header controls are quiet icon buttons, as in the desktop app, not filled grey chips. */
+ .sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):not(.sp-primary-action){background:transparent;border-color:transparent}
+ .sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):hover{background:var(--sp-surface-raised)}
+}
+/* Conversation rows in the web sidebar follow the desktop app. Without these, the generic
+   `.remote-session-list button{width:100%}` also claims the pin button, which takes the whole row
+   and collapses the real row button to a few pixels (titles rendered one letter per line). */
+.sp-remote .remote-session-sidebar .remote-session-list{display:grid;gap:2px}
+.sp-remote .remote-session-sidebar .ide-session-row{display:flex;align-items:center;gap:2px;border-radius:8px;min-width:0}
+.sp-remote .remote-session-sidebar .ide-session-row:hover,
+.sp-remote .remote-session-sidebar .ide-session-row:has([aria-current="true"]){background:var(--sp-surface-raised)}
+.sp-remote .remote-session-sidebar .ide-session{flex:1 1 auto;width:auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:1px;margin:0;padding:6px 6px 6px 10px;min-height:42px;background:transparent;border:0;text-align:left;font-family:var(--sp-font-sans)}
+.sp-remote .remote-session-sidebar .ide-session-title{grid-column:1;font-weight:500;font-size:var(--sp-fs-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-remote .remote-session-sidebar .ide-session time{grid-column:2;grid-row:1;font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap}
+.sp-remote .remote-session-sidebar .ide-session-meta{grid-column:1 / -1;font-size:var(--sp-fs-meta);color:var(--sp-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-remote .remote-session-sidebar .ide-session-more{flex:0 0 28px;width:28px;min-width:28px;min-height:28px;margin:0;padding:0;border:0;background:transparent;color:var(--sp-text-3);display:inline-flex;align-items:center;justify-content:center;opacity:0}
+.sp-remote .remote-session-sidebar .ide-session-more[aria-pressed="true"],
+.sp-remote .remote-session-sidebar .ide-session-row:is(:hover,:focus-within) .ide-session-more{opacity:1}
+/* Header limits sit at the right of the title row, as in the desktop app's conversation heading. */
+@media(min-width:768px){
+ .sp-remote.is-embedded .remote-heading>div{display:flex;align-items:center;gap:var(--sp-2);min-width:0;flex-wrap:nowrap}
+ .sp-remote.is-embedded .remote-heading>div>:is(h1,h2){flex:0 1 auto;min-width:0}
+ .sp-remote.is-embedded .remote-heading .sp-conversation-limits{margin-left:auto;flex:0 0 auto}
+}
+@media(max-width:767px){
+ /* The Remote surface is fixed to the viewport, so it must stop above the console tab bar or it
+    covers the only navigation on a phone. */
+ .sp-remote.is-embedded:is(.is-paired,.is-reconnecting){
+  height:calc(var(--remote-viewport-height,100dvh) - var(--rail-h,56px) - env(safe-area-inset-bottom));
+ }
+ /* Header: title and limits take their own row so the action buttons never sit on top of them. */
+ .sp-remote.is-embedded .remote-heading{flex-wrap:wrap;row-gap:4px;padding-block:8px}
+ .sp-remote.is-embedded .remote-heading>div{flex:1 1 100%;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .sp-remote.is-embedded .remote-heading .sp-conversation-limits{flex:0 0 auto}
+ .sp-remote.is-embedded .remote-heading>:is(button,a){flex:0 0 auto}
+}
+/* Quiet header controls at every width, not just desktop. */
+.sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):not(.sp-primary-action){background:transparent;border-color:transparent}
+.sp-remote.is-embedded .remote-heading :is(button,a):not([type="submit"]):hover{background:var(--sp-surface-raised)}
