@@ -1,6 +1,6 @@
 # Gnomcode — The Runtime for AI Coding Agents
 
-> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. The current build is a Windows development build; macOS and Linux builds are not available yet.
+> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. The current packaged build targets Windows x64; macOS and Linux builds are not available yet.
 
 ## Core Capabilities
 - **Model Switching**: Switch mid-conversation between Claude Code, OpenAI Codex and Antigravity. Compiles objectives, changed files, and recent turns into a local handoff.
@@ -30,3 +30,9 @@ Gnomcode 1.0 supports exactly these three agents.
 ## Downloads
 
 - [Windows downloads](https://gnomcode.vercel.app/downloads): The downloads page shows the package version and Windows x64 release-candidate installer/ZIP names. Review the published release notes and versioned SHA-256 checksums before installing. Windows installers are unsigned; updater signatures are separate from OS signing. macOS and Linux downloads are not available yet.
+
+## Files and project trust
+
+The console browses workspace files, Git changes and referenced agent documents for Claude Code, Codex and Antigravity. File previews can expand and complete files can download. Desktop project trust remembers tool/folder approval for the exact workspace; permission and sandbox changes still ask. Remote attachment uploads support files up to 15 MiB and messages wait for saved-file confirmation. Old desktop listings can be removed from Devices without deleting local sessions.
+
+Remote Agent terminal exposes the hosted agent screen and explicit text/keys over E2EE, with clickable login links and manual code entry. Arbitrary workspace shells remain local. Desktop localhost OAuth callbacks are not proxied. Limit rejections appear directly in the conversation; low-limit notifications are deduplicated until recovery or a confirmed new window, including across daemon restart.

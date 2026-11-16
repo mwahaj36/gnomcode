@@ -86,7 +86,7 @@ fn one_line(text: &str) -> String {
 /// Classifies a user-role entry. `is_meta` and `is_compact_summary` come from the source line.
 #[must_use]
 pub fn classify_user_entry(text: &str, is_meta: bool, is_compact_summary: bool) -> UserEntry {
-    let trimmed = text.trim();
+    let trimmed = crate::redact::clean_user_text(text).trim();
     if is_compact_summary
         || trimmed.starts_with("This session is being continued from a previous conversation")
     {

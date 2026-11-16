@@ -17,7 +17,7 @@ const docsJsonLd = {
     name: "gnomcode",
     url: branding.baseUrl,
   },
-  dependencies: "Windows (development build)",
+  dependencies: "Windows x64 release; macOS and Linux planned",
   articleSection: "Developer Tools",
 };
 
@@ -214,7 +214,7 @@ export default function DocsPage() {
               <div className="bg-card border border-border rounded-lg p-4">
                 <CopyCommand command="gnomcode install" />
                 <div className="text-muted text-[11px] mb-2">
-                  Configures autostart, the system tray and shortcuts for the current platform. The Windows development build is the verified one.
+                  Configures autostart, the system tray and shortcuts for the current platform. The Windows x64 release is verified; macOS and Linux packages are planned.
                 </div>
               </div>
             </div>

@@ -109,6 +109,18 @@ pub const RELAY_CLOSE: &str = "</spawnt_context>";
 /// Removes leading injected agent context while retaining any following user prompt.
 #[must_use]
 pub fn clean_user_text(mut text: &str) -> &str {
+    let trimmed = text.trim_start();
+    if trimmed.starts_with("<pasted_content")
+        && let Some((tag, body)) = trimmed.split_once('>')
+        && tag["<pasted_content".len()..].starts_with([' ', '\t', '\n', '\r'])
+        && body.trim_start().starts_with(RELAY_OPEN)
+    {
+        text = body
+            .trim()
+            .strip_suffix("</pasted_content>")
+            .unwrap_or(body)
+            .trim();
+    }
     loop {
         let trimmed = text.trim_start();
         let closing = if trimmed.starts_with("# AGENTS.md instructions for ") {
@@ -440,5 +452,28 @@ only data"
         assert!(redacted.contains("<REDACTED>"));
         assert!(redacted.contains("DATABASE_PASSWORD=<REDACTED>"));
         assert!(redacted.chars().count() > 200);
+    }
+}
+
+#[cfg(test)]
+mod relay_paste_tests {
+    #[test]
+    fn pasted_handoff_keeps_only_the_real_prompt() {
+        assert_eq!(
+            super::clean_user_text(
+                "<pasted_content id=\"b0c8\">\n<spawnt_context>\ninternal history\n</spawnt_context>\n\nWhat model are you?\n</pasted_content>"
+            ),
+            "What model are you?"
+        );
+        assert_eq!(
+            super::clean_user_text(
+                "<pasted_content id=\"x\">ordinary pasted text</pasted_content>"
+            ),
+            "<pasted_content id=\"x\">ordinary pasted text</pasted_content>"
+        );
+        assert_eq!(
+            super::clean_user_text("<pasted_content id=\"x\"><spawnt_context>truncated"),
+            ""
+        );
     }
 }

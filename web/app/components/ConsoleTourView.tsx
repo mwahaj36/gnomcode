@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   type ActivityHeatmap,
   type ProviderOverview,
@@ -93,7 +93,7 @@ export function TourHome({ compact = false, sessions = true }: { compact?: boole
   </div>;
 }
 
-export function ConsoleTourView({ kind }: { kind: string }) {
+const TourContent = memo(function TourContent({ kind }: { kind: string }) {
   const root = useRef<HTMLDivElement>(null);
   // Like the console, the activity grid opens on the most recent weeks.
   useEffect(() => { root.current?.querySelectorAll<HTMLElement>(".sp-heatmap-scroll").forEach(grid => { grid.scrollLeft = grid.scrollWidth; }); }, [kind]);
@@ -121,7 +121,7 @@ export function ConsoleTourView({ kind }: { kind: string }) {
     return () => { observer.disconnect(); window.removeEventListener("resize", fit); };
   }, [kind]);
   return <div ref={root}><TourView kind={kind} /></div>;
-}
+});
 
 function TourView({ kind }: { kind: string }) {
   if (kind === "overview") return <TourHome sessions={false} />;
@@ -131,4 +131,17 @@ function TourView({ kind }: { kind: string }) {
     <Html html={renderHeatmap(sampleHeatmap)} />
   </div>;
   return <Html html={openFirst(renderProviderCards(sampleProviders), "sp-card sp-provider-card")} />;
+}
+
+
+export function ConsoleTourView({kind}:{kind:string}) {
+ const frame=useRef<HTMLDivElement>(null),stage=useRef<HTMLDivElement>(null);
+ const [scale,setScale]=useState(1);
+ useEffect(()=>{
+  const fit=()=>{if(frame.current&&stage.current)setScale(Math.min(1,frame.current.clientHeight/Math.max(1,stage.current.scrollHeight)));};
+  const observer=new ResizeObserver(fit);
+  if(frame.current)observer.observe(frame.current);if(stage.current)observer.observe(stage.current);
+  fit();return()=>observer.disconnect();
+ },[kind]);
+ return <div ref={frame} className="sp-tour-fit"><div ref={stage} className="sp-tour-stage" style={{transform:`translateX(-50%) scale(${scale})`}}><TourContent kind={kind} /></div></div>;
 }

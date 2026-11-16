@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { fetchLocalJson, fetchLocalMutation } from './local-api';
 
 interface SetupStatus {
+  limit_message?: string | null;
   blocker?: 'trust_folder' | 'setup' | null;
   agent?: string;
   folder?: string;
@@ -69,6 +70,7 @@ export function SetupPrompt({
     await load();
   };
 
+  if (status.limit_message) return <div className="sp-limit-reached" role="alert"><strong>Limit reached</strong><p>{status.limit_message.replace(/^Limit reached\.\s*/, '')}</p><button type="button" onClick={onOpenTerminal}>Open agent terminal</button></div>;
   if (!status.blocker) return null;
   const agent = status.agent || 'The agent';
   const isTrust = status.blocker === 'trust_folder';

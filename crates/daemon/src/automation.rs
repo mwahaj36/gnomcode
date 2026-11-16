@@ -247,6 +247,7 @@ fn provider(agent: &str) -> &str {
 
 #[derive(Default, Clone)]
 pub(crate) struct Observations {
+    quota_checkpoint: Arc<std::sync::Mutex<Option<Value>>>,
     engine: Arc<std::sync::Mutex<gnomcode_core::notifications::NotificationEngine>>,
 }
 
@@ -319,6 +320,15 @@ pub(crate) async fn notify_approval_waiting_hook(
     let settings = store(db, Database::get_notification_settings)
         .await
         .unwrap_or_default();
+    if settings.managed_only {
+        let id = session.id.clone();
+        if !store(db, move |db| Ok(db.conversation_launch(&id)?.is_some()))
+            .await
+            .unwrap_or(false)
+        {
+            return;
+        }
+    }
     let batch =
         observations
             .engine()
@@ -354,20 +364,74 @@ async fn record_batch_notice(
     }
 }
 
+pub(crate) async fn notification_preferences(db: &Arc<Mutex<Database>>, request: &Value) -> Value {
+    if let Some(value) = request.get("settings") {
+        let Ok(settings) = serde_json::from_value::<
+            gnomcode_core::notifications::NotificationSettings,
+        >(value.clone()) else {
+            return json!({"type":"error","message":"Invalid notification preferences."});
+        };
+        if store(db, move |db| db.save_notification_settings(&settings))
+            .await
+            .is_err()
+        {
+            return json!({"type":"error","message":"Notification preferences could not be saved."});
+        }
+    }
+    match store(db, Database::get_notification_settings).await {
+        Ok(settings) => json!({"type":"notification_settings","settings":settings}),
+        Err(_) => json!({"type":"error","message":"Notification preferences unavailable."}),
+    }
+}
+
 pub(crate) async fn tick(db: &Arc<Mutex<Database>>, previous: &mut Observations) {
     let _ = store(db, Database::expire_automation_records).await;
     let settings = store(db, Database::get_notification_settings)
         .await
         .unwrap_or_default();
-    let sessions = store(db, |db| db.list_active_sessions(1000))
-        .await
-        .unwrap_or_default();
+    let managed_only = settings.managed_only;
+    let sessions = store(db, move |db| {
+        let mut sessions = db.list_active_sessions(1000)?;
+        if managed_only {
+            sessions.retain(|session| db.conversation_launch(&session.id).ok().flatten().is_some());
+        }
+        Ok(sessions)
+    })
+    .await
+    .unwrap_or_default();
     let quotas = store(db, Database::get_latest_quota_snapshots)
         .await
         .unwrap_or_default();
+    let needs_restore = previous
+        .quota_checkpoint
+        .lock()
+        .map(|saved| saved.is_none())
+        .unwrap_or(false);
+    if needs_restore && let Ok(saved) = store(db, Database::quota_notification_checkpoint).await {
+        previous.engine().restore_quota_checkpoint(saved.clone());
+        if let Ok(mut cache) = previous.quota_checkpoint.lock() {
+            *cache = Some(saved);
+        }
+    }
     let batch = previous
         .engine()
         .evaluate(&sessions, &quotas, &settings, chrono::Utc::now());
+    let checkpoint = previous.engine().quota_checkpoint();
+    let changed = previous
+        .quota_checkpoint
+        .lock()
+        .map(|saved| saved.as_ref() != Some(&checkpoint))
+        .unwrap_or(false);
+    if changed {
+        let value = checkpoint.clone();
+        if store(db, move |db| db.save_quota_notification_checkpoint(&value))
+            .await
+            .is_ok()
+            && let Ok(mut saved) = previous.quota_checkpoint.lock()
+        {
+            *saved = Some(checkpoint);
+        }
+    }
     if let Some(batch) = batch {
         record_batch_notice(db, batch).await;
     }
@@ -905,6 +969,48 @@ mod tests {
             started_at: now,
             last_event_at: now,
         };
+        db.lock()
+            .await
+            .save_notification_settings(&gnomcode_core::notifications::NotificationSettings {
+                managed_only: true,
+                ..Default::default()
+            })
+            .expect("managed settings");
+        let mut filtered = Observations::default();
+        notify_approval_waiting_hook(&db, &mut filtered, &session).await;
+        assert!(
+            db.lock()
+                .await
+                .pending_push_notices_with_meta()
+                .expect("quiet imports")
+                .is_empty()
+        );
+        {
+            let database = db.lock().await;
+            database
+                .save_conversation_launch("managed-host", "codex", "fixture", None)
+                .expect("managed launch");
+            database
+                .bind_conversation_host("managed-host", &session.id)
+                .expect("binding");
+        }
+        notify_approval_waiting_hook(&db, &mut filtered, &session).await;
+        assert_eq!(
+            db.lock()
+                .await
+                .pending_push_notices_with_meta()
+                .expect("managed alert")
+                .len(),
+            1
+        );
+        db.lock()
+            .await
+            .save_notification_settings(&Default::default())
+            .expect("restore settings");
+        let session = Session {
+            id: "codex:baseline-notification-fixture".into(),
+            ..session
+        };
         let mut hook = Observations::default();
         let poll = hook.clone();
         notify_approval_waiting_hook(&db, &mut hook, &session).await;
@@ -914,7 +1020,7 @@ mod tests {
             .await
             .pending_push_notices_with_meta()
             .expect("push notices");
-        assert_eq!(notices.len(), 1);
+        assert_eq!(notices.len(), 2);
         let payload = notices[0].payload.as_ref().expect("structured payload");
         assert!(
             !serde_json::to_string(payload)
@@ -949,7 +1055,7 @@ mod tests {
                 .pending_push_notices_with_meta()
                 .expect("push notices")
                 .len(),
-            1
+            2
         );
     }
 

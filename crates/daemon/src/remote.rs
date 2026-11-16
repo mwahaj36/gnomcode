@@ -524,11 +524,14 @@ async fn run_connection(
 ) {
     let (mut writer, mut reader) = socket.split();
     let mut resume_context = String::new();
+    let mut upload_buffer = String::new();
+    let mut upload_started: Option<std::time::Instant> = None;
     let mut timer = tokio::time::interval(std::time::Duration::from_secs(10));
     loop {
         tokio::select! {
             _ = canceled.changed() => break,
             _ = timer.tick() => {
+                if upload_started.is_some_and(|start| start.elapsed().as_secs() > 90) { break; }
                 let trusted=room.trusted.lock().await;
                 if trusted.as_ref().is_some_and(|trust|!trust.valid(chrono::Utc::now().timestamp())) {break;}
                 if trusted.is_none() && chrono::Utc::now() > room.expires_at
@@ -600,9 +603,21 @@ async fn run_connection(
                 if !(room.local_confirmed.load(Ordering::Acquire)
                     && room.phone_confirmed.load(Ordering::Acquire)) { break; }
                 if !room.trusted.lock().await.as_ref().is_some_and(|trust|trust.valid(chrono::Utc::now().timestamp())) {break;}
+                let value = if value.get("type").and_then(Value::as_str) == Some("upload_chunk") {
+                    upload_started.get_or_insert_with(std::time::Instant::now);
+                    room.activity().await;
+                    match assemble_upload_chunk(&mut upload_buffer, &value) {
+                        Ok(Some(request)) => { upload_started = None; request }
+                        Ok(None) => continue,
+                        Err(()) => break,
+                    }
+                } else {
+                    if !upload_buffer.is_empty() { break; }
+                    value
+                };
                 let request_type = value.get("type").cloned().unwrap_or(Value::Null);
                 if request_type.as_str()==Some("interrupt") {room.activity().await;}
-                if matches!(request_type.as_str(),Some("activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file"|"changes"|"artifacts"|"upload_attachment"|"quick_actions"|"continue_here"|"worktree_merge"|"worktree_discard"|"worktree_open_pr"|"approvals"|"trust_folder")) {room.activity().await;}
+                if matches!(request_type.as_str(),Some("terminal_screen"|"terminal_input"|"activity"|"prompt"|"launch"|"switch"|"workspaces"|"schedule"|"cancel_schedule"|"resume_on_reset"|"approval"|"repo_files"|"repo_file"|"changes"|"artifacts"|"upload_attachment"|"quick_actions"|"continue_here"|"worktree_merge"|"worktree_discard"|"worktree_open_pr"|"approvals"|"trust_folder")) {room.activity().await;}
                 if request_type.as_str()==Some("activity") {continue;}
                 let mut response = if matches!(request_type.as_str(),Some("devices")) {
                     if let Some(controller)=room.controller.upgrade() { controller.command(value).await } else {json!({"type":"error","message":"Update your desktop to manage devices."})}
@@ -613,6 +628,24 @@ async fn run_connection(
         }
     }
     let _ = writer.send(Message::Close(None)).await;
+}
+
+// Only authenticated attachment requests may use the bounded, connection-local accumulator.
+fn assemble_upload_chunk(buffer: &mut String, part: &Value) -> Result<Option<Value>, ()> {
+    let data = part.get("data").and_then(Value::as_str).ok_or(())?;
+    let last = part.get("final").and_then(Value::as_bool).ok_or(())?;
+    if data.is_empty() || buffer.len().saturating_add(data.len()) > 22 * 1024 * 1024 {
+        return Err(());
+    }
+    buffer.push_str(data);
+    if !last {
+        return Ok(None);
+    }
+    let value: Value = serde_json::from_str(&std::mem::take(buffer)).map_err(|_| ())?;
+    if value.get("type").and_then(Value::as_str) != Some("upload_attachment") {
+        return Err(());
+    }
+    Ok(Some(value))
 }
 
 fn chunk_response(value: &Value) -> Result<Vec<Value>, serde_json::Error> {
@@ -631,8 +664,71 @@ fn chunk_response(value: &Value) -> Result<Vec<Value>, serde_json::Error> {
     Ok(parts)
 }
 
+async fn remote_terminal(db: &Arc<Mutex<Database>>, request: &Value) -> Value {
+    let Some(id) = request
+        .get("session_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty() && id.len() <= 128)
+    else {
+        return json!({"type":"error","message":"Choose a hosted agent terminal."});
+    };
+    let hosted = gnomcode_pty::list_active_sessions();
+    let host = {
+        let guard = db.lock().await;
+        let sessions = guard.list_active_sessions(usize::MAX).unwrap_or_default();
+        conversation_host(&guard, id, &sessions, &hosted)
+            .ok()
+            .flatten()
+            .cloned()
+    };
+    let Some(host) = host.filter(|host| {
+        matches!(
+            host.agent.as_str(),
+            "claude-code" | "claude" | "codex" | "antigravity" | "agy"
+        )
+    }) else {
+        return json!({"type":"error","message":"Agent terminal requires a live hosted agent. Workspace shells are unavailable over Remote."});
+    };
+    if request["type"] == "terminal_input" {
+        let Some(input) = request
+            .get("text")
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty() && text.len() <= 4096)
+        else {
+            return json!({"type":"error","message":"Terminal input must be 1-4096 bytes."});
+        };
+        return match gnomcode_pty::send_input(&host, input.as_bytes()).await {
+            Ok(()) => {
+                json!({"type":"terminal_input_ack","session_id":id,"request_id":request["request_id"]})
+            }
+            Err(_) => {
+                json!({"type":"error","message":"Terminal input was not accepted. Reconnect and check the agent."})
+            }
+        };
+    }
+    match gnomcode_pty::terminal_output(
+        &host,
+        request["after"].as_u64(),
+        request["cols"].as_u64().and_then(|n| u16::try_from(n).ok()),
+        request["rows"].as_u64().and_then(|n| u16::try_from(n).ok()),
+    )
+    .await
+    {
+        Ok(output) => {
+            json!({"type":"terminal_screen","session_id":id,"terminal_data":output["data"],"cursor":output["cursor"],"reset":output["reset"]})
+        }
+        Err(_) => {
+            json!({"type":"error","message":"Native terminal unavailable. Protocol-mode agents use conversation controls; open a native CLI session for an interactive terminal."})
+        }
+    }
+}
+
 pub(crate) async fn dispatch(db: &Arc<Mutex<Database>>, request: Value) -> Value {
     match request.get("type").and_then(Value::as_str) {
+        Some("terminal_screen" | "terminal_input") => remote_terminal(db, &request).await,
+        Some("notification_settings") => {
+            crate::automation::notification_preferences(db, &request).await
+        }
         Some("models") => {
             json!({"type":"models","providers":crate::model_catalog::discover().await})
         }
@@ -3185,5 +3281,37 @@ mod launched_row_tests {
             listed.contains(&record.session_id.as_str()),
             "page: {listed:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod upload_chunk_tests {
+    use super::*;
+
+    #[test]
+    fn reassembles_large_upload_and_rejects_other_commands_or_oversize() {
+        let mut buffer = String::new();
+        let request = json!({"type":"upload_attachment","data_base64":"a".repeat(100_000)});
+        let text = request.to_string();
+        assert!(
+            assemble_upload_chunk(&mut buffer, &json!({"data":&text[..50_000],"final":false}))
+                .expect("part")
+                .is_none()
+        );
+        assert_eq!(
+            assemble_upload_chunk(&mut buffer, &json!({"data":&text[50_000..],"final":true}))
+                .expect("last"),
+            Some(request)
+        );
+        assert!(buffer.is_empty());
+        assert!(
+            assemble_upload_chunk(
+                &mut buffer,
+                &json!({"data":"{\"type\":\"prompt\"}","final":true})
+            )
+            .is_err()
+        );
+        buffer = "a".repeat(22 * 1024 * 1024);
+        assert!(assemble_upload_chunk(&mut buffer, &json!({"data":"a","final":false})).is_err());
     }
 }

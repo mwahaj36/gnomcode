@@ -290,9 +290,9 @@ fn claude_access_token_in(dir: &Path, now_ms: i64) -> Result<String, String> {
         // Gnomcode retries with the official CLI, which fixes a token that merely lapsed
         // while the computer was off. A real sign-out needs the person, so say both.
         return Err(if refresh_enabled("claude") {
-            "Claude sign-in expired; Gnomcode is retrying with the official CLI. If it stays, run `claude` in a terminal".to_owned()
+            "Claude limits credential expired; retrying through the official CLI. If Claude still works, restart its session before signing in again".to_owned()
         } else {
-            "Claude sign-in expired; run `claude` in a terminal to refresh it".to_owned()
+            "Claude limits credential expired; check `claude auth status` in a terminal".to_owned()
         });
     }
     oauth
@@ -753,8 +753,8 @@ mod tests {
         write(1_000);
         let expired = claude_access_token_in(dir.path(), 2_000).expect_err("expired");
         assert!(
-            expired.starts_with("Claude sign-in expired")
-                && expired.contains("run `claude` in a terminal"),
+            expired.starts_with("Claude limits credential expired")
+                && (expired.contains("restart") || expired.contains("check `claude auth status`")),
             "the person is always told how to fix it themselves: {expired}"
         );
         write(3_000);

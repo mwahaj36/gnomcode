@@ -2,19 +2,22 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from './fixtures';
 import { openClaudeConversation, reshapeConversations } from './workspace-helpers';
 
-test('compact bubbles reveal metadata only after a click', async ({ page, openConsole }) => {
+test('compact bubbles keep icon-only metadata outside the bubble and reveal it on hover', async ({ page, openConsole }) => {
   await page.route('**/api/v1/sessions/*/chat?*', route => route.fulfill({ json: [{ event_id: 'compact', turn_index: 1, role: 'user', content: 'hi', created_at: '2026-11-16T00:00:00Z' }] }));
   await openConsole('#sessions');
   await openClaudeConversation(page);
   const bubble = page.locator('[data-chat-id="compact"]');
   await expect(bubble).toBeVisible();
-  expect((await bubble.boundingBox())!.height).toBeLessThan(80);
+  expect((await bubble.locator('.sp-chat-body').boundingBox())!.height).toBeLessThan(60);
   const copy = bubble.getByRole('button', { name: 'Copy your message' });
   await bubble.hover();
-  await expect(copy).toHaveCSS('opacity', '0');
-  await bubble.click();
   await expect(copy).toHaveCSS('opacity', '1');
-  expect((await copy.boundingBox())!.width).toBeGreaterThanOrEqual(64);
+  await expect(copy).toHaveCSS('opacity', '1');
+  expect((await copy.boundingBox())!.width).toBeGreaterThanOrEqual(32);
+  const body = await bubble.locator('.sp-chat-body').boundingBox();
+  const footer = await bubble.locator('header').boundingBox();
+  expect(footer!.y).toBeGreaterThanOrEqual(body!.y + body!.height);
+  await expect(copy.locator('.sp-copy-label')).toBeHidden();
 });
 
 test('Files keeps folders visible, downloads exact content, and expands its viewer', async ({ page, openConsole }, testInfo) => {
