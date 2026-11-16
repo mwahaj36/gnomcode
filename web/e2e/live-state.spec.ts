@@ -34,7 +34,7 @@ for (const [name, viewport] of [['desktop', { width: 1280, height: 900 }], ['pho
         await expect(header).toHaveAttribute('data-live', live.state);
         await expect(header.locator('.sp-live-label')).toHaveText(live.label);
         await expect(header.locator('.sp-live-shape')).toHaveCount(1);
-        await expect(header.locator('.sp-live-basis')).toHaveCount(live.basis === 'exact' ? 0 : 1);
+        await expect(header.locator('.sp-live-basis')).toHaveCount(0);
         await expect(page.locator('.ide-session[aria-current="true"] .sp-live')).toHaveAttribute('data-live', live.state);
         const activity = page.getByRole('status', { name: 'Agent activity' });
         const box = page.getByRole('textbox', { name: 'Message the agent' });
