@@ -37,6 +37,10 @@ export async function copyTextToClipboard(text) {
   return false;
 }
 
+/** A stored title can end with a separator when the part after it was empty; never show a
+ * dangling "·" or "-" to the person. */
+export const cleanSessionTitle = title => (title || '').replace(/[\s·–—:,-]+$/u, '').trim();
+
 export const sessionStateLabel = state => ({ thinking: 'Running', tool: 'Running', running: 'Running', awaiting_approval: 'Waiting', waiting: 'Waiting', idle: 'Idle', error: 'Error', ended: 'Ended', waiting_for_history: 'Starting' }[state] || 'Unknown');
 // Shared presentation only. Rust supplies totals, pricing, and chart proportions.
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
