@@ -7,6 +7,18 @@
 - Let the quota-triggered context relay hand off to Antigravity, not just Claude Code and Codex.
 - Scope 1.0 to Claude Code, Codex and Antigravity: remove the Gemini CLI adapter and every Gemini CLI launch, resume, limits and model-catalog path, and remove the Teams tier and its feature toggle. Existing rows from removed agents stay stored and show as unsupported. Antigravity keeps using Gemini models.
 
+## 1.0.4 — 2026-11-16
+
+- Stop the console window that flashed on every Claude Code hook and status-line refresh on Windows: a new GUI-subsystem `gnomcode-hook.exe` launches the engine with `CREATE_NO_WINDOW`, forwards the exit code and fails open. `gnomcode integrate claude` writes it when present and still removes cleanly.
+- Lock the console shell to the viewport at every width. Below 768px the document itself scrolled behind the fixed tab bar, so a shrunk desktop window showed blank content, navigation floating mid-window and a second scrollbar.
+- Keep a desktop-app or IDE session (Antigravity 2.0, Claude desktop app, Codex desktop app) read-only when Gnomcode does not host it: a stale launch row no longer makes it resumable, promptable or queueable, and the console hides the composer, queued messages and `Resume conversation`.
+- Bound the left rail to the viewport so `Collapse navigation` is never clipped at short heights or 125/150% display scaling, restore the 1px dividers between the rail, `Conversations` and the work pane, keep `+ New` on one line, and hide the dead `Sign out` control in signed-out rails.
+- Replace browser-default disclosure triangles and native dropdown chrome with one chevron and one `select` appearance across the console, in both themes.
+- Usage: the activity grid follows the selected reporting period, the grid and its period note read as one card, and period totals replace the day-only tiles. Home still speaks for today. The duplicated limits block is gone from the conversation Overview.
+- Onboarding no longer counts a stale quota row as an exact-limits reading, so the API limits source is still offered when readings have gone cold.
+- Conversation list: subagent rows sit inline under their parent instead of as tall blocks, with tighter filter pills, rows and footer.
+- Web console Workspace matches the desktop app: the same conversation sidebar (`+ New`, search, All/Active/Pinned, pinnable rows, pager), tools and automation in an Overview drawer, and the same rail widths, conversation column and pane dividers. Pairing and reconnect are unchanged.
+
 ## 1.0.3 — 2026-11-16
 
 - Reject `Continue here` for non-CLI external sessions (e.g., Antigravity 2.0 IDE) in Rust (`continue_here::plan`) and expose `can_continue_here` so unresumable external sessions stay cleanly read-only with a `New conversation` action instead of silently failing.

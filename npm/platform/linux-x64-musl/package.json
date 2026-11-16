@@ -1,6 +1,6 @@
 {
   "name": "@gnomcode/cli-linux-x64-musl",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "license": "Apache-2.0",
   "os": [
     "linux"
