@@ -304,6 +304,18 @@ fn protocol_step(inputs: &Inputs<'_>) -> Step {
     }
 }
 
+/// A stale reading (an old status line, say) must not mark limits as set up: the person would
+/// never be offered the API source that keeps Claude limits fresh from the desktop app.
+const CLAUDE_READING_FRESH: chrono::Duration = chrono::Duration::hours(6);
+
+fn fresh_claude_reading(
+    rows: &[gnomcode_core::QuotaSnapshot],
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    rows.iter()
+        .any(|r| r.provider == "claude-code" && now - r.observed_at <= CLAUDE_READING_FRESH)
+}
+
 fn limits_step(inputs: &Inputs<'_>) -> Step {
     let consent = inputs.gnomcode_home.join("vendor-limits.json");
     let enabled = crate::vendor_limits::enabled_in(&consent, "claude")
@@ -560,7 +572,7 @@ pub async fn status(
         let reading = guard
             .get_latest_quota_snapshots()
             .ok()
-            .is_some_and(|rows| rows.iter().any(|r| r.provider == "claude-code"));
+            .is_some_and(|rows| fresh_claude_reading(&rows, chrono::Utc::now()));
         (first, reading)
     };
     Some(evaluate(&Inputs {
@@ -665,6 +677,23 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         assert!(!json.contains("SECRET"));
         assert_eq!(state(&s, "limits"), StepState::Done);
+    }
+
+    #[test]
+    fn stale_claude_reading_does_not_count_as_limits_set_up() {
+        let now = chrono::Utc::now();
+        let snap = |age_hours| gnomcode_core::QuotaSnapshot {
+            provider: "claude-code".into(),
+            limit_id: "five_hour".into(),
+            window: gnomcode_core::QuotaWindow::FiveHour,
+            used_pct: 0.0,
+            resets_at: None,
+            plan: None,
+            basis: gnomcode_core::TrustLevel::Exact,
+            observed_at: now - chrono::Duration::hours(age_hours),
+        };
+        assert!(!fresh_claude_reading(&[snap(16)], now));
+        assert!(fresh_claude_reading(&[snap(1)], now));
     }
 
     #[test]

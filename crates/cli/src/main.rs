@@ -605,6 +605,18 @@ fn cmd_statusline() {
     println!("{}", line.join(" · "));
 }
 
+/// On Windows, hooks and the status line run through the windowless `gnomcode-hook.exe` beside
+/// the engine when it is installed, so GUI agents never flash a console window; elsewhere the
+/// engine runs them itself.
+fn hook_launcher(exe: &std::path::Path) -> std::path::PathBuf {
+    let shim = exe.with_file_name("gnomcode-hook.exe");
+    if cfg!(windows) && shim.is_file() {
+        shim
+    } else {
+        exe.to_path_buf()
+    }
+}
+
 /// Gnomcode owns the status line only when it installed it.
 fn is_gnomcode_status_line(settings: &serde_json::Value) -> bool {
     settings
@@ -637,7 +649,9 @@ fn cmd_integrate(agent: &str, remove: bool, approvals: bool) -> Result<()> {
     // Integrating a WSL distro from Windows writes the interop path the distro can run.
     let exe = match std::env::var("GNOMCODE_HOOK_EXE") {
         Ok(path) if !path.trim().is_empty() => path,
-        _ => std::env::current_exe()?.to_string_lossy().into_owned(),
+        _ => hook_launcher(&std::env::current_exe()?)
+            .to_string_lossy()
+            .into_owned(),
     };
     integrate::apply_hooks(&mut settings, &exe, remove, approvals)?;
     let status_line = if remove {
