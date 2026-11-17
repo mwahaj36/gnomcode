@@ -380,9 +380,6 @@ export function SessionTools({
               <button type="button" className="btn-control" onClick={() => void loadChanges()}>
                 Refresh
               </button>
-              <button type="button" className="btn-control" onClick={() => setPanel(null)}>
-                Close
-              </button>
             </div>
           </div>
           <div
@@ -400,9 +397,6 @@ export function SessionTools({
         <section className="sp-files-panel" aria-labelledby="chat-files-heading" onClick={delegate}>
           <div className="sp-changes-head">
             <h3 id="chat-files-heading">Workspace files</h3>
-            <button type="button" className="btn-control" onClick={() => setPanel(null)}>
-              Close
-            </button>
           </div>
           <form
             className="sp-file-form"
@@ -435,9 +429,6 @@ export function SessionTools({
             </span>
             <button type="button" className="btn-control" onClick={() => void loadArtifacts()}>
               Refresh
-            </button>
-            <button type="button" className="btn-control" onClick={() => setPanel(null)}>
-              Close
             </button>
           </header>
           <div className="sp-artifacts-layout">

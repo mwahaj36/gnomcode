@@ -237,7 +237,7 @@ pub(crate) async fn notice(
     }
 }
 
-fn provider(agent: &str) -> &str {
+pub(crate) fn provider(agent: &str) -> &str {
     match agent {
         "anthropic" | "claude" | "claude-code" => "claude-code",
         "openai" | "codex" => "codex",
@@ -751,6 +751,15 @@ fn automatic_switch_allowed(
 }
 
 async fn route_limited(db: &Arc<Mutex<Database>>) {
+    let normalize_quotas = |quotas: &mut Vec<gnomcode_core::QuotaSnapshot>| {
+        for q in quotas.iter_mut() {
+            let old = q.provider.clone();
+            q.provider = provider(&old).to_owned();
+            if q.limit_id == old || provider(&q.limit_id) == q.provider {
+                q.limit_id = q.provider.clone();
+            }
+        }
+    };
     let Ok((events, policy, mut quotas)) = store(db, |db| {
         Ok((
             db.automation_events()?,
@@ -762,13 +771,8 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
     else {
         return;
     };
-    for q in &mut quotas {
-        let old = q.provider.clone();
-        q.provider = provider(&old).to_owned();
-        if q.limit_id == old || provider(&q.limit_id) == q.provider {
-            q.limit_id = q.provider.clone();
-        }
-    }
+    normalize_quotas(&mut quotas);
+    let mut refreshed_limits = false;
     for (event, id, kind, timestamp) in events {
         if kind == "approval_wait" {
             continue;
@@ -840,6 +844,16 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
         else {
             continue;
         };
+        if !refreshed_limits {
+            refreshed_limits = true;
+            if crate::vendor_limits::refresh_if_stale(db, &quotas, chrono::Duration::minutes(2))
+                .await
+                && let Ok(mut latest) = store(db, Database::get_latest_quota_snapshots).await
+            {
+                normalize_quotas(&mut latest);
+                quotas = latest;
+            }
+        }
         let catalogs = crate::model_catalog::discover().await;
         let choices: Vec<_> = catalogs
             .iter()
@@ -847,7 +861,7 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
             .flat_map(|p| p.models.iter())
             .filter(|m| matches!(provider(&m.agent), "codex" | "claude-code" | "antigravity"))
             .collect();
-        let candidate_labels: Vec<(String, String)> = store(db, {
+        let candidate_labels: Vec<(String, String, String)> = store(db, {
             let pairs: Vec<(String, String, String)> = choices
                 .iter()
                 .map(|c| {
@@ -870,7 +884,7 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
                         } else {
                             None
                         };
-                        (agent, pool.unwrap_or(model))
+                        (agent, display_name, pool.unwrap_or(model))
                     })
                     .collect())
             }
@@ -879,9 +893,43 @@ async fn route_limited(db: &Arc<Mutex<Database>>) {
         .unwrap_or_else(|_| {
             choices
                 .iter()
-                .map(|c| (provider(&c.agent).to_owned(), c.model.clone()))
+                .map(|c| {
+                    (
+                        provider(&c.agent).to_owned(),
+                        c.display_name.clone(),
+                        c.model.clone(),
+                    )
+                })
                 .collect()
         });
+        let candidate_labels: Vec<(String, String)> = candidate_labels
+            .into_iter()
+            .map(|(agent, display_name, label)| {
+                let resolved = if agent == "antigravity"
+                    && !quotas.iter().any(|q| {
+                        q.provider == "antigravity"
+                            && (q.limit_id == label || q.limit_id == "antigravity")
+                    }) {
+                    quotas
+                        .iter()
+                        .find(|q| {
+                            q.provider == "antigravity"
+                                && (gnomcode_core::quota::model_matches_pool_name(
+                                    &display_name,
+                                    &q.limit_id,
+                                ) || gnomcode_core::quota::model_matches_pool_name(
+                                    &label,
+                                    &q.limit_id,
+                                ))
+                        })
+                        .map(|q| q.limit_id.clone())
+                        .unwrap_or(label)
+                } else {
+                    label
+                };
+                (agent, resolved)
+            })
+            .collect();
         let candidates: Vec<_> = candidate_labels
             .iter()
             .map(|(agent, label)| (agent.as_str(), label.as_str()))

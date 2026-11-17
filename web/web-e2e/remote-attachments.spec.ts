@@ -85,6 +85,7 @@ test('Remote attachment exceeds one relay frame, waits for acknowledgement, and 
   await send.click();
   await expect.poll(() => prompt?.text).toContain('.gnomcode/attachments/notes.txt');
   expect(frames.length).toBeGreaterThan(10);
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
   await page.getByRole('button', { name: 'Agent terminal', exact: true }).click();
   const terminal = page.getByRole('region', { name: 'Agent terminal', exact: true });
   await expect(terminal.locator('.xterm')).toBeVisible();
@@ -98,7 +99,7 @@ test('Remote attachment exceeds one relay frame, waits for acknowledgement, and 
   await expect(terminal.locator('.xterm-screen')).toContainText('history line 0');
   await page.screenshot({path:info.outputPath('terminal.png')});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
-  await terminal.getByRole('button',{name:'Close terminal',exact:true}).click();
+  await page.getByRole('button', { name: 'Close terminal' }).click();
   await expect(page.getByRole('alert').filter({hasText:'Limit reached'})).toContainText('Resets in 2 hours');
   await page.getByRole('button',{name:'Overview',exact:true}).click();
   await page.getByText('Notification preferences',{exact:true}).click();

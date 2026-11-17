@@ -459,6 +459,30 @@ pub fn spawn(db: Arc<Mutex<Database>>) -> tokio::task::JoinHandle<()> {
     })
 }
 
+/// Refreshes any opted-in provider whose latest stored quota is missing or older than `max_age`.
+pub(crate) async fn refresh_if_stale(
+    db: &Arc<Mutex<Database>>,
+    quotas: &[QuotaSnapshot],
+    max_age: chrono::Duration,
+) -> bool {
+    let now = chrono::Utc::now();
+    let mut refreshed = false;
+    for provider in PROVIDERS {
+        if !enabled(provider) {
+            continue;
+        }
+        let fresh = quotas.iter().any(|q| {
+            crate::automation::provider(&q.provider) == crate::automation::provider(provider)
+                && now - q.observed_at <= max_age
+        });
+        if !fresh {
+            record_outcome(db, provider, check(provider).await).await;
+            refreshed = true;
+        }
+    }
+    refreshed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

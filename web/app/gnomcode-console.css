@@ -1158,10 +1158,10 @@ details[open] > summary .sp-chevron { transform: rotate(180deg); }
 .sp-provider-card--compact .sp-provider-body { gap: var(--sp-3); padding-bottom: var(--sp-4); }
 @container (max-width: 400px) { .sp-provider-card .sp-strip { display: none; } .sp-provider-card > summary { padding-inline: var(--sp-4); } .sp-provider-body { padding-inline: var(--sp-4); } }
 
-.sp-copy { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; min-height: 44px; padding: 0 var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-control-radius); background: var(--sp-surface-2); color: var(--sp-text); cursor: pointer; font: inherit; }
+.sp-copy { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--sp-border); border-radius: var(--sp-control-radius); background: var(--sp-surface-2); color: var(--sp-text); cursor: pointer; font: inherit; }
 .sp-copy:hover { border-color: var(--sp-border-strong); }
 .sp-copy:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: 2px; }
-.sp-copy code { min-width: 0; font-family: var(--sp-font-mono); font-size: var(--sp-fs-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-copy code { min-width: 0; font-family: var(--sp-font-mono); font-size: var(--sp-fs-meta); white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .sp-copy span { flex: none; font-size: var(--sp-fs-meta); color: var(--sp-text-3); }
 
 /* meter rows */
@@ -2630,21 +2630,21 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 /* Workspace panels are a docked pane, not an overlay: the conversation reflows beside them and
    the edge is draggable, matching the desktop app's inspector. */
 @media(min-width:768px){
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]{
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]{
   position:fixed;top:var(--remote-viewport-top,0px);bottom:0;right:0;left:auto;
   width:clamp(360px,var(--inspector-w,560px),72vw);max-width:none;max-height:none;height:auto;
   margin:0;padding:0;border:0;border-left:1px solid var(--sp-border);border-radius:0;
   background:var(--sp-surface);display:flex;flex-direction:column;z-index:30;overflow:hidden
  }
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>header{
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]>header{
   flex:none;padding:12px 16px;margin:0;border-bottom:1px solid var(--sp-border)
  }
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>:not(header):not(.sp-pane-resizer):not(.sp-file-form){
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]>:not(header):not(.sp-pane-resizer):not(.sp-file-form){
   flex:1 1 auto;min-height:0;overflow:auto;padding:12px 16px
  }
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]>.sp-pane-resizer{left:-5px;right:auto}
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]>.sp-pane-resizer{left:-5px;right:auto}
  /* The conversation gives up the pane's width instead of being covered by it. */
- .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]) .remote-workspace{
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]) .remote-workspace{
   padding-right:clamp(360px,var(--inspector-w,560px),72vw)
  }
  /* Both panes are draggable, as in the app. */
@@ -2654,10 +2654,13 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 }
 @media(max-width:767px){
  /* On a phone the panel is a full-height sheet; there is no room to dock it. */
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]{
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]{
   position:fixed;left:0;right:0;top:auto;width:100%;max-width:none;margin:0;
   bottom:calc(var(--rail-h,56px) + env(safe-area-inset-bottom));border-radius:16px 16px 0 0;
   max-height:min(85dvh,var(--remote-viewport-height,100dvh));z-index:50
+ }
+ .sp-remote dialog.sp-terminal-sheet[open]{
+  display:flex;flex-direction:column;height:min(85dvh,calc(var(--remote-viewport-height,100dvh) - 16px));padding:16px;overflow:hidden
  }
  .sp-remote.is-embedded dialog[open]>.sp-pane-resizer{display:none}
 }
@@ -2698,9 +2701,9 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
   grid-column:1
  }
  /* The docked panel takes room from the chat, not from the whole shell. */
- .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]) .remote-workspace{padding-right:0}
- .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting)>.remote-heading,
- .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting) .remote-conversation{
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]) .remote-workspace{padding-right:0}
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]):is(.is-paired,.is-reconnecting)>.remote-heading,
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]):is(.is-paired,.is-reconnecting) .remote-conversation{
   padding-right:clamp(360px,var(--inspector-w,560px),72vw)
  }
 }
@@ -2764,9 +2767,9 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 .sp-remote .remote-session-sidebar .ide-sidebar{min-width:0;overflow-x:hidden}
 .sp-remote .remote-session-sidebar .remote-session-list{min-width:0}
 @media(min-width:768px) and (max-width:1279px){
- .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting)>.remote-heading{padding-right:24px}
- .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]):is(.is-paired,.is-reconnecting) .remote-conversation{padding-right:0}
- .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet)[open]{width:min(var(--inspector-w,560px),calc(100vw - 72px));box-shadow:var(--sp-shadow-popover)}
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]):is(.is-paired,.is-reconnecting)>.remote-heading{padding-right:24px}
+ .sp-remote.is-embedded:has(dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]):is(.is-paired,.is-reconnecting) .remote-conversation{padding-right:0}
+ .sp-remote.is-embedded dialog:is(.sp-files-sheet,.sp-changes-sheet,.sp-artifacts-sheet,.sp-terminal-sheet)[open]{width:min(var(--inspector-w,560px),calc(100vw - 72px));box-shadow:var(--sp-shadow-popover)}
 }
 .sp-remote .remote-sheet nav.sp-file-tree{display:block}
 .sp-remote .sp-file-tree .sp-file-tree-row{display:flex;gap:8px;min-height:36px;padding-block:6px;padding-inline-end:8px;margin:0;border:0;background:transparent;font:400 var(--sp-fs-control)/1.4 var(--sp-font-sans);border-radius:var(--sp-control-radius)}
@@ -2786,17 +2789,21 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 .sp-dev-actions{flex-wrap:wrap}
 /* Phone chrome has one title row and one row of reachable controls. */
 @media(max-width:767px){
- .sp-remote.is-embedded .remote-heading{display:grid;grid-template-columns:44px auto minmax(0,1fr) repeat(3,44px);gap:4px;padding:8px 12px!important;align-items:center}
- .sp-remote.is-embedded .remote-heading>div{display:contents}
- .sp-remote.is-embedded .remote-heading>div>:is(h1,h2){grid-column:1 / -1;grid-row:1;margin:0;max-width:100%;font-size:15px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- .sp-remote.is-embedded .remote-heading .remote-sidebar-toggle{grid-column:1;grid-row:2}
- .sp-remote.is-embedded .remote-heading .sp-conversation-live{grid-column:2;grid-row:2;max-width:52px;overflow:hidden;margin:0;font-size:11px}
- .sp-remote.is-embedded .remote-heading .sp-conversation-limits{grid-column:3;grid-row:2;min-width:0;max-width:100%;min-height:44px;padding:0;margin:0;font-size:11px}
- .sp-remote.is-embedded .remote-heading .sp-overview-toggle{grid-column:4;grid-row:2}
- .sp-remote.is-embedded .remote-heading .remote-notif-button{grid-column:5;grid-row:2}
- .sp-remote.is-embedded .remote-heading .remote-desktop-button{grid-column:6;grid-row:2}
- .sp-remote.is-embedded .remote-heading>:is(button,a){width:44px;min-width:44px;margin:0;padding:0;justify-content:center}
- .sp-remote .remote-composer .remote-model-button{flex:1;min-width:0;max-width:calc(100% - 140px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+ .sp-remote:is(.is-paired,.is-reconnecting){z-index:42}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading{display:grid;grid-template-columns:44px auto minmax(0,1fr) repeat(3,44px);gap:4px;padding:8px 12px!important;align-items:center}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading>div{display:contents}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading>div>:is(h1,h2){grid-column:1 / -1;grid-row:1;margin:0;max-width:100%;font-size:15px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading .remote-sidebar-toggle{grid-column:1;grid-row:2}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading .sp-conversation-live{grid-column:2;grid-row:2;white-space:nowrap;margin:0;font-size:11px}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading .sp-conversation-limits{grid-column:3;grid-row:2;min-width:0;max-width:100%;min-height:44px;padding:0;margin:0;font-size:11px;justify-content:flex-start}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading .sp-overview-toggle{grid-column:4;grid-row:2}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading .remote-notif-button{grid-column:5;grid-row:2}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading .remote-desktop-button{grid-column:6;grid-row:2}
+ .sp-remote:is(.is-paired,.is-reconnecting) .remote-heading>:is(button,a){width:44px;min-width:44px;margin:0;padding:0;justify-content:center}
+ .sp-remote .remote-composer-toolbar{flex-wrap:wrap;gap:8px}
+ .sp-remote .remote-composer .remote-model-button{flex:1 1 120px;min-width:0;max-width:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+ .sp-remote .remote-composer-toolbar>button:not(.remote-model-button){flex:0 0 auto;min-height:40px}
+ .sp-remote .remote-overview{z-index:35;max-height:calc(100dvh - 140px)}
 }
 
 .sp-web-usage-overview{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-6);margin-bottom:var(--sp-6)}
@@ -2844,7 +2851,9 @@ body.sp-native-console .sp-console-workspace{height:100dvh;max-height:100dvh;min
 .sp-native-console .sp-chat-card .sp-chat-copy,.sp-remote .sp-remote-chat .sp-chat-card .sp-chat-copy,.sp-remote .sp-remote-chat .sp-chat-card.sp-chat-user .sp-chat-copy:is(:hover,:focus-visible,[data-copy-state]){color:var(--sp-text-2);background:transparent;border-color:transparent}
 .sp-native-console .sp-chat-card .sp-chat-copy svg,.sp-remote .sp-remote-chat .sp-chat-card .sp-chat-copy svg{stroke:currentColor;fill:none;width:16px;height:16px;opacity:1}
 
-/* The terminal is a full conversation view; its own scrollback owns history scrolling. */
-.sp-remote .remote-conversation.has-agent-terminal>.remote-agent-terminal{display:flex;flex-direction:column;flex:1 1 0;min-height:0;max-height:none;overflow:hidden}
-.sp-remote .remote-conversation.has-agent-terminal>:not(.remote-agent-terminal):not(.sp-limit-reached){display:none!important}
-.remote-agent-terminal>header,.remote-agent-terminal>.sp-field-note,.remote-agent-terminal>.remote-terminal-keys{flex:none}
+/* Right-pane Agent terminal sheet fills the available height cleanly on desktop and mobile. */
+.sp-terminal-sheet[open]{display:flex;flex-direction:column}
+.sp-terminal-sheet .sp-terminal-sheet-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.sp-terminal-sheet .sp-field-note{margin:0;flex:none}
+.sp-terminal-sheet .remote-terminal-keys{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:none;margin-top:4px}
+.sp-terminal-sheet .remote-terminal-keys button{min-height:36px;padding:6px 9px;font-size:12px}
