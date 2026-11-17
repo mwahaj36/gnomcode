@@ -77,14 +77,12 @@ const today = { total_tokens: 412000, total_cost_usd: 5.98, cost_basis: "estimat
 const week = { total_tokens: 2_960_000, total_cost_usd: 37.8, total_cache_savings_usd: 21.4, cost_basis: "estimated", unpriced_turns: 0, range_label: "Last 7 days" };
 const makeStatic = (html: string) =>
   html
-    .replaceAll("<details ", "<div ")
-    .replaceAll("<details>", "<div>")
+    .replaceAll("<details ", '<div data-tour-collapsed="1" ')
+    .replaceAll("<details>", '<div data-tour-collapsed="1">')
     .replaceAll("</details>", "</div>")
     .replaceAll("<summary ", "<div ")
     .replaceAll("<summary>", "<div>")
     .replaceAll("</summary>", "</div>");
-const openAll = (html: string) =>
-  makeStatic(html.replaceAll("<details ", "<details open "));
 
 function Html({ html, className }: { html: string; className?: string }) {
   return <div className={className} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: html }} />;
@@ -134,12 +132,12 @@ const TourContent = memo(function TourContent({ kind }: { kind: string }) {
 
 function TourView({ kind }: { kind: string }) {
   if (kind === "overview") return <TourHome sessions={false} />;
-  if (kind === "sessions") return <Html html={openAll(renderHomeSessions(sampleSessions()))} />;
+  if (kind === "sessions") return <Html html={makeStatic(renderHomeSessions(sampleSessions()))} />;
   if (kind === "usage") return <div className="sp-home-react">
     <Html html={renderPeriodTiles(week)} />
     <Html html={renderHeatmap(sampleHeatmap)} />
   </div>;
-  return <Html html={openAll(renderProviderCards(sampleProviders))} />;
+  return <Html html={makeStatic(renderProviderCards(sampleProviders))} />;
 }
 
 

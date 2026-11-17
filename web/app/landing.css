@@ -280,5 +280,8 @@
 .sp-tour-stage .sp-heatmap-scroll{width:100%;overflow:hidden}
 .sp-tour-stage .sp-heatmap-body{min-width:0}
 .sp-tour-stage .sp-heatmap-days{display:none}
-.sp-tour-stage .sp-heatmap-grid,.sp-tour-stage .sp-heatmap-months{width:100%;grid-template-columns:repeat(var(--cols,53),minmax(0,1fr));column-gap:2px}
+.sp-tour-stage .sp-heatmap-grid,.sp-tour-stage .sp-heatmap-months{width:100%;min-width:0;grid-template-columns:repeat(var(--cols,53),minmax(0,1fr));column-gap:2px}
+.sp-tour-stage .sp-heatmap-cell{width:100%;height:auto;aspect-ratio:1}
 .sp-tour-stage .sp-heatmap-months{margin-left:0}
+.sp-tour-stage .sp-heat-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.sp-tour [data-tour-collapsed="1"]>:not(:first-child){display:none}
