@@ -113,6 +113,10 @@ impl IngestWatcher {
         base_interval: Duration,
         max_idle_interval: Duration,
     ) -> Self {
+        let roots: Vec<(PathBuf, RecursiveMode)> = roots
+            .into_iter()
+            .map(|(p, mode)| (gnomcode_platform::canonical_watch_path(&p), mode))
+            .collect();
         let dirty = Arc::new(AtomicBool::new(true));
         let roots_changed = Arc::new(AtomicBool::new(false));
         let wakeup = Arc::new(Notify::new());

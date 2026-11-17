@@ -20,7 +20,49 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  changes:
+    name: detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      web: ${{ steps.filter.outputs.web }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      npm: ${{ steps.filter.outputs.npm }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'deny.toml'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'web/**'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            e2e:
+              - 'crates/**'
+              - 'web/**'
+              - 'fixtures/**'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+            desktop:
+              - 'apps/desktop/**'
+              - '.github/workflows/ci.yml'
+            npm:
+              - 'npm/**'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+
   fmt:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +73,8 @@ jobs:
       - run: cargo fmt --all --check
 
   check:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
     name: clippy + test (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -48,6 +92,8 @@ jobs:
       - run: cargo test --workspace
 
   embedded-key:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
     name: embedded update key (RFC 8032 test key)
     runs-on: ubuntu-latest
     steps:
@@ -63,6 +109,8 @@ jobs:
           GNOMCODE_UPDATE_PUBLIC_KEY=0000000000000000000000000000000000000000000000000000000000000000             "$exe" embedded_key_requires_signature_despite_runtime_override --ignored --nocapture
 
   msrv:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
     name: MSRV check
     runs-on: ubuntu-latest
     steps:
@@ -73,6 +121,8 @@ jobs:
       - run: cargo +1.88 check --workspace
 
   deny:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
     name: cargo-deny
     runs-on: ubuntu-latest
     steps:
@@ -83,6 +133,8 @@ jobs:
           command-arguments: advisories bans sources
 
   handoff-evals:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true'
     # Report only: a low score never fails the workflow (ADR 0055).
     name: handoff evals (report)
     runs-on: ubuntu-latest
@@ -147,6 +199,8 @@ jobs:
           if-no-files-found: error
 
   web:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true'
     name: web lint, typecheck and tests
     runs-on: ubuntu-latest
     defaults:
@@ -165,6 +219,8 @@ jobs:
       - run: npm test
 
   console-e2e:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.e2e == 'true'
     name: console e2e (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -199,6 +255,8 @@ jobs:
           if-no-files-found: ignore
 
   desktop:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.desktop == 'true'
     name: desktop typecheck and tests
     runs-on: ubuntu-latest
     defaults:
@@ -222,6 +280,8 @@ jobs:
       - run: xvfb-run -a npm test
 
   npm-shim:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.npm == 'true'
     name: npm shim (${{ matrix.os }})
     strategy:
       fail-fast: false

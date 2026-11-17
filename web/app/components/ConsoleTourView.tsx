@@ -75,7 +75,16 @@ const sampleSessions = () => [
 
 const today = { total_tokens: 412000, total_cost_usd: 5.98, cost_basis: "estimated", unpriced_turns: 0 };
 const week = { total_tokens: 2_960_000, total_cost_usd: 37.8, total_cache_savings_usd: 21.4, cost_basis: "estimated", unpriced_turns: 0, range_label: "Last 7 days" };
-const openFirst = (html: string, tag: string) => html.replace(`<details class="${tag}"`, `<details open class="${tag}"`);
+const makeStatic = (html: string) =>
+  html
+    .replaceAll("<details ", "<div ")
+    .replaceAll("<details>", "<div>")
+    .replaceAll("</details>", "</div>")
+    .replaceAll("<summary ", "<div ")
+    .replaceAll("<summary>", "<div>")
+    .replaceAll("</summary>", "</div>");
+const openAll = (html: string) =>
+  makeStatic(html.replaceAll("<details ", "<details open "));
 
 function Html({ html, className }: { html: string; className?: string }) {
   return <div className={className} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: html }} />;
@@ -84,7 +93,7 @@ function Html({ html, className }: { html: string; className?: string }) {
 /** The console Home: full-width Limits, then Activity (with the year highlights) and Sessions (2fr) beside Today (1fr). */
 export function TourHome({ compact = false, sessions = true }: { compact?: boolean; sessions?: boolean }) {
   return <div className="sp-home-react sp-tour-home">
-    <Html html={renderProviderCards(sampleProviders, { cost: false })} />
+    <Html html={makeStatic(renderProviderCards(sampleProviders, { cost: false }))} />
     <div className="sp-home-grid">
       {!compact && <Html className="sp-tour-activity" html={renderHeatmap(sampleHeatmap, { weeks: 53, stats: true, legend: true, months: true })} />}
       <Html className="sp-tour-today" html={renderTodayTiles({ report: today, activeCount: 2 })} />
@@ -125,12 +134,12 @@ const TourContent = memo(function TourContent({ kind }: { kind: string }) {
 
 function TourView({ kind }: { kind: string }) {
   if (kind === "overview") return <TourHome sessions={false} />;
-  if (kind === "sessions") return <Html html={openFirst(renderHomeSessions(sampleSessions()), "sp-subagents")} />;
+  if (kind === "sessions") return <Html html={openAll(renderHomeSessions(sampleSessions()))} />;
   if (kind === "usage") return <div className="sp-home-react">
     <Html html={renderPeriodTiles(week)} />
     <Html html={renderHeatmap(sampleHeatmap)} />
   </div>;
-  return <Html html={openFirst(renderProviderCards(sampleProviders), "sp-card sp-provider-card")} />;
+  return <Html html={openAll(renderProviderCards(sampleProviders))} />;
 }
 
 
