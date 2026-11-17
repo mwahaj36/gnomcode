@@ -80,7 +80,7 @@ for (const [name, viewport] of [['desktop', { width: 1280, height: 900 }], ['pho
         route.fulfill({ json: [{ event_id: 'a1', turn_index: 1, role: 'user', content: 'Look\n[Attachment: shot.png]', created_at: '2026-11-14T10:00:00Z' }] }),
       );
       await openFiles(page, openConsole);
-      await page.locator('.sp-files-panel').getByRole('button', { name: 'Close' }).click();
+      await page.getByRole('button', { name: 'Close workspace inspector' }).click();
       const thumb = page.locator('.sp-chat-thumb[data-attachment-path="shot.png"] img');
       await expect(thumb).toHaveAttribute('src', PNG);
       await thumb.click();
