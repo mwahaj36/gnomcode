@@ -1,8 +1,9 @@
 name: CI
 
 on:
-  # Manual trigger only while conserving private-repo GitHub Actions minutes.
-  # All commits and PRs are verified locally via `.agents/skills/rust-quality-gate/scripts/check.ps1`.
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
       package:
