@@ -34,4 +34,4 @@ Supporting differences: a trust label (`exact`, `estimated`, `api`, `unknown`) o
 
 ## Where it is weaker
 
-Gnomcode has less managed task isolation and no integrated code-review workflow compared with task-runner tools like Vibe Kanban. Its remote and handoff paths are newer and have had less real-world use than the single-purpose incumbents. Native macOS/Linux packaging is not yet release-tested.
+Gnomcode has less managed task isolation and no integrated code-review workflow compared with task-runner tools like Vibe Kanban. Its remote and handoff paths are newer and have had less real-world use than the single-purpose incumbents. Native macOS and Linux packages are built and smoke-tested in CI, though physical desktop UI verification on both OSes remains limited.

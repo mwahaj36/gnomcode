@@ -34,29 +34,27 @@ Last updated: 2026-11-13 (CI packaging evidence from run `43464307883`).
 ## macOS (arm64 and x64)
 
 ### Verified
-- Release daemon binary compilation and tarball packaging (`native archive (aarch64-apple-darwin)` and `native archive (x86_64-apple-darwin)` in CI run `43464307883`).
-- Desktop Electron app `.zip` packaging (`desktop package (macos-15 / arm64)` and `desktop package (macos-15-intel / x64)` in CI run `43464307883`).
+- Release daemon binary compilation and tarball packaging (`native archive (aarch64-apple-darwin)` and `native archive (x86_64-apple-darwin)` in CI runs `43464307883` and `44131280761`).
+- Desktop Electron app `.zip` packaging and CI `packaged smoke` (`macos-15` / arm64 and `macos-15-intel` / x64 in CI run `44131280761`).
 - Rust workspace compilation, clippy, and unit tests on `macos-latest` (`clippy + test (macos-latest)` in CI run `43464307883`).
 
 ### Known gaps
 - Code signing and Apple notarization are not configured; Gatekeeper will block unnotarized `.app` downloads on end-user Macs.
 - Packaged `.app` launch, tray menu rendering, native notifications, `osascript` window focus, and `caffeinate -i -w` hardware sleep inhibition are unverified on a live macOS machine.
 - Antigravity IDE 1.x and 2.0 app data/config directories on macOS (`~/Library/Application Support/Antigravity` vs `~/.gemini`) are unverified on-device (`docs/SPEC.md` §3.5).
-- Unix-specific tests added in PR #256 (`agy_gemini_bin_install_works_without_path_entry`, `unix_helper_command_uses_expected_backend`) and the CI `package-smoke` job (PR #257) have not yet executed on macOS runners due to a GitHub Actions account billing/spending limit hit on run `43475756520`.
 
 ## Linux (x64, `ubuntu-22.04` / `ubuntu-latest`)
 
 ### Verified
-- Release daemon binary compilation and tarball packaging for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu` in CI run `43464307883`.
-- Desktop Electron app `.deb` and `.zip` packaging on `ubuntu-22.04` (`desktop package (ubuntu-22.04 / x64)` in CI run `43464307883`).
-- Rust workspace compilation, clippy, and unit tests on `ubuntu-latest`, `apps/desktop` Electron tests under `xvfb-run`, and Playwright local console E2E (`console e2e (ubuntu-latest)`) in CI run `43464307883`.
+- Release daemon binary compilation and tarball packaging for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu` in CI runs `43464307883` and `44131280761`.
+- Desktop Electron app `.deb` and `.zip` packaging plus CI `packaged smoke` on `ubuntu-22.04` (`desktop package (ubuntu-22.04 / x64)` in CI run `44131280761`).
+- Rust workspace compilation, clippy, and unit tests on `ubuntu-latest`, `apps/desktop` Electron tests under `xvfb-run`, and Playwright local console E2E (`console e2e (ubuntu-latest)`).
 
 ### Known gaps
 - `.deb` installation/uninstallation and packaged Electron launch on a live Linux desktop (X11 and Wayland) are unverified.
 - `systemd-inhibit` sleep inhibition, `wmctrl` window focus (not supported on pure Wayland compositors), desktop notifications, and system tray behavior across GNOME/KDE/Wayland are unverified on live Linux desktops.
 - Antigravity IDE 1.x and 2.0 app data/config directories on Linux (`~/.config/Antigravity` vs `~/.gemini`) are unverified on-device (`docs/SPEC.md` §3.5).
 - Linux `arm64` desktop Electron packaging and `linux-x64-musl` builds are not in the CI packaging matrix.
-- Unix-specific tests added in PR #256 and the CI `package-smoke` job (PR #257) have not yet executed on Linux runners due to the GitHub Actions account billing/spending limit hit on run `43475756520`.
 
 ## WSL on Windows (ADR 0060)
 

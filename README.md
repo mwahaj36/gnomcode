@@ -50,7 +50,7 @@ What actually works depends on the installed CLI version, your authentication an
 | Platform | Status |
 | :--- | :--- |
 | Windows x64 | Installer and npm |
-| macOS, Linux | npm or build from source; native packaging not yet release-tested |
+| macOS, Linux | Tarball archives, desktop packages, and npm; CI smoke-tested, unnotarized on macOS |
 
 ## What it does
 
