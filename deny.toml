@@ -8,6 +8,8 @@ ignore = [
     # RUSTSEC-2026-0459: upstream C SQLite WAL page-cache advisory bundled in rusqlite 0.40.2 / libsqlite3-sys 0.38.2.
     # Local-only database files accessed through validated loopback daemon paths.
     "RUSTSEC-2026-0459",
+    # RUSTSEC-2026-0543: chrono marked unmaintained; workspace-wide migration to jiff/time tracked separately.
+    "RUSTSEC-2026-0543",
 ]
 
 [licenses]

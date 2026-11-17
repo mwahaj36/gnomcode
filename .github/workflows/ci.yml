@@ -95,8 +95,8 @@ jobs:
         env:
           GNOMCODE_HOME: ${{ runner.temp }}/gnomcode-home
         run: |
-          cargo run -q -p gnomcode -- evals handoff --no-save | tee "$RUNNER_TEMP/handoff-evals.txt"
-          cargo run -q -p gnomcode -- evals handoff --no-save --json > "$RUNNER_TEMP/handoff-evals.json"
+          cargo run -q -p gnomcode --bin gnomcode -- evals handoff --no-save | tee "$RUNNER_TEMP/handoff-evals.txt"
+          cargo run -q -p gnomcode --bin gnomcode -- evals handoff --no-save --json > "$RUNNER_TEMP/handoff-evals.json"
           { echo '### Handoff quality evals (estimated, synthetic cases)'; echo '```'; cat "$RUNNER_TEMP/handoff-evals.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
