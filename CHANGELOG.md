@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7 - 2026-11-17
+
+- Block pasted/scheduled prompts and `/model` switches while a hosted PTY is sitting on an active rate-limit screen, preventing raw bracketed-paste sequences from leaking into Claude's limit option menu.
+- Refresh stale opted-in vendor limits before automatic failover and resolve Antigravity model pool names via `model_matches_pool_name` fallback.
+- Move Remote Agent terminal out of the chat composer into the right-pane inspector sheet (`Overview -> Agent terminal` / `Limit reached -> Open agent terminal`) on both desktop and mobile.
+- Polish desktop and mobile console layouts across all viewports (remove duplicate inspector Close buttons, fix mobile Remote header/composer/terminal-keys wrapping, wrap command snippets cleanly, make marketing tour tabs static).
+- Canonicalize macOS file-watcher paths and re-enable path-filtered CI triggers.
+
 ## 1.0.6 - 2026-11-17
 
 - Suppress repeated low-limit warnings through stale polls and restarts until recovery or reset.

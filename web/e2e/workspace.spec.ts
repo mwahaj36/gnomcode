@@ -36,7 +36,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     await panel.getByRole('button', { name: 'Open' }).click();
     await expect(panel.getByRole('alert')).toBeVisible();
     expect(escaped).toBe(false);
-    await panel.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'Close workspace inspector' }).click();
     await expect(panel).toHaveCount(0);
   });
 
