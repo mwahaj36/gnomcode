@@ -1254,6 +1254,25 @@ pub fn disk_free_bytes(path: &Path) -> Option<u64> {
     disk_free::available_bytes(existing)
 }
 
+/// Resolves symlinks on the existing prefix of a watched path so OS file-watcher events match.
+#[must_use]
+pub fn canonical_watch_path(path: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(existing) = path.ancestors().find(|candidate| candidate.exists())
+            && let Ok(canon) = std::fs::canonicalize(existing)
+            && let Ok(suffix) = path.strip_prefix(existing)
+        {
+            return if suffix.as_os_str().is_empty() {
+                canon
+            } else {
+                canon.join(suffix)
+            };
+        }
+    }
+    path.to_path_buf()
+}
+
 /// Opens an OS-held exclusive file lock, released when the returned file closes.
 ///
 /// # Errors
