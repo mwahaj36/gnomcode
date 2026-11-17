@@ -1076,6 +1076,31 @@ fn startup_needs_setup(agent: &str, bytes: &[u8]) -> bool {
     startup_needs_setup_from_rows(agent, &render_screen_rows(bytes), bytes.len())
 }
 
+fn limit_blocks_prompt(agent: &str, rows: &[String], has_limit_message: bool) -> bool {
+    if !has_limit_message {
+        return false;
+    }
+    let recent = screen_text_from_rows(rows);
+    let limit_pos = [
+        "individual quota reached",
+        "usage limit reached",
+        "you've hit your limit",
+        "rate limit exceeded",
+        "quota exceeded",
+        "rate_limit_exceeded",
+        "resource_exhausted",
+    ]
+    .iter()
+    .filter_map(|marker| recent.rfind(marker))
+    .max();
+    match (limit_pos, last_ready(agent, &recent)) {
+        (Some(at), Some(ready)) => ready < at,
+        (Some(_), None) => true,
+        (None, Some(_)) => false,
+        (None, None) => true,
+    }
+}
+
 async fn host_input_handler(
     headers: HeaderMap,
     State(state): State<Arc<HostState>>,
@@ -1094,6 +1119,7 @@ async fn host_input_handler(
     if body.is_empty() {
         return StatusCode::BAD_REQUEST;
     }
+
     if !state.protocol
         && matches!(
             state.agent.as_str(),
@@ -1103,6 +1129,7 @@ async fn host_input_handler(
         && state.scrollback.lock().map_or(true, |output| {
             let rows = output.screen_rows();
             startup_needs_setup_from_rows(&state.agent, &rows, output.len())
+                || limit_blocks_prompt(&state.agent, &rows, output.limit_message.is_some())
                 || (state.agent == "codex" && !codex_prompt_ready_with(&output.bytes(), &rows))
         })
     {
@@ -2842,6 +2869,35 @@ mod tests {
             "claude",
             &ready_rows,
             sb.len()
+        ));
+    }
+
+    #[test]
+    fn limit_screen_blocks_pasted_prompts_until_ready_returns() {
+        let mut sb = Scrollback::new(SCROLLBACK_BYTES);
+        sb.append(
+            concat!(
+                "\x1b[2J\x1b[1;1H? for shortcuts",
+                "\x1b[10;1HYou've hit your limit \u{b7} resets 11pm",
+                "\x1b[12;1H1. Stop and wait for limit to reset",
+                "\x1b[13;1H2. Switch to extra usage"
+            )
+            .as_bytes(),
+        );
+        let rows = sb.screen_rows();
+        assert!(sb.limit_message.is_some());
+        assert!(limit_blocks_prompt(
+            "claude",
+            &rows,
+            sb.limit_message.is_some()
+        ));
+
+        sb.append(b"\x1b[2J\x1b[1;1H> \x1b[2;1H? for shortcuts");
+        let ready_rows = sb.screen_rows();
+        assert!(!limit_blocks_prompt(
+            "claude",
+            &ready_rows,
+            sb.limit_message.is_some()
         ));
     }
 }
