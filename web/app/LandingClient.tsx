@@ -20,7 +20,6 @@ const tours = [
   { name: "Overview", title: "Everything happening now.", detail: "Home puts limits first, then a year of activity, today's totals and the sessions that need you.", kind: "overview" },
   { name: "Sessions", title: "Every run, in one place.", detail: "Sessions group by Needs you, Running and Recent, with subagents and WSL distros labelled.", kind: "sessions" },
   { name: "Usage", title: "Know where the tokens went.", detail: "Recorded tokens, estimated API-equivalent spend and cache savings, plus the activity grid.", kind: "usage" },
-  { name: "Limits", title: "See what is left.", detail: "Session and weekly windows per provider, with Low and Out states, reset times and the source of each reading.", kind: "limits" },
 ];
 const features = [
   ["Hit a limit. Keep the task moving.", "Switch supported agents with a compact briefing of objectives and changed files. Keep the original history and continue with another model. Browse workspace files, diffs and agent documents in the same console."],

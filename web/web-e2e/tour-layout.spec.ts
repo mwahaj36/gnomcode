@@ -5,7 +5,7 @@ for (const size of [{width:1440,height:900},{width:390,height:844},{width:844,he
   const tour=page.locator('.sp-tour');
   await tour.scrollIntoViewIfNeeded();
   const heights:number[]=[];
-  for(const name of ['Overview','Sessions','Usage','Limits']) {
+  for(const name of ['Overview','Sessions','Usage']) {
    await tour.getByRole('tab',{name,exact:true}).click();
    await expect.poll(async()=>{const box=await tour.boundingBox();return box!.y>=70 && box!.y+box!.height<=size.height+1;}).toBe(true);
    if(name==='Overview')await page.screenshot({path:info.outputPath('tour.png')});
