@@ -22,12 +22,14 @@ test('the Overview tour is the console Home: limits, then activity with year hig
 test('the Sessions tour shows status groups, subagents and a WSL badge', () => {
   const html=render('sessions');
   assert.match(html,/Needs you/);assert.match(html,/Running/);
-  assert.match(html,/<details open class="sp-subagents"/);
+  assert.match(html,/class="sp-subagents"/);
+  assert.doesNotMatch(html,/<details\b/);
   assert.match(html,/WSL: Ubuntu/);
 });
-test('the Limits tour expands one card and shows Low and Out states with trust levels', () => {
+test('the Limits tour renders static cards and shows Low and Out states with trust levels', () => {
   const html=render('limits');
-  assert.equal((html.match(/<details open class="sp-card sp-provider-card"/g)||[]).length,1);
+  assert.equal((html.match(/class="sp-card sp-provider-card"/g)||[]).length,3);
+  assert.doesNotMatch(html,/<details\b/);
   assert.match(html,/sp-chip--low/);assert.match(html,/1 pool out/);
   assert.match(html,/Provider measured/);assert.match(html,/Status line/);
 });

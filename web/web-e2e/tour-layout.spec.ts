@@ -11,15 +11,7 @@ for (const size of [{width:1440,height:900},{width:390,height:844},{width:844,he
    if(name==='Overview')await page.screenshot({path:info.outputPath('tour.png')});
    const panel=await tour.locator('.sp-tour-panel').boundingBox(); heights.push(panel!.height);
    expect((await tour.boundingBox())!.height).toBeLessThanOrEqual(size.height-80);
-   const detail=tour.locator('details').first();
-   if(await detail.count()) {
-    const wasOpen=await detail.getAttribute('open')!==null;
-    await detail.locator('summary').click();
-    await expect.poll(async()=>await detail.getAttribute('open')!==null).toBe(!wasOpen);
-    await page.waitForTimeout(250);
-    expect(await detail.getAttribute('open')!==null).toBe(!wasOpen);
-    expect((await tour.locator('.sp-tour-panel').boundingBox())!.height).toBeCloseTo(panel!.height,0);
-   }
+   expect(await tour.locator('details').count()).toBe(0);
   }
   expect(Math.max(...heights)-Math.min(...heights)).toBeLessThanOrEqual(1);
  });
