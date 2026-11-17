@@ -1193,6 +1193,7 @@ mod disk_free {
         ) -> i32;
     }
 
+    #[allow(clippy::useless_conversion, clippy::unnecessary_fallible_conversions)]
     pub(super) fn available_bytes(existing: &Path) -> Option<u64> {
         let wide: Vec<u16> = existing
             .as_os_str()
@@ -1222,6 +1223,7 @@ mod disk_free {
     use std::os::unix::ffi::OsStrExt as _;
     use std::path::Path;
 
+    #[allow(clippy::useless_conversion, clippy::unnecessary_fallible_conversions)]
     pub(super) fn available_bytes(existing: &Path) -> Option<u64> {
         let c_path = CString::new(existing.as_os_str().as_bytes()).ok()?;
         let mut stats = MaybeUninit::<libc::statvfs>::uninit();
