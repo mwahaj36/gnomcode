@@ -18,15 +18,24 @@ const platforms = [
     note: "Unsigned Windows installer. Review the release notes and SHA-256 checksums before installing.",
   },
   {
-    id: "macos", name: "macOS", availability: "NOT AVAILABLE YET", detail: "No build yet",
+    id: "macos", name: "macOS", availability: "RELEASE CANDIDATE", detail: "macOS · Apple Silicon & Intel",
     body: "Bring your agent conversations, recorded usage and model-switch workflow into one local workspace.",
-    actions: [] as DownloadAction[], command: null, note: "Read the installation guide for platform requirements and release channels.",
+    actions: [
+      {label: "Download macOS (Apple Silicon)", href: `/downloads/gnomcode-v${version}-darwin-aarch64.tar.gz`, detail: "macOS arm64 archive"},
+      {label: "Download macOS (Intel)", href: `/downloads/gnomcode-v${version}-darwin-x86_64.tar.gz`, detail: "macOS x86_64 archive"},
+    ] as DownloadAction[],
+    command: "curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash",
+    note: "Unsigned macOS archive verified in CI. Review the release notes and SHA-256 checksums before installing.",
   },
   {
-    id: "linux", name: "Linux", availability: "NOT AVAILABLE YET", detail: "No build yet",
+    id: "linux", name: "Linux", availability: "RELEASE CANDIDATE", detail: "Linux · x86_64 & arm64",
     body: "Use the standalone CLI and local console to orchestrate agents and inspect usage on your own machine.",
-    actions: [] as DownloadAction[], command: null,
-    note: "Read the installation guide for current release channels and verification steps.",
+    actions: [
+      {label: "Download Linux (x86_64)", href: `/downloads/gnomcode-v${version}-linux-x86_64.tar.gz`, detail: "Linux x86_64 archive"},
+      {label: "Download Linux (arm64)", href: `/downloads/gnomcode-v${version}-linux-aarch64.tar.gz`, detail: "Linux aarch64 archive"},
+    ] as DownloadAction[],
+    command: "curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash",
+    note: "Linux archive verified in CI; desktop .deb and .zip packages are attached on GitHub Releases.",
   },
 ] as const;
 
@@ -92,7 +101,7 @@ export function PlatformDownloads() {
             ))}
           </div>
         ) : <p className="sp-download-unavailable">Choose your installation path in the <a href="/docs/getting-started">getting started guide</a>.</p>}
-        <p className="sp-platform-note">{active.note} {active.id==='windows' && <a href={`/downloads/SHA256SUMS-v${version}.txt`}>SHA-256 checksums</a>}</p>
+        <p className="sp-platform-note">{active.note} <a href={`/downloads/SHA256SUMS-v${version}.txt`}>SHA-256 checksums</a></p>
       </article>
     </section>
   );

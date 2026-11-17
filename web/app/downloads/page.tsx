@@ -3,7 +3,7 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version} for Windows`, "Windows x64 release candidate for Claude Code, Codex and Antigravity. Check release notes and SHA-256 checksums before installing. macOS and Linux downloads are not available yet.");
+export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Windows x64, macOS (Apple Silicon & Intel) and Linux (x86_64 & arm64) release candidate for Claude Code, Codex and Antigravity. Check release notes and SHA-256 checksums before installing.");
 
 export default function DownloadsPage() {
   return (
@@ -11,7 +11,7 @@ export default function DownloadsPage() {
       <header className="sp-downloads-header">
         <div>
           <h1>Download gnomcode</h1>
-          <p>Launch and switch supported AI coding agents in one local workspace. This release candidate targets Windows x64; macOS and Linux downloads are not yet available.</p>
+          <p>Launch and switch supported AI coding agents in one local workspace. Release builds are available for Windows x64, macOS and Linux.</p>
         </div>
         <span className="sp-download-release">GNOMCODE · v{packageInfo.version}</span>
       </header>
