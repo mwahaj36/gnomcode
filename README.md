@@ -22,13 +22,6 @@ Launch official AI coding agent CLIs in one workspace, track usage and quota win
   <img src=".github/assets/console-overview.png" alt="Gnomcode console overview showing provider limits, activity heatmap, and daily totals" width="780">
 </p>
 
-<details>
-<summary>More screenshots: live sessions and subagent tree</summary>
-<p align="center">
-  <img src=".github/assets/console-sessions.png" alt="Gnomcode sessions grouped by Needs you, Running, and Recent with nested subagents" width="780">
-</p>
-</details>
-
 ---
 
 ## Install

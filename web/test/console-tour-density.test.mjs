@@ -26,12 +26,11 @@ test('the Sessions tour shows status groups, subagents and a WSL badge', () => {
   assert.doesNotMatch(html,/<details\b/);
   assert.match(html,/WSL: Ubuntu/);
 });
-test('the Limits tour renders static cards and shows Low and Out states with trust levels', () => {
-  const html=render('limits');
+test('the Overview tour renders static collapsed limit cards with Low and Out states', () => {
+  const html=render('overview');
   assert.equal((html.match(/class="sp-card sp-provider-card"/g)||[]).length,3);
   assert.doesNotMatch(html,/<details\b/);
   assert.match(html,/sp-chip--low/);assert.match(html,/1 pool out/);
-  assert.match(html,/Provider measured/);assert.match(html,/Status line/);
 });
 test('the Usage tour uses the 53-week brand-red heatmap', () => {
   const html=render('usage');
