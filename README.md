@@ -1,84 +1,163 @@
 # Gnomcode
 
-**One place to launch your AI coding agents, watch their usage and limits, and hand a task from one to another when it hits its quota.**
+**Local-first runtime and mission control for Claude Code, Codex, and Antigravity.**
 
-Gnomcode reads the logs of Claude Code, Codex and Antigravity to show live sessions, cost and quota, launches and resumes them through their official CLIs, and compiles a briefing so you can continue a task on a different agent. Everything runs locally. No account, no telemetry.
+Launch official AI coding agent CLIs in one workspace, track usage and quota windows with explicit trust labels, compile cross-vendor handoff briefings when an agent hits a limit, and approve prompts from your phone over an end-to-end encrypted relay. Everything runs locally on your machine — no account required, no telemetry.
 
-<!-- DEMO GIF SLOT: drop a Claude Code -> Codex handoff recording at .github/assets/handoff-demo.gif -->
 <p align="center">
-  <img src=".github/assets/handoff-demo.gif" alt="Handing a task from Claude Code to Codex" width="760">
+  <a href="https://gnomcode.vercel.app">Website</a> &middot;
+  <a href="https://gnomcode.vercel.app/downloads">Downloads</a> &middot;
+  <a href="https://gnomcode.vercel.app/docs">Documentation</a> &middot;
+  <a href="https://github.com/mwahaj36/gnomcode/releases">Releases</a>
 </p>
 
-[![npm version](https://img.shields.io/npm/v/gnomcode.svg)](https://www.npmjs.com/package/gnomcode)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/mwahaj36/gnomcode/actions/workflows/ci.yml"><img src="https://github.com/mwahaj36/gnomcode/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/mwahaj36/gnomcode/releases"><img src="https://img.shields.io/github/v/release/mwahaj36/gnomcode" alt="GitHub Release"></a>
+  <a href="https://www.npmjs.com/package/gnomcode"><img src="https://img.shields.io/npm/v/gnomcode.svg" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+</p>
+
+<p align="center">
+  <img src=".github/assets/console-overview.png" alt="Gnomcode console overview showing provider limits, activity heatmap, and daily totals" width="780">
+</p>
+
+<details>
+<summary>More screenshots: live sessions and subagent tree</summary>
+<p align="center">
+  <img src=".github/assets/console-sessions.png" alt="Gnomcode sessions grouped by Needs you, Running, and Recent with nested subagents" width="780">
+</p>
+</details>
+
+---
 
 ## Install
+
+### npm (Windows, macOS, Linux)
 
 ```sh
 npm install -g gnomcode
 ```
 
-Then open the console:
+### macOS & Linux
 
 ```sh
-gnomcode console
+curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash
 ```
 
-Prebuilt installers for Windows are on the [Releases page](https://github.com/mwahaj36/gnomcode-releases/releases). macOS and Linux: install with npm above, or build from source (see [Development](#development)).
+Tarball archives (`darwin-aarch64`, `darwin-x86_64`, `linux-x86_64`, `linux-aarch64`) and `SHA256SUMS` are also published on the [Releases page](https://github.com/mwahaj36/gnomcode/releases) and [Downloads](https://gnomcode.vercel.app/downloads).
 
-## First run (no account, under a minute)
+### Windows
 
-1. Install and sign in to at least one agent CLI yourself (`claude`, `codex` or `agy`) - Gnomcode never handles their credentials.
-2. `gnomcode console` opens the local dashboard in your browser. It binds to `127.0.0.1` only.
-3. Pick a folder and an agent, finish the agent's own login/trust prompt in the terminal pane, and send a prompt.
-4. `gnomcode doctor` lists every endpoint the daemon can reach, so you can confirm what is and isn't local.
+Download `Gnomcode-Setup.exe` or `Gnomcode-v1.0.7-windows-x64.zip` from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
 
-No sign-up. The only outbound call Gnomcode makes on its own is an opt-out update check.
+```powershell
+irm https://gnomcode.vercel.app/downloads/install.ps1 | iex
+```
+
+---
+
+## Quick start (under a minute, no account)
+
+1. Install and sign in to at least one official agent CLI yourself (`claude`, `codex`, or `agy`). Gnomcode never stores or replaces your vendor credentials.
+2. Start the local console:
+   ```sh
+   gnomcode console
+   ```
+   The daemon binds to `127.0.0.1` only and opens the console in your browser.
+3. Choose a project folder and an agent, finish any initial CLI trust/login prompt in the workspace terminal, and start chatting.
+4. Run `gnomcode doctor` to inspect detected CLIs, log roots, and every outbound endpoint the daemon can reach.
+
+---
+
+## CLI reference
+
+| Command | Purpose |
+| :--- | :--- |
+| `gnomcode console` | Start the local daemon and open the web console (`127.0.0.1`) |
+| `gnomcode launch <agent> --repo <path>` | Launch `claude-code`, `codex`, or `antigravity` under a managed PTY |
+| `gnomcode doctor` | Verify installed CLIs, log directories, and network rules (`--network`) |
+| `gnomcode integrate <agent>` | Install optional fail-open hooks (`--remove` to revert cleanly) |
+| `gnomcode remote` | Pair a phone or remote browser over the E2E-encrypted relay |
+
+---
 
 ## Supported agents
 
 | Agent | Observe sessions, usage, quota | Launch and resume | Approve prompts remotely | Handoff target |
 | :--- | :--- | :--- | :--- | :--- |
-| Claude Code | Yes | Yes | Yes | Yes |
-| Codex | Yes | Yes | Opt-in protocol mode | Yes |
-| Antigravity | Yes | Yes | Opt-in protocol mode | Yes |
+| **Claude Code** | Yes | Yes | Yes | Yes |
+| **Codex** | Yes | Yes | Opt-in protocol mode | Yes |
+| **Antigravity** | Yes | Yes | Opt-in protocol mode | Yes |
 
-What actually works depends on the installed CLI version, your authentication and your provider entitlements. Observation is the most complete; hosted control and model-switch acceptance vary by agent and are still being hardened. Test your own versions before relying on a claim.
+What works in practice depends on your installed CLI version, authentication state, and provider entitlements. Log observation is the most complete path; hosted control and model-switch behavior are actively hardened against CLI updates.
 
 ## Platforms
 
-| Platform | Status |
-| :--- | :--- |
-| Windows x64 | Installer and npm |
-| macOS, Linux | Tarball archives, desktop packages, and npm; CI smoke-tested, unnotarized on macOS |
+| Platform | Distribution | Status |
+| :--- | :--- | :--- |
+| **Windows x64** | Setup `.exe`, portable ZIP, `install.ps1`, npm | Verified locally & in CI (unsigned installer) |
+| **macOS (arm64, x64)** | `.tar.gz` archives, `install.sh`, npm | Built & smoke-tested in CI; unnotarized (Gatekeeper) |
+| **Linux (x64, arm64)** | `.tar.gz` archives, `install.sh`, npm | Built & smoke-tested in CI; live DE tray/Wayland unverified |
 
-## What it does
+See [docs/PLATFORMS.md](docs/PLATFORMS.md) for the full verification matrix and known platform gaps.
 
-- **Launch and chat** - run the official CLIs under a managed PTY, with paged, redacted local history and a separate terminal pane.
-- **Cross-vendor handoff** - a new agent receives the objective, changed-file paths and recent activity as a compiled briefing. No inference call builds it; the receiving agent still spends its own tokens.
-- **Usage and quota** - recorded tokens, estimated API-equivalent cost and quota windows. Every number carries a trust label (`exact`, `estimated`, `api`, `unknown`); an estimate is never shown as exact.
-- **Remote** - pair a phone or browser over an end-to-end-encrypted relay to read sessions, send prompts and answer approvals. Trust is remembered and revocable.
-- **Guardrails and resume** - budget and loop rules, alerts, routing and a resume queue, all local. Hard-stop enforcement is Claude-specific and fails open.
+---
 
-## Privacy
+## Key capabilities
 
-- Loopback only: servers bind to `127.0.0.1` and require a bearer token plus Host/Origin checks.
-- No telemetry: the only self-initiated network call is the opt-out update-manifest check. `gnomcode doctor --network` lists them all.
-- Local history is redacted before storage; agent-owned logs are left untouched. Redaction reduces risk but is not a guarantee - do not type secrets into chat.
+- **Launch, chat, and terminal separation** — run official CLIs inside a managed PTY with paged, redacted local history and a dedicated workspace terminal sheet.
+- **Cross-vendor handoff** — compile a bounded briefing (objective, changed files, recent activity) so another agent can pick up the task when your current quota runs out. No extra LLM call is used to generate the briefing.
+- **Usage and quota with trust labels** — every token count, API-equivalent cost estimate, and quota window declares its trust level (`exact`, `estimated`, `api`, `unknown`). Estimates are never presented as exact.
+- **Encrypted Remote** — pair a phone or browser over an end-to-end encrypted relay to monitor sessions, send prompts, inspect files/diffs, and answer tool approvals.
+- **Guardrails and auto-routing** — local budget rules, loop detection, scheduled prompts, and quota-aware fallback routing. Hard-stop enforcement is Claude-specific and fails open.
 
-## Free and open source
+---
 
-Gnomcode is licensed under the [Apache License 2.0](LICENSE).
+## Privacy and security invariants
 
-Contributions are welcome - see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) (DCO sign-off required), [SECURITY.md](SECURITY.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Engineering rules live in [AGENTS.md](AGENTS.md); the product brief is [docs/PRODUCT.md](docs/PRODUCT.md) and a feature comparison with similar tools is in [docs/comparison.md](docs/comparison.md).
+- **Loopback only:** Local HTTP/WS servers bind strictly to `127.0.0.1` and require a bearer token plus `Host`/`Origin` validation.
+- **No telemetry:** No analytics and no phone-home. Run `gnomcode doctor --network` to inspect allowed outbound endpoints (opt-out update manifest, opt-in vendor quota/pricing refresh, and opt-in E2E relay).
+- **Redacted local history:** Activity summaries pass through `core::redact` before SQLite persistence; agent-owned logs (`~/.claude`, `~/.codex`, `~/.gemini`) are read-only and never modified.
+- **Never escalate permissions:** Gnomcode never passes `--dangerously-skip-permissions`, `--yolo`, or equivalent flags.
+- **Fail open:** Hooks use a 50 ms IPC timeout and never block an agent CLI if the daemon is stopped or slow.
 
-## Development
+---
+
+## Architecture
+
+Business logic lives in Rust (`crates/`); TypeScript (`web/` and `apps/desktop/`) handles presentation and shell integration only.
+
+```text
+crates/
+├── core        Pure domain types, pricing, quota math, routing, redactor (no I/O)
+├── adapters    Deterministic parsers for Claude Code, Codex, and Antigravity logs
+├── store       SQLite schema, migrations, and rollups
+├── platform    OS paths, process scan, window focus, autostart, sleep inhibition
+├── pty         Managed PTY host and prompt/limit state detection
+├── ingest      Filesystem watcher, reconciler, and checkpoints
+├── daemon      axum HTTP/WS API, IPC server, relay client, automation scheduler
+└── cli         Thin `gnomcode` binary entrypoint
+
+web/            Next.js marketing site, local console bundle, and encrypted Remote PWA
+apps/desktop/   Electron tray shell
+```
+
+Dependency direction: `core` <- `adapters`, `store`, `platform`, `pty` <- `ingest` <- `daemon` <- `cli`.
+
+---
+
+## Contributing and development
+
+Gnomcode is licensed under the [Apache License 2.0](LICENSE). Contributions are welcome — see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) (DCO sign-off required), [SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Additional docs: [docs/PRODUCT.md](docs/PRODUCT.md), [docs/comparison.md](docs/comparison.md), and [AGENTS.md](AGENTS.md).
+
+Run the Rust quality gate locally:
 
 ```sh
-cargo fmt --all
+cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo deny check
 ```
 
-The web console and desktop shell are in `web/` and `apps/desktop/` (`npm ci` then the package scripts). The Rust daemon owns all product logic.
+For the web console and desktop shell (`web/` and `apps/desktop/`), run `npm ci` followed by `npm test`.
