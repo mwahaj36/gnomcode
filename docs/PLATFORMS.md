@@ -1,27 +1,31 @@
-# Platform Support Matrix (Gnomcode 1.0)
+# Platform Support Matrix (Gnomcode 1.1)
 
-This document records the exact verification status per operating system and architecture for Gnomcode 1.0. Marketing pages, download links, and release notes may only claim capabilities marked **Verified** below.
+This document records the exact verification status per operating system and architecture for Gnomcode 1.1. Marketing pages, download links, and release notes may only claim capabilities marked **Verified** below.
 
-Last updated: 2026-11-13 (CI packaging evidence from run `43464307883`).
+Last updated: 2026-11-21.
+
+Current release evidence: desktop/native packaging and platform tests in run `44884214524`; additional ARM64/static-musl builds in `44885881614`; actual offline npm tarball install, version, doctor and report checks on all seven native/Alpine targets in `44913532282`. These are CI/runtime checks, not physical desktop/provider acceptance. Older run numbers in the detailed sections below describe historical feature evidence.
+
+The [v1.1.0 release](https://github.com/mwahaj36/gnomcode/releases/tag/v1.1.0) includes manual downloads with SHA-256 manifests. OS signing/notarization and signed automatic updates remain separate.
 
 ## Summary
 
 | Platform | Daemon CLI | Desktop App Package | Live Runtime / Hardware Acceptance | Signing / Notarization |
 | :--- | :--- | :--- | :--- | :--- |
-| Windows x64 | Verified (CI + local) | Verified (unsigned NSIS/Squirrel dev build) | Partial (local smoke + console E2E; clean VM install/upgrade pending) | Unsigned (`NotSigned`) |
-| Windows arm64 | Not built | Not built | Not verified | Unsigned |
-| macOS arm64 (Apple Silicon) | Verified (CI tarball `43464307883`) | Verified (CI `.zip` `43464307883`) | Not verified on live device | Unsigned, not notarized |
-| macOS x64 (Intel) | Verified (CI tarball `43464307883`) | Verified (CI `.zip` `43464307883`) | Not verified on live device | Unsigned, not notarized |
-| Linux x64 (`ubuntu-22.04`) | Verified (CI tarball `43464307883`) | Verified (CI `.deb` + `.zip` `43464307883`) | Not verified on live desktop (X11/Wayland) | N/A |
-| Linux arm64 | Verified (CI tarball `43464307883`) | Not built | Not verified | N/A |
-| Linux x64 musl | Not built in CI | Not built | Not verified | N/A |
+| Windows x64 | Verified (CI + local) | Verified v1.1.0 setup and Electron payload | Partial (local smoke + console E2E; clean VM install/upgrade pending) | Unsigned (`NotSigned`) |
+| Windows arm64 | Verified ARM64 CLI build and packed install | CLI only | Native Windows ARM64 CI smoke; interactive agent workflows pending | Unsigned |
+| macOS arm64 (Apple Silicon) | Verified v1.1.0 CI tarball | Verified v1.1.0 CI `.zip` | Not verified on live device | Unsigned, not notarized |
+| macOS x64 (Intel) | Verified v1.1.0 CI tarball | Verified v1.1.0 CI `.zip` | Not verified on live device | Unsigned, not notarized |
+| Linux x64 (`ubuntu-22.04`) | Verified v1.1.0 CI tarball | Verified v1.1.0 CI `.deb` + `.zip` | Not verified on live desktop (X11/Wayland) | N/A |
+| Linux arm64 | Verified v1.1.0 CI tarball | Not built | Not verified | N/A |
+| Linux x64 musl | Verified static binary and Alpine npm smoke | CLI only | CI CLI checks; live desktop workflows pending | N/A |
 
 ## Windows (x64)
 
 ### Verified
 - Rust workspace build, clippy (`-D warnings`), and unit/integration test suite (`cargo test --workspace`, CI run `43464307883` and local Windows runs).
 - Automated smoke check (`scripts/smoke/run-packaged-smoke.mjs`) against `gnomcode.exe`: daemon startup on a free loopback port with isolated `GNOMCODE_HOME`, `/api/v1/doctor`, `/api/v1/providers/overview` (`antigravity`, `claude-code`, `codex`), `/api/v1/sessions`, console HTML `/`, and `formatTrayMenu` template generation.
-- `apps/desktop` lint, typecheck, and 40 unit/Electron tests, plus Playwright local console E2E (`console e2e (windows-latest)` in run `43464307883`).
+- `apps/desktop` lint, typecheck, and 44 unit/Electron tests, plus Playwright local console E2E (`console e2e (windows-latest)` in run `43464307883`).
 - Antigravity 2.0 app, Antigravity IDE 1.x, and `agy` CLI data/trajectory paths under `GEMINI_HOME` (default `~/.gemini`), plus Claude Code and Codex discovery (`docs/SPEC.md` §3.5).
 - Process termination via `taskkill /F /T`.
 
@@ -29,7 +33,7 @@ Last updated: 2026-11-13 (CI packaging evidence from run `43464307883`).
 - Authenticode signing is not present (`NotSigned`); owner signing or explicit unsigned-beta approval is required before public 1.0 distribution (`docs/LAUNCH_CHECKLIST.md`).
 - Clean install, upgrade, reboot persistence, and uninstall on a disposable Windows VM have not been executed (`docs/LAUNCH_CHECKLIST.md`).
 - Win32 `SetThreadExecutionState` keep-awake is unit-tested via mock backend; real hardware sleep prevention is unverified.
-- Windows `arm64` is not built or tested.
+- Windows ARM64 is CLI-only. Native packed-install/version/doctor/report checks pass in CI; the ARM64 desktop installer and full interactive-provider acceptance remain pending.
 
 ## macOS (arm64 and x64)
 
