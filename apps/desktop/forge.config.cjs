@@ -6,7 +6,11 @@ module.exports = {
   packagerConfig: {
     name: 'Gnomcode',
     executableName: 'gnomcode-desktop',
-    icon: path.join(__dirname, '../../scripts/gnomcode.ico'),
+    icon: path.join(__dirname, process.platform === 'darwin'
+      ? '../../web/public/icons/gnomcode.icns'
+      : process.platform === 'linux'
+        ? '../../web/public/icons/gnomcode-512.png'
+        : '../../scripts/gnomcode.ico'),
     appBundleId: 'app.gnomcode.desktop',
     asar: true,
     extraResource: [
