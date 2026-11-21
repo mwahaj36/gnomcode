@@ -6,6 +6,8 @@
 - Align Home sessions and provider monitoring, simplify settings, and improve keyboard focus and permission banners.
 - Keep large change reviews usable with per-file diffs and explicit truncation.
 - Package matching desktop builds for Windows, macOS, and Linux.
+- Add standalone Windows ARM64 and static Linux x64 musl CLI payloads, plus verified npm tarballs for all seven platforms.
+- Update desktop/CLI download links, platform documentation, release checksums and npm publishing guidance.
 
 ## 1.0.7 - 2026-11-17
 
