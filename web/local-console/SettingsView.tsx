@@ -753,7 +753,7 @@ export function SettingsView() {
           <div>
             <p className="sp-setting-label">Back up usage history to your account</p>
             <p className="sp-setting-desc">
-              Opt-in. Syncs per-turn usage rows (dedup_key, session_id, timestamp, model, token counts, context_window, cost_usd, cache_savings_usd, cost_basis, pricing_version) and session metadata (agent, surface, project folder name, started_at, last_event_at) so a fresh install can restore your Usage page. Never syncs chat content, session titles, or full file paths.
+              Back up token counts, model usage, costs and session metadata so you can restore your Usage page on a new install. Chat messages, session titles and full file paths stay on this desktop. Off by default.
             </p>
             {usageSyncMsg ? (
               <p className="sp-setting-desc" role="status">
@@ -1399,7 +1399,7 @@ export function SettingsView() {
           <button
             type="button"
             className="btn-primary"
-            onClick={() => void handleSaveNotifications()}
+            onClick={() => void handleSaveNotifications().catch(() => setNotifySaved('Could not save notifications. Try again.'))}
           >
             Save notifications
           </button>
@@ -1460,7 +1460,7 @@ export function SettingsView() {
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => void handleSaveProfile()}
+                onClick={() => void handleSaveProfile().catch(() => setSettingsSaved('Could not save profile settings. Try again.'))}
               >
                 Save Preferences
               </button>

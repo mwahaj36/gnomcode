@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 - 2026-11-21
+
+- Rebuild console navigation, session history, conversation layout, tools, composer, and responsive layouts across desktop and web.
+- Align Home sessions and provider monitoring, simplify settings, and improve keyboard focus and permission banners.
+- Keep large change reviews usable with per-file diffs and explicit truncation.
+- Package matching desktop builds for Windows, macOS, and Linux.
+
 ## 1.0.7 - 2026-11-17
 
 - Block pasted/scheduled prompts and `/model` switches while a hosted PTY is sitting on an active rate-limit screen, preventing raw bracketed-paste sequences from leaking into Claude's limit option menu.

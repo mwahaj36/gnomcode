@@ -11,6 +11,7 @@ test.describe('workspace inspector tabs, observed sessions, and usage projects',
     await openClaudeConversation(page);
 
     const tools = page.getByRole('complementary', { name: 'Conversation tools' });
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await tools.getByRole('button', { name: 'Files' }).click();
     await page.setViewportSize({ width: 920, height: 760 });
 
@@ -31,16 +32,22 @@ test.describe('workspace inspector tabs, observed sessions, and usage projects',
     await expect(firstTab).toHaveAttribute('tabindex', '0');
     await expect(tabs.nth(1)).toHaveAttribute('tabindex', '-1');
 
-    // ArrowRight moves focus and activates Changes; Home/End jump cleanly.
+    // Arrow keys move focus; Enter activates, avoiding work while crossing expensive tabs.
     await firstTab.focus();
     await page.keyboard.press('ArrowRight');
-    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
     await expect(tabs.nth(1)).toBeFocused();
+    await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Enter');
     await expect(firstTab).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('End');
+    await expect(tabs.last()).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(tabs.last()).toHaveAttribute('aria-selected', 'true');
     await page.keyboard.press('Home');
+    await page.keyboard.press('Enter');
     await expect(firstTab).toHaveAttribute('aria-selected', 'true');
 
     // Close button also stays single-line and returns focus cleanly.

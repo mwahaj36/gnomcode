@@ -16,7 +16,7 @@ test.describe('Home', () => {
     const order = await page
       .locator('#home-limits, #home-activity, #home-today, #home-sessions')
       .evaluateAll((nodes) => nodes.map((node) => node.id));
-    expect(order).toEqual(['home-limits', 'home-activity', 'home-today', 'home-sessions']);
+    expect(order).toEqual(['home-sessions', 'home-limits', 'home-today', 'home-activity']);
   });
 
   test('a session row opens that conversation in Workspace', async ({ page, openConsole }) => {
@@ -215,12 +215,12 @@ test.describe('Settings', () => {
   });
 });
 
-test('the Home activity grid is separated from the Today tiles in the 2fr/1fr desktop grid', async ({ page, openConsole }) => {
+test('Home activity and Today remain separate full-width sections', async ({ page, openConsole }) => {
   await openConsole();
   await expect(page.locator('#home-activity')).toContainText('Activity');
   const today = await page.locator('#home-today').boundingBox();
   const activity = await page.locator('#home-activity').boundingBox();
-  expect((today?.x ?? 0) - ((activity?.x ?? 0) + (activity?.width ?? 0))).toBeGreaterThanOrEqual(16);
+  expect((today?.y ?? 0) - ((activity?.y ?? 0) + (activity?.height ?? 0))).toBeGreaterThanOrEqual(16);
 });
 
 test.describe('Stale and reset quota states', () => {

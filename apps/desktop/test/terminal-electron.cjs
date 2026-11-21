@@ -10,7 +10,7 @@ app.setPath('userData', mkdtempSync(path.join(tmpdir(), 'gnomcode-electron-test-
 const timeout = setTimeout(() => { console.error('Terminal WebSocket timed out'); app.exit(1); }, 15000);
 app.whenReady().then(async () => {
   const server = createServer((_request, response) => {
-    response.writeHead(200, {'Content-Type':'text/html'}); response.end('<!doctype html><title>Terminal test</title><style>.ide-sidebar{position:absolute;top:72px}</style><body class="sp-native-console"><aside class="ide-sidebar"></aside></body>');
+    response.writeHead(200, {'Content-Type':'text/html'}); response.end('<!doctype html><title>Terminal test</title><style>.sp-chat-column{position:fixed;inset:0 0 56px}</style><body class="sp-native-console"><div class="gc-console sp-console-workspace"><div class="sp-chat-column"><aside class="ide-sidebar"></aside></div></div></body>');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
@@ -25,7 +25,7 @@ app.whenReady().then(async () => {
   await window.loadURL(`http://127.0.0.1:${port}`);
   const chrome = await window.webContents.executeJavaScript(`new Promise(resolve=>setTimeout(()=>{document.documentElement.dataset.theme='dark';resolve({header:document.querySelector('.desktop-titlebar')?.textContent,drag:getComputedStyle(document.querySelector('.desktop-titlebar')).webkitAppRegion,padding:getComputedStyle(document.body).paddingTop});},100))`);
   if(chrome.header !== 'Gnomcode' || chrome.drag !== 'drag' || chrome.padding !== '32px') throw new Error('Desktop titlebar failed: '+JSON.stringify(chrome));
-  if(await window.webContents.executeJavaScript("getComputedStyle(document.querySelector('.ide-sidebar')).top") !== '104px') throw new Error('Intermediate-width drawer overlaps titlebar');
+  if(await window.webContents.executeJavaScript("document.querySelector('.sp-chat-column').getBoundingClientRect().top") !== 32) throw new Error('Compact history drawer overlaps titlebar');
   await new Promise(resolve=>setTimeout(resolve,100));
   if(appearance !== 'dark') throw new Error('Titlebar theme did not synchronize');
   console.log('PASS: real sandboxed Electron titlebar, drag region and theme synchronization');

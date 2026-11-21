@@ -3,7 +3,7 @@ const path = require('node:path');
 
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
-function renderNotices(directories) {
+function renderNotices(directories, bundledFiles = []) {
   const sections = directories.map(dir => {
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
     const licenseName = fs.readdirSync(dir).find(name => /^licen[sc]e(?:\.(?:md|txt))?$/i.test(name));
@@ -12,6 +12,11 @@ function renderNotices(directories) {
     if (!license.trim()) throw new Error(`License file is empty for ${pkg.name}.`);
     return `<section><h2>${escape(pkg.name)} ${escape(pkg.version)}</h2><p>${escape(pkg.license || 'See license')}</p><pre>${escape(license)}</pre></section>`;
   });
+  for (const file of bundledFiles) {
+    const license = fs.readFileSync(file, 'utf8');
+    if (!license.trim()) throw new Error(`License file is empty: ${file}`);
+    sections.push(`<section><h2>${escape(path.basename(file))}</h2><pre>${escape(license)}</pre></section>`);
+  }
   return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Desktop third-party notices</title><h1>Desktop third-party notices</h1><p>Electron and Chromium licenses are included in ELECTRON_LICENSE.txt and CHROMIUM_LICENSES.html. Rust notices are included in THIRD_PARTY_NOTICES.html.</p>${sections.join('\n')}</html>`;
 }
 
@@ -36,7 +41,12 @@ function productionDependencies(root) {
 if (require.main === module) {
   try {
     const out = path.join(__dirname, 'staging');
-    const html = renderNotices(productionDependencies(__dirname));
+    const web = path.join(__dirname, '../../web/public');
+    const bundledFiles = ['XTERM-LICENSE.txt', 'XTERM-FIT-LICENSE.txt', 'MARKDOWN-LICENSE.txt']
+      .map(name => path.join(web, 'vendor', name));
+    bundledFiles.push(...fs.readdirSync(path.join(web, 'fonts')).filter(name => name.endsWith('-LICENSE.txt'))
+      .map(name => path.join(web, 'fonts', name)));
+    const html = renderNotices(productionDependencies(__dirname), bundledFiles);
     const electronDir = path.dirname(require.resolve('electron/package.json'));
     const electronLicense = path.join(electronDir, 'dist', 'LICENSE');
     const chromiumLicenses = path.join(electronDir, 'dist', 'LICENSES.chromium.html');

@@ -574,7 +574,7 @@ mod tests {
                 "export function renderSummary",
             ),
             ("/provider-logos.js", "text/javascript", "PROVIDER_LOGOS"),
-            ("/gnomcode-console.css", "text/css", ".sp-console-workspace"),
+            ("/gnomcode-console.css", "text/css", ".gc-console"),
             ("/gnomcode-tokens.css", "text/css", "--sp-bg"),
         ] {
             let response = app

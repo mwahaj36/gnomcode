@@ -144,12 +144,12 @@ export function HomeView() {
 
   return (
     <div className="sp-home-react">
-      <section className="sp-section" id="home-limits" ref={limitsRef} />
       <div className="sp-home-grid">
-        <ActivityGrid id="home-activity" viewName="overview" />
-        <section className="sp-section" id="home-today" ref={todayRef} />
         <section className="sp-section" id="home-sessions" ref={sessionsRef} />
+        <section className="sp-section" id="home-limits" ref={limitsRef} />
       </div>
+      <section className="sp-section" id="home-today" ref={todayRef} />
+      <ActivityGrid id="home-activity" viewName="overview" />
     </div>
   );
 }

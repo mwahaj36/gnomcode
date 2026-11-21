@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 const STORAGE_KEY = 'gnomcode-chat-list-collapsed';
-const isPhone = () => window.matchMedia('(max-width: 760px)').matches;
+const isPhone = () => window.matchMedia('(max-width: 899px)').matches;
 
 function stored(): string | null {
   try {
@@ -29,6 +29,10 @@ function apply(next: boolean, persist: boolean): void {
 }
 
 apply(collapsed, false);
+
+window.matchMedia('(max-width: 899px)').addEventListener('change', (event) => {
+  apply(event.matches || stored() === '1', false);
+});
 
 /** Flips the conversation list and remembers the choice on desktop. */
 export function toggleChatList(): void {

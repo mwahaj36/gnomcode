@@ -50,3 +50,12 @@ test('changes view wires into Remote without mutation controls', () => {
   assert.ok(css.includes('.sp-changes-panel{'));
   assert.doesNotMatch(cssSlice, /#[0-9a-f]{3,6}\b/i);
 });
+
+test('large reviews keep changed files visible and explain file-by-file review', () => {
+  const html = renderChangesView({ status: ' M small.txt\n M large.txt\n', diff: '', truncated: true });
+  assert.match(html, /data-change-file="small.txt"/);
+  assert.match(html, /Select a file to review/);
+  assert.doesNotMatch(html, /Working tree clean/);
+  const selected = renderChangesView({ status: ' M large.txt\n', diff: '', truncated: true }, { selected: 'large.txt' });
+  assert.match(selected, /This file exceeds/);
+});
