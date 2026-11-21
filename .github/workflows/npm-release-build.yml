@@ -9,6 +9,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   GNOMCODE_UPDATE_PUBLIC_KEY: ${{ vars.GNOMCODE_UPDATE_PUBLIC_KEY }}
+  CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: "--remap-path-prefix crates=/gnomcode/crates -C target-feature=+crt-static"
 
 jobs:
   build:
@@ -52,6 +53,21 @@ jobs:
           offset = struct.unpack_from('<I', data, 0x3c)[0]
           assert data[offset:offset + 4] == b'PE\0\0'
           assert struct.unpack_from('<H', data, offset + 4)[0] == 0xaa64
+          optional = offset + 24
+          count = struct.unpack_from('<H', data, offset + 6)[0]
+          size = struct.unpack_from('<H', data, offset + 20)[0]
+          sections = [struct.unpack_from('<IIII', data, optional + size + index * 40 + 8) for index in range(count)]
+          def file_offset(rva):
+              for virtual_size, address, raw_size, raw_offset in sections:
+                  if address <= rva < address + max(virtual_size, raw_size):
+                      return raw_offset + rva - address
+              raise ValueError('Invalid import address')
+          imports = file_offset(struct.unpack_from('<I', data, optional + 120)[0])
+          while any(data[imports:imports + 20]):
+              name = file_offset(struct.unpack_from('<I', data, imports + 12)[0])
+              library = data[name:data.index(0, name)].lower()
+              assert not library.startswith((b'vcruntime', b'msvcp')), library
+              imports += 20
       - name: Verify static musl executable and packaged behavior
         if: runner.os == 'Linux'
         shell: bash
