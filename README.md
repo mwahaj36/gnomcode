@@ -92,7 +92,7 @@ What works in practice depends on your installed CLI version, authentication sta
 | Platform | Distribution | Status |
 | :--- | :--- | :--- |
 | **Windows x64** | Setup `.exe`, portable ZIP, `install.ps1`, npm | Verified locally & in CI (unsigned installer) |
-| **Windows ARM64** | CLI ZIP, npm | Cross-compiled; native ARM64 execution unverified |
+| **Windows ARM64** | CLI ZIP, npm | Static-runtime CLI; native ARM64 packed-install smoke tested |
 | **macOS (arm64, x64)** | Desktop ZIP, CLI `.tar.gz`, `install.sh`, npm | Built & smoke-tested in CI; unnotarized (Gatekeeper) |
 | **Linux (x64, arm64)** | x64 desktop ZIP/DEB; CLI `.tar.gz`, `install.sh`, npm | Built & smoke-tested in CI; live DE tray/Wayland unverified |
 
