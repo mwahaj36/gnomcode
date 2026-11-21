@@ -32,6 +32,7 @@ test('Files keeps folders visible, downloads exact content, and expands its view
   await page.route('**/api/v1/repos/file?*', route => route.fulfill({ json: { path: 'src/main.rs', kind: 'code', language: 'rust', content } }));
   await openConsole('#sessions');
   await openClaudeConversation(page);
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
   await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Files', exact: true }).click();
   const panel = page.locator('.sp-files-panel');
   await panel.getByRole('button', { name: /^src(?: Folder)?$/ }).click();

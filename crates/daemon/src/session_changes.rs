@@ -3,11 +3,11 @@
 use crate::api::{AppState, validate_auth};
 use crate::workspace_files::resolve_session_workspace;
 use axum::Json;
-use axum::extract::{Path as AxumPath, State};
+use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use gnomcode_store::Database;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
@@ -22,6 +22,12 @@ struct SessionChanges {
     diff: String,
     status: String,
     lossy: bool,
+    truncated: bool,
+}
+
+#[derive(Default, Deserialize)]
+pub(crate) struct ChangesQuery {
+    path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +36,7 @@ enum ChangesError {
     TooLarge,
     Timeout,
     Io,
+    InvalidPath,
 }
 
 impl ChangesError {
@@ -39,6 +46,7 @@ impl ChangesError {
             Self::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Timeout => StatusCode::GATEWAY_TIMEOUT,
             Self::Io => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::InvalidPath => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -48,6 +56,7 @@ impl ChangesError {
             Self::TooLarge => "Workspace diff exceeds 1 MiB limit",
             Self::Timeout => "Git status or diff timed out",
             Self::Io => "Could not inspect workspace changes",
+            Self::InvalidPath => "Choose a relative file inside the workspace",
         }
     }
 }
@@ -102,7 +111,18 @@ async fn run_git_readonly(repo: &Path, args: &[&str]) -> Result<(String, bool), 
     .map_err(|_| ChangesError::Timeout)?
 }
 
-async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesError> {
+async fn collect_changes(
+    workspace: &Path,
+    path: Option<&str>,
+) -> Result<SessionChanges, ChangesError> {
+    if let Some(path) = path
+        && (path.is_empty()
+            || !Path::new(path)
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_))))
+    {
+        return Err(ChangesError::InvalidPath);
+    }
     let canonical = workspace
         .canonicalize()
         .map_err(|_| ChangesError::NotGitRepo)?;
@@ -125,11 +145,16 @@ async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesErro
         }
         None => "HEAD".to_owned(),
     };
-    let (diff, diff_lossy) = run_git_readonly(
-        &canonical,
-        &["diff", "--no-ext-diff", "--no-textconv", &base],
-    )
-    .await?;
+    let mut args = vec!["diff", "--no-ext-diff", "--no-textconv", &base];
+    if let Some(path) = path {
+        args.extend(["--", path]);
+    }
+    let (diff, diff_lossy, truncated) = match run_git_readonly(&canonical, &args).await {
+        Ok((diff, lossy)) => (diff, lossy, false),
+        // Keep the complete bounded status list so a large review remains navigable.
+        Err(ChangesError::TooLarge) => (String::new(), false, true),
+        Err(error) => return Err(error),
+    };
     let (status_raw, status_lossy) =
         run_git_readonly(&canonical, &["status", "--porcelain=v1", "-z"]).await?;
     let status = status_raw.replace('\0', "\n");
@@ -138,6 +163,7 @@ async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesErro
         diff,
         status,
         lossy: diff_lossy || status_lossy,
+        truncated,
     })
 }
 
@@ -145,6 +171,7 @@ async fn collect_changes(workspace: &Path) -> Result<SessionChanges, ChangesErro
 pub(crate) async fn get_handler(
     headers: HeaderMap,
     AxumPath(session_id): AxumPath<String>,
+    Query(query): Query<ChangesQuery>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, StatusCode> {
     validate_auth(&headers, &state.bearer_token)?;
@@ -152,7 +179,7 @@ pub(crate) async fn get_handler(
         let db = state.db.lock().await;
         resolve_session_workspace(&db, &session_id).map_err(|_| StatusCode::NOT_FOUND)?
     };
-    let changes = collect_changes(&workspace)
+    let changes = collect_changes(&workspace, query.path.as_deref())
         .await
         .map_err(ChangesError::status_code)?;
     Ok(Json(json!({
@@ -161,6 +188,7 @@ pub(crate) async fn get_handler(
         "diff": changes.diff,
         "status": changes.status,
         "lossy": changes.lossy,
+        "truncated": changes.truncated,
     })))
 }
 
@@ -176,7 +204,7 @@ pub(crate) async fn remote_command(db: &Arc<Mutex<Database>>, request: &Value) -
             Err(message) => return json!({"type": "error", "message": message}),
         }
     };
-    match collect_changes(&workspace).await {
+    match collect_changes(&workspace, request.get("path").and_then(Value::as_str)).await {
         Ok(changes) => json!({
             "type": "changes",
             "session_id": session_id,
@@ -184,6 +212,7 @@ pub(crate) async fn remote_command(db: &Arc<Mutex<Database>>, request: &Value) -
             "diff": changes.diff,
             "status": changes.status,
             "lossy": changes.lossy,
+            "truncated": changes.truncated,
         }),
         Err(err) => json!({"type": "error", "message": err.message()}),
     }
@@ -273,6 +302,70 @@ mod tests {
         )
         .await;
         assert_eq!(response["type"], "error");
+    }
+
+    #[tokio::test]
+    async fn oversized_review_keeps_file_list_and_allows_a_single_file_diff() {
+        let repo = tempfile::tempdir().expect("repo");
+        for args in [
+            vec!["init"],
+            vec!["config", "user.email", "test@example.com"],
+            vec!["config", "user.name", "Test"],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(repo.path())
+                    .output()
+                    .expect("git")
+                    .status
+                    .success()
+            );
+        }
+        std::fs::write(repo.path().join("large.txt"), "base\n").expect("base");
+        std::fs::write(repo.path().join("small.txt"), "base\n").expect("base");
+        for args in [vec!["add", "."], vec!["commit", "-m", "base"]] {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(repo.path())
+                    .output()
+                    .expect("git")
+                    .status
+                    .success()
+            );
+        }
+        std::fs::write(
+            repo.path().join("large.txt"),
+            "large change\n".repeat(100_000),
+        )
+        .expect("large change");
+        std::fs::write(repo.path().join("small.txt"), "small change\n").expect("small change");
+        let db = seeded_db_with_session("codex:large-review", repo.path());
+        let response = remote_command(&db, &json!({"session_id": "codex:large-review"})).await;
+        assert_eq!(response["type"], "changes", "{response}");
+        assert_eq!(response["truncated"], true);
+        assert!(
+            response["status"]
+                .as_str()
+                .expect("status")
+                .contains("small.txt")
+        );
+        let response = remote_command(
+            &db,
+            &json!({"session_id": "codex:large-review", "path": "small.txt"}),
+        )
+        .await;
+        assert_eq!(response["truncated"], false);
+        let diff = response["diff"].as_str().expect("diff");
+        assert!(diff.contains("+small change"));
+        assert!(!diff.contains("large.txt"));
+        let rejected = remote_command(
+            &db,
+            &json!({"session_id": "codex:large-review", "path": "../outside.txt"}),
+        )
+        .await;
+        assert_eq!(rejected["type"], "error");
     }
 
     #[tokio::test]

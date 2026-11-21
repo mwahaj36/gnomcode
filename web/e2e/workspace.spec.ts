@@ -15,6 +15,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     );
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     const tools = page.getByRole('complementary', { name: 'Conversation tools' });
     await tools.getByRole('button', { name: 'Files' }).click();
     const panel = page.locator('.sp-files-panel');
@@ -43,6 +44,7 @@ test.describe('read-only workspace panels on an observed session', () => {
   test('Files explains a session without a workspace folder', async ({ page, openConsole }) => {
     await openConsole('#sessions');
     await page.locator('.ide-session').first().click();
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Files', exact: true }).click();
     await expect(page.locator('.sp-files-panel [role="alert"]')).toContainText('Workspace repository path is unavailable for this session.');
   });
@@ -55,6 +57,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     );
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes', exact: true }).click();
     const panel = page.locator('.sp-changes-panel');
     await expect(panel.getByRole('heading', { name: 'Workspace changes' })).toBeVisible();
@@ -69,6 +72,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     await page.route('**/api/v1/sessions/*/changes', (route) => route.fulfill({ status: 400, json: { message: 'not a repo' } }));
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes', exact: true }).click();
     await expect(page.locator('.sp-changes-panel [role="alert"]')).toContainText('This workspace is not a git repository.');
   });
@@ -87,6 +91,7 @@ test.describe('read-only workspace panels on an observed session', () => {
     );
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Artifacts', exact: true }).click();
     const panel = page.locator('.sp-artifacts-panel');
     await expect(panel.getByRole('status')).toHaveText('2 workspace changes');
@@ -103,6 +108,7 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     await reshapeConversations(page, { source: 'managed', can_prompt: true, hosted: true, state: 'working' });
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await expect(page.getByRole('toolbar', { name: 'Quick prompts' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Manage quick prompts' })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Message the agent', exact: true })).toBeVisible();
@@ -118,6 +124,7 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     });
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message the agent', exact: true }).fill('Read this file');
     const input = page.locator('#local-workspace-root input[type="file"]');
     const send = page.locator('.sp-chat-composer button[type="submit"]');
@@ -146,6 +153,7 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     });
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     const input = page.locator('#local-workspace-root input[type="file"]');
     await input.setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
     await expect(page.locator('#chat-attachments-bar')).toContainText('notes.txt');
@@ -167,6 +175,7 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     });
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     const interrupt = page.getByRole('button', { name: 'Interrupt running turn' });
     await expect(interrupt).toBeVisible();
     await interrupt.click();
@@ -178,6 +187,7 @@ test.describe('composer on a conversation Gnomcode manages', () => {
     await reshapeConversations(page, { source: 'managed', state: 'idle' });
     await openConsole('#sessions');
     await openClaudeConversation(page);
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Interrupt running turn' })).toHaveCount(0);
   });
 });

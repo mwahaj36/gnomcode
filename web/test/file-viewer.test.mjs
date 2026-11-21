@@ -91,7 +91,7 @@ test('UI overhaul fixes Antigravity mark, Home full-width sessions, Settings iso
   assert.ok(PROVIDER_LOGOS.antigravity.startsWith('M21.751'), 'Antigravity should use its own mark');
 
   const css = read('../app/gnomcode-console.css');
-  assert.match(css, /#home-sessions\{grid-column:1 \/ -1/);
+  assert.match(css, /\.gc-console \.sp-home-grid\{display:grid;grid-template-columns:minmax\(0,2fr\) minmax\(280px,1fr\)/);
   assert.match(css, /\.sp-heatmap-legend \.sp-heat/);
   assert.match(css, /@container \(max-width: 600px\)/);
   assert.match(css, /\.sp-workspace-modal/);

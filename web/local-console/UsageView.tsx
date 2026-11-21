@@ -101,7 +101,7 @@ export function UsageView() {
       lastQuotaKeyRef.current = '';
       if (quotaRef.current) {
         quotaRef.current.textContent =
-          'Quota refresh failed. Last observations are stale; retry Reload view.';
+          'Quota refresh failed. Last observations are stale; use Refresh.';
       }
     }
   }, []);
@@ -112,7 +112,7 @@ export function UsageView() {
         buildRangeUrl('/api/v1/report', targetRange),
       );
       if (!res || !res.timeline) {
-        throw new Error('The local report response is incomplete. Retry Reload view.');
+        throw new Error('The local report response is incomplete. Select Refresh.');
       }
       if (targetRange !== rangeRef.current) return;
       const key = `${targetRange}:${JSON.stringify(res)}`;
@@ -162,7 +162,7 @@ export function UsageView() {
       }
       if (providersRef.current) {
         providersRef.current.innerHTML =
-          '<p class="local-view-message">Usage data is unavailable. Retry Reload view when the local daemon is reachable.</p>';
+          '<p class="local-view-message">Usage data is unavailable. Select Refresh when the local daemon is reachable.</p>';
       }
     }
   }, []);
@@ -181,7 +181,7 @@ export function UsageView() {
       }
     } catch {
       if (projectsRef.current) {
-        projectsRef.current.textContent = 'Project usage could not be refreshed. Retry Reload view.';
+        projectsRef.current.textContent = 'Project usage could not be refreshed. Select Refresh.';
       }
     }
   }, []);
@@ -304,6 +304,7 @@ export function UsageView() {
       <div className="timeline-bar">
         <div className="timeline-label">{timelineLabel}</div>
         <div className="sp-period-actions">
+          <button type="button" className="btn-control" onClick={() => void refreshAll()}>Refresh</button>
           <select
             aria-label="Reporting period"
             value={range}

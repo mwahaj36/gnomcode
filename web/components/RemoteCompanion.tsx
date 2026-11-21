@@ -34,7 +34,7 @@ type ScheduledMessage = {id:string;due_at:number;status:string;text:string};
 type AutomationNotice = {id:string;conversation_id:string;message:string;created_at:number};
 type PendingApproval = {id:string;agent:string;tool:string;summary:string;expires_at:number};
 type SetupStatus = {session_id:string;blocker:'trust_folder'|'setup';agent:string;folder:string};
-type Reply = { settings?:NotificationPreferences;terminal_data?:number[];cursor?:number;reset?:boolean;limit_message?:string|null; screen?:string; blocker?:'trust_folder'|'setup'|null; folder?:string; agent?:string; name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean;  items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]|ProviderOverview[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
+type Reply = { settings?:NotificationPreferences;terminal_data?:number[];cursor?:number;reset?:boolean;limit_message?:string|null; screen?:string; blocker?:'trust_folder'|'setup'|null; folder?:string; agent?:string; name?:string; size?:number; kind?:string; mime_type?:string; language?:string; data_url?:string; distros?:{name:string;label:string;running:boolean}[]; starting?:string; branch?:string; url?:string; sent?:boolean; request_id?:string; workspace_path?:string; filename?:string; artifacts?:ArtifactItem[]; changes_count?:number; content?:string; entries?:RepoFileEntry[]; repo?:string; diff?:string; status?:string; reason?:string; lossy?:boolean;truncated?:boolean;  items?:PendingApproval[]; decision?:string; reset_armed?:boolean; id?:string; messages?:ScheduledMessage[]; policy?:string; notices?:AutomationNotice[]; type: string; secret?:string; request_type?: string; message?: string; sessions?: Session[]; providers?:ProviderCatalog[]|ProviderOverview[]; session_id?: string; new_session_id?: string; events?: ChatEvent[]; page?:number; total_pages?:number; total_count?:number } & Partial<FolderListing>;
 
 const REMOTE_DRAFTS_KEY = 'gnomcode-remote-drafts';
 function loadRemoteDrafts(): Map<string, string> {
@@ -70,8 +70,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   const [limitsPanel, setLimitsPanel] = useState(false);
   const [changesPanel, setChangesPanel] = useState(false);
   const [changesLoading, setChangesLoading] = useState(false);
-  const [changesState, setChangesState] = useState<{ session_id: string; repo?: string; diff?: string; status?: string; lossy?: boolean; error?: string } | null>(null);
+  const [changesState, setChangesState] = useState<{ session_id: string; repo?: string; diff?: string; status?: string; lossy?: boolean; truncated?: boolean; error?: string } | null>(null);
   const changesRequested = useRef(false);
+  const changesFileMode = useRef(false);
+  const [changesSelected, setChangesSelected] = useState('');
   const [filesPanel, setFilesPanel] = useState(false);
   const [filePathInput, setFilePathInput] = useState('');
   const [fileListState, setFileListState] = useState<RepoFileListing | null>(null);
@@ -496,13 +498,15 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     void send({ type: 'chat', session_id: sessionId, before, limit: 500 }).catch(() => {if(epoch===connectionEpoch.current && socket.current?.readyState===WebSocket.OPEN && authenticated.current)setError('Chat connection lost.');});
   }
 
-  async function loadChanges() {
+  async function loadChanges(path = '') {
     if (!authenticated.current || !selectedRef.current) return;
     changesRequested.current = true;
+    if (!path) changesFileMode.current = false;
+    setChangesSelected(path);
     setChangesPanel(true);
     setChangesLoading(true);
     setChangesState(null);
-    try { await send({ type: 'changes', session_id: selectedRef.current }); }
+    try { await send({ type: 'changes', session_id: selectedRef.current, ...(path ? { path } : {}) }); }
     catch { changesRequested.current = false; setChangesLoading(false); setChangesState({ session_id: selectedRef.current, error: 'Could not reach your desktop for workspace changes.' }); }
   }
 
@@ -672,7 +676,8 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       changesRequested.current = false;
       setChangesLoading(false);
       if (!reply.session_id || reply.session_id === selectedRef.current) {
-        setChangesState({ session_id: reply.session_id || selectedRef.current, repo: reply.repo, diff: reply.diff || '', status: reply.status || '', lossy: Boolean(reply.lossy) });
+        changesFileMode.current ||= Boolean(reply.truncated);
+        setChangesState({ session_id: reply.session_id || selectedRef.current, repo: reply.repo, diff: reply.diff || '', status: reply.status || '', lossy: Boolean(reply.lossy), truncated: Boolean(reply.truncated) });
       }
     }
     else if (reply.type === 'repo_files') {
@@ -957,7 +962,13 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
     {modelPanel && <dialog ref={modelDialog} className="remote-sheet" aria-labelledby="remote-model-heading" onClose={()=>setModelPanel(false)}><header><h2 id="remote-model-heading">Change model</h2><button type="button" aria-label="Close model selection" onClick={()=>modelDialog.current?.close()}>Close</button></header><ModelChoices providers={modelProviders} loading={modelsLoading} error={modelsError} disabled={!connected} onRefresh={()=>void loadModels()} onSelect={selectModel}/></dialog>}
     {changesPanel && <dialog ref={changesDialog} className="remote-sheet sp-changes-sheet" aria-labelledby="remote-changes-heading" onClose={()=>setChangesPanel(false)}><PaneResizer cssVar="--inspector-w" label="Resize workspace panel" min={360} max={960} initial={560} direction={-1} />
       <header><h2 id="remote-changes-heading">Workspace changes</h2><div className="sp-changes-actions"><button type="button" disabled={!connected || changesLoading} onClick={()=>void loadChanges()}>Refresh</button><button type="button" aria-label="Close workspace changes" onClick={()=>changesDialog.current?.close()}>Close</button></div></header>
-      <div className="sp-changes-sheet-body" dangerouslySetInnerHTML={{__html:renderChangesView(changesLoading ? { loading: true } : changesState)}} />
+      <div className="sp-changes-sheet-body" onClick={event => {
+        const button = (event.target as HTMLElement).closest<HTMLElement>('[data-change-file]');
+        if (!button || changesLoading) return;
+        const path = button.dataset.changeFile || '';
+        if (changesFileMode.current) void loadChanges(path);
+        else setChangesSelected(path);
+      }} dangerouslySetInnerHTML={{__html:renderChangesView(changesLoading ? { loading: true } : changesState, { selected: changesSelected })}} />
     </dialog>}
     {filesPanel && <dialog ref={filesDialog} className="remote-sheet sp-files-sheet" aria-labelledby="remote-files-heading" onClose={()=>setFilesPanel(false)}><PaneResizer cssVar="--inspector-w" label="Resize workspace panel" min={360} max={960} initial={560} direction={-1} />
       <header><h2 id="remote-files-heading">Workspace files</h2><button type="button" aria-label="Close workspace files" onClick={()=>filesDialog.current?.close()}>Close</button></header>

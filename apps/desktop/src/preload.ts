@@ -36,11 +36,7 @@ window.addEventListener('DOMContentLoaded', () => {
     .desktop-titlebar{position:fixed;inset:0 0 auto;height:32px;z-index:100;background:var(--sp-surface,#0d0d0f);color:var(--sp-text-2,#aaa);font:500 12px/32px var(--sp-font-sans,sans-serif);padding:0 150px 0 16px;user-select:none;-webkit-app-region:drag;border-bottom:1px solid var(--sp-border,#222)}
     body.sp-desktop-window{padding-top:32px}
     body.sp-native-console.sp-desktop-window .sp-console-workspace{height:calc(100dvh - 32px);max-height:calc(100dvh - 32px);min-height:0}
-    @media(min-width:768px){body.sp-native-console.sp-desktop-window .sp-console-workspace>.sp-console-nav{top:0;height:calc(100dvh - 32px);max-height:calc(100dvh - 32px)}}
-    @media(min-width:768px){body.sp-native-console.sp-desktop-window .sp-chat-column{height:100%}body.sp-native-console.sp-desktop-window .sp-console-content{height:calc(100% - 16px);min-height:0}}
-    body.sp-native-console.sp-desktop-window .ide-layout{height:100%;min-height:0}
-    @media(max-width:600px){body.sp-desktop-window .ide-layout{height:calc(100dvh - 32px)}body.sp-desktop-window #chat-list-toggle{top:44px!important}}
-    @media(max-width:760px){body.sp-desktop-window .ide-sidebar{top:104px}}
+    @media(max-width:899px){body.sp-native-console.sp-desktop-window .gc-console>.sp-chat-column:not([hidden]){top:32px}}
   `;
   if (process.platform === 'darwin') style.textContent += '.desktop-titlebar{padding-left:80px}';
   document.head.append(style);

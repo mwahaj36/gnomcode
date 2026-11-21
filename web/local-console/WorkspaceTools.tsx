@@ -107,7 +107,7 @@ export function AttachmentsBar({ items, status, onRemove }: { items: AttachmentI
         onClick={click}
         dangerouslySetInnerHTML={{ __html: renderAttachmentPills(items) }}
       />
-      <p id="chat-attach-status" className="sp-attach-status" role="status">
+      <p id="chat-attach-status" className="sp-attach-status" role="status" hidden={!status}>
         {status}
       </p>
     </>
@@ -155,6 +155,10 @@ export function SessionTools({
   const [hasDiffText, setHasDiffText] = useState(false);
   // The last changes payload, so picking a file re-renders without another git call.
   const changesData = useRef<unknown>(null);
+  const changesRequest = useRef(0);
+  const fileByFileReview = useRef(false);
+  const fileRequest = useRef(0);
+  const directoryRequest = useRef(0);
   const [fileListing, setFileListing] = useState<RepoFileListing>(null);
   const [fileBodyHtml, setFileBodyHtml] = useState('');
   const [filePath, setFilePath] = useState('');
@@ -170,6 +174,7 @@ export function SessionTools({
   useEffect(() => {
     if (controlledPanel === undefined) setInternalPanel(null);
     changesData.current = null;
+    fileByFileReview.current = false;
     setChangesHtml('');
     setHasDiffText(false);
     setDiffCopied(false);
@@ -182,15 +187,20 @@ export function SessionTools({
     interruptAttempt.current = null;
   }, [sessionId]);
 
-  const loadChanges = useCallback(async () => {
+  const loadChanges = useCallback(async (selected = '') => {
     const target = sessionId;
+    const request = ++changesRequest.current;
+    changesData.current = null;
+    setHasDiffText(false);
     setChangesHtml(renderChangesView({ loading: true }));
     try {
-      const data = await fetchLocalJson<Record<string, unknown>>(`/api/v1/sessions/${encodeURIComponent(target)}/changes`);
-      if (sessionRef.current === target) {
+      const query = selected ? `?path=${encodeURIComponent(selected)}` : '';
+      const data = await fetchLocalJson<Record<string, unknown>>(`/api/v1/sessions/${encodeURIComponent(target)}/changes${query}`);
+      if (sessionRef.current === target && changesRequest.current === request) {
         changesData.current = data;
+        fileByFileReview.current = Boolean(data.truncated) || (Boolean(selected) && fileByFileReview.current);
         setHasDiffText(Boolean(typeof data?.diff === 'string' && data.diff.trim()));
-        setChangesHtml(renderChangesView(data as never));
+        setChangesHtml(renderChangesView(data as never, { selected }));
       }
     } catch (err) {
       const text = httpStatusOf(err);
@@ -200,13 +210,16 @@ export function SessionTools({
           ? 'Git diff timed out after 10 seconds.'
           : text.includes('404')
             ? 'This conversation has no workspace on this desktop.'
-            : 'This workspace is not a git repository.';
-      if (sessionRef.current === target) setChangesHtml(renderChangesView({ error: message }));
+            : text.includes('400')
+              ? 'This workspace is not a git repository.'
+            : 'Could not load changes. Refresh to try again.';
+      if (sessionRef.current === target && changesRequest.current === request) setChangesHtml(renderChangesView({ error: message }));
     }
   }, [sessionId]);
 
   const loadFiles = useCallback(
     async (subpath = '') => {
+      const request = ++directoryRequest.current;
       if (!repoPath) {
         setFileListing({ error: 'Workspace repository path is unavailable for this session.' });
         return;
@@ -216,16 +229,18 @@ export function SessionTools({
         const listing = await fetchLocalJson<Record<string, unknown>>(
           `/api/v1/repos/files?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(subpath)}`,
         );
-        setFileListing(listing as RepoFileListing);
+        if (request === directoryRequest.current && sessionRef.current === sessionId) setFileListing(listing as RepoFileListing);
       } catch (err) {
+        if (request !== directoryRequest.current || sessionRef.current !== sessionId) return;
         setFileListing({ error: httpStatusOf(err).includes('404') ? 'Folder not found inside the workspace.' : 'Could not list this workspace folder.' });
       }
     },
-    [repoPath],
+    [repoPath, sessionId],
   );
 
   const readFile = useCallback(
     async (raw: string) => {
+      const request = ++fileRequest.current;
       const check = normalizeWorkspaceRelPath(raw);
       if (!check.ok) {
         setFileBodyHtml(renderFileViewer({ error: check.error }));
@@ -241,8 +256,9 @@ export function SessionTools({
         const data = await fetchLocalJson<Record<string, unknown>>(
           `/api/v1/repos/file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(check.path)}`,
         );
-        setFileBodyHtml(renderFileViewer(data as never));
+        if (request === fileRequest.current && sessionRef.current === sessionId) setFileBodyHtml(renderFileViewer(data as never));
       } catch (err) {
+        if (request !== fileRequest.current || sessionRef.current !== sessionId) return;
         const text = httpStatusOf(err);
         const message = text.includes('413')
           ? 'File exceeded the 512 KiB read cap on desktop.'
@@ -254,7 +270,7 @@ export function SessionTools({
         setFileBodyHtml(renderFileViewer({ error: message }));
       }
     },
-    [repoPath],
+    [repoPath, sessionId],
   );
 
   const loadArtifacts = useCallback(async () => {
@@ -269,7 +285,10 @@ export function SessionTools({
       setArtifacts(list);
       const linked = artifactLink ? artifactForLink(list, artifactLink) : null;
       const first = artifactLink ? linked : list[0];
-      setSelectedArtifact(first ? String(first.id || first.path || 0) : '');
+      setSelectedArtifact((previous) => {
+        if (!artifactLink && list.some((item, index) => String(item.id || item.path || index) === previous)) return previous;
+        return first ? String(first.id || first.path || list.indexOf(first)) : '';
+      });
       setArtifactsBadge(
         typeof data.changes_count === 'number' ? `${data.changes_count} workspace change${data.changes_count === 1 ? '' : 's'}` : 'Artifacts',
       );
@@ -387,7 +406,9 @@ export function SessionTools({
             onClick={(event) => {
               const button = (event.target as HTMLElement).closest<HTMLElement>('[data-change-file]');
               if (!button || !changesData.current) return;
-              setChangesHtml(renderChangesView(changesData.current as never, { selected: button.dataset.changeFile || '' }));
+              const selected = button.dataset.changeFile || '';
+              if (fileByFileReview.current) void loadChanges(selected);
+              else setChangesHtml(renderChangesView(changesData.current as never, { selected }));
             }}
           />
         </section>
