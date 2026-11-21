@@ -16,3 +16,15 @@ test('notices include and escape the actual production dependency license', () =
     assert.match(html,/Terms &lt;literal&gt; &amp; attribution/);
   } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 });
+
+test('bundled console licenses are included and cannot be omitted silently', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gnomcode-console-notices-'));
+  try {
+    const file = path.join(dir, 'font-LICENSE.txt');
+    assert.throws(() => renderNotices([], [file]));
+    fs.writeFileSync(file, 'Font copyright <owner>');
+    assert.match(renderNotices([], [file]), /Font copyright &lt;owner&gt;/);
+    fs.writeFileSync(file, '');
+    assert.throws(() => renderNotices([], [file]));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
