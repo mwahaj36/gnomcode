@@ -175,8 +175,13 @@ jobs:
             target: aarch64-apple-darwin
             argument: darwin-aarch64
     runs-on: ${{ matrix.os }}
+    env:
+      GNOMCODE_UPDATE_PUBLIC_KEY: ${{ vars.GNOMCODE_UPDATE_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@v7
+      - name: Require release verification key
+        shell: bash
+        run: '[[ "$GNOMCODE_UPDATE_PUBLIC_KEY" =~ ^[0-9a-fA-F]{64}$ ]]'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v7
@@ -313,8 +318,13 @@ jobs:
             arch: arm64
             targets: "@electron-forge/maker-zip"
     runs-on: ${{ matrix.os }}
+    env:
+      GNOMCODE_UPDATE_PUBLIC_KEY: ${{ vars.GNOMCODE_UPDATE_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@v7
+      - name: Require release verification key
+        shell: bash
+        run: '[[ "$GNOMCODE_UPDATE_PUBLIC_KEY" =~ ^[0-9a-fA-F]{64}$ ]]'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-about
@@ -348,6 +358,11 @@ jobs:
           node check-inputs.cjs
           npx electron-forge make --arch ${{ matrix.arch }} --targets ${{ matrix.targets }}
           find out/make -maxdepth 4 -type f
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.os }}-${{ matrix.arch }}
+          path: apps/desktop/out/make/**/*
+          if-no-files-found: error
 
   package-smoke:
     if: inputs.package
