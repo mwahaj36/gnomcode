@@ -26,6 +26,8 @@ Launch official AI coding agent CLIs in one workspace, track usage and quota win
 
 ## Install
 
+**v1.1.0** rebuilds the console across Home, Workspace, Usage, Settings and Remote, including project-grouped conversations, the composer, file/artifact inspection, per-file change reviews and terminals. Download the desktop app for your platform from [Downloads](https://gnomcode.vercel.app/downloads) or [v1.1.0 release assets](https://github.com/mwahaj36/gnomcode/releases/tag/v1.1.0). Windows installers are unsigned; macOS apps are unnotarized. Automatic update installation awaits a signed update manifest.
+
 ### npm (Windows, macOS, Linux)
 
 ```sh
@@ -38,11 +40,11 @@ npm install -g gnomcode
 curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash
 ```
 
-Tarball archives (`darwin-aarch64`, `darwin-x86_64`, `linux-x86_64`, `linux-aarch64`) and `SHA256SUMS` are also published on the [Releases page](https://github.com/mwahaj36/gnomcode/releases) and [Downloads](https://gnomcode.vercel.app/downloads).
+Desktop ZIPs are available for macOS Intel/Apple Silicon and Linux x64, with a Debian/Ubuntu `.deb` installer. CLI tarball archives (`darwin-aarch64`, `darwin-x86_64`, `linux-x86_64`, `linux-aarch64`, `linux-x86_64-musl`) and `SHA256SUMS` are also published on the [Releases page](https://github.com/mwahaj36/gnomcode/releases) and [Downloads](https://gnomcode.vercel.app/downloads).
 
 ### Windows
 
-Download `Gnomcode-Setup.exe` or `Gnomcode-v1.0.7-windows-x64.zip` from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
+Download `Gnomcode-Setup.exe` or `Gnomcode-v1.1.0-windows-x64.zip` from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
 
 ```powershell
 irm https://gnomcode.vercel.app/downloads/install.ps1 | iex
@@ -90,8 +92,11 @@ What works in practice depends on your installed CLI version, authentication sta
 | Platform | Distribution | Status |
 | :--- | :--- | :--- |
 | **Windows x64** | Setup `.exe`, portable ZIP, `install.ps1`, npm | Verified locally & in CI (unsigned installer) |
-| **macOS (arm64, x64)** | `.tar.gz` archives, `install.sh`, npm | Built & smoke-tested in CI; unnotarized (Gatekeeper) |
-| **Linux (x64, arm64)** | `.tar.gz` archives, `install.sh`, npm | Built & smoke-tested in CI; live DE tray/Wayland unverified |
+| **Windows ARM64** | CLI ZIP, npm | Cross-compiled; native ARM64 execution unverified |
+| **macOS (arm64, x64)** | Desktop ZIP, CLI `.tar.gz`, `install.sh`, npm | Built & smoke-tested in CI; unnotarized (Gatekeeper) |
+| **Linux (x64, arm64)** | x64 desktop ZIP/DEB; CLI `.tar.gz`, `install.sh`, npm | Built & smoke-tested in CI; live DE tray/Wayland unverified |
+
+Linux x64 musl is also available as a static CLI archive and npm package. npm registry publication is separate from GitHub release publication; check the npm version badge for the published version.
 
 See [docs/PLATFORMS.md](docs/PLATFORMS.md) for the full verification matrix and known platform gaps.
 

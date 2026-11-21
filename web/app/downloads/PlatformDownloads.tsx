@@ -9,33 +9,38 @@ type DownloadAction = { label: string; href: string; detail: string };
 
 const platforms = [
   {
-    id: "windows", name: "Windows", availability: "RELEASE CANDIDATE", detail: "Windows · x64",
+    id: "windows", name: "Windows", availability: "Available", detail: "Windows · x64",
     body: "Launch Claude Code, Codex and Antigravity, continue conversations and keep a separate workspace terminal close at hand.",
     actions: [
       {label: "Download Windows installer", href: "/downloads/Gnomcode-Setup.exe", detail: "Windows x64"},
-      {label: "Download ZIP", href: `/downloads/Gnomcode-v${version}-windows-x64.zip`, detail: "Portable archive"},
+      {label: "Download ZIP", href: `/downloads/Gnomcode-v${version}-windows-x64.zip`, detail: "CLI and installer archive"},
+      {label: "Download Windows ARM64 CLI", href: `/downloads/Gnomcode-v${version}-windows-arm64-cli.zip`, detail: "CLI only; no desktop installer"},
     ] as DownloadAction[], command: null,
     note: "Unsigned Windows installer. Review the release notes and SHA-256 checksums before installing.",
   },
   {
-    id: "macos", name: "macOS", availability: "RELEASE CANDIDATE", detail: "macOS · Apple Silicon & Intel",
+    id: "macos", name: "macOS", availability: "Available", detail: "macOS · Apple Silicon & Intel",
     body: "Bring your agent conversations, recorded usage and model-switch workflow into one local workspace.",
     actions: [
-      {label: "Download macOS (Apple Silicon)", href: `/downloads/gnomcode-v${version}-darwin-aarch64.tar.gz`, detail: "macOS arm64 archive"},
-      {label: "Download macOS (Intel)", href: `/downloads/gnomcode-v${version}-darwin-x86_64.tar.gz`, detail: "macOS x86_64 archive"},
+      {label: "Download desktop (Apple Silicon)", href: `/downloads/Gnomcode-darwin-arm64-${version}.zip`, detail: "macOS arm64 desktop app"},
+      {label: "Download desktop (Intel)", href: `/downloads/Gnomcode-darwin-x64-${version}.zip`, detail: "macOS x64 desktop app"},
+      {label: "Download macOS CLI (Apple Silicon)", href: `/downloads/gnomcode-v${version}-darwin-aarch64.tar.gz`, detail: "macOS arm64 archive"},
+      {label: "Download macOS CLI (Intel)", href: `/downloads/gnomcode-v${version}-darwin-x86_64.tar.gz`, detail: "macOS x86_64 archive"},
     ] as DownloadAction[],
     command: "curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash",
-    note: "Unsigned macOS archive verified in CI. Review the release notes and SHA-256 checksums before installing.",
+    note: "Unsigned, unnotarized macOS packages verified in CI. Review the release notes and SHA-256 checksums before installing.",
   },
   {
-    id: "linux", name: "Linux", availability: "RELEASE CANDIDATE", detail: "Linux · x86_64 & arm64",
+    id: "linux", name: "Linux", availability: "Available", detail: "Linux · x86_64 & arm64",
     body: "Use the standalone CLI and local console to orchestrate agents and inspect usage on your own machine.",
     actions: [
-      {label: "Download Linux (x86_64)", href: `/downloads/gnomcode-v${version}-linux-x86_64.tar.gz`, detail: "Linux x86_64 archive"},
-      {label: "Download Linux (arm64)", href: `/downloads/gnomcode-v${version}-linux-aarch64.tar.gz`, detail: "Linux aarch64 archive"},
+      {label: "Download desktop (.deb)", href: `/downloads/gnomcode-desktop_${version}_amd64.deb`, detail: "Debian / Ubuntu x64"},
+      {label: "Download desktop ZIP", href: `/downloads/Gnomcode-linux-x64-${version}.zip`, detail: "Linux x64 portable desktop"},
+      {label: "Download Linux CLI (x86_64)", href: `/downloads/gnomcode-v${version}-linux-x86_64.tar.gz`, detail: "Linux x86_64 archive"},
+      {label: "Download Linux CLI (arm64)", href: `/downloads/gnomcode-v${version}-linux-aarch64.tar.gz`, detail: "Linux aarch64 archive"},
     ] as DownloadAction[],
     command: "curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash",
-    note: "Linux archive verified in CI; desktop .deb and .zip packages are attached on GitHub Releases.",
+    note: "Linux desktop and CLI packages verified in CI. ARM64 and musl are CLI-only distributions.",
   },
 ] as const;
 
