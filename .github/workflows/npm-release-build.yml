@@ -1,0 +1,67 @@
+name: Npm additional release targets
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  GNOMCODE_UPDATE_PUBLIC_KEY: ${{ vars.GNOMCODE_UPDATE_PUBLIC_KEY }}
+
+jobs:
+  build:
+    name: npm binary (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            platform: win32-arm64
+            binary: gnomcode.exe
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            platform: linux-x64-musl
+            binary: gnomcode
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require release verification key
+        shell: bash
+        run: '[[ "$GNOMCODE_UPDATE_PUBLIC_KEY" =~ ^[0-9a-fA-F]{64}$ ]]'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install musl toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build release binary
+        run: cargo build --locked --release -p gnomcode --target ${{ matrix.target }}
+      - name: Check Windows ARM64 machine type
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          import pathlib, struct
+          data = pathlib.Path('target/${{ matrix.target }}/release/gnomcode.exe').read_bytes()
+          offset = struct.unpack_from('<I', data, 0x3c)[0]
+          assert data[offset:offset + 4] == b'PE\0\0'
+          assert struct.unpack_from('<H', data, offset + 4)[0] == 0xaa64
+      - name: Verify static musl executable and packaged behavior
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if readelf -l target/${{ matrix.target }}/release/gnomcode | grep -q INTERP; then
+            echo 'Expected a static musl executable'; exit 1
+          fi
+          node scripts/smoke/run-packaged-smoke.mjs --binary target/${{ matrix.target }}/release/gnomcode
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-extra-${{ matrix.platform }}
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          if-no-files-found: error
