@@ -97,7 +97,7 @@ if not assets:
 # Preserve checksums from other targets built in the same release.
 assets = list({path.name: path for path in [*assets, *out.glob(f'gnomcode-v{version}-*.tar.gz'), *out.glob(f'Gnomcode-v{version}-*.zip')]}.values())
 manifest = ''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in sorted(assets))
-(out / f'SHA256SUMS-v{version}.txt').write_text(manifest)
-(out / 'SHA256SUMS').write_text(manifest)
+(out / f'SHA256SUMS-v{version}.txt').write_bytes(manifest.encode('utf-8'))
+(out / 'SHA256SUMS').write_bytes(manifest.encode('utf-8'))
 for path in assets:
     print(f'{path.name}: {path.stat().st_size} bytes')
