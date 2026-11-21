@@ -22,7 +22,7 @@ export default function DownloadsPage() {
       <section className="sp-download-help" aria-label="Release verification">
         <div>
           <h2>Verify the release</h2>
-          <p>Check the versioned SHA-256 manifest and release notes before installing. Windows installers are unsigned; update signatures are a separate authenticity check.</p>
+          <p>Check the versioned SHA-256 manifest and release notes before installing. Windows installers are unsigned and macOS apps are unnotarized. This release is a manual download; automatic updates await a signed manifest.</p>
         </div>
         <Link href="/docs/getting-started">Read installation guide <span aria-hidden="true">→</span></Link>
       </section>
