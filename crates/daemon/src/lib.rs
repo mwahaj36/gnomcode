@@ -1366,11 +1366,9 @@ mod tests {
             .await;
         });
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        // macOS can deliver startup directory events after the initial dirty pass.
-        // Measure idleness after those settle rather than assuming one OS event.
+        // OS startup events can arrive after the initial dirty pass.
         assert!(count.load(Ordering::SeqCst) >= 1);
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let baseline = count.load(Ordering::SeqCst);
+        let baseline = settled_count(&count).await;
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         assert_eq!(count.load(Ordering::SeqCst), baseline);
         std::fs::write(
@@ -1387,18 +1385,8 @@ mod tests {
                 break;
             }
         }
-        // One write can raise several OS events (create, then modify) that arrive apart, more
-        // so under load. Let the log write's own events finish before measuring the db write,
-        // or a late one is blamed on it.
-        let mut settled = count.load(Ordering::SeqCst);
-        for _ in 0..50 {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            let now = count.load(Ordering::SeqCst);
-            if now == settled {
-                break;
-            }
-            settled = now;
-        }
+        // One write can raise several OS events that arrive in separate batches.
+        let settled = settled_count(&count).await;
         // SQLite writes in a watched dir must not retrigger (feedback loop).
         std::fs::write(dir.path().join("state.db-wal"), "x").expect("db write");
         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
@@ -1409,6 +1397,23 @@ mod tests {
             after_db, settled,
             "own db writes must not trigger a reconcile"
         );
+    }
+
+    async fn settled_count(count: &std::sync::atomic::AtomicUsize) -> usize {
+        use std::sync::atomic::Ordering;
+        let mut previous = count.load(Ordering::SeqCst);
+        let mut quiet = 0;
+        for _ in 0..100 {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let current = count.load(Ordering::SeqCst);
+            quiet = if current == previous { quiet + 1 } else { 0 };
+            if quiet >= 10 {
+                return current;
+            }
+            previous = current;
+        }
+        assert!(quiet >= 10, "watcher did not settle within ten seconds");
+        previous
     }
 
     async fn wait_for(count: &std::sync::atomic::AtomicUsize, at_least: usize) -> bool {
@@ -1447,6 +1452,7 @@ mod tests {
             .await;
         });
         assert!(wait_for(&count, 1).await, "initial pass");
+        let baseline = settled_count(&count).await;
         // Unrelated home-dir churn must not wake ingestion.
         std::fs::write(home.path().join("notes.txt"), "x").expect("write");
         std::fs::create_dir(home.path().join(".other")).expect("mkdir");
@@ -1456,19 +1462,20 @@ mod tests {
         std::fs::create_dir_all(&root).expect("create root");
         let created = wait_for(&count, idle + 1).await;
         // Files written inside the new root keep triggering passes.
-        let before_write = count.load(Ordering::SeqCst);
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let before_write = settled_count(&count).await;
         std::fs::write(root.join("rollout-a.jsonl"), "{}\n").expect("write");
         let wrote = wait_for(&count, before_write + 1).await;
         // Delete and recreate: picked up again.
         std::fs::remove_dir_all(home.path().join(".codex")).expect("rm");
-        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        let before_recreate = count.load(Ordering::SeqCst);
+        let before_recreate = settled_count(&count).await;
         std::fs::create_dir_all(&root).expect("recreate");
         std::fs::write(root.join("rollout-b.jsonl"), "{}\n").expect("write");
         let recreated = wait_for(&count, before_recreate + 1).await;
         loop_task.abort();
-        assert_eq!(idle, 1, "unrelated home writes must not trigger a pass");
+        assert_eq!(
+            idle, baseline,
+            "unrelated home writes must not trigger a pass"
+        );
         assert!(created, "new root must trigger a pass");
         assert!(wrote, "writes in the new root must trigger a pass");
         assert!(recreated, "recreated root must trigger a pass");
