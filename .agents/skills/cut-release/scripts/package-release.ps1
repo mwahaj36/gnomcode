@@ -52,6 +52,9 @@ Copy-Item $NativeExe (Join-Path $DesktopStaging "bin/gnomcode.exe") -Force
 Copy-Item $HookExe (Join-Path $DesktopStaging "bin/gnomcode-hook.exe") -Force
 Copy-Item "LICENSE" (Join-Path $DesktopStaging "LICENSE") -Force
 Copy-Item "$Out/THIRD_PARTY_NOTICES.html" (Join-Path $DesktopStaging "THIRD_PARTY_NOTICES.html") -Force
+# Electron 45 downloads its runtime on first require; notices need that payload.
+& node -e "require('./apps/desktop/node_modules/electron')"
+if ($LASTEXITCODE -ne 0) { throw "Electron runtime preparation failed" }
 & node apps/desktop/desktop-notices.cjs
 if ($LASTEXITCODE -ne 0) { throw "Desktop notices staging failed" }
 & npm run package --prefix apps/desktop
