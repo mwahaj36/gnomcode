@@ -101,7 +101,7 @@ export function PaneResizer({ cssVar, label, min, max, initial, direction, class
       title={`${label}. Drag, or use the arrow keys. Double-click to reset.`}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
-      onDoubleClick={() => setWidth(initial)}
+      onDoubleClick={() => setWidth(clamp(initial))}
     />
   );
 }

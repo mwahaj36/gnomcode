@@ -78,6 +78,11 @@ test('history and docked tools retain keyboard resizing without overflowing comp
   await handle.focus();
   await handle.press('ArrowRight');
   await expect.poll(async () => (await tools.boundingBox())!.width).toBe(width - 8);
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await expect(handle).toBeVisible();
+  await expect.poll(async () => Number(await handle.getAttribute('aria-valuemax'))).toBeLessThan(560);
+  await handle.dblclick();
+  expect(Number(await handle.getAttribute('aria-valuenow'))).toBeLessThanOrEqual(Number(await handle.getAttribute('aria-valuemax')));
   await page.setViewportSize({ width: 1000, height: 720 });
   await expect(handle).toBeHidden();
   const pane = await tools.boundingBox();
