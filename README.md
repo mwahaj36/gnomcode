@@ -40,7 +40,7 @@ npm install -g gnomcode
 curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash
 ```
 
-Desktop ZIPs are available for macOS Intel/Apple Silicon and Linux x64, with a Debian/Ubuntu `.deb` installer. CLI tarball archives (`darwin-aarch64`, `darwin-x86_64`, `linux-x86_64`, `linux-aarch64`, `linux-x86_64-musl`) and `SHA256SUMS` are also published on the [Releases page](https://github.com/mwahaj36/gnomcode/releases) and [Downloads](https://gnomcode.vercel.app/downloads).
+Desktop ZIPs are available for macOS Intel/Apple Silicon and Linux x64, with a Debian/Ubuntu `.deb` installer. On Alpine/musl, use npm or the static musl archive; the shell installer currently targets glibc Linux. CLI tarball archives (`darwin-aarch64`, `darwin-x86_64`, `linux-x86_64`, `linux-aarch64`, `linux-x86_64-musl`) and `SHA256SUMS` are also published on the [Releases page](https://github.com/mwahaj36/gnomcode/releases) and [Downloads](https://gnomcode.vercel.app/downloads).
 
 ### Windows
 

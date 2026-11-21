@@ -3,6 +3,8 @@ param([string]$Version)
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
 Set-Location $RepoRoot
+& python scripts/test-package-checksums.py
+if ($LASTEXITCODE -ne 0) { throw "Release checksum regression failed" }
 $SetupSource = Get-Content "scripts/Setup.cs" -Raw
 if ($SetupSource -notmatch 'AssemblyVersion\("(\d+\.\d+\.\d+)\.0"\)') { throw "Missing installer version" }
 $SourceVersion = $Matches[1]
