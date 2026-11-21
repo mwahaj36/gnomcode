@@ -1148,7 +1148,15 @@ pub fn write_private_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
                 (_, Ok(user)) if !user.is_empty() => format!("{user}:(F)"),
                 _ => String::new(),
             };
+            // Reset explicit grants before removing inheritance. Some Windows profiles
+            // create files with explicit grants that /inheritance:r alone preserves.
             let fast_ok = !account.is_empty()
+                && std::process::Command::new("icacls.exe")
+                    .arg(&pending)
+                    .args(["/reset", "/Q"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+                    .is_ok_and(|out| out.status.success())
                 && std::process::Command::new("icacls.exe")
                     .arg(&pending)
                     .args(["/inheritance:r", "/grant:r", &account, "/Q"])

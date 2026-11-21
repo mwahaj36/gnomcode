@@ -1366,8 +1366,13 @@ mod tests {
             .await;
         });
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        // Initial dirty pass only: 60 s back-off keeps idle ticks from scanning.
-        assert_eq!(count.load(Ordering::SeqCst), 1);
+        // macOS can deliver startup directory events after the initial dirty pass.
+        // Measure idleness after those settle rather than assuming one OS event.
+        assert!(count.load(Ordering::SeqCst) >= 1);
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let baseline = count.load(Ordering::SeqCst);
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(count.load(Ordering::SeqCst), baseline);
         std::fs::write(
             dir.path().join("rollout-x.jsonl"),
             "{}
@@ -1377,7 +1382,7 @@ mod tests {
         let mut woke = false;
         for _ in 0..150 {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-            if count.load(Ordering::SeqCst) >= 2 {
+            if count.load(Ordering::SeqCst) > baseline {
                 woke = true;
                 break;
             }
