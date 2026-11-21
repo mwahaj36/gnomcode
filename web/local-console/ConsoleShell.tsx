@@ -1,10 +1,11 @@
-import { type KeyboardEvent, type MouseEvent, type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { bindPreviewInteractions, copyTextToClipboard } from '../lib/console-presentation';
+import { CONSOLE_ICONS } from '../lib/console-navigation';
 import { AccountView } from './AccountView';
 import { ApprovalsCard } from './ApprovalsCard';
 import { CommandPalette } from './CommandPalette';
 import { fetchAccount, signOutDesktop } from './settings-index';
-import { toggleChatList, useChatListCollapsed } from './chat-list';
+import { collapseChatList, toggleChatList, useChatListCollapsed } from './chat-list';
 import { HomeView } from './HomeView';
 import { fetchLocalJson } from './local-api';
 import { PaneResizer } from './pane-resizer';
@@ -30,31 +31,15 @@ const TITLES: Record<ConsoleView, string> = {
   settings: 'Settings',
   auth: 'Account',
 };
-const RAIL: { view: ConsoleView; label: string; controls: string; icon: ReactElement }[] = [
-  {
-    view: 'overview',
-    label: 'Home',
-    controls: 'view-console',
-    icon: <path d="M3 11l9-8 9 8v10H3z M9 21v-6h6v6" />,
-  },
-  { view: 'sessions', label: 'Workspace', controls: 'view-console', icon: <path d="M4 4h16v12H9l-5 4V4Z" /> },
-  { view: 'usage', label: 'Usage', controls: 'view-console', icon: <path d="M4 20V10m8 10V4m8 16v-7" /> },
-  {
-    view: 'settings',
-    label: 'Settings',
-    controls: 'view-settings',
-    icon: (
-      <>
-        <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
-        <circle cx="16" cy="7" r="2" />
-        <circle cx="8" cy="17" r="2" />
-      </>
-    ),
-  },
+const RAIL: { view: Exclude<ConsoleView, 'auth'>; label: string; controls: string }[] = [
+  { view: 'overview', label: 'Home', controls: 'view-console' },
+  { view: 'sessions', label: 'Workspace', controls: 'view-console' },
+  { view: 'usage', label: 'Usage', controls: 'view-console' },
+  { view: 'settings', label: 'Settings', controls: 'view-settings' },
 ];
 
 const POLL_MS = 2000;
-const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
+const isPhone = () => window.matchMedia('(max-width: 899px)').matches;
 const resolveView = (name: string): string => (name.startsWith('settings-') ? 'settings' : (VIEW_ALIASES[name] ?? name));
 const isView = (name: string): name is ConsoleView => (VIEWS as string[]).includes(name);
 
@@ -131,9 +116,26 @@ export function ConsoleShell() {
   const [navTick, setNavTick] = useState(0);
   // The rail is a compact icon column unless the person asks for labels.
   const [railExpanded, setRailExpanded] = useState(() => storedFlag('gnomcode-rail-expanded') === '1');
+  const [compact, setCompact] = useState(isPhone);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 899px)');
+    const changed = () => setCompact(media.matches);
+    media.addEventListener('change', changed);
+    return () => media.removeEventListener('change', changed);
+  }, []);
   const [paired, setPaired] = useState(false);
   const [sync, setSync] = useState<{ text: string; failed: boolean }>({ text: 'Connecting', failed: false });
   const chatListCollapsed = useChatListCollapsed();
+  useEffect(() => {
+    if (!compact || chatListCollapsed) return;
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      collapseChatList();
+      document.getElementById('chat-list-toggle')?.focus();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [compact, chatListCollapsed]);
   const lastConsoleView = useRef<ConsoleView>('overview');
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const viewRef = useRef(view);
@@ -324,13 +326,13 @@ export function ConsoleShell() {
 
   return (
     <>
-      <div className="sp-console-workspace">
+      <div className="sp-console-workspace gc-console" data-view={view} data-navigation={railExpanded ? 'expanded' : 'collapsed'}>
         <nav className="nav-tabs sp-console-nav" aria-label="Console views" onKeyDown={onRailKey}>
           <a className="app-brand" href={viewUrl('overview')} aria-label="Gnomcode home" onClick={(event) => onRailClick(event, 'overview')}>
             <span className="sp-brand-mark" aria-hidden="true" />
             <span className="rail-label">gnomcode</span>
           </a>
-          <div role="tablist" aria-label="Console views" aria-orientation="vertical" className="sp-rail-tabs">
+          <div role="tablist" aria-label="Console views" aria-orientation={compact ? 'horizontal' : 'vertical'} className="sp-rail-tabs">
             {RAIL.map((item, index) => {
               const selected = item.view === view;
               return (
@@ -350,7 +352,7 @@ export function ConsoleShell() {
                   onClick={(event) => onRailClick(event, item.view)}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
-                    {item.icon}
+                    <path d={CONSOLE_ICONS[item.view]} />
                   </svg>
                   <span className="rail-label">{item.label}</span>
                 </button>
@@ -420,7 +422,7 @@ export function ConsoleShell() {
         </nav>
         <div className="sp-chat-column" hidden={view !== 'sessions' || chatListCollapsed}>
           <div id="console-nav-sessions" className="sp-nav-sessions" />
-          <PaneResizer cssVar="--chat-w" label="Resize conversations" min={220} max={440} initial={280} direction={1} />
+          <PaneResizer cssVar="--chat-w" label="Resize conversations" min={220} max={440} initial={260} direction={1} />
         </div>
         <div className="sp-console-content">
           <div className="console-context">

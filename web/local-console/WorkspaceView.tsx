@@ -270,6 +270,8 @@ export function WorkspaceView() {
 
   // Chat state
   const [chatEvents, setChatEvents] = useState<ChatEvent[]>([]);
+  const chatEventsRef = useRef(chatEvents);
+  useEffect(() => { chatEventsRef.current = chatEvents; }, [chatEvents]);
   const [pendingBySession, setPendingBySession] = useState<Record<string, PendingChat[]>>({});
   const [draftsBySession, setDraftsBySession] = useState<Record<string, string>>({});
   const [chatStatus, setChatStatus] = useState('');
@@ -295,30 +297,14 @@ export function WorkspaceView() {
   const [artifactLink, setArtifactLink] = useState('');
   const sidePanelRef = useRef(sidePanel);
   sidePanelRef.current = sidePanel;
-  // Overview card beside the conversation; a per-viewer layout preference. Narrow windows start with it
-  // closed because it overlays the conversation there.
-  const [overviewOpen, setOverviewOpenState] = useState(() => {
-    if (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 1181px)').matches) return false;
-    try {
-      return localStorage.getItem('gnomcode.overview') !== '0';
-    } catch {
-      return true;
-    }
-  });
+  const [overviewOpen, setOverviewOpenState] = useState(false);
   const overviewOpenRef = useRef(overviewOpen);
   overviewOpenRef.current = overviewOpen;
   const setOverviewOpen = useCallback((open: boolean) => {
     setOverviewOpenState(open);
-    try {
-      localStorage.setItem('gnomcode.overview', open ? '1' : '0');
-    } catch {
-      // Storage unavailable
-    }
   }, []);
-  // On narrow windows the Overview overlays the conversation, so opening a tool from it closes it
-  // (without changing the remembered desktop preference) and closing the tool returns to the chat.
   const openTool = (panel: WorkspaceSidePanel | 'automation') => {
-    if (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 1181px)').matches) setOverviewOpenState(false);
+    setOverviewOpenState(false);
     setSidePanel(panel);
   };
   const [queuedPrompts, setQueuedPrompts] = useState<
@@ -554,7 +540,7 @@ export function WorkspaceView() {
       }
 
       try {
-        const currentEvents = earlier ? chatEvents : [];
+        const currentEvents = earlier ? chatEventsRef.current : [];
         const before =
           earlier && currentEvents.length
             ? `&before=${encodeURIComponent(currentEvents[0].event_id)}`
@@ -600,7 +586,7 @@ export function WorkspaceView() {
         }
       }
     },
-    [chatEvents, closeAgentTerminal, loadChatModels, refreshAutomation, resizePrompt],
+    [closeAgentTerminal, loadChatModels, refreshAutomation, resizePrompt],
   );
 
   const loadConversations = useCallback(async () => {
@@ -679,6 +665,8 @@ export function WorkspaceView() {
 
   const openLauncher = useCallback(
     (open = true, folder?: string) => {
+      if (window.matchMedia('(max-width: 899px)').matches) collapseChatList();
+      setAllChatsOpen(false);
       reopenTriedRef.current = true;
       activeSessionIdRef.current = '';
       chatRequestRef.current += 1;
@@ -759,7 +747,44 @@ export function WorkspaceView() {
       sessionListRef.current.replaceChildren(empty);
       return;
     }
-    sessionListRef.current.innerHTML = renderSessionList(visibleSidebarSessions, activeSessionId);
+    const host = sessionListRef.current;
+    const projects = new Map<string, { label: string; sessions: typeof visibleSidebarSessions }>();
+    for (const session of visibleSidebarSessions) {
+      const key = session.repo_path || session.project_name || '';
+      const label = session.project_name || session.repo_path?.split(/[\\/]/).filter(Boolean).at(-1) || 'Other conversations';
+      const project = projects.get(key) ?? { label, sessions: [] };
+      project.sessions.push(session);
+      projects.set(key, project);
+    }
+    const previous = new Map(Array.from(host.querySelectorAll<HTMLDetailsElement>('details[data-project]'), (group) => [group.dataset.project, group.open]));
+    const fragment = document.createDocumentFragment();
+    for (const [key, project] of projects) {
+      const group = document.createElement('details');
+      group.className = 'sp-project-conversations';
+      group.dataset.project = key;
+      group.open = project.sessions.some((session) => session.id === activeSessionId) || (previous.get(key) ?? previous.size === 0);
+      const heading = document.createElement('summary');
+      heading.textContent = project.label;
+      heading.title = key || project.label;
+      const rows = document.createElement('div');
+      rows.innerHTML = renderSessionList(project.sessions, activeSessionId);
+      group.append(heading, rows);
+      fragment.append(group);
+    }
+    if (!projects.size) {
+      host.innerHTML = renderSessionList([], activeSessionId);
+      return;
+    }
+    const focus = document.activeElement;
+    const action = focus instanceof HTMLElement && host.contains(focus) ? focus.dataset : null;
+    const top = host.scrollTop;
+    host.replaceChildren(fragment);
+    if (action?.arg && action.action) {
+      Array.from(host.querySelectorAll<HTMLElement>('[data-action][data-arg]'))
+        .find((element) => element.dataset.arg === action.arg && element.dataset.action === action.action)
+        ?.focus({ preventScroll: true });
+    }
+    host.scrollTop = top;
   }, [visibleSidebarSessions, sidebarQuickFilter, activeSessionId, sidebarError]);
 
   // Sync reconciled chat cards via shared pure helper
@@ -1007,7 +1032,6 @@ export function WorkspaceView() {
     if (chatSocketRef.current) {
       const previous = chatSocketRef.current;
       chatSocketRef.current = null;
-      previous.onclose = null;
       previous.close();
     }
     const host = chatTerminalRef.current;
@@ -1295,15 +1319,15 @@ export function WorkspaceView() {
   const handleOpenWorkspaceTerminal = async () => {
     const source = activeSessionId;
     if (!source || workspaceTerminalBusyRef.current) return;
+    workspaceTerminalBusyRef.current = true;
     setWorkspaceTerminalError(null);
     setSidePanel('shell');
-    // The screen element lives in the pane that just opened; wait for React to mount it.
-    for (let frame = 0; frame < 60 && !workspaceTerminalScreenRef.current; frame += 1) {
-      await new Promise((done) => window.requestAnimationFrame(() => done(null)));
-    }
-    if (!workspaceTerminalScreenRef.current) return;
-    workspaceTerminalBusyRef.current = true;
     try {
+      // The screen element lives in the pane that just opened; wait for React to mount it.
+      for (let frame = 0; frame < 60 && !workspaceTerminalScreenRef.current; frame += 1) {
+        await new Promise((done) => window.requestAnimationFrame(() => done(null)));
+      }
+      if (!workspaceTerminalScreenRef.current || source !== activeSessionIdRef.current) return;
       let entry = workspaceTerminalsRef.current.get(source);
       if (entry && (entry.socket.readyState === WebSocket.CLOSING || entry.socket.readyState === WebSocket.CLOSED)) {
         entry.observer.disconnect();
@@ -1321,17 +1345,18 @@ export function WorkspaceView() {
           `/api/v1/sessions/${encodeURIComponent(source)}/terminal`,
           { method: 'POST' },
         );
-        const container = workspaceTerminalScreenRef.current;
-        container.querySelectorAll('[data-disconnected]').forEach((node) => node.remove());
+        const container = source === activeSessionIdRef.current ? workspaceTerminalScreenRef.current : null;
+        container?.querySelectorAll('[data-disconnected]').forEach((node) => node.remove());
         const element = document.createElement('div');
-        container.append(element);
+        container?.append(element);
+        const colors = getComputedStyle(document.body);
         const terminal = new window.Terminal({
           cols: 80,
           rows: 12,
           scrollback: 3000,
           fontSize: 13,
           fontFamily: 'Consolas, monospace',
-          theme: { background: '#0d0d0f', foreground: '#f6f7f8' },
+          theme: { background: colors.getPropertyValue('--sp-surface').trim(), foreground: colors.getPropertyValue('--sp-text').trim() },
           allowProposedApi: false,
         });
         const fit = new window.FitAddon.FitAddon();
@@ -1347,7 +1372,7 @@ export function WorkspaceView() {
           }
         };
         const observer = new ResizeObserver(resize);
-        observer.observe(container);
+        if (container) observer.observe(container);
         socket.onopen = resize;
         socket.onmessage = (evt) => {
           terminal.write(
@@ -1379,11 +1404,14 @@ export function WorkspaceView() {
         };
         workspaceTerminalsRef.current.set(source, entry);
       }
-      if (source !== activeSessionIdRef.current) return;
-      if (entry.element.parentElement !== workspaceTerminalScreenRef.current) {
-        workspaceTerminalScreenRef.current.append(entry.element);
+      const currentHost = workspaceTerminalScreenRef.current;
+      if (source !== activeSessionIdRef.current || !currentHost) return;
+      if (entry.element.parentElement !== currentHost) {
+        currentHost.append(entry.element);
       }
-      Array.from(workspaceTerminalScreenRef.current.children).forEach((node) => {
+      entry.observer.disconnect();
+      entry.observer.observe(currentHost);
+      Array.from(currentHost.children).forEach((node) => {
         if (node instanceof HTMLElement) {
           node.hidden = node !== entry?.element;
         }
@@ -1395,6 +1423,7 @@ export function WorkspaceView() {
         entry?.terminal.focus();
       });
     } catch (error) {
+      if (source !== activeSessionIdRef.current) return;
       const message =
         error instanceof Error && error.message
           ? error.message
@@ -1825,7 +1854,7 @@ export function WorkspaceView() {
     setSessionContextMenu(null);
     setAllChatsOpen(false);
     void loadChat(sessionId);
-    if (window.matchMedia('(max-width: 767px)').matches) {
+    if (window.matchMedia('(max-width: 899px)').matches) {
       collapseChatList();
     }
   };
@@ -1961,20 +1990,32 @@ export function WorkspaceView() {
       ? 'Google Antigravity'
       : activeSession?.agent || 'your agent application';
 
-  const [desktopNavSlot, setDesktopNavSlot] = useState<HTMLElement | null>(null);
+  const [historySlot, setHistorySlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(min-width: 768px)');
-    const syncSlot = () => {
-      setDesktopNavSlot(mq.matches ? document.getElementById('console-nav-sessions') : null);
-    };
-    syncSlot();
-    mq.addEventListener('change', syncSlot);
-    return () => mq.removeEventListener('change', syncSlot);
+    setHistorySlot(document.getElementById('console-nav-sessions'));
   }, []);
 
   const usageTriggerRef = useRef<HTMLButtonElement | null>(null);
   const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!overviewOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.sp-overview') && !toolsTriggerRef.current?.contains(target)) setOverviewOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOverviewOpen(false);
+      toolsTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [overviewOpen, setOverviewOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -2296,7 +2337,10 @@ export function WorkspaceView() {
           type="button"
           className="btn-control sp-all-chats-trigger"
           aria-pressed={allChatsOpen}
-          onClick={() => setAllChatsOpen((open) => !open)}
+          onClick={() => {
+            setAllChatsOpen((open) => !open);
+            if (window.matchMedia('(max-width: 899px)').matches) collapseChatList();
+          }}
         >
           {allChatsOpen ? 'Back to chat' : 'All chats ›'}
         </button>
@@ -2322,7 +2366,7 @@ export function WorkspaceView() {
 
   return (
     <section className="ide-layout" aria-label="Agent workspace">
-      {desktopNavSlot ? createPortal(sidebarNode, desktopNavSlot) : sidebarNode}
+      {historySlot ? createPortal(sidebarNode, historySlot) : null}
 
       <div className="ide-main">
         <button
@@ -2817,7 +2861,7 @@ export function WorkspaceView() {
                   type="button"
                   className="btn-control sp-overview-toggle"
                   aria-label="Overview"
-                  title="Overview: changes, files, terminals, artifacts and limits"
+                  title="Open workspace tools"
                   aria-pressed={overviewOpen || Boolean(sidePanel)}
                   onClick={() => {
                     if (sidePanel) {
@@ -2829,6 +2873,7 @@ export function WorkspaceView() {
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
                     <path d="M3 4h18v16H3z M15 4v16" />
                   </svg>
+                  <span className="sp-tools-label">Tools</span>
                   {activeChangesCount > 0 ? (
                     <span className="sp-overview-badge" aria-hidden="true">
                       {activeChangesCount}
@@ -3038,7 +3083,7 @@ export function WorkspaceView() {
               </div>
             ) : null}
 
-            {chatStatus ? <p role="status">{chatStatus}</p> : null}
+            {chatStatus ? <p className="sp-chat-status" data-message-count={/^\d+ messages?$/.test(chatStatus) || undefined} role="status">{chatStatus}</p> : null}
             {actionStatus ? <p role="status">{actionStatus}</p> : null}
             {copyPath ? (
               <button
@@ -3207,6 +3252,7 @@ export function WorkspaceView() {
             ) : (
               <>
                 <form className="sp-chat-composer" onSubmit={handleSendPrompt}>
+                  <div className="sp-composer-editor">
                   <AttachmentsBar items={attachments.items} status={attachments.status} onRemove={attachments.remove} />
                   <input
                     ref={attachInputRef}
@@ -3238,6 +3284,7 @@ export function WorkspaceView() {
                     }}
                     onKeyDown={handlePromptKeyDown}
                   />
+                  </div>
                   <div className="composer-toolbar">
                     <div className="composer-model">
                       <select
@@ -3246,7 +3293,7 @@ export function WorkspaceView() {
                         value={selectedModelValue}
                         onChange={(event) => void handleModelSwitch(event.target.value)}
                       >
-                        <option value="">
+                        <option value="" disabled>
                           {catalogError ? 'Model catalog unavailable' : 'Agent default'}
                         </option>
                         {providers.map((provider) => (
@@ -3349,7 +3396,7 @@ export function WorkspaceView() {
               ) : null}
               {sidePanel ? (
                   <aside className="sp-inspector" aria-label="Workspace tools">
-                    <PaneResizer cssVar="--inspector-w" label="Resize tools panel" min={360} max={960} initial={560} direction={-1} />
+                    <PaneResizer cssVar="--inspector-w" label="Resize tools panel" min={360} max={960} initial={560} direction={-1} maxRatio={0.55} />
                     <div className="sp-workspace-modal-head">
                       <div
                         className="sp-header-panel-toggles"
@@ -3369,7 +3416,6 @@ export function WorkspaceView() {
                           if (next === -1) return;
                           event.preventDefault();
                           tabs[next].focus();
-                          tabs[next].click();
                         }}
                       >
                         {(
@@ -3386,6 +3432,8 @@ export function WorkspaceView() {
                             key={tab}
                             type="button"
                             role="tab"
+                            id={`workspace-tool-${tab}`}
+                            aria-controls="workspace-inspector-content"
                             aria-selected={sidePanel === tab}
                             tabIndex={sidePanel === tab ? 0 : -1}
                             className={`btn-control${sidePanel === tab ? ' is-active' : ''}`}
@@ -3417,7 +3465,7 @@ export function WorkspaceView() {
                         Close
                       </button>
                     </div>
-                    <div className="sp-workspace-modal-body">
+                    <div className="sp-workspace-modal-body" id="workspace-inspector-content" role="tabpanel" aria-labelledby={`workspace-tool-${sidePanel}`}>
                       <div
                         ref={chatTerminalRef}
                         className="sp-chat-terminal-box"

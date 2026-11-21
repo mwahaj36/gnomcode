@@ -20,10 +20,24 @@ colors:
   border-strong-light: "#becbd8"
   text-light: "#0c1119"
   text-secondary-light: "#4a5565"
-  text-muted-light: "#657184"
+  text-muted-light: "#525e70"
   accent-dark: "#becbd8"
   accent-light: "#252e99"
   on-primary: "#0c1119"
+  action-dark: "#f6f7f8"
+  action-text-dark: "#0c1119"
+  action-light: "#252e99"
+  action-text-light: "#ffffff"
+  heat-dark-0: "#17171a"
+  heat-dark-1: "#4a121b"
+  heat-dark-2: "#7d1626"
+  heat-dark-3: "#ba1c35"
+  heat-dark-4: "#ff2544"
+  heat-light-0: "#e4e9ee"
+  heat-light-1: "#fcd1d8"
+  heat-light-2: "#f799a8"
+  heat-light-3: "#ec526b"
+  heat-light-4: "#ff2544"
 typography:
   display:
     fontFamily: "system-ui, Segoe UI, sans-serif"
@@ -48,9 +62,14 @@ typography:
     lineHeight: 1.6
   conversation:
     fontFamily: "system-ui, Segoe UI, sans-serif"
-    fontSize: "15px"
+    fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.75
+    lineHeight: 1.7
+  toolbar:
+    fontFamily: "system-ui, Segoe UI, sans-serif"
+    fontSize: "16px"
+    fontWeight: 600
+    lineHeight: 1.5
   control:
     fontFamily: "system-ui, Segoe UI, sans-serif"
     fontSize: "13px"
@@ -65,6 +84,7 @@ rounded:
   code: "4px"
   control: "6px"
   panel: "12px"
+  composer: "10px"
   conversation: "16px"
 spacing:
   tight: "4px"
@@ -88,16 +108,24 @@ components:
     typography: "{typography.control}"
     rounded: "{rounded.control}"
     padding: "9px 14px"
+  button-send-dark:
+    backgroundColor: "{colors.action-dark}"
+    textColor: "{colors.action-text-dark}"
+    typography: "{typography.control}"
+  button-send-light:
+    backgroundColor: "{colors.action-light}"
+    textColor: "{colors.action-text-light}"
+    typography: "{typography.control}"
   composer-dark:
-    backgroundColor: "{colors.surface-dark}"
+    backgroundColor: "{colors.surface-raised-dark}"
     textColor: "{colors.text-dark}"
-    rounded: "{rounded.panel}"
-    padding: "10px 12px"
-  agent-bubble-dark:
+    rounded: "{rounded.composer}"
+    padding: "12px"
+  user-prompt-dark:
     backgroundColor: "{colors.surface-raised-dark}"
     textColor: "{colors.text-dark}"
     rounded: "{rounded.conversation}"
-    padding: "16px 20px"
+    padding: "12px 16px"
 ---
 
 # Design System: gnomcode
@@ -108,7 +136,7 @@ components:
 
 Gnomcode keeps its lowercase wordmark, canonical solid triangle-and-square mark, red accent and near-black/light canvases. The interface is flat, precise and restrained: hairline divisions organize information; actions have modest corners and readable sans labels. The approved console redesign replaces the oversized branded hero and debug-style control rows with compact application chrome.
 
-Marketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in [the console surface brief](docs/design/console-workspace.md); product and security behavior remain governed by [SPEC](docs/SPEC.md).
+Marketing keeps its established editorial scale and detaching navigation. Application surfaces prioritize task space, readable conversations and predictable controls. The accepted composition and verification boundaries live in the maintainer-local console surface brief; public product boundaries are recorded in [the product brief](docs/PRODUCT.md).
 
 **Key Characteristics:**
 
@@ -123,7 +151,8 @@ The palette pairs a vivid red accent with cool neutral canvases, surfaces, borde
 
 ### Primary
 
-- **Gnomcode red** (`primary`) identifies primary actions, attention and user chat bubbles. Text on red uses `on-primary` in both themes.
+- **Gnomcode red** (`primary`) identifies brand emphasis and deliberate attention. It also supplies the activity heat ramp; it is not the default user-message fill. Text on red uses `on-primary` in both themes.
+- **Theme-paired Send action** (`action-dark` / `action-light` and their text tokens) keeps the composer action distinct: light-on-dark in the dark theme and deep-blue-on-light in the light theme. Stop remains a separate red action.
 - **Readable accent text** (`primary-text-dark` / `primary-text-light`) is the theme-specific red used for small links and accent labels. Do not substitute the fill color for small text on light backgrounds.
 
 ### Secondary
@@ -132,9 +161,11 @@ The palette pairs a vivid red accent with cool neutral canvases, surfaces, borde
 
 ### Neutral
 
-- Canvas tokens supply the near-black or cool light ground. Surface and raised-surface tokens distinguish panes, fields and agent replies.
+- Canvas tokens supply the near-black or cool light ground. Surface and raised-surface tokens distinguish panes, fields and controls.
 - Border tokens make hairline divisions; strong borders clarify controls and floating surfaces.
 - Main, secondary and muted text tokens keep hierarchy readable in either theme.
+
+The activity scale progresses through the recorded theme-specific red tones. Its legend and labels establish that these cells measure activity, rather than reporting an error.
 
 **The Foreground Pair Rule.** A control's foreground and background must switch theme together; never carry a light foreground onto a light fill or the reverse.
 
@@ -146,7 +177,8 @@ The platform system sans is the user-approved application family. Use it for hea
 
 - **Display:** the frontmatter's responsive display role belongs to marketing headlines, not console page chrome.
 - **Application titles:** compact semibold titles distinguish the active view or conversation. Section headings are larger than body copy without becoming page heroes.
-- **Body and conversation:** body uses the regular role; chat uses the more generous conversation leading, reducing to a smaller body size on phones.
+- **Body and conversation:** body and transcript text use the regular application size, with conversation leading from its own role. Code and Markdown retain readable line spacing.
+- **Metadata:** navigation labels, session metadata and timestamps use at least the 12px data role. The collapsed desktop rail deliberately hides its text labels while retaining accessible names; compact bottom navigation shows labels.
 - **Controls:** sentence-case sans labels share one weight and scale. Avoid technical-looking monospace labels for ordinary buttons.
 - **Data:** system sans with tabular numerals keeps application rows aligned. Executable snippets and code retain monospace.
 
@@ -156,11 +188,13 @@ The platform system sans is the user-approved application family. Use it for hea
 
 Use the established spacing rhythm in frontmatter. Marketing content remains centered around a 1200px maximum, with narrower mobile gutters. Open sections and aligned grids separate content without introducing a floating card for every group.
 
-The native and web consoles occupy the available window. Their left rail is a 56px icon column on the page ground; labels appear on request at 208px and the choice is remembered. Every view sits in one inset work pane (8px from the window edge, 12px radius, hairline border) so navigation reads as chrome and the pane reads as the task. Profile sits at the bottom of the full-height rail. Application views keep independent data/auth adapters while sharing presentation tokens and formatting.
+The local and account web consoles occupy a bounded viewport. A compact desktop primary rail (64px) expands only through its toggle (176px), pushing content rather than covering it. Workspace history owns an independent resizable column (260px by default, 220–440px within desktop layouts). The page toolbar is a separate row (52px); notices flow beneath it within a bounded scrolling region. Page chrome, history, transcript and tools each own their available space, without adding document scrolling.
 
-Workspace places conversation history beside the transcript and anchors the composer beneath it. Native history is its own resizable column between the rail and the pane (280px default, 220-440px); Remote uses 260px. Conversation tools live in an Overview card beside the transcript and open a docked, resizable tools panel rather than a modal; the composer floats at the foot of the transcript with a neutral Send and red reserved for Stop. Conversation lists have an explicit collapse control. Phone layouts replace the list with a drawer anchored to the content edge, use one conversation toolbar with a New action, and retain readable touch targets. Paired and reconnecting Remote fill a bounded viewport updated from the visual viewport; only messages, lists and modal content scroll, keeping the composer above the keyboard and safe-area edge. The precise route composition belongs to the surface brief rather than a new global layout rule.
+At compact widths (899px and below), labeled bottom navigation (56px) replaces the desktop rail and history opens as a full-work-area drawer above it. Selecting a session or New closes the drawer. Compact interactive targets are at least 44px; short landscape windows arrange history controls across a small grid, preserving space for the scrollable list. The compact page toolbar is 48px. Electron adds its own titlebar above the same layout, rather than changing page composition.
 
-Dashboard presents activity before summary, then limits and ongoing sessions; narrow layouts stack them. Activity adapts its visible interval from daily to ISO-weekly, monthly or yearly totals as the reporting span grows, while Today remains hourly. Long-period reporting labels the selected period, aggregation interval and actual UTC chart window. Keep provenance at section or column level and distinguish unknown data from zero. Profile groups account, devices, appearance, data and desktop downloads, with advanced plans/pricing and offline license disclosed.
+The conversation transcript takes the remaining workspace height and scrolls independently above its composer. Both use a readable maximum width (800px). The Tools control opens an anchored overview menu; a selected tool docks beside the conversation at a preferred 560px, resizable from 360px to 960px and bounded to 55% of the available workspace width. Resize handles support pointer dragging, arrow keys and Home reset; overlay tools hide their resize handle. When the workspace container is 880px or narrower, that tool occupies the conversation area instead of squeezing it. Files, Changes, Artifacts, automation and terminals share the same tool surface. File navigation stacks above the preview below a 600px tool-content width. Remote retains its own encrypted data adapter and bounded visual-viewport treatment; its transport and permissions remain separate from account snapshots.
+
+Home aligns Sessions and Limits at their headers in a two-to-one grid, stacking below 1100px. Usage owns reporting periods, refresh, activity and cost information. Home and Usage content can extend to 1440px; Settings uses a 1200px maximum with a 200px category column, switching to its section selector below 1100px. Unknown values and estimates remain explicit. Route-specific capability and security behavior belongs in the product specification rather than this visual system.
 
 The landing tour preserves its compact illustrative overview: three KPIs, a short chart and short activity rows. Full daily grids and session details belong in the relevant tour views. Keep KPI labels, values and trust aligned; narrow tour rows omit a column consistently rather than changing tracks per row.
 
@@ -172,7 +206,7 @@ Flat surfaces and hairlines provide the default depth. Floating menus and dialog
 
 ## Shapes
 
-Controls use the restrained `control` radius, replacing the old square-control guidance. They are neither sharp boxes nor pills. Code spans use the smaller code radius. Composers and dialogs use the panel radius; chat bubbles use larger corners with one small trailing corner. Grid cells, full-width dividers and reporting rows keep straight edges. Borders remain thin (1px).
+Controls use the restrained `control` radius, replacing the old square-control guidance. They are neither sharp boxes nor pills. Code spans use the smaller code radius. Dialogs use the panel radius; composers use their own slightly tighter radius. User prompts use larger, uniformly rounded corners; agent replies remain open on the conversation surface. Grid cells, full-width dividers and reporting rows keep straight edges. Borders remain thin (1px).
 
 The canonical logo stays an unframed solid triangle-and-square mark in `currentColor`, from `web/public/gnomcode-mark.svg`. Windows app and installer icons center that mark at 0.65x on the opaque dark canvas; the separate full-size tray icon retains its badge appearance. Small Windows ICO frames use DIB encoding for the existing tray renderer. These platform assets preserve their established geometry.
 
@@ -180,7 +214,7 @@ The canonical logo stays an unframed solid triangle-and-square mark in `currentC
 
 ### Buttons and fields
 
-Primary actions use red fill with dark text; secondary actions use a quiet theme-aware neutral fill; ghost actions remain transparent until interaction. Shared button labels use the control role, consistent padding and restrained corners. Desktop density may use 40px controls; phone targets are at least 44px. Keyboard focus is a visible 2px outline in the theme accent (`--sp-accent`, never brand red), and pointer-down feedback is immediate. Disabled actions remain distinct and cannot be mistaken for available actions.
+Brand and general primary actions retain the red treatment; the composer Send action uses its dedicated theme pair. Secondary actions use quiet neutral fill; ghost actions remain transparent until interaction. Shared labels use the application sans and restrained corners. Dense desktop tools use 32-40px controls where appropriate, while primary rail destinations are 44-48px; compact targets are at least 44px. Buttons and standalone fields use a visible 2px focus outline in the theme accent (`--sp-accent`, never brand red), and pointer-down feedback is immediate. The composer uses the single outer focus treatment described below. Disabled actions remain distinct and cannot be mistaken for available actions.
 
 Fields use theme-aware surfaces, main text and subtle borders. Associate visible labels with their fields. Error, pending and successful states use readable messages rather than color alone. Never render missing values as `undefined` or `NaN`.
 
@@ -188,9 +222,9 @@ Fields use theme-aware surfaces, main text and subtle borders. Associate visible
 
 Marketing headers retain Product, Agents, Docs, Pricing, an account link and Download. Log in/Console is the primary red action. Desktop places secondary Download to its left; phone headers keep the account action visible and put Download in the menu. The landing hero illustrates a concise conversation handoff between agents. Its full-width moving agent strip remains a separate section, with a static reduced-motion fallback; usage reporting stays in the lower product tour. The account link shows Console and opens it directly for a signed-in user; a signed-out user sees Log in. Mobile menus originate beneath their trigger, expose expanded state, dismiss on Escape and restore focus.
 
-Application navigation uses the left rail and compact current-view title rather than the removed top brand/settings/theme bar. Profile contains theme, account and devices. Theme cycles System, Light, Dark; System follows the OS, stored overrides apply before first paint, and controls stay readable throughout the switch. The marketing footer retains its small theme control; Auth's phone menu also exposes it.
+Application navigation uses Home, Workspace, Usage and Settings in the left rail and a compact current-view toolbar. Settings contains theme, account and devices. Theme cycles System, Light, Dark; System follows the OS, stored overrides apply before first paint, and controls stay readable throughout the switch. The marketing footer retains its small theme control; Auth's phone menu also exposes it.
 
-Desktop rail labels reveal on hover or visible keyboard focus; touch uses a labeled toggle exposing expanded state to assistive technology. Default transitions use the existing exponential ease-out curve; remove nonessential looping or travel for reduced motion while preserving clear state changes. The supported-agent strip becomes a static wrapping list in reduced motion. Workspace itself avoids an entry transform that would offset the fixed drawer.
+Desktop rail expansion is explicit and exposes expanded state to assistive technology; hover and focus never change its width. Its tab orientation is vertical on desktop and horizontal in compact bottom navigation. Shared state transitions use the recorded easing and duration; remove nonessential looping or travel for reduced motion while preserving clear state changes. The supported-agent strip becomes a static wrapping list in reduced motion. Workspace itself avoids an entry transform that would offset the fixed drawer.
 
 ### Reporting containers and badges
 
@@ -198,13 +232,13 @@ Reporting uses hairline grids, divided rows and truthful unavailable states. Rep
 
 ### Conversation bubbles and composer
 
-User messages align right in red with dark text; agent replies align left on a neutral gray surface. Submission immediately adds the optimistic user bubble and a gray agent waiting bubble. Reconcile that feedback with recorded history without duplicating messages; failed delivery preserves the draft. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
+User prompts align right on a bordered neutral surface. Agent replies align left directly on the conversation surface, with metadata beneath the reply. Submission provides optimistic user and waiting feedback. Reconcile that feedback with recorded history without duplicating messages; failed delivery preserves the draft. Keep user prompts literal. Replies may render the supported safe Markdown subset, with headings, lists, links, code and tables fitting the bubble. Long code lines wrap without changing copied text; simple tables fit their width, while wide phone tables become labeled rows. Bubble content must not require sideways scrolling.
 
-The composer starts compact and grows with text to a bounded maximum (160px), then scrolls vertically inside its field. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Selecting a model requests the change immediately within the same visible conversation. Distinguish the request from agent-observed confirmation using centered status text and a centered timestamp, without side rules. Keep CLI commands, session IDs and generated continuation briefings out of ordinary chat. Preserve the title, history, selection and draft across provider switches. Saved supported chats offer Resume conversation on desktop and mobile; mobile requires the laptop and Gnomcode online. Conversation headers show compact remaining-limit readings with source details available on demand, refreshed with incoming observations; unknown and older readings remain explicit. Handoff also supports a workspace outside Git. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
+The composer separates a scrollable editor region from its fixed model, attachment and Send toolbar. Text grows within the available editor region; the toolbar never joins that scrolling area. Short compact landscape windows preserve an editor region of at least 44px, reduce the field height and omit message-count-only status and keyboard-help copy when needed to retain input and Send. Focus is shown once, on the outer composer: its existing 1px border changes to the theme accent with no shadow. The inner textarea has no separate rectangular outline or shadow. Local and Remote composers share this treatment. The provider/model control belongs beside the composer, groups choices by provider and includes each provider's default model. Selecting a model requests the change immediately within the same visible conversation. Distinguish the request from agent-observed confirmation using centered status text and a centered timestamp, without side rules. Keep CLI commands, session IDs and generated continuation briefings out of ordinary chat. Preserve the title, history, selection and draft across provider switches. Saved supported chats offer Resume conversation on desktop and mobile; mobile requires the laptop and Gnomcode online. Conversation headers show compact remaining-limit readings with source details available on demand, refreshed with incoming observations; unknown and older readings remain explicit. Handoff also supports a workspace outside Git. Put secondary session actions in an anchored menu. Keep per-session drafts and delivery feedback independent of history updates, and preserve the reader's position when new messages arrive. The workspace path field includes a compact geometric folder control rather than a separate bulky button. A same-workspace xterm pane keeps interactive terminal controls beside the conversation; preserve its terminal rendering and keyboard behavior rather than presenting it as chat output.
 
-### Profile, pairing and feedback
+### Settings, pairing and feedback
 
-Profile uses open sections and aligned action groups. Advanced settings use disclosures. Account connection distinguishes account state from publication state, masks the desktop token field, names the actual web action, and offers a separate Disconnect action when connected.
+Settings uses open sections and aligned action groups. Advanced settings use disclosures. Account connection distinguishes account state from publication state, masks the desktop token field, names the actual web action, and offers a separate Disconnect action when connected.
 
 Devices is one account-wide screen. Before linking a native app through either sign-in or browser-account transfer, show the existing confirmation modal explaining that every current and future device signed into the account can access this native app's available conversations and supported controls. Cancel submits nothing. After confirmation, phones and browsers connect automatically without approval steps or code fields. Existing links require this new confirmation before broader access is enabled. Devices shows each native app's availability and can disable that host for every signed-in device. Re-enabling on native uses the same disclosure. Approval does not expire with updates or inactivity. Keep connection availability separate from account permission, preserve drafts during bounded recovery, and never expose credentials or proof material.
 
@@ -216,25 +250,11 @@ Confirmation dialogs describe the action and consequence, focus Cancel initially
 
 Commands keep an integrated clipboard icon with a 44px target, an accessible name, keyboard focus and visible success/failure feedback. Copy the exact displayed command. Long snippets safely wrap or use a deliberate code container while the copy control remains visible.
 
-## Console overhaul system
+### Reporting and workspace primitives
 
-The local console uses four places, a token set, a small component vocabulary and a list of anti-clutter rules. [The overhaul plan](docs/design/console-overhaul-plan.md) and [its mockup](docs/design/console-mockup.html) are the build reference; this section is the standing contract.
+The runtime token file owns the 4-64px spacing scale and application type roles. Reporting cards use the panel radius, controls the restrained control radius, and meters the small meter radius. Provider cards are collapsed disclosures with a monochrome provider mark, current summary, status label and optional command or recovery action. Session rows keep the title above agent/status metadata and a timestamp; their separate action control uses the shared geometric SVG treatment. Filters and selected tabs use a neutral raised fill rather than a new accent color.
 
-### Information architecture
-
-The rail has exactly four places: Home, Workspace, Usage and Settings. Home shows provider cards, sessions grouped by Needs you, Running and Recent, three stat tiles and a 12-week activity grid, in that order. Workspace opens on the conversation list; the launcher is behind New. Usage holds limits, the 53-week activity grid with stats and legend, the Today hourly strip and cost reporting. Settings holds providers, appearance, devices, automations and license. The old `#limits`, `#projects` and `#automations` addresses redirect to Usage and Settings. The rail is a toggle-only column that pushes content; labels never cover it.
-
-### Tokens
-
-`web/app/gnomcode-tokens.css` is the source. Spacing uses `--sp-1` to `--sp-7` (4, 8, 12, 16, 24, 32, 48). Type uses `--sp-fs-meta` 12, `--sp-fs-body` 14, `--sp-fs-strong` 15, `--sp-fs-title` 20 and `--sp-fs-number` 28; nothing smaller than 12px except heatmap day labels, and 16px only for phone form inputs. Cards use 12px radius, controls 6px, meters 3px. State colors `--sp-ok`, `--sp-low`, `--sp-exhausted`, `--sp-unknown` (with soft backgrounds) mean limit state only. The activity ramp `--sp-heat-0..4` is blue so it never reads as an alarm; in light theme level 0 carries a strong-border outline (at least 1.5:1 against the card) and every step is distinct. Tabular numerals apply to every number in the native console.
-
-### Components
-
-Card, section header, chip (`sp-chip` with `ok`, `low`, `exhausted`, `unknown`, `neutral` states; also used per window in the conversation header), meter row (role `meter`, pace marker), collapsible provider card (`details.sp-provider-card`, collapsed by default, each card its own height in the grid; provider marks are simple-icons CC0 paths in `web/lib/provider-logos.js` with a letter fallback; windows without a Rust state show no chip and a neutral accent meter), stat tile, session row, activity grid with legend, copy command button and empty state (one line plus one action).
-
-### Anti-clutter rules
-
-One primary number per card. No nested borders. Three text colors only. Color means state; brand red is reserved for the single primary button per view and user chat bubbles. No explanatory paragraphs in default views; use a chip with a tooltip or a disclosure. Trust is shown once per card footer and inline only for estimated money. Empty states are one line plus one action. Content is at most 1200px wide. Tap targets are at least 44px on phones and for rail buttons, copy buttons, session rows and clickable chips; dense desktop form controls may stay at 40px.
+Keep numeric trust at the section or value that needs it. Meter state, descriptive statuses, source disclosures and explicit empty/error/loading states remain separate from decoration. Use a small component vocabulary across Home, Workspace, Usage and Settings; preserve distinct states without repeating a floating container around each subsection.
 
 ## Do's and Don'ts
 

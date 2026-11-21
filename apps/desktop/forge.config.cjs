@@ -6,7 +6,11 @@ module.exports = {
   packagerConfig: {
     name: 'Gnomcode',
     executableName: 'gnomcode-desktop',
-    icon: path.join(__dirname, '../../scripts/gnomcode.ico'),
+    icon: path.join(__dirname, process.platform === 'darwin'
+      ? '../../web/public/icons/gnomcode.icns'
+      : process.platform === 'linux'
+        ? '../../web/public/icons/gnomcode-512.png'
+        : '../../scripts/gnomcode.ico'),
     appBundleId: 'app.gnomcode.desktop',
     asar: true,
     extraResource: [
@@ -26,7 +30,7 @@ module.exports = {
   makers: [
     { name: '@electron-forge/maker-squirrel', platforms: ['win32'], config: { name: 'gnomcode', authors: 'Wahaj', setupIcon: path.join(__dirname, '../../scripts/gnomcode.ico') } },
     { name: '@electron-forge/maker-zip', platforms: ['win32', 'darwin', 'linux'] },
-    { name: '@electron-forge/maker-deb', platforms: ['linux'], config: {} },
+    { name: '@electron-forge/maker-deb', platforms: ['linux'], config: { options: { productName: 'Gnomcode', icon: path.join(__dirname, '../../web/public/icons/gnomcode-512.png'), categories: ['Development'] } } },
     { name: '@electron-forge/maker-rpm', platforms: ['linux'], config: {} },
   ],
   plugins: [new FusesPlugin({

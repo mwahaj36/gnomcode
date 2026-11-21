@@ -10,6 +10,11 @@ for (const theme of ['light', 'dark']) {
         contentType: 'text/css',
         path: path.resolve(__dirname, '../app/gnomcode-console.css'),
       }));
+      await page.route('**/api/v1/activity/heatmap', route => route.fulfill({ json: {
+        from: '2026-01-01', to: '2026-11-20', first_recorded: '2026-11-20',
+        days: [{ date: '2026-11-20', total_tokens: 1000, cost_usd: 0, cost_basis: 'estimated', turns: 1, level: 2 }],
+        stats: { total_tokens: 1000, active_days: 1, current_streak: 1, longest_streak: 1, busiest: null },
+      } }));
       await openConsole();
       await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
       const swatches = page.locator('#home-activity .sp-heatmap-legend .sp-heat');
@@ -22,7 +27,7 @@ for (const theme of ['light', 'dark']) {
       if (width >= 1024) {
         const activity = await page.locator('#home-activity .sp-section-head').boundingBox();
         const today = await page.locator('#home-today .sp-section-head').boundingBox();
-        expect(Math.abs(activity!.y - today!.y)).toBeLessThanOrEqual(1);
+        expect(activity!.y + activity!.height).toBeLessThanOrEqual(today!.y + 1);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: test.info().outputPath('home.png'), fullPage: true });

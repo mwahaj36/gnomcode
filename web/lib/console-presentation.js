@@ -842,7 +842,7 @@ export function renderSessionList(sessions, selected = '', query = '') {
     const group = HOME_GROUPS.some(([name]) => name === session.home_group) ? session.home_group : 'recent';
     const heading = grouped && group !== lastGroup ? `<h3 class="sp-group-label">${HOME_GROUPS.find(([name]) => name === group)[1]}</h3>` : '';
     lastGroup = group;
-    return `${heading}<div class="ide-session-row" data-session-id="${escape(session.id)}"><button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" data-subagent="${isSubagent ? 'true' : 'false'}" aria-current="${session.id === selected}"><strong class="ide-session-title">${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span class="ide-session-meta">${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${session.live && !session.state_label ? renderLiveBadge(session.live) : escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button><button type="button" class="ide-session-more" data-action="session-menu" data-arg="${escape(session.id)}" aria-label="Actions for ${escape(session.title || session.project_name || 'session')}" title="More actions">&#8942;</button></div>${renderSubagents(session, 'load-chat')}`;
+    return `${heading}<div class="ide-session-row" data-session-id="${escape(session.id)}"><button type="button" class="ide-session" data-action="load-chat" data-arg="${escape(session.id)}" data-subagent="${isSubagent ? 'true' : 'false'}" aria-current="${session.id === selected}"><strong class="ide-session-title">${escape(session.title || session.project_name || session.repo_path || 'Untitled session')}</strong><span class="ide-session-meta">${wslBadge(session)}${escape(session.surface_label || session.agent)}${isSubagent ? ' · Subagent' : ''} · ${session.live && !session.state_label ? renderLiveBadge(session.live) : escape(session.state_label || sessionStateLabel(session.state))}</span>${Number.isFinite(Date.parse(session.last_event_at)) ? `<time datetime="${escape(session.last_event_at)}">${escape(relativeActivity(session.last_event_at))}</time>` : ''}</button><button type="button" class="ide-session-more" data-action="session-menu" data-arg="${escape(session.id)}" aria-label="Actions for ${escape(session.title || session.project_name || 'session')}" title="More actions"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></button></div>${renderSubagents(session, 'load-chat')}`;
   }).join('') || '<p class="local-view-message">No matching sessions. Clear search or launch an installed agent.</p>';
 }
 
@@ -1264,7 +1264,7 @@ export function renderChangesView(data, { selected = '' } = {}) {
     data.lossy ? '<span class="sp-chip sp-chip--low" title="Non-UTF-8 bytes were replaced with U+FFFD by Rust">Lossy UTF-8 decoding</span>' : '',
     data.repo ? `<span class="sp-changes-repo" title="${escape(data.repo)}">${escape(wslDistro(data.repo) ? middleTruncate(data.repo, 48) : shortPath(data.repo))}</span>` : '',
   ].filter(Boolean).join('');
-  if (!files.length && !diffText.trim()) {
+  if (!files.length && !diffText.trim() && !data.truncated) {
     return `<div class="sp-changes-meta">${badges}</div><p class="sp-provider-empty">Working tree clean: no modified or untracked files.</p>`;
   }
   const fileButton = (path, label, text) => `<li><button type="button" class="sp-changes-file" data-change-file="${escape(path)}" aria-pressed="${selected === path}"><span class="sp-chip sp-chip--neutral">${escape(label)}</span><code>${escape(text)}</code></button></li>`;
@@ -1277,6 +1277,8 @@ export function renderChangesView(data, { selected = '' } = {}) {
     : '';
   const diffMarkup = diffLines
     ? `<pre class="sp-diff-code" tabindex="0" aria-label="${selected ? `Diff for ${escape(selected)}` : 'Unified git diff'}">${diffLines}</pre>`
+    : data.truncated
+      ? `<p class="sp-provider-empty" role="status">${selected ? 'This file exceeds the 1 MiB preview limit. Open it in your editor to review the full diff.' : 'The combined diff exceeds the 1 MiB preview limit. Select a file to review its changes.'}</p>`
     : selected
       ? `<p class="sp-provider-empty">No diff for ${escape(selected)}. Untracked files have no diff until git tracks them.</p>`
       : '<p class="sp-provider-empty">No modified tracked diff hunks (untracked files listed above).</p>';

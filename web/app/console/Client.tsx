@@ -1,5 +1,6 @@
 "use client";
 
+import { CONSOLE_ICONS } from '../../lib/console-navigation';
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import RemoteCompanion from "../../components/RemoteCompanion";
@@ -12,12 +13,7 @@ import { updateActivity, updateHeatmap, updateProviders, updateSessions, updateQ
 
 // The four places of the console. `sessions` is the synced history reached from Home, so it keeps Home highlighted.
 const PLACES: [string, string][] = [["overview", "Home"], ["chat", "Workspace"], ["usage", "Usage"], ["settings", "Settings"]];
-const PLACE_ICONS: Record<string, string> = {
-  overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
-  chat: "M4 4h16v12H9l-5 4V4Z",
-  usage: "M4 20V10m8 10V4m8 16v-7",
-  settings: "M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM3 22v-3a6 6 0 0 1 6-6h6a6 6 0 0 1 6 6v3",
-};
+const PLACE_ICONS: Record<string, string> = { ...CONSOLE_ICONS, chat: CONSOLE_ICONS.sessions };
 const VIEW_ALIASES: Record<string, string> = { limits: "usage", projects: "usage", automations: "settings" };
 const VIEW_KEYS = ["overview", "sessions", "chat", "usage", "settings"];
 const VIEW_TITLES: Record<string, string> = { overview: "Home", sessions: "Sessions", chat: "Workspace", usage: "Usage", settings: "Settings" };
@@ -437,8 +433,16 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
 
   return (
     <AppLockGate>
-    <div className={`sp-console-app sp-web-app ${navigationExpanded ? "web-navigation-expanded" : ""}`}>
-      <header className="web-context"><h1 aria-live="polite">{VIEW_TITLES[activeView] || "Home"}</h1>{activeView === "sessions" && <button type="button" className="sp-link" onClick={() => changeConsoleView("overview")}>Back to Home</button>}</header>
+    <div className="sp-console-app gc-web">
+      <div className="sp-console-workspace gc-console" data-navigation={navigationExpanded ? "expanded" : "collapsed"} data-view={activeView}>
+      <nav className="sp-console-nav" aria-label="Console views">
+        <Link href="/console" className="app-brand" aria-label="Gnomcode dashboard"><span className="sp-brand-mark" /></Link>
+        <div className="sp-rail-tabs">{PLACES.map(([view, label]) => <button key={view} type="button" className={`tab-btn${activeView === view ? " active" : ""}`} data-place={view} aria-label={label} title={label} aria-current={(activeView === "sessions" ? "overview" : activeView) === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={PLACE_ICONS[view]} /></svg><span className="rail-label">{label}</span></button>)}</div><div className="sp-nav-footer">
+        <Link className="web-download-link tab-btn" href="/downloads" aria-label="Download desktop app" title="Download app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span className="rail-label">Download app</span></Link>
+        <button type="button" className="web-rail-toggle tab-btn" aria-label={navigationExpanded ? "Collapse navigation" : "Expand navigation"} title={navigationExpanded ? "Collapse navigation" : "Expand navigation"} aria-expanded={navigationExpanded} onClick={() => setNavigationExpanded(!navigationExpanded)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" /></svg><span className="rail-label">{navigationExpanded ? "Collapse navigation" : "Expand navigation"}</span></button>
+      </div></nav>
+      <div className="sp-console-content">
+      <header className="console-context"><h1 aria-live="polite">{VIEW_TITLES[activeView] || "Home"}</h1>{activeView === "sessions" && <button type="button" className="sp-link" onClick={() => changeConsoleView("overview")}>Back to Home</button>}</header>
       {!user && <section className="sp-console-connect" aria-label="Desktop connection">
         <p>Sign in to view activity from your paired desktop.</p>
         <div className="sp-console-connect-actions">
@@ -452,23 +456,18 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         <span>{lastSuccessfulUpdate ? `Last successful view refresh: ${lastSuccessfulUpdate.toLocaleTimeString()}` : "Last successful view refresh: not yet"}</span>
       </div></details>
 
-      <div className="sp-console-workspace">
-      <nav className="sp-console-nav" aria-label="Console views">
-        <Link href="/console" className="web-rail-brand" aria-label="Gnomcode dashboard"><span className="sp-brand-mark" /></Link>
-        {PLACES.map(([view, label]) => <button key={view} type="button" data-place={view} aria-label={label} title={label} aria-current={(activeView === "sessions" ? "overview" : activeView) === view ? "page" : undefined} onClick={() => changeConsoleView(view)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={PLACE_ICONS[view]} /></svg><span>{label}</span></button>)}
-        <Link className="web-download-link" href="/downloads" aria-label="Download desktop app" title="Download app"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><span>Download app</span></Link>
-        <button type="button" className="web-rail-toggle" aria-label={navigationExpanded ? "Collapse navigation" : "Expand navigation"} title={navigationExpanded ? "Collapse navigation" : "Expand navigation"} aria-expanded={navigationExpanded} onClick={() => setNavigationExpanded(!navigationExpanded)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3z M9 4v16" /></svg><span>{navigationExpanded ? "Collapse navigation" : "Expand navigation"}</span></button>
-      </nav>
-      <div className="sp-console-content">
+      <main className="gc-web-page">
       {activeView === "settings" && <><section className="web-profile-section"><h2>Appearance</h2><ThemeControl /></section><section className="web-profile-section"><h2>Desktop connection and data</h2><p>Account sync shares session metadata without end-to-end encryption. Linked desktops are available to every device signed into your account.</p><details><summary>What gets shared</summary><p>Connecting publishes project names, session IDs, agent activity, usage and quotas to your account. The snapshot is not end-to-end encrypted and may contain sensitive metadata. New snapshots exclude conversation text and titles; older copies may still contain titles. Sign in on your desktop to make it available here. Linking the native app allows every device signed in to this account to open its available sessions. No phone pairing or per-desktop approval is required.</p></details><div className="web-profile-actions"><button type="button" className="sp-console-action" onClick={refreshCloudSnapshot} disabled={refreshing || !user}>{refreshing ? "Refreshing…" : "Reload activity"}</button></div>{user && <details><summary>Connect an existing browser account</summary><p>Use this option in the native app when you signed in through a provider. Treat the copied connection like a password.</p><button type="button" className="sp-console-action" onClick={copyQuickToken}>Copy account connection</button></details>}</section><section className="web-profile-section"><h2>Automations</h2><p>Schedule messages, reconnect after a limit, or choose automatic model switching from Workspace. Manage usage rules in the desktop app.</p><button type="button" className="sp-console-action" onClick={()=>changeConsoleView('chat')}>Open workspace</button></section><DesktopDevices /><SettingsPanel embedded /></>}
-      <div hidden={activeView !== "chat"}><RemoteCompanion embedded visible={activeView === "chat"} /></div>
+      <div className="sp-web-remote-host" hidden={activeView !== "chat"}><RemoteCompanion embedded visible={activeView === "chat"} /></div>
       {activeView === "overview" && <div className="sp-home">
         {snapshotGeneratedAt && Date.now() - Date.parse(snapshotGeneratedAt) > 10 * 60_000 && <p className="sp-snapshot-note" role="note">
           Home and limits show the last snapshot your desktop published, {new Date(snapshotGeneratedAt).toLocaleString()}. Desktops publish only while Account sync is on (desktop Settings, Privacy and data). Conversations in Workspace are live over Remote.
         </p>}
-        <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />
+        <div className="sp-home-grid">
+          <HomeSessionsPanel sessions={homeSessions} onAction={homeAction} />
+          <QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} />
+        </div>
         <HeatmapPanel heatmap={activityHeatmap} />
-        <HomeSessionsPanel sessions={homeSessions} onAction={homeAction} />
         <section className="sp-section"><TodayPanel report={todayReport} activeCount={activeCount} /></section>
       </div>}
       {activeView === "usage" && <div className="sp-web-usage-overview"><QuotaPanel pools={quota} publishedAt={snapshotGeneratedAt} /><HeatmapPanel heatmap={activityHeatmap} /></div>}
@@ -559,7 +558,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
           </div>
         </div>
       </div>}
-      </div></div>
+      </main></div></div>
     </div>
     </AppLockGate>
   );

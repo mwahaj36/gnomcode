@@ -11,3 +11,7 @@ Devices offers Remove desktop for old account listings. Confirming removes that 
 Remote attachment transfers retain the 15 MiB per-file limit. Send waits for saved-file acknowledgement; failures and timeouts require removing or reattaching the failed selection. Encrypted frames stay below the relay size ceiling.
 
 Remote Agent terminal shows the live hosted agent terminal with retained scrollback and accepts direct keyboard input; arbitrary workspace shells remain local. Login links open on the current device, and one-time codes can be entered directly in the terminal. Desktop localhost OAuth callbacks may still require the desktop browser. No credentials or terminal output are added to cloud metadata or persisted by the Remote terminal feature.
+
+Review Changes keeps its changed-file list when a combined diff exceeds the 1 MiB preview limit. Select a file to load its diff separately. An individual file over that limit shows a clear limit message; review the full diff in your editor. Git operations in this pane remain read-only.
+
+The local and account consoles share navigation icons and responsive layout rules. Compact windows use labeled bottom navigation and a history drawer. Opening a conversation or New closes that drawer. Workspace notices sit below the page toolbar; tool panes use the remaining work area.
