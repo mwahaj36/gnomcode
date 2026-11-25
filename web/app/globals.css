@@ -129,6 +129,7 @@ body {
 .sp-trust { display: inline-block; border: 0; color: var(--sp-text-2); padding: 0; font: 600 9px/1.4 var(--sp-font-mono); vertical-align: middle; }
 .sp-console-shell table { border-collapse: collapse; }
 .sp-console-nav { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--sp-border); margin: 0 0 24px; }
+.gc-console>.sp-console-nav { margin: 0; }
 .sp-console-nav button { flex: none; min-height: 44px; padding: 0 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--sp-text-2); font: 600 11px/1.2 var(--sp-font-mono); text-transform: uppercase; cursor: pointer; }
 .sp-console-nav button[aria-current="page"] { color: var(--sp-text); border-bottom-color: var(--sp-primary); }
 .sp-console-notice { margin: 0 0 20px; border: 1px solid var(--sp-border); padding: 12px 16px; color: var(--sp-text-2); font: 12px/1.5 var(--sp-font-mono); }
@@ -490,3 +491,22 @@ body {
 .sp-global-skip { position: fixed; left: 16px; top: -80px; z-index: 200; padding: 12px; background: var(--sp-primary); color: var(--sp-on-primary); }
 .sp-global-skip:focus { top: 16px; }
 body:has(.sp-page) > .sp-global-skip { display: none; }
+
+/* ===== Datasheet world: site layer (2026-11 redesign) =====
+   Inter is the one voice on the site; monospace is kept for code, commands and terminals only. */
+:is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-app-header,.sp-not-found){--sp-font-mono:var(--sp-font-sans)}
+:is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-app-header,.sp-not-found) :is(code,pre,kbd,samp,.sp-copy code,.sp-command,.sp-command *,.xterm,.xterm *){font-family:"JetBrains Mono",ui-monospace,Consolas,monospace}
+:is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-app-header,.sp-not-found) :not(h1,h2,h3,code,pre,kbd){text-transform:none;letter-spacing:normal}
+.sp-page .sp-nav-login{font-family:var(--sp-font-sans)}
+/* Navigation and labels: sentence case, readable size, quiet until hovered. */
+.sp-site-links a,.sp-site-login,.sp-site-download,.sp-app-nav a,.sp-app-account :is(a,button),.sp-auth-tabs button{font-family:var(--sp-font-sans);font-size:13px;font-weight:500}
+.sp-site-footer-grid>div>span,.sp-site-footer-bottom{font-family:var(--sp-font-sans);font-size:12px}
+.sp-site-download,.sp-auth-oauth{border-radius:var(--sp-r-control)}
+.sp-site-links a:hover,.sp-site-login:hover,.sp-site-footer-grid a:hover,.sp-site-footer-grid button:hover{color:var(--sp-text)}
+.sp-app-nav a.selected::after,.sp-auth-tabs button[aria-pressed="true"]{border-color:var(--sp-accent)}
+.sp-app-nav a.selected::after{background:var(--sp-accent)}
+.sp-auth-tabs button[aria-pressed="true"]{color:var(--sp-text)}
+.sp-auth-panel{border-radius:var(--sp-r-dialog)}
+:is(.sp-site-header,.sp-app-header,.sp-site-footer) :focus-visible{outline:2px solid var(--sp-focus);outline-offset:2px}
+.sp-site-wordmark span{color:var(--sp-accent)}
+.sp-app-daemon.is-live>span:first-child{background:var(--sp-ok)}

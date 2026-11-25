@@ -35,6 +35,6 @@ export default function HeroWorkflow() {
         <div className="sp-workflow-composer"><span>Continue the task...</span><span><ProviderLogo provider="codex" size={14} /> Codex <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg></span></div>
       </div>
     </div>
-    <figcaption>One task. A concise handoff. <span>ILLUSTRATIVE</span></figcaption>
+    <figcaption>One task. A concise handoff. <span>Illustrative</span></figcaption>
   </figure>;
 }

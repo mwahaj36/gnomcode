@@ -13,7 +13,7 @@ export default function DownloadsPage() {
           <h1>Download gnomcode</h1>
           <p>Launch and switch supported AI coding agents in one local workspace. Release builds are available for Windows x64, macOS and Linux.</p>
         </div>
-        <span className="sp-download-release">GNOMCODE · v{packageInfo.version}</span>
+        <span className="sp-download-release">Gnomcode v{packageInfo.version}</span>
       </header>
 
       <PlatformDownloads />
