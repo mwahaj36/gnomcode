@@ -35,7 +35,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 640, height: 850 }, {
     await expect(composer).toBeVisible();
     expect(await composer.evaluate(node => getComputedStyle(node).outlineStyle)).toBe('none');
     if (size.width < 900) {
-      for (const control of [page.getByRole('button', { name: 'Overview', exact: true }), page.getByRole('button', { name: 'Remaining limits — View Usage' }), page.getByLabel('Conversation actions', { exact: true }), page.getByLabel('Model', { exact: true }), page.getByRole('button', { name: 'Attach', exact: true }), page.getByRole('button', { name: 'Send', exact: true })]) {
+      for (const control of [page.getByRole('button', { name: 'Tools', exact: true }), page.getByRole('button', { name: 'Remaining limits' }), page.getByLabel('Conversation actions', { exact: true }), page.getByLabel('Model', { exact: true }), page.getByRole('button', { name: 'Attach', exact: true }), page.getByRole('button', { name: 'Send', exact: true })]) {
         expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       }
     }
@@ -56,7 +56,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 640, height: 850 }, {
     await page.screenshot({ path: info.outputPath('trust-grants.png') });
     notices = false;
     await expect(page.locator('#approvals')).toBeHidden();
-    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
     await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Agent terminal', exact: true }).click();
     await expect(page.locator('.sp-chat-terminal-box .xterm')).toBeVisible();
     await page.screenshot({ path: info.outputPath('agent-terminal.png') });
