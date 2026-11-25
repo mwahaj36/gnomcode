@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 - 2026-11-25
+
+- Replace the visual world across the local console, account web console, Remote and the website: graphite and paper grounds, one ink interactive colour, Inter throughout, monospace kept for code and commands.
+- Give every control a clear affordance: drawn icons instead of glyphs, a three-dot overflow menu, carets on pickers and menus, switches for binary settings, outlined destructive actions and a segmented System, Light and Dark theme control.
+- Use one control scale (36px page actions, 32px dense panes, 44px touch targets) and one alignment rule across views.
+- Fix the phone web app: the reconnecting view no longer covers the tab bar, the desktop heading no longer wraps one word per line, the tab bar sits on the bottom edge, device actions read as buttons and the Remote composer is a single frame.
+- Accessibility: accessible names now contain their visible labels, the activity grid scrolls by keyboard, notices clear the phone tab bar, and an axe-core WCAG 2.2 AA audit covers every console view in both themes on desktop and phone.
+- Update website copy to match the app: the three supported agents, trust labels on every number, and the Apache-2.0 licence.
+
 ## 1.1.0 - 2026-11-21
 
 - Rebuild console navigation, session history, conversation layout, tools, composer, and responsive layouts across desktop and web.
