@@ -22,7 +22,7 @@
       },
       "brand-red": {
         "role": "accent",
-        "displayName": "Brand red, activity ramp only"
+        "displayName": "Brand red, recorded only; not used in the interface"
       }
     },
     "typographyMeta": {
@@ -140,7 +140,7 @@
     ],
     "donts": [
       "Don't use monospace as decoration",
-      "Don't use brand red outside the activity ramp",
+      "Don't use brand red in the interface",
       "Don't use emojis or unicode glyphs as icons"
     ]
   }

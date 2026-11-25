@@ -83,12 +83,12 @@
   --sp-exhausted-soft: rgb(255 107 114 / .14);
   --sp-danger-soft: rgb(255 107 114 / .14);
 
-  /* activity heat ramp, level 0..4 (brand red, owner decision; the one place brand red stays) */
-  --sp-heat-0: #17171a;
-  --sp-heat-1: #4a121b;
-  --sp-heat-2: #7d1626;
-  --sp-heat-3: #ba1c35;
-  --sp-heat-4: #ff2544;
+  /* activity heat ramp, level 0..4 (ink, the primary colour; owner decision 2026-11-25) */
+  --sp-heat-0: #181d26;
+  --sp-heat-1: #233063;
+  --sp-heat-2: #3149a6;
+  --sp-heat-3: #5670dc;
+  --sp-heat-4: #8ea2ff;
 
   /* motion */
   --sp-ease: cubic-bezier(.2, .8, .2, 1);
@@ -137,11 +137,11 @@
     --sp-warn-soft: rgb(150 88 0 / .10);
     --sp-exhausted-soft: rgb(192 38 45 / .09);
     --sp-danger-soft: rgb(192 38 45 / .09);
-    --sp-heat-0: #e4e9ee;
-    --sp-heat-1: #fcd1d8;
-    --sp-heat-2: #f799a8;
-    --sp-heat-3: #ec526b;
-    --sp-heat-4: #ff2544;
+    --sp-heat-0: #e6e6de;
+    --sp-heat-1: #c9d0f5;
+    --sp-heat-2: #93a2ea;
+    --sp-heat-3: #5a6fd6;
+    --sp-heat-4: #2d43c0;
   }
 }
 
@@ -185,11 +185,11 @@
   --sp-warn-soft: rgb(150 88 0 / .10);
   --sp-exhausted-soft: rgb(192 38 45 / .09);
   --sp-danger-soft: rgb(192 38 45 / .09);
-  --sp-heat-0: #e4e9ee;
-  --sp-heat-1: #fcd1d8;
-  --sp-heat-2: #f799a8;
-  --sp-heat-3: #ec526b;
-  --sp-heat-4: #ff2544;
+  --sp-heat-0: #e6e6de;
+  --sp-heat-1: #c9d0f5;
+  --sp-heat-2: #93a2ea;
+  --sp-heat-3: #5a6fd6;
+  --sp-heat-4: #2d43c0;
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }

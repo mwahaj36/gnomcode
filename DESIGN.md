@@ -30,8 +30,8 @@ colors:
   warn-light: "#965800"
   danger-light: "#c0262d"
   brand-red: "#ff2544"
-  heat-dark: ["#17171a", "#4a121b", "#7d1626", "#ba1c35", "#ff2544"]
-  heat-light: ["#e4e9ee", "#fcd1d8", "#f799a8", "#ec526b", "#ff2544"]
+  heat-dark: ["#181d26", "#233063", "#3149a6", "#5670dc", "#8ea2ff"]
+  heat-light: ["#e6e6de", "#c9d0f5", "#93a2ea", "#5a6fd6", "#2d43c0"]
 typography:
   family: "Inter (self-hosted), -apple-system, Segoe UI, sans-serif"
   mono: "JetBrains Mono (self-hosted), for code, commands and terminals only"
@@ -75,7 +75,7 @@ controls:
 
 **Creative North Star: "Datasheet, conversation first."** Redesign of 2026-11-25. Owner brief: replace the visual world, use Inter, cover the whole app including marketing. Owner pin: simple and functional like the Claude app on a phone. The world comes from a component datasheet, where every number is a specification with its condition stated. It lends type, palette, density and one signature move; navigation and controls stay platform-standard.
 
-Gnomcode keeps its lowercase wordmark and solid triangle-and-square mark. Interface chrome is calm: graphite (dark) and paper (light) grounds, hairline rules, one ink-blue interactive colour and Inter throughout. Brand red is retired from chrome and remains only in the activity heat ramp (an owner decision recorded in the e2e suite).
+Gnomcode keeps its lowercase wordmark and solid triangle-and-square mark. Interface chrome is calm: graphite (dark) and paper (light) grounds, hairline rules, one ink-blue interactive colour and Inter throughout. Brand red is retired from the interface; the activity heat ramp follows the ink primary (owner decision 2026-11-25, recorded in the e2e suite).
 
 **Signature: the spec row.** Metrics read as an 11px uppercase column head, a tabular value, a smaller unit and a stated trust condition (Exact, Est, API, Unknown). Used for Usage totals, Home limits, the conversation header and the site's illustrative tour.
 
@@ -93,7 +93,8 @@ Gnomcode keeps its lowercase wordmark and solid triangle-and-square mark. Interf
 ### Primary
 
 - **Ink** (`ink-dark` / `ink-light`) is the single interactive colour. Text on ink uses `on-ink`.
-- **Brand red** appears only in the activity heat ramp. It is never a button, focus or status colour.
+- **Activity heat ramp** runs from the raised neutral to full ink in five steps, so activity reads as the product colour. Its legend labels the scale; colour never stands alone.
+- **Brand red** (`brand-red`) is kept as a recorded brand value only; it is not used in the interface.
 
 ### Secondary
 

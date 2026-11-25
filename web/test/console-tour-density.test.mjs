@@ -32,7 +32,7 @@ test('the Overview tour renders static collapsed limit cards with Low and Out st
   assert.doesNotMatch(html,/<details\b/);
   assert.match(html,/sp-chip--low/);assert.match(html,/1 pool out/);
 });
-test('the Usage tour uses the 53-week brand-red heatmap', () => {
+test('the Usage tour uses the 53-week activity heatmap', () => {
   const html=render('usage');
   assert.match(html,/data-level="4"/);assert.match(html,/Est\. spend/);
 });
