@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { applyThemeMode, nextThemeMode, readThemeMode, type ThemeMode } from "../lib/theme";
+import { type KeyboardEvent, useEffect, useState } from "react";
+import { applyThemeMode, readThemeMode, type ThemeMode } from "../lib/theme";
 
+const MODES: { mode: ThemeMode; label: string }[] = [
+  { mode: "system", label: "System" },
+  { mode: "light", label: "Light" },
+  { mode: "dark", label: "Dark" },
+];
+
+/** Theme as a three-way segmented control: every option is visible, the current one is checked. */
 export default function ThemeControl({ className = "" }: { className?: string }) {
   const [theme, setTheme] = useState<ThemeMode>("system");
 
@@ -26,13 +33,28 @@ export default function ThemeControl({ className = "" }: { className?: string })
     };
   }, []);
 
-  function cycleTheme() {
-    const next = nextThemeMode(theme);
-    applyThemeMode(next);
-    setTheme(next);
+  function choose(mode: ThemeMode) {
+    applyThemeMode(mode);
+    setTheme(mode);
   }
 
-  return <button className={`sp-theme-control ${className}`} type="button" onClick={cycleTheme} aria-label={`Theme: ${theme}. Switch mode`}>
-    Theme / {theme}
-  </button>;
+  // Radio group keyboard model: arrows move and select, focus follows the checked option.
+  function onKey(event: KeyboardEvent<HTMLDivElement>) {
+    const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const index = (MODES.findIndex((item) => item.mode === theme) + step + MODES.length) % MODES.length;
+    choose(MODES[index].mode);
+    event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[index]?.focus();
+  }
+
+  return (
+    <div className={`sp-theme-control ${className}`} role="radiogroup" aria-label="Theme" onKeyDown={onKey}>
+      {MODES.map(({ mode, label }) => (
+        <button key={mode} type="button" role="radio" aria-checked={theme === mode} tabIndex={theme === mode ? 0 : -1} onClick={() => choose(mode)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 }
