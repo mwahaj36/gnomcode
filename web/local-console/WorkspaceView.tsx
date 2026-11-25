@@ -2044,7 +2044,7 @@ export function WorkspaceView() {
               type="button"
               onClick={() => openLauncher(true)}
             >
-              <span aria-hidden="true">+ </span>New
+              <svg className="gc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>New
             </button>
             <button
               type="button"
@@ -2342,7 +2342,7 @@ export function WorkspaceView() {
             if (window.matchMedia('(max-width: 899px)').matches) collapseChatList();
           }}
         >
-          {allChatsOpen ? 'Back to chat' : 'All chats ›'}
+          {allChatsOpen ? 'Back to chat' : 'All chats'}
         </button>
       </aside>
   );
@@ -2811,16 +2811,14 @@ export function WorkspaceView() {
                   type="button"
                   className="sp-limits-popover-trigger"
                   aria-expanded={usagePopoverOpen}
-                  aria-label="Remaining limits — View Usage"
                   onClick={() => setUsagePopoverOpen((open) => !open)}
                 >
+                  <span className="visually-hidden">Remaining limits: </span>
                   <span
                     className="sp-conversation-limits"
-                    role="status"
-                    aria-label="Remaining limits"
                     dangerouslySetInnerHTML={{ __html: limitsMarkup }}
                   />
-                  <span className="sp-limits-view-link">Usage ›</span>
+                  <span className="sp-limits-view-link">Usage<svg className="gc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></span>
                 </button>
                 {usagePopoverOpen ? (
                   <div className="sp-usage-popover" role="region" aria-label="All provider usage">
@@ -2834,7 +2832,7 @@ export function WorkspaceView() {
                           navigateTo('usage');
                         }}
                       >
-                        View Usage ›
+                        View Usage<svg className="gc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
                       </button>
                     </div>
                     <div
@@ -2860,7 +2858,6 @@ export function WorkspaceView() {
                   ref={toolsTriggerRef}
                   type="button"
                   className="btn-control sp-overview-toggle"
-                  aria-label="Overview"
                   title="Open workspace tools"
                   aria-pressed={overviewOpen || Boolean(sidePanel)}
                   onClick={() => {
@@ -2907,7 +2904,7 @@ export function WorkspaceView() {
                   }
                 }}
               >
-                <summary aria-label="Conversation actions">Actions</summary>
+                <summary aria-label="Conversation actions" title="More actions"><svg className="gc-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></svg></summary>
                 <div>
                   {imported && activeSession?.can_continue_here ? (
                     <button
@@ -2954,10 +2951,10 @@ export function WorkspaceView() {
                   {chatEvents.length > 0 ? (
                     <button
                       type="button"
-                      className="btn-control"
+                      className="btn-control btn-danger"
                       onClick={() => setConfirmDeleteOpen(true)}
                     >
-                      Delete local chat history
+                      Delete local chat history…
                     </button>
                   ) : null}
                 </div>
@@ -3074,7 +3071,7 @@ export function WorkspaceView() {
                   </button>
                   <button
                     type="button"
-                    className="btn-primary"
+                    className="btn-primary btn-destructive"
                     onClick={() => void handleDeleteChatConfirmed()}
                   >
                     Delete history

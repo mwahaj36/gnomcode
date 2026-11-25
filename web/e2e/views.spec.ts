@@ -340,7 +340,7 @@ test.describe('Stale and reset quota states', () => {
     await expect(claudeCard).not.toContainText(/Runs out in/i);
 
     await page.screenshot({
-      path: 'C:/Users/Wahaj/.gemini/antigravity/brain/5751486b-f1ee-46eb-aac7-95ecc2468411/scratch/stale-quota-after.png',
+      path: test.info().outputPath('stale-quota-after.png'),
     });
 
     // Live card ticks its reset and runs-out countdowns every 30s without waiting for a poll.
@@ -361,18 +361,19 @@ test.describe('Stale and reset quota states', () => {
     await expect(codexCard).toContainText('EST');
 
     await page.screenshot({
-      path: 'C:/Users/Wahaj/.gemini/antigravity/brain/5751486b-f1ee-46eb-aac7-95ecc2468411/scratch/reset-unconfirmed-after.png',
+      path: test.info().outputPath('reset-unconfirmed-after.png'),
     });
   });
 });
 
-test.describe('Owner decision: brand-red activity heatmap', () => {
+test.describe('Owner decision: ink activity heatmap', () => {
+  // 2026-11-25: the heatmap follows the primary ink colour (it was brand red before the redesign).
   const ramps = {
-    dark: ['#17171a', '#4a121b', '#7d1626', '#ba1c35', '#ff2544'],
-    light: ['#e4e9ee', '#fcd1d8', '#f799a8', '#ec526b', '#ff2544'],
+    dark: ['#181d26', '#233063', '#3149a6', '#5670dc', '#8ea2ff'],
+    light: ['#e6e6de', '#c9d0f5', '#93a2ea', '#5a6fd6', '#2d43c0'],
   } as const;
   for (const scheme of ['dark', 'light'] as const) {
-    test(`heat tokens and rendered cells keep the brand-red ramp in ${scheme} mode`, async ({ page, openConsole }) => {
+    test(`heat tokens and rendered cells use the ink ramp in ${scheme} mode`, async ({ page, openConsole }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await openConsole();
       await expect(page.locator('#home-activity .sp-heat[data-level]').first()).toBeVisible();

@@ -90,14 +90,6 @@ export function takeSettingsQuery(): string {
 /** Reveals a Settings category by id and moves focus to its heading. */
 export function revealSection(id: string): void {
   window.dispatchEvent(new CustomEvent('gnomcode:reveal-section', { detail: { id } }));
-  window.requestAnimationFrame(() => {
-    const section = document.getElementById(id);
-    const heading = section?.querySelector<HTMLElement>('h2');
-    if (heading) {
-      heading.tabIndex = -1;
-      heading.focus({ preventScroll: true });
-    }
-  });
 }
 
 /** The five places the shell can show; `auth` is the Account view reached from the rail or Settings. */
