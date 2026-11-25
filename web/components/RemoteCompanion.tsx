@@ -274,7 +274,7 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
   useEffect(()=>{const visible=()=>{
     if(document.visibilityState!=='visible' || !proofKey.current)return;
     if(socket.current?.readyState===WebSocket.OPEN && channel.current && authenticated.current){lastReply.current=Date.now();void requestSessions().catch(()=>reconnect.current());}
-    else if(socket.current?.readyState!==WebSocket.CONNECTING){if(reconnectTimer.current)clearTimeout(reconnectTimer.current);reconnect.current();}
+    else if(socket.current?.readyState!==WebSocket.CONNECTING){if(reconnectTimer.current)clearTimeout(reconnectTimer.current);retryStart.current=0;reconnect.current();}
   };document.addEventListener('visibilitychange',visible);window.addEventListener('online',visible);return()=>{document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible);};},[]);
 
   useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
@@ -807,7 +807,10 @@ export default function RemoteCompanion({ embedded = false, visible = true }: { 
       if(connectionWatch.current)clearInterval(connectionWatch.current);
       if(poll.current)clearInterval(poll.current);
       const previous=socket.current;socket.current=null;previous?.close();
-      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Gnomcode is running. Your account connection is still saved.');return;
+      setPhase('unavailable');setError('Your desktop is not responding. Check that it is awake and Gnomcode is running. Your account connection is still saved.');
+      // Keep trying quietly: a desktop that wakes or starts later must not need a manual retry.
+      if(proofKey.current)reconnectTimer.current=setTimeout(()=>{if(document.visibilityState==='visible'){retryStart.current=0;void connect(true);}},15000);
+      return;
     }
     if(reconnectTimer.current)clearTimeout(reconnectTimer.current);
     if(connectionWatch.current)clearInterval(connectionWatch.current);
