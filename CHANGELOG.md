@@ -8,6 +8,9 @@
 - Fix the phone web app: the reconnecting view no longer covers the tab bar, the desktop heading no longer wraps one word per line, the tab bar sits on the bottom edge, device actions read as buttons and the Remote composer is a single frame.
 - Accessibility: accessible names now contain their visible labels, the activity grid scrolls by keyboard, notices clear the phone tab bar, and an axe-core WCAG 2.2 AA audit covers every console view in both themes on desktop and phone.
 - Update website copy to match the app: the three supported agents, trust labels on every number, and the Apache-2.0 licence.
+- Fix Remote staying on "Reconnecting" after the desktop came back: it no longer gives up after 30 seconds, retries quietly every 15 seconds, and starts a fresh attempt when the page becomes visible or the network returns.
+- Keep the desktop heartbeat independent of snapshot and usage publication, so database-bound work can no longer make a running desktop look offline; failed directory polls back off instead of retrying every 5 seconds.
+- Command palette and Settings section links now move focus to the chosen section reliably, and automatic desktop opening works again after switching accounts.
 
 ## 1.1.0 - 2026-11-21
 
