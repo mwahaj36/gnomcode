@@ -2087,13 +2087,13 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-native-console .sp-workspace-list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:2px}
 .ide-session-row{position:relative;display:flex;align-items:center;gap:2px}
 .ide-session-row .ide-session{flex:1 1 auto;min-width:0;text-align:left}
-.ide-session-row .ide-session[data-subagent="true"]{padding-left:22px;border-left:2px solid var(--sp-border);margin-left:8px}
+.ide-session-row .ide-session[data-subagent="true"]{padding-left:22px;border-left:1px solid var(--sp-border);margin-left:8px}
 .ide-session-row .ide-session-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ide-session-row .ide-session-meta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--sp-text-3)}
 .ide-session-more{flex:none;min-height:28px;min-width:28px;padding:2px 6px;border-radius:6px;background:transparent;border:0;color:var(--sp-text-3);opacity:0}
 .ide-session-row:hover .ide-session-more,.ide-session-row:focus-within .ide-session-more{opacity:1}
 @media (hover:none){.ide-session-more{opacity:1;min-height:36px;min-width:36px}}
-.sp-subagents{margin:2px 0 6px 14px;padding-left:10px;border-left:2px solid var(--sp-border)}
+.sp-subagents{margin:2px 0 6px 14px;padding-left:10px;border-left:1px solid var(--sp-border)}
 .sp-subagents summary{font-size:12px;color:var(--sp-text-3);cursor:pointer;padding:4px 6px}
 .sp-subagents ul{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px}
 .sp-subagent-row{width:100%;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:transparent;border:0;text-align:left;min-height:34px}
@@ -3273,4 +3273,37 @@ body.sp-native-console{margin:0;padding:0;max-width:none;height:100dvh;overflow:
 .sp-remote .remote-heading :is(.sp-overview-toggle,.remote-notif-button,.remote-desktop-button,.remote-sidebar-toggle):hover{background:var(--sp-hover);color:var(--sp-text)}
 .sp-remote .remote-heading .sp-overview-toggle[aria-pressed=true]{background:var(--sp-selected);color:var(--sp-accent)}
 /* Phone: the conversation layer ends above the tab bar instead of covering it. */
-@media(max-width:899px){.sp-remote.is-embedded:is(.is-paired,.is-reconnecting){height:calc(var(--remote-viewport-height,100dvh) - 56px - env(safe-area-inset-bottom))}}
+/* The tab bar shows up to 899px; the older rule above stopped at 767px. */
+@media(max-width:899px){.sp-remote.is-embedded:is(.is-paired,.is-reconnecting){height:calc(var(--remote-viewport-height,100dvh) - var(--rail-h,56px) - env(safe-area-inset-bottom))}}
+
+/* ===== Consistency: one control scale, one alignment rule =====
+   Page actions 36px, dense panes 32px, touch 44px. Label and icon centre on one axis with a 6px gap;
+   horizontal padding is 14px (page) or 10px (dense). Icon-only buttons are square and ghost. */
+.gc-console :is(.btn-control,.btn-primary,.sp-console-action){align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;font-size:13px;line-height:1.2;text-decoration:none;white-space:nowrap}
+.gc-console :is(.ide-sidebar,.conversation-heading,.sp-readonly-banner,.sp-workspace-modal-head,.composer-toolbar,.sp-approval-actions,.sp-inspector,.sp-overview,.conversation-menu) :is(.btn-control,.btn-primary){min-height:32px;padding:0 10px}
+.gc-console a:is(.btn-control,.btn-primary){text-decoration:none}
+.gc-console .console-context #chat-list-toggle{display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:var(--sp-text-2);border-radius:8px}
+.gc-console .console-context #chat-list-toggle:hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .console-context{gap:8px}
+.gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn){width:32px;min-width:32px;padding:0}
+.gc-console .conversation-menu>div>button{min-height:36px;padding:0 12px;border-radius:6px}
+/* Messages: hidden metadata takes no room until it shows; replies keep theirs on one line. */
+.gc-console .sp-chat-stream{gap:16px}
+.gc-console .sp-chat-user>header{height:0;margin:0;overflow:visible}
+.gc-console .sp-chat-user:is(:hover,:focus-within,[data-meta="shown"])>header{height:auto;margin-top:6px}
+/* Account: one heading scale shared with Settings. */
+.gc-console .sp-account-intro h2{font-size:22px;line-height:1.3;letter-spacing:-.015em;margin:0 0 8px}
+.gc-console .sp-account-panel h3{font-size:16px;line-height:1.4;margin:0 0 12px}
+.gc-console .sp-account-state #auth-cloud-status{font-size:15px;font-weight:600}
+.gc-console .sp-account-panel :is(.btn-control,.btn-primary){font:500 13px/1.2 var(--sp-font-sans);min-height:36px;padding:0 14px}
+.gc-console .sp-account-panel label{font:500 13px/1.5 var(--sp-font-sans);color:var(--sp-text)}
+.gc-console .sp-account-label{font-family:var(--sp-font-sans);letter-spacing:0}
+/* Section rhythm: more space above a heading than below it. */
+.gc-console :is(.sp-section-head,.sp-settings-section>h2){margin-top:0}
+.gc-console .sp-section+.sp-section{margin-top:32px}
+@media(max-width:899px){
+ .gc-console :is(.btn-control,.btn-primary,.sp-console-action),.gc-console :is(.ide-sidebar,.conversation-heading,.sp-readonly-banner,.sp-workspace-modal-head,.composer-toolbar,.sp-approval-actions,.sp-inspector,.sp-overview,.conversation-menu) :is(.btn-control,.btn-primary){min-height:44px}
+ .gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn),.gc-console .console-context #chat-list-toggle{width:44px;min-width:44px}
+ .gc-console .conversation-menu>div>button{min-height:44px}
+}
+@media(max-width:899px){.gc-console .timeline-bar :is(select,.btn-control),.sp-native-console .sp-export-menu>summary{min-height:44px}}

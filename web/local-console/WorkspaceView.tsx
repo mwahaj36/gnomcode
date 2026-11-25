@@ -2954,7 +2954,7 @@ export function WorkspaceView() {
                       className="btn-control btn-danger"
                       onClick={() => setConfirmDeleteOpen(true)}
                     >
-                      Delete local chat history
+                      Delete local chat history…
                     </button>
                   ) : null}
                 </div>

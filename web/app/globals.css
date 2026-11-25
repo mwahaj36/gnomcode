@@ -497,7 +497,6 @@ body:has(.sp-page) > .sp-global-skip { display: none; }
 :is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-app-header,.sp-not-found){--sp-font-mono:var(--sp-font-sans)}
 :is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-app-header,.sp-not-found) :is(code,pre,kbd,samp,.sp-copy code,.sp-command,.sp-command *,.xterm,.xterm *){font-family:"JetBrains Mono",ui-monospace,Consolas,monospace}
 :is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-app-header,.sp-not-found) :not(h1,h2,h3,code,pre,kbd){text-transform:none;letter-spacing:normal}
-.sp-page .sp-nav-login{font-family:var(--sp-font-sans)}
 /* Navigation and labels: sentence case, readable size, quiet until hovered. */
 .sp-site-links a,.sp-site-login,.sp-site-download,.sp-app-nav a,.sp-app-account :is(a,button),.sp-auth-tabs button{font-family:var(--sp-font-sans);font-size:13px;font-weight:500}
 .sp-site-footer-grid>div>span,.sp-site-footer-bottom{font-family:var(--sp-font-sans);font-size:12px}
