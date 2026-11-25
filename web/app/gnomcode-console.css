@@ -3300,7 +3300,6 @@ body.sp-native-console{margin:0;padding:0;max-width:none;height:100dvh;overflow:
 .gc-console .sp-account-label{font-family:var(--sp-font-sans);letter-spacing:0}
 /* Section rhythm: more space above a heading than below it. */
 .gc-console :is(.sp-section-head,.sp-settings-section>h2){margin-top:0}
-.gc-console .sp-section+.sp-section{margin-top:32px}
 @media(max-width:899px){
  .gc-console :is(.btn-control,.btn-primary,.sp-console-action),.gc-console :is(.ide-sidebar,.conversation-heading,.sp-readonly-banner,.sp-workspace-modal-head,.composer-toolbar,.sp-approval-actions,.sp-inspector,.sp-overview,.conversation-menu) :is(.btn-control,.btn-primary){min-height:44px}
  .gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn),.gc-console .console-context #chat-list-toggle{width:44px;min-width:44px}
