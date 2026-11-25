@@ -107,6 +107,20 @@ function formatAgeLabel(isoStr?: string): string {
 export function SettingsView() {
   const providerListRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState(() => takeSettingsQuery());
+  // Focus moves after the section is committed and visible; a frame-timed focus could land on a
+  // still-hidden heading and silently do nothing.
+  const pendingFocus = useRef<string | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
+  useEffect(() => {
+    const id = pendingFocus.current;
+    if (!id) return;
+    pendingFocus.current = null;
+    const heading = document.getElementById(id)?.querySelector<HTMLElement>('h2');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+  }, [revealTick]);
   const [selectedId, setSelectedId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const hashId = window.location.hash.replace(/^#/, '');
@@ -126,8 +140,10 @@ export function SettingsView() {
     const onReveal = (event: Event) => {
       const id = (event as CustomEvent<{ id?: string }>).detail?.id;
       if (id && SETTINGS_SECTIONS.some((section) => section.id === id)) {
+        pendingFocus.current = id;
         setSelectedId(id);
         setQuery('');
+        setRevealTick((tick) => tick + 1);
       }
     };
     const onHash = () => {
