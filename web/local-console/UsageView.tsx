@@ -317,7 +317,7 @@ export function UsageView() {
             <option value="all">All time</option>
           </select>
           <details ref={exportDetailsRef} className="sp-export-menu">
-            <summary>Export</summary>
+            <summary>Export<svg className="gc-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
             <div>
               <button
                 type="button"

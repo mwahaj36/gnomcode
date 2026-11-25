@@ -31,7 +31,7 @@ async function openFiles(page: Page, openConsole: (hash: string) => Promise<void
   await page.locator('.ide-session', { hasText: 'claude-code' }).first().click();
   const tools = page.getByRole('complementary', { name: 'Conversation tools' });
   // Narrow windows start with the Overview closed; open it from the conversation header.
-  if (!(await tools.isVisible())) await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  if (!(await tools.isVisible())) await page.getByRole('button', { name: 'Tools', exact: true }).click();
   await tools.getByRole('button', { name: 'Files', exact: true }).click();
   return page.locator('.sp-files-panel');
 }

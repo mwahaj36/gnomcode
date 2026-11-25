@@ -24,7 +24,7 @@ export default function DesktopDevices({onPair,autoOpen=false}:{onPair?:(offer:D
   const autoStarted=useRef(false);
   const [disableTarget,setDisableTarget]=useState<Desktop|null>(null);
   const disableDialog=useRef<HTMLDialogElement|null>(null);
-  useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{setOwner(session?.user.id||null);setDesktops([]);setRequests([]);setLoaded(false);});return()=>subscription.unsubscribe();},[]);
+  useEffect(()=>{const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{setOwner(session?.user.id||null);setDesktops([]);setRequests([]);setLoaded(false);autoStarted.current=false;});return()=>subscription.unsubscribe();},[]);
   useEffect(()=>{
     if(!owner){if(owner===null)setStatus('Sign in with the same account as your desktop.');return;}
     let active=true,running=false;
