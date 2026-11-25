@@ -181,22 +181,41 @@ pub fn spawn_cloud_sync(
             tracing::warn!("cloud sync client could not start");
             return;
         };
+        // The device directory carries the desktop heartbeat. It runs on its own task so snapshot
+        // and usage publication, which wait on the database, can never make a running desktop
+        // look offline to signed-in phones.
+        tokio::spawn({
+            let (client, db, remote) = (client.clone(), db.clone(), remote.clone());
+            async move {
+                let mut devices_ticker = tokio::time::interval(Duration::from_secs(5));
+                devices_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                let mut backoff_secs = 0u64;
+                loop {
+                    tokio::select! {
+                        _ = devices_ticker.tick() => {},
+                        () = remote.devices.changed() => {},
+                    }
+                    match poll_devices(&client, &db, &remote).await {
+                        Ok(()) => backoff_secs = 0,
+                        Err(error) => {
+                            // Back off so a rejected login or an outage is not retried every 5s.
+                            backoff_secs = (backoff_secs * 2).clamp(5, 60);
+                            tracing::warn!(
+                                "Device directory unavailable (retry in {backoff_secs}s): {error}"
+                            );
+                            tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
+                        }
+                    }
+                }
+            }
+        });
         let mut ticker = tokio::time::interval(Duration::from_secs(60));
-        let mut devices_ticker = tokio::time::interval(Duration::from_secs(5));
         let mut usage_backoff_secs = 0u64;
         let mut next_usage_attempt = tokio::time::Instant::now();
         loop {
             tokio::select! {
                 _ = ticker.tick() => {},
                 () = remote.discovery_changed() => {},
-                _ = devices_ticker.tick() => {
-                    if let Err(error)=poll_devices(&client,&db,&remote).await {tracing::warn!("Device directory unavailable: {error}");}
-                    continue;
-                },
-                () = remote.devices.changed() => {
-                    if let Err(error)=poll_devices(&client,&db,&remote).await {tracing::warn!("Device directory unavailable: {error}");}
-                    continue;
-                },
             }
             if !db
                 .lock()

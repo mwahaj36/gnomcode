@@ -96,7 +96,7 @@ export function PlatformDownloads() {
         </header>
         <p className="sp-platform-detail">{active.detail}</p>
         <p className="sp-platform-body">{active.body}</p>
-        {active.command && <div className="sp-install-command"><span>QUICK INSTALL</span><CopyCommand command={active.command} /></div>}
+        {active.command && <div className="sp-install-command"><span>Quick install</span><CopyCommand command={active.command} /></div>}
         {active.actions.length ? (
           <div className="sp-download-actions">
             {active.actions.map((action, index) => (

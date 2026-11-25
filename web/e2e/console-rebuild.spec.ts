@@ -50,7 +50,7 @@ test('a large review stays navigable and loads the selected file', async ({ page
   });
   await openConsole('#sessions');
   await openClaudeConversation(page);
-  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByRole('button', { name: 'Tools', exact: true }).click();
   await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Changes', exact: true }).click();
   const panel = page.locator('.sp-changes-panel');
   await expect(panel).toContainText('Select a file to review');
@@ -70,7 +70,7 @@ test('history and docked tools retain keyboard resizing without overflowing comp
   await historyHandle.focus();
   await historyHandle.press('ArrowRight');
   await expect.poll(async () => (await history.boundingBox())!.width).toBe(before + 8);
-  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByRole('button', { name: 'Tools', exact: true }).click();
   await page.getByRole('complementary', { name: 'Conversation tools' }).getByRole('button', { name: 'Files', exact: true }).click();
   const tools = page.getByRole('complementary', { name: 'Workspace tools' });
   const width = (await tools.boundingBox())!.width;

@@ -285,3 +285,13 @@
 .sp-tour-stage .sp-heatmap-months{margin-left:0}
 .sp-tour-stage .sp-heat-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .sp-tour [data-tour-collapsed="1"]>:not(:first-child){display:none}
+
+/* Datasheet world: Inter is the site voice; monospace only for code, commands and terminals. */
+html body :is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-not-found) :not(code,pre,kbd,samp,code *,pre *,.xterm,.xterm *,svg,svg *){font-family:var(--sp-font-sans)}
+html body :is(.sp-page,.sp-site-header,.sp-site-footer,.sp-console-shell,.sp-auth-page,.sp-not-found) :not(h1,h2,h3,code,pre,kbd,.sp-tile-label){text-transform:none;letter-spacing:normal}
+html body .sp-page :is(.sp-nav-links a,.sp-nav-login,.sp-nav-cta,.sp-tour-tabs button,.sp-label,.sp-footer-bottom,.sp-footer-grid>div>span){font-size:13px;font-weight:500}
+html body .sp-page .sp-footer-grid>div>span{color:var(--text-3);font-size:12px}
+html body .sp-page .sp-tour-tabs button[aria-selected="true"]{color:var(--text);border-color:var(--accent)}
+html body .sp-page :is(.sp-button-primary,.sp-button-outline,.sp-nav-cta,.sp-nav-login){border-radius:var(--sp-r-control)}
+.sp-start h2{font-size:40px;line-height:44px;font-weight:600;letter-spacing:-.025em;margin:0;max-width:20ch}
+@media(max-width:760px){.sp-start h2{font-size:28px;line-height:36px}}
