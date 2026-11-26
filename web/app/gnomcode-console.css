@@ -551,7 +551,7 @@ body:where(.sp-native-console) {
 
 .sp-summary-grid>div{padding:12px 16px}.sp-summary-grid>div>span{margin-bottom:8px}.sp-summary-grid strong{font-size:22px}.sp-summary-grid p{margin-top:6px}
 .sp-overview-live{align-items:start}.sp-panel-heading{min-height:76px;border-bottom:1px solid var(--sp-border);padding-bottom:16px;box-sizing:border-box}.sp-panel-heading h2{display:block;font:600 22px/1.3 var(--sp-font-sans);margin:0 0 10px}.sp-panel-heading p{font:12px/1.5 var(--sp-font-sans);color:var(--sp-text-2);margin:0}.sp-ongoing>.sp-panel-heading+details{border-top:0}
-.sp-period-actions{display:flex;align-items:center;gap:12px;margin-left:auto}.timeline-bar select,.sp-console-timeline-filter select{min-height:40px;width:auto;padding:8px 32px 8px 12px;font:12px/1.5 var(--sp-font-mono)}.timeline-label{font-size:var(--sp-fs-meta);color:var(--sp-text-2)}.sp-export-menu{position:relative}.sp-export-menu>summary{cursor:pointer;border:1px solid var(--sp-border);padding:10px 16px;font:12px/1.5 var(--sp-font-mono)}.sp-export-menu>div{position:absolute;right:0;z-index:10;padding:8px;border:1px solid var(--sp-border);background:var(--sp-bg);display:flex;gap:8px}.sp-settings-resources{display:flex;gap:24px;padding:0 0 24px;font:12px/1.5 var(--sp-font-mono)}.sp-settings-resources a{color:var(--sp-primary-text)}
+.sp-period-actions{display:flex;align-items:center;gap:12px;margin-left:auto}.timeline-bar select,.sp-console-timeline-filter select{min-height:40px;width:auto;padding:8px 32px 8px 12px;font:500 13px/1.5 var(--sp-font-sans)}.timeline-label{font-size:var(--sp-fs-meta);color:var(--sp-text-2)}.sp-export-menu{position:relative}.sp-export-menu>summary{cursor:pointer;border:1px solid var(--sp-border);padding:10px 16px;font:12px/1.5 var(--sp-font-mono)}.sp-export-menu>div{position:absolute;right:0;z-index:10;padding:8px;border:1px solid var(--sp-border);background:var(--sp-bg);display:flex;gap:8px}.sp-settings-resources{display:flex;gap:24px;padding:0 0 24px;font:12px/1.5 var(--sp-font-mono)}.sp-settings-resources a{color:var(--sp-primary-text)}
 @media(max-width:900px){.sp-panel-heading{min-height:0}}@media(max-width:640px){.timeline-bar{flex-wrap:wrap}.sp-period-actions{margin-left:0}}
 
 .sp-ongoing summary>time{grid-column:1;font:var(--sp-fs-meta)/1.5 var(--sp-font-mono);color:var(--sp-text-2)}.sp-ongoing summary>b{grid-row:1/4}.sp-export-menu>summary:focus-visible{outline:2px solid var(--sp-primary);outline-offset:4px}
@@ -3234,6 +3234,20 @@ body.sp-native-console{margin:0;padding:0;max-width:none;height:100dvh;overflow:
 /* Remote, not yet in a conversation: an in-flow page with a gutter, never a full-screen layer. */
 .sp-remote .remote-reconnect{margin:0 0 20px;padding:14px 16px;border:1px solid var(--sp-border);border-radius:12px;background:var(--sp-surface-2);gap:10px 12px}
 .sp-remote .remote-reconnect strong{color:var(--sp-text);font-weight:600}
+/* Sheet actions read as the same rows as the links above them; banner actions share one height. */
+/* Desktop sheet: navigation rows carry a chevron; actions are real buttons in a footer. */
+.sp-remote .remote-sheet nav.remote-sheet-links{display:block;margin:16px 0 0;border:1px solid var(--sp-border);border-radius:10px;overflow:hidden;background:var(--sp-surface)}
+.sp-remote .remote-sheet nav.remote-sheet-links a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:10px 14px;border-radius:0;background:transparent;color:var(--sp-text);text-decoration:none}
+.sp-remote .remote-sheet nav.remote-sheet-links a+a{border-top:1px solid var(--sp-border)}
+.sp-remote .remote-sheet nav.remote-sheet-links a:hover{background:var(--sp-surface-2)}
+.sp-remote .remote-sheet nav.remote-sheet-links a:focus-visible{outline:2px solid var(--sp-accent);outline-offset:-2px}
+.sp-remote .remote-sheet nav.remote-sheet-links span{display:grid;gap:2px}
+.sp-remote .remote-sheet nav.remote-sheet-links strong{font:500 14px/1.4 var(--sp-font-sans)}
+.sp-remote .remote-sheet nav.remote-sheet-links small{font:400 12px/1.4 var(--sp-font-sans);color:var(--sp-text-2)}
+.sp-remote .remote-sheet nav.remote-sheet-links svg{flex:none;color:var(--sp-text-2)}
+.sp-remote .remote-sheet .remote-sheet-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--sp-border)}
+@media(max-width:480px){.sp-remote .remote-sheet .remote-sheet-actions{flex-direction:column-reverse}.sp-remote .remote-sheet .remote-sheet-actions button{width:100%;min-height:44px}}
+.sp-devices .sp-dev-group+p,.sp-devices+p{margin-top:12px}
 .sp-remote .remote-reconnect p{font-size:13px}
 .sp-remote .remote-reconnect a{color:var(--sp-text)}
 .sp-remote.is-reconnecting .remote-reconnect{margin:0;border-width:0 0 1px;border-radius:0}

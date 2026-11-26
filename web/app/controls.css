@@ -1,0 +1,192 @@
+/* One control system for the website, account console and Remote.
+   Loaded last; selectors are prefixed with `html` (and a doubled class where an older rule is more specific)
+   so these states win over the many earlier per-surface rules.
+   Sizes: 44px actions (40px in the site header), 32px segmented controls.
+   Variants: primary (accent fill), secondary (surface + border), quiet (no chrome), danger (outlined).
+   States: hover, pressed, focus-visible ring, disabled, busy. */
+
+:root {
+  --ctl-radius: 8px;
+  --ctl-h-lg: 44px;
+  --ctl-h: 44px;
+  --ctl-h-sm: 32px;
+  --ctl-font: 500 14px/1.2 var(--sp-font-sans, Inter, system-ui, sans-serif);
+  --ctl-font-sm: 500 13px/1.2 var(--sp-font-sans, Inter, system-ui, sans-serif);
+  --ctl-ease: 140ms cubic-bezier(.2, 0, 0, 1);
+  --ctl-primary-hover: color-mix(in srgb, var(--sp-primary) 86%, var(--sp-text));
+  --ctl-primary-press: color-mix(in srgb, var(--sp-primary) 76%, var(--sp-text));
+  --ctl-hover-fill: color-mix(in srgb, var(--sp-text) 6%, transparent);
+  --ctl-press-fill: color-mix(in srgb, var(--sp-text) 10%, transparent);
+}
+
+/* ---------- Shared states for every interactive element ---------- */
+html :is(button, [role="button"], [role="tab"], a, summary, select):focus-visible {
+  outline: 2px solid var(--sp-accent, var(--sp-primary));
+  outline-offset: 2px;
+}
+html :is(button, [role="button"]):disabled,
+html :is(button, [role="button"], a)[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .45;
+  box-shadow: none;
+}
+html :is(button, [role="button"])[aria-busy="true"] { cursor: progress; opacity: .7; }
+
+/* ---------- Primary ---------- */
+html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primary, .sp-download-primary.sp-download-primary,
+  .sp-auth-submit, .btn-primary, .btn-control.sp-sidebar-new-btn, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry) {
+  border: 1px solid var(--sp-primary);
+  background: var(--sp-primary);
+  color: var(--sp-on-primary) !important;
+  border-radius: var(--ctl-radius);
+  transition: background-color var(--ctl-ease), border-color var(--ctl-ease), color var(--ctl-ease), transform var(--ctl-ease);
+  cursor: pointer;
+}
+html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primary, .sp-download-primary.sp-download-primary,
+  .sp-auth-submit, .btn-primary, .btn-control.sp-sidebar-new-btn, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry):hover:not(:disabled) {
+  background: var(--ctl-primary-hover);
+  border-color: var(--ctl-primary-hover);
+}
+html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primary, .sp-download-primary.sp-download-primary,
+  .sp-auth-submit, .btn-primary, .btn-control.sp-sidebar-new-btn, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry):active:not(:disabled) {
+  background: var(--ctl-primary-press);
+  transform: translateY(1px);
+}
+
+/* ---------- Secondary ---------- */
+html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control:not(.sp-sidebar-new-btn),
+  .sp-dev-secondary.sp-dev-secondary, .sp-console-action, .sp-settings-action, .sp-auth-oauth) {
+  border: 1px solid var(--sp-border-strong);
+  background: var(--sp-surface);
+  color: var(--sp-text) !important;
+  border-radius: var(--ctl-radius);
+  transition: background-color var(--ctl-ease), border-color var(--ctl-ease), color var(--ctl-ease), transform var(--ctl-ease);
+  cursor: pointer;
+}
+html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control:not(.sp-sidebar-new-btn),
+  .sp-dev-secondary.sp-dev-secondary, .sp-console-action, .sp-settings-action, .sp-auth-oauth):hover:not(:disabled) {
+  background: var(--sp-surface-2);
+  border-color: color-mix(in srgb, var(--sp-text) 28%, var(--sp-border-strong));
+}
+html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control:not(.sp-sidebar-new-btn),
+  .sp-dev-secondary.sp-dev-secondary, .sp-console-action, .sp-settings-action, .sp-auth-oauth):active:not(:disabled) {
+  background: color-mix(in srgb, var(--sp-surface-2) 80%, var(--sp-text));
+  transform: translateY(1px);
+}
+
+/* Download rows keep their two-line layout; only their chrome and states are unified. */
+html .sp-download-action.sp-download-action:not(.sp-download-primary) {
+  border: 1px solid var(--sp-border-strong);
+  border-radius: var(--ctl-radius);
+  background: var(--sp-surface);
+  transition: background-color var(--ctl-ease), border-color var(--ctl-ease);
+}
+html .sp-download-action.sp-download-action:not(.sp-download-primary):hover { background: var(--sp-surface-2); }
+html .sp-download-action.sp-download-action { border-radius: var(--ctl-radius); }
+
+/* ---------- Danger (outlined) ---------- */
+html :is(.sp-dev-quiet-danger.sp-dev-quiet-danger, .remote-sheet-forget.remote-sheet-forget, .btn-danger) {
+  border: 1px solid color-mix(in srgb, var(--sp-danger) 45%, transparent);
+  background: transparent;
+  color: var(--sp-danger) !important;
+  border-radius: var(--ctl-radius);
+  transition: background-color var(--ctl-ease), border-color var(--ctl-ease);
+  cursor: pointer;
+}
+html :is(.sp-dev-quiet-danger.sp-dev-quiet-danger, .remote-sheet-forget.remote-sheet-forget, .btn-danger):hover:not(:disabled) {
+  background: var(--sp-danger-soft);
+  border-color: var(--sp-danger);
+}
+html :is(.sp-dev-quiet-danger.sp-dev-quiet-danger, .remote-sheet-forget.remote-sheet-forget, .btn-danger):active:not(:disabled) { transform: translateY(1px); }
+
+/* ---------- Quiet (no chrome until hover) ---------- */
+html :is(.sp-dev-quiet.sp-dev-quiet, .btn-quiet) {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sp-text-2);
+  border-radius: var(--ctl-radius);
+  transition: background-color var(--ctl-ease), color var(--ctl-ease);
+}
+html :is(.sp-dev-quiet.sp-dev-quiet, .btn-quiet):hover:not(:disabled) { background: var(--ctl-hover-fill); color: var(--sp-text); }
+
+/* ---------- Sizes and type ---------- */
+/* Marketing actions: 44px, 14px medium, sentence case. */
+html :is(.sp-button-primary, .sp-button-outline, .sp-docs-cta-primary, .sp-docs-cta-secondary) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--ctl-h-lg); padding: 0 18px;
+  font: var(--ctl-font); letter-spacing: 0; text-transform: none; text-decoration: none; white-space: nowrap;
+}
+/* Header actions: 40px so they sit inside the 64px bar with even margins. */
+html :is(.sp-nav-cta.sp-nav-cta, .sp-account-cta.sp-account-cta, .sp-site-download) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 16px;
+  font: var(--ctl-font); letter-spacing: 0; text-transform: none; white-space: nowrap;
+}
+/* Console actions: 44px, matching the console's shared control height. */
+html body :is(.btn-control, .btn-primary, .btn-danger, .btn-quiet, .sp-console-action, .sp-settings-action,
+  .sp-dev-primary.sp-dev-primary, .sp-dev-secondary.sp-dev-secondary, .sp-dev-quiet.sp-dev-quiet, .sp-dev-quiet-danger.sp-dev-quiet-danger,
+  .remote-sheet-retry.remote-sheet-retry, .remote-sheet-forget.remote-sheet-forget) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--ctl-h); height: auto; margin: 0; padding: 0 14px;
+  font: var(--ctl-font-sm); letter-spacing: 0; text-transform: none; text-decoration: none; white-space: nowrap;
+}
+@media (max-width: 760px), (pointer: coarse) {
+  html :is(.btn-control, .btn-primary, .btn-danger, .btn-quiet, .sp-console-action, .sp-settings-action,
+    .sp-dev-primary.sp-dev-primary, .sp-dev-secondary.sp-dev-secondary, .sp-dev-quiet.sp-dev-quiet, .sp-dev-quiet-danger.sp-dev-quiet-danger,
+    .remote-sheet-retry.remote-sheet-retry, .remote-sheet-forget.remote-sheet-forget) { min-height: 44px; }
+}
+
+/* ---------- Tabs: underline, sentence case ---------- */
+html :is(.sp-platform-tabs [role="tab"], .sp-tour-tabs button) {
+  min-height: 44px; padding: 0 16px;
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+  background: transparent; color: var(--sp-text-2);
+  font: var(--ctl-font); letter-spacing: 0; text-transform: none;
+  transition: color var(--ctl-ease), border-color var(--ctl-ease), background-color var(--ctl-ease);
+  cursor: pointer;
+}
+html :is(.sp-platform-tabs [role="tab"], .sp-tour-tabs button):hover { color: var(--sp-text); background: var(--ctl-hover-fill); }
+html :is(.sp-platform-tabs [role="tab"], .sp-tour-tabs button):is([aria-selected="true"]) { color: var(--sp-text); border-bottom-color: var(--sp-primary); }
+html :is(.sp-platform-tabs [role="tab"], .sp-tour-tabs button):focus-visible { outline-offset: -2px; }
+
+/* ---------- Segmented control (theme) ---------- */
+html body .sp-theme-control.sp-theme-control button {
+  min-height: 0; height: var(--ctl-h-sm); padding: 0 12px; border-radius: 6px;
+  font: var(--ctl-font-sm); color: var(--sp-text-2); background: transparent;
+  transition: background-color var(--ctl-ease), color var(--ctl-ease);
+}
+html .sp-theme-control.sp-theme-control button:hover { color: var(--sp-text); background: var(--ctl-hover-fill); }
+html .sp-theme-control.sp-theme-control button[aria-checked="true"] { color: var(--sp-text); background: var(--sp-surface); box-shadow: 0 1px 2px rgb(0 0 0 / .16); }
+
+@media (prefers-reduced-motion: reduce) {
+  html :is(button, a, [role="tab"]) { transition: none !important; }
+  html :is(button, a):active { transform: none !important; }
+}
+
+/* ---------- Selects: same height, type and border as actions, with a drawn caret ---------- */
+html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not([hidden]) {
+  appearance: none; -webkit-appearance: none;
+  min-height: 40px; height: 40px; padding: 0 36px 0 12px;
+  border: 1px solid var(--sp-border-strong); border-radius: var(--ctl-radius);
+  background-color: var(--sp-surface); color: var(--sp-text);
+  background-image: linear-gradient(45deg, transparent 50%, var(--sp-text-2) 50%), linear-gradient(135deg, var(--sp-text-2) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  font: var(--ctl-font-sm); cursor: pointer;
+  transition: border-color var(--ctl-ease), background-color var(--ctl-ease);
+}
+html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not([hidden]):hover { background-color: var(--sp-surface-2); }
+
+/* Desktop picker scopes the whole page, so it sits on top as a quiet toolbar row. */
+html body .sp-console-timeline-filter.sp-desktop-picker {
+  justify-content: flex-start; gap: 12px; margin: 0 0 24px; padding: 0; border: 0;
+  font: var(--ctl-font-sm); color: var(--sp-text-2);
+}
+
+/* ---------- Inline notices: a contained callout instead of a ruled line ---------- */
+html body .sp-console-notice.sp-console-notice {
+  margin: 16px 0; padding: 12px 16px;
+  border: 1px solid var(--sp-border); border-radius: var(--ctl-radius);
+  background: var(--sp-surface-2); color: var(--sp-text-2);
+  font: 400 13px/1.5 var(--sp-font-sans, Inter, system-ui, sans-serif);
+}

@@ -14,7 +14,7 @@ Launch official AI coding agent CLIs in one workspace, track usage and quota win
 <p align="center">
   <a href="https://github.com/mwahaj36/gnomcode/actions/workflows/ci.yml"><img src="https://github.com/mwahaj36/gnomcode/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/mwahaj36/gnomcode/releases"><img src="https://img.shields.io/github/v/release/mwahaj36/gnomcode" alt="GitHub Release"></a>
-  <a href="https://www.npmjs.com/package/gnomcode"><img src="https://img.shields.io/npm/v/gnomcode.svg" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/gnomcode"><img src="https://img.shields.io/npm/v/gnomcode?label=npm" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
 </p>
 

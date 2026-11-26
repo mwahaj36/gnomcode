@@ -40,7 +40,7 @@ public class BrandProgressBar : Control
     public BrandProgressBar() { DoubleBuffered = true; AccessibleName = "Installation progress"; }
     protected override void OnPaint(PaintEventArgs e) {
         using (Brush track = new SolidBrush(Color.FromArgb(36, 36, 40))) e.Graphics.FillRectangle(track, ClientRectangle);
-        using (Brush fill = new SolidBrush(Color.FromArgb(255, 37, 68))) e.Graphics.FillRectangle(fill, 0, 0, Width * value / 100, Height);
+        using (Brush fill = new SolidBrush(Color.FromArgb(79, 103, 240))) e.Graphics.FillRectangle(fill, 0, 0, Width * value / 100, Height);
     }
 }
 

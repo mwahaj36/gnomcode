@@ -45,12 +45,12 @@ export default function DocPage({
         <p className="sp-guide-answer">{answer}</p>
         {children}
         <section>
-          <h2>Try Gnomcode on Windows</h2>
+          <h2>Try Gnomcode</h2>
           <p>
-            Download the Windows x64 build, choose your workspace and launch an agent.
+            Download it free for Windows, macOS or Linux, choose your workspace and launch an agent.
           </p>
           <p>
-            <Link href="/downloads">Download for Windows</Link> · <Link href="/docs/getting-started">Installation guide</Link>
+            <Link href="/downloads">Download</Link> · <Link href="/docs/getting-started">Installation guide</Link>
           </p>
         </section>
         <section>

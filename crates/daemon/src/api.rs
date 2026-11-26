@@ -135,6 +135,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/markdown-it.mjs", get(markdown_handler))
         .route("/gnomcode-tokens.css", get(tokens_handler))
         .route("/gnomcode-console.css", get(console_styles_handler))
+        .route("/gnomcode-controls.css", get(controls_styles_handler))
         .route(
             "/console-presentation.js",
             get(console_presentation_handler),
@@ -401,6 +402,13 @@ async fn console_styles_handler() -> impl IntoResponse {
     )
 }
 
+async fn controls_styles_handler() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../../../web/app/controls.css"),
+    )
+}
+
 async fn console_presentation_handler() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
@@ -576,6 +584,7 @@ mod tests {
             ("/provider-logos.js", "text/javascript", "PROVIDER_LOGOS"),
             ("/gnomcode-console.css", "text/css", ".gc-console"),
             ("/gnomcode-tokens.css", "text/css", "--sp-bg"),
+            ("/gnomcode-controls.css", "text/css", "--ctl-radius"),
         ] {
             let response = app
                 .clone()
