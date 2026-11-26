@@ -201,6 +201,9 @@ fn hook_stops_waiting_when_the_prompt_is_answered_at_the_terminal() {
 #[test]
 fn hook_does_not_wait_when_the_daemon_says_nobody_can_answer() {
     let home = tempfile::tempdir().expect("home");
+    // Warm the freshly built binary first so first-launch scanning is not timed.
+    let warm = tempfile::tempdir().expect("warm");
+    run_hook(warm.path(), "{}");
     let (port, daemon) = fake_daemon(vec![r#"{"hold":false,"reason":"no_listener"}"#]);
     write_daemon_info(home.path(), port);
     let (out, ok, elapsed) = run_hook(home.path(), &payload());

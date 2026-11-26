@@ -487,6 +487,14 @@ mod tests {
             "0.9.4",
         )
         .await;
+        if option_env!("GNOMCODE_UPDATE_PUBLIC_KEY").is_some() {
+            // A release key embedded at build time requires a signature this unsigned
+            // fixture cannot carry; the embedded-key regression covers that path.
+            assert_eq!(ready.state, UpdateStateKind::Error);
+            assert!(ready.downloaded_path.is_none());
+            server.abort();
+            return;
+        }
         assert_eq!(ready.state, UpdateStateKind::Ready);
         assert_eq!(ready.available_version.as_deref(), Some("9.9.9"));
         let staged = std::path::PathBuf::from(ready.downloaded_path.expect("staged path"));
