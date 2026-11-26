@@ -365,7 +365,7 @@ export default function DocsPage() {
                 href="/downloads"
                 className="sp-docs-cta-secondary"
               >
-                Download free
+                Download
               </Link>
             </div>
           </div>

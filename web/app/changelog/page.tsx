@@ -7,7 +7,7 @@ import { pageMetadata } from "../../lib/seo";
 export const metadata = pageMetadata(
   "/changelog",
   "Gnomcode Changelog: What's New in Each Release",
-  "Release notes for Gnomcode, the free local runtime for Claude Code, Codex and Antigravity: new features, fixes and platform changes in every version.",
+  "Release notes for Gnomcode, the local runtime for Claude Code, Codex and Antigravity: new features, fixes and platform changes in every version.",
 );
 
 type Release = { version: string; date: string; groups: Array<{ title: string; items: string[] }> };
