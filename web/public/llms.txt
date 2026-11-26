@@ -13,7 +13,7 @@
 - OpenAI Codex (`codex`)
 - Google Antigravity (`agy`)
 
-Gnomcode 1.0 supports exactly these three agents.
+Gnomcode supports exactly these three agents.
 
 ## Official Documentation & Guides
 - [Getting Started](https://gnomcode.vercel.app/docs/getting-started): Installation and initial setup.

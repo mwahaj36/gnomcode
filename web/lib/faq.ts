@@ -37,7 +37,7 @@ export const faqGroups = [
     "questions": [
       {
         "question": "Which agents does Gnomcode observe?",
-        "answer": "Gnomcode 1.0 supports exactly Claude Code, Codex and Antigravity. Available token, model and quota fields vary by source."
+        "answer": "Gnomcode supports exactly Claude Code, Codex and Antigravity. Available token, model and quota fields vary by source."
       },
       {
         "question": "Does Gnomcode support Gemini CLI, Cursor, Aider, Cline or Teams?",
