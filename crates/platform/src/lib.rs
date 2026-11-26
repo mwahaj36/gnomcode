@@ -953,6 +953,12 @@ mod tests {
             .expect("spawn cmd");
         let pid = child.id();
         let _ = child.wait().expect("wait exited");
+        // Close our handle; Windows can list an exited process briefly while handles remain.
+        drop(child);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while super::process_is_alive(pid) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
         assert!(!super::process_is_alive(pid));
         super::stop_owned_process(pid).expect("stopping already-exited process should succeed");
     }
