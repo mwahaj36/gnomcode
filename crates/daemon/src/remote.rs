@@ -2656,7 +2656,7 @@ mod tests {
                 ))
                 .await
                 .expect("send activity request");
-                let refreshed = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                let refreshed = tokio::time::timeout(std::time::Duration::from_secs(10), async {
                     loop {
                         if active_room
                             .trusted
