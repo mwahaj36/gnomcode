@@ -1,12 +1,14 @@
-import { pageMetadata } from "../../lib/seo";
+import { pageMetadata, buildSoftwareAppJsonLd } from "../../lib/seo";
 import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Windows x64, macOS (Apple Silicon & Intel) and Linux (x86_64 & arm64) release candidate for Claude Code, Codex and Antigravity. Check release notes and SHA-256 checksums before installing.");
+export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Free download for Windows (x64, ARM64 CLI), macOS (Apple Silicon and Intel) and Linux (x86_64, arm64, .deb). Run Claude Code, Codex and Antigravity in one local workspace. SHA-256 checksums included.");
 
 export default function DownloadsPage() {
   return (
+    <>
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(buildSoftwareAppJsonLd()).replace(/</g, "\\u003c") }} />
     <div className="sp-console-shell sp-downloads-page mx-auto max-w-7xl px-6 py-16 font-sans">
       <header className="sp-downloads-header">
         <div>
@@ -22,10 +24,11 @@ export default function DownloadsPage() {
       <section className="sp-download-help" aria-label="Release verification">
         <div>
           <h2>Verify the release</h2>
-          <p>Check the versioned SHA-256 manifest and release notes before installing. Windows installers are unsigned and macOS apps are unnotarized. This release is a manual download; automatic updates await a signed manifest.</p>
+          <p>Check the versioned SHA-256 manifest and release notes before installing. Windows installers are unsigned and macOS apps are unnotarized. Windows automatic updates install only installers whose Ed25519 signature matches the key built into Gnomcode.</p>
         </div>
         <Link href="/docs/getting-started">Read installation guide <span aria-hidden="true">→</span></Link>
       </section>
     </div>
+    </>
   );
 }
