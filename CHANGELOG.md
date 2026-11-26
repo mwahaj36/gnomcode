@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.1 - 2026-11-26
+
+- Restore padding, borders and fonts on web console and Remote buttons, selects and sheets: the website's base reset was overriding the console styles.
+- One control system across the website, web console, Remote and desktop console: primary, secondary, quiet and destructive actions with consistent sizes, hover, pressed, focus, disabled and busy states, underline tabs, a compact theme control and selects with a visible caret.
+- Recolor the Gnomcode mark to the blue accent everywhere: app and browser icons, macOS and Windows icons, the tray icon and its badges, the installer progress bar and the social preview image. Remove the last red hover states.
+- Redesign the Remote desktop panel: Dashboard and Profile are navigation rows with a description and chevron; Try again and Forget this desktop are clear primary and destructive actions.
+- Put the desktop picker and its status note at the top of Home and Usage, above the data they scope.
+- The website download button names your operating system; Windows-only wording is gone from the home page, downloads, FAQ, docs and llms.txt.
+- Add a changelog page and one-command install instructions for Windows, macOS, Linux and npm, with structured data for search and answer engines.
+- Retire the old /app launcher page; it now opens the console.
+- Stabilise three timing-sensitive tests on Windows and builds that embed the release key.
+- Update clap, notify, sha2 and zeroize.
+
 ## 1.2.0 - 2026-11-25
 
 - Replace the visual world across the local console, account web console, Remote and the website: graphite and paper grounds, one ink interactive colour (the activity heatmap included), Inter throughout, monospace kept for code and commands.
