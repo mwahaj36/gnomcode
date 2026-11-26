@@ -106,7 +106,7 @@ export default function LandingPage() {
 
     <div id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><h1>Switch agents. Keep the task moving.</h1><p>Run Claude Code, Codex and Antigravity from one local workspace. When one hits a limit, Gnomcode carries a concise handoff so the next agent picks up the task.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">{downloadLabel} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Free and open source under Apache-2.0. For Windows, macOS and Linux.</small></div>
+        <div className="sp-hero-copy"><h1>Switch agents. Keep the task moving.</h1><p>Run Claude Code, Codex and Antigravity from one local workspace. When one hits a limit, Gnomcode carries a concise handoff so the next agent picks up the task.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">{downloadLabel} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Open source under Apache-2.0. For Windows, macOS and Linux.</small></div>
         <HeroWorkflow />
       </section>
 
@@ -135,7 +135,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Local by default. Encrypted when remote.</h2></div><div className="sp-privacy-grid">{[["Local history", "Keep redacted conversations on your desktop."], ["Encrypted Remote", "Conversations reach your paired device through E2EE."], ["No telemetry", "No product analytics or tracking. Free, open source and auditable."], ["Your choice", "Account metadata sync is optional and separately disclosed."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
+      <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Local by default. Encrypted when remote.</h2></div><div className="sp-privacy-grid">{[["Local history", "Keep redacted conversations on your desktop."], ["Encrypted Remote", "Conversations reach your paired device through E2EE."], ["No telemetry", "No product analytics or tracking. Open source and auditable."], ["Your choice", "Account metadata sync is optional and separately disclosed."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
 
       <section className="sp-start sp-width" data-reveal aria-labelledby="start-title"><h2 id="start-title">Start at your desk. Continue wherever you are.</h2><p>Install Gnomcode, open a workspace and launch your agent. Connect another device when you want to keep working away from your desktop.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">{downloadLabel}</Link><Link className="sp-button-outline" href="/docs/getting-started">Get started</Link></div></section>
 
@@ -152,7 +152,7 @@ export default function LandingPage() {
         <div><span>Legal</span><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/auth">Account</Link><ThemeControl className="sp-footer-theme" /></div>
       </div>
       <div className="sp-width sp-footer-wordmark" aria-hidden="true">gnomcode<span>.</span></div>
-      <div className="sp-width sp-footer-bottom"><span>© 2026 gnomcode</span><span>Free and open source, Apache-2.0</span><a href="#content">Back to top <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></a></div>
+      <div className="sp-width sp-footer-bottom"><span>© 2026 gnomcode</span><span>Open source, Apache-2.0</span><a href="#content">Back to top <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></a></div>
     </footer>
   </div>;
 }

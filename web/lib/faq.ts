@@ -7,8 +7,8 @@ export const faqGroups = [
         "answer": "No account is needed for local features. Optional account metadata sync and Remote discovery use a Gnomcode account; your agents keep separate vendor accounts."
       },
       {
-        "question": "Is Gnomcode free?",
-        "answer": "Yes. Gnomcode is free and open source under the Apache-2.0 license, with no paid plan, account or telemetry. You still use your own Claude Code, Codex or Antigravity subscription or API access."
+        "question": "Is Gnomcode open source?",
+        "answer": "Yes. Gnomcode is open source under the Apache-2.0 license, with no Gnomcode account or telemetry required. You still use your own Claude Code, Codex or Antigravity subscription or API access."
       },
       {
         "question": "Does Gnomcode work offline?",

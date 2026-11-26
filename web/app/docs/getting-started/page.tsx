@@ -1,6 +1,6 @@
 import DocPage from "../../../components/DocPage";
 import { pageMetadata, buildHowToJsonLd } from "../../../lib/seo";
-const howTo = buildHowToJsonLd("How to install Gnomcode", "Install the free Gnomcode runtime for Claude Code, Codex and Antigravity on Windows, macOS or Linux.", [
+const howTo = buildHowToJsonLd("How to install Gnomcode", "Install the Gnomcode runtime for Claude Code, Codex and Antigravity on Windows, macOS or Linux.", [
   { name: "Install Gnomcode", text: "On Windows run irm https://gnomcode.vercel.app/downloads/install.ps1 | iex in PowerShell. On macOS or Linux run curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash. With Node.js on any platform run npm install -g gnomcode." },
   { name: "Install an agent CLI", text: "Install and sign in to Claude Code, OpenAI Codex or Antigravity with its official CLI." },
   { name: "Open the console", text: "Run gnomcode console, choose a workspace folder and an installed agent, then launch." },
@@ -10,7 +10,7 @@ import { CopyCommand } from "../../components/CopyCommand";
 export const metadata = pageMetadata("/docs/getting-started", "Getting Started with Gnomcode | Gnomcode", "Install Gnomcode, launch your first official agent CLI and find its conversation, terminal, usage and quota in one workspace.");
 export default function Page() { return <DocPage title={"Getting Started with Gnomcode"} answer={"Install Gnomcode with one command (PowerShell on Windows, curl on macOS and Linux, or npm anywhere), install and sign into an official agent CLI, then choose a workspace and launch it from Gnomcode. Local features require no Gnomcode account; each agent keeps its own provider account and permissions."}>
 <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howTo).replace(/</g, "\\u003c") }} />
-<section><h2>{"How do I install Gnomcode?"}</h2><p>{"Gnomcode is free and open source. Pick the command for your system, or download an installer or archive from the downloads page and compare it with the published SHA-256 checksums. Windows installers are not Authenticode-signed and macOS apps are not notarized, so your OS may ask you to confirm the first launch."}</p>
+<section><h2>{"How do I install Gnomcode?"}</h2><p>{"Gnomcode is open source (Apache-2.0). Pick the command for your system, or download an installer or archive from the downloads page and compare it with the published SHA-256 checksums. Windows installers are not Authenticode-signed and macOS apps are not notarized, so your OS may ask you to confirm the first launch."}</p>
 <h3>Windows (PowerShell)</h3><CopyCommand command={"irm https://gnomcode.vercel.app/downloads/install.ps1 | iex"} />
 <h3>macOS and Linux</h3><CopyCommand command={"curl -fsSL https://gnomcode.vercel.app/downloads/install.sh | bash"} />
 <h3>Any platform with Node.js</h3><CopyCommand command={"npm install -g gnomcode"} />
