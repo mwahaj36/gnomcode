@@ -5,7 +5,7 @@
 @font-face { font-family: 'JetBrains Mono'; src: url('/fonts/jetbrains-mono.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
 :root {
   color-scheme: dark;
-  --sp-control-radius: 6px;
+  --sp-control-radius: 8px;
   --sp-control-height: 44px;
   --sp-bg: #0d1015;
   --sp-surface: #12161d;
@@ -40,7 +40,7 @@
   --sp-radius-card: 10px;
   --sp-radius-meter: 3px;
   --sp-r-code: 4px;
-  --sp-r-control: 6px;
+  --sp-r-control: 8px;
   --sp-r-popover: 10px;
   --sp-r-card: 10px;
   --sp-r-dialog: 14px;

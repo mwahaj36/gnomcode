@@ -1,6 +1,11 @@
 @import "./gnomcode-tokens.css";
 
-@tailwind base;
+/* Tailwind's reset sits in the lowest layer so the layered console styles in gnomcode-console.css
+   (button padding, borders, fonts) win over it; unlayered CSS beats every layer regardless of specificity. */
+@layer tailwind-base, console-components;
+@layer tailwind-base {
+  @tailwind base;
+}
 @tailwind components;
 @tailwind utilities;
 
@@ -157,8 +162,8 @@ body {
 .sp-console-title { margin: 0; color: var(--sp-text); font: 600 clamp(36px, 5.2vw, 60px)/1 var(--sp-font-sans); letter-spacing: -.04em; }
 .sp-console-status { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--sp-text-2); font: 13px/1.4 var(--sp-font-mono); }
 .sp-console-refresh-state { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0 18px; color: var(--sp-text-3); font: 10px/1.5 var(--sp-font-mono); }
-.sp-console-timeline-filter { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 0; margin: 4px 0 28px; border-block: 1px solid var(--sp-border); font: 11px/1.4 var(--sp-font-mono); }
-.sp-console-timeline-filter button { min-height: 40px; padding-inline: 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--sp-text-2); font: 600 10px/1.4 var(--sp-font-mono); cursor: pointer; }
+.sp-console-timeline-filter { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 12px 0; margin: 4px 0 28px; border-block: 1px solid var(--sp-border); font: 500 13px/1.4 var(--sp-font-sans); color: var(--sp-text-2); }
+.sp-console-timeline-filter button { min-height: 40px; padding-inline: 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--sp-text-2); font: 500 13px/1.4 var(--sp-font-sans); cursor: pointer; }
 .sp-console-timeline-filter button[aria-pressed="true"] { border-bottom-color: var(--sp-primary); color: var(--sp-text); background: transparent; }
 .sp-console-app > .grid.grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-4 { gap: 0; border-block: 1px solid var(--sp-border); }
 .sp-console-app > .grid.grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-4 > div { min-width: 0; padding: 18px 20px; border: 0; border-radius: 0; background: transparent; }
@@ -482,7 +487,7 @@ body {
 
 .sp-site-actions > .sp-site-download { background: transparent; color: var(--sp-text-2); border: 1px solid var(--sp-border-strong); }
 .sp-site-actions > .sp-account-cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border-radius: 6px; background: var(--sp-primary); color: var(--sp-on-primary); font: 600 13px/20px var(--sp-font-sans); text-transform: none; letter-spacing: 0; }
-.sp-site-actions > .sp-account-cta:hover { background: #ff4d66; color: var(--sp-on-primary); }
+.sp-site-actions > .sp-account-cta:hover { background: color-mix(in srgb, var(--sp-primary) 86%, var(--sp-text)); color: var(--sp-on-primary); }
 .sp-site-mobile-download { display: none; }
 @media (max-width: 760px) { .sp-site-actions > .sp-site-download { display: none; } .sp-site-actions > .sp-account-cta { display: inline-flex; } .sp-site-links .sp-site-mobile-download { display: block; } }
 

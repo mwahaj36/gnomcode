@@ -177,7 +177,7 @@ function Update-TrayIconBadge([int]$count) {
 
         if ($count -gt 0) {
             # Square red session count matches the canonical brand mark.
-            $badgeBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 37, 68))
+            $badgeBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(79, 103, 240))
             $darkPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(7, 7, 8), 2.0)
             $badgeRect = New-Object System.Drawing.Rectangle 13, 13, 18, 18
             $g.FillRectangle($badgeBrush, $badgeRect)

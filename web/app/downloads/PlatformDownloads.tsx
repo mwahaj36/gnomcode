@@ -44,11 +44,23 @@ const platforms = [
   },
 ] as const;
 
-function detectPlatform(): (typeof platforms)[number]["id"] {
+export function detectPlatform(): (typeof platforms)[number]["id"] {
   const platform = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
   if (platform.includes("mac") || platform.includes("iphone") || platform.includes("ipad")) return "macos";
   if (platform.includes("linux") || platform.includes("android")) return "linux";
   return "windows";
+}
+
+export const platformName = { windows: "Windows", macos: "macOS", linux: "Linux" } as const;
+
+/** "Download for <OS>" once mounted; a neutral label on the server keeps hydration stable. */
+export function useDownloadLabel() {
+  const [label, setLabel] = useState("Download");
+  useEffect(() => {
+    const mobile = /iphone|ipad|android/i.test(navigator.userAgent);
+    if (!mobile) setLabel(`Download for ${platformName[detectPlatform()]}`);
+  }, []);
+  return label;
 }
 
 export function PlatformDownloads() {

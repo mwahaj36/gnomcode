@@ -76,7 +76,7 @@ const badgeDirectory = new URL('scripts/tray-badges/', root);
 await mkdir(badgeDirectory, { recursive: true });
 for (let count = 1; count <= 10; count++) {
   const label = count === 10 ? '9+' : String(count);
-  const badge = Buffer.from(`<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="13" width="18" height="18" fill="#ff2544" stroke="#070708" stroke-width="2"/><text x="22" y="26" text-anchor="middle" font-family="Arial" font-size="${count === 10 ? 10 : 14}" font-weight="bold" fill="#070708">${label}</text></svg>`);
+  const badge = Buffer.from(`<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="13" width="18" height="18" fill="#4f67f0" stroke="#070708" stroke-width="2"/><text x="22" y="26" text-anchor="middle" font-family="Arial" font-size="${count === 10 ? 10 : 14}" font-weight="bold" fill="#070708">${label}</text></svg>`);
   const icon = await sharp(images.get(32)).flatten({ background: '#070708' }).composite([{ input: badge }]).png().toBuffer();
   await writeFile(new URL(`gnomcode-tray-${count === 10 ? '9plus' : count}.png`, badgeDirectory), icon);
 }

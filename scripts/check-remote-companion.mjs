@@ -147,7 +147,7 @@ try {
   assert.ok(streamBox.width >= chatWidth - 1,`phone bubbles use the available conversation width (${streamBox.width}/${chatWidth})`);
   await page.locator('.sp-chat-notice').filter({hasText:'Model active: gpt-6.1-sol'}).waitFor();
   assert.doesNotMatch(await page.locator('.sp-remote-chat').textContent(),/Command output/);
-  assert.equal(await page.locator('.sp-chat-user').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(255, 37, 68)','phone user bubbles use Gnomcode red');
+  assert.equal(await page.locator('.sp-chat-user').evaluate(node=>{const probe=document.createElement('span');probe.style.color='var(--sp-primary)';node.appendChild(probe);const want=getComputedStyle(probe).color;probe.remove();return getComputedStyle(node).backgroundColor===want;}),true,'phone user bubbles use the Gnomcode accent');
   assert.equal(await page.locator('.sp-remote-chat').evaluate(element=>[...element.querySelectorAll('.sp-chat-body,pre,.sp-chat-table')].every(node=>node.scrollWidth<=node.clientWidth+1)),true,'phone bubble content never scrolls horizontally');
   await page.locator('#remote-prompt').fill('Review synthetic input\nThen run checks');
   await page.waitForFunction(()=>!document.querySelector('button[type="submit"]:disabled') || [...document.querySelectorAll('button')].some(button=>button.textContent==='Send'&&!button.disabled));

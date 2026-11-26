@@ -4,8 +4,9 @@ import Link from "next/link";
 import AccountLink from "../components/AccountLink";
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
+import "./controls.css";
 import ThemeControl from "../components/ThemeControl";
-import { PlatformDownloads } from "./downloads/PlatformDownloads";
+import { PlatformDownloads, useDownloadLabel } from "./downloads/PlatformDownloads";
 import { landingFaq } from "../lib/landing-faq";
 import { ConsoleTourView } from "./components/ConsoleTourView";
 import HeroWorkflow from "./components/HeroWorkflow";
@@ -32,6 +33,7 @@ function Mark() { return <span className="sp-brand-mark sp-mark" aria-hidden="tr
 
 export default function LandingPage() {
   const [tab, setTab] = useState(0);
+  const downloadLabel = useDownloadLabel();
   const tourTabs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectTour = (index: number) => {
     setTab(index);
@@ -104,7 +106,7 @@ export default function LandingPage() {
 
     <div id="content">
       <section className="sp-hero sp-width">
-        <div className="sp-hero-copy"><h1>Switch agents. Keep the task moving.</h1><p>Run Claude Code, Codex and Antigravity from one local workspace. When one hits a limit, Gnomcode carries a concise handoff so the next agent picks up the task.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download for Windows <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Free and open source under Apache-2.0. Windows x64 build available.</small></div>
+        <div className="sp-hero-copy"><h1>Switch agents. Keep the task moving.</h1><p>Run Claude Code, Codex and Antigravity from one local workspace. When one hits a limit, Gnomcode carries a concise handoff so the next agent picks up the task.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">{downloadLabel} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg></Link><Link className="sp-button-outline" href="/docs">View docs <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></Link></div><small>Free and open source under Apache-2.0. For Windows, macOS and Linux.</small></div>
         <HeroWorkflow />
       </section>
 
@@ -135,7 +137,7 @@ export default function LandingPage() {
 
       <section className="sp-privacy" data-reveal><div className="sp-width"><div className="sp-section-head"><h2>Local by default. Encrypted when remote.</h2></div><div className="sp-privacy-grid">{[["Local history", "Keep redacted conversations on your desktop."], ["Encrypted Remote", "Conversations reach your paired device through E2EE."], ["No telemetry", "No product analytics or tracking. Free, open source and auditable."], ["Your choice", "Account metadata sync is optional and separately disclosed."]].map(([title, copy]) => <div key={title}><h3>{title}</h3><p>{copy}</p></div>)}</div></div></section>
 
-      <section className="sp-start sp-width" data-reveal aria-labelledby="start-title"><h2 id="start-title">Start at your desk. Continue wherever you are.</h2><p>Install Gnomcode, open a workspace and launch your agent. Connect another device when you want to keep working away from your desktop.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">Download for Windows</Link><Link className="sp-button-outline" href="/docs/getting-started">Get started</Link></div></section>
+      <section className="sp-start sp-width" data-reveal aria-labelledby="start-title"><h2 id="start-title">Start at your desk. Continue wherever you are.</h2><p>Install Gnomcode, open a workspace and launch your agent. Connect another device when you want to keep working away from your desktop.</p><div className="sp-actions"><Link className="sp-button-primary" href="/downloads">{downloadLabel}</Link><Link className="sp-button-outline" href="/docs/getting-started">Get started</Link></div></section>
 
       <section className="sp-width sp-landing-downloads" data-reveal><div className="sp-section-head"><h2>Choose your platform.</h2></div><PlatformDownloads /></section>
 
