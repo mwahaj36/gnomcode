@@ -42,8 +42,18 @@ export function buildSoftwareAppJsonLd() {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Gnomcode",
-    "operatingSystem": "Windows",
+    "operatingSystem": "Windows 10, Windows 11, macOS, Linux",
     "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "AI coding agent manager",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "isAccessibleForFree": true,
+    "downloadUrl": `${branding.baseUrl}/downloads`,
+    "installUrl": `${branding.baseUrl}/docs/getting-started`,
+    "softwareHelp": `${branding.baseUrl}/docs`,
+    "image": `${branding.baseUrl}/og-image.png`,
+    "author": { "@type": "Person", "name": "Wahaj", "url": "https://github.com/mwahaj36" },
+    "sameAs": ["https://github.com/mwahaj36/gnomcode", "https://www.npmjs.com/package/gnomcode"],
     "description": "Local-first runtime, model handoff orchestrator, and encrypted remote control for AI coding agents including Claude Code, OpenAI Codex and Antigravity.",
     "url": branding.baseUrl,
     "softwareVersion": packageInfo.version,
@@ -53,6 +63,17 @@ export function buildSoftwareAppJsonLd() {
       "Local-first architecture with zero telemetry and fail-open guarantees",
       "Unified token, cost and quota usage tracking with declared trust levels"
     ]
+  };
+}
+
+export function buildWebSiteJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Gnomcode",
+    "url": branding.baseUrl,
+    "description": "Free, open source local runtime for Claude Code, OpenAI Codex and Antigravity: switch agents with a handoff, track usage and quota, and control sessions from your phone.",
+    "publisher": { "@type": "Organization", "name": "Gnomcode", "url": branding.baseUrl, "logo": `${branding.baseUrl}/icons/gnomcode-192.png`, "sameAs": ["https://github.com/mwahaj36/gnomcode"] }
   };
 }
 

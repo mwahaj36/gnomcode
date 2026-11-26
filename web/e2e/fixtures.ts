@@ -21,6 +21,7 @@ export const test = base.extend<Fixtures, { daemon: Daemon }>({
     // Fast UI iteration; release verification leaves this off and tests the embedded assets.
     if (process.env.GNOMCODE_E2E_SOURCE_UI === '1') {
       await page.route('**/gnomcode-console.css', route => route.fulfill({ contentType: 'text/css', path: path.resolve(__dirname, '../app/gnomcode-console.css') }));
+      await page.route('**/gnomcode-tokens.css', route => route.fulfill({ contentType: 'text/css', path: path.resolve(__dirname, '../app/gnomcode-tokens.css') }));
       await page.route('**/console-react.js', route => route.fulfill({ contentType: 'text/javascript', path: path.resolve(__dirname, '../../crates/daemon/src/console-react.js') }));
     }
     // The first-run tour opens by itself on an empty history; tests that cover it opt back in.

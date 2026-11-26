@@ -362,10 +362,10 @@ export default function DocsPage() {
                 Launch Console &rarr;
               </Link>
               <Link
-                href="/pricing"
+                href="/downloads"
                 className="sp-docs-cta-secondary"
               >
-                View Plans
+                Download free
               </Link>
             </div>
           </div>

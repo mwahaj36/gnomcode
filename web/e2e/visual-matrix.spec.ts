@@ -25,7 +25,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, 
       }
       for (const name of ['Files', 'Changes', 'Artifacts']) {
         const tools = page.getByRole('complementary', { name: 'Conversation tools' });
-        if (!await tools.isVisible()) await page.getByRole('button', { name: 'Overview', exact: true }).click();
+        if (!await tools.isVisible()) await page.getByRole('button', { name: 'Tools', exact: true }).click();
         await tools.getByRole('button', { name, exact: true }).click();
         const panel = page.locator(name === 'Files' ? '.sp-files-panel' : name === 'Changes' ? '.sp-changes-panel' : '.sp-artifacts-panel');
         await expect(panel).toBeVisible();

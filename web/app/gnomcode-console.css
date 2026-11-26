@@ -2087,13 +2087,13 @@ details.sp-chat-system[open]>.sp-chat-body,.sp-chat-system-note{margin:8px 0 0;p
 .sp-native-console .sp-workspace-list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:2px}
 .ide-session-row{position:relative;display:flex;align-items:center;gap:2px}
 .ide-session-row .ide-session{flex:1 1 auto;min-width:0;text-align:left}
-.ide-session-row .ide-session[data-subagent="true"]{padding-left:22px;border-left:2px solid var(--sp-border);margin-left:8px}
+.ide-session-row .ide-session[data-subagent="true"]{padding-left:22px;border-left:1px solid var(--sp-border);margin-left:8px}
 .ide-session-row .ide-session-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ide-session-row .ide-session-meta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--sp-text-3)}
 .ide-session-more{flex:none;min-height:28px;min-width:28px;padding:2px 6px;border-radius:6px;background:transparent;border:0;color:var(--sp-text-3);opacity:0}
 .ide-session-row:hover .ide-session-more,.ide-session-row:focus-within .ide-session-more{opacity:1}
 @media (hover:none){.ide-session-more{opacity:1;min-height:36px;min-width:36px}}
-.sp-subagents{margin:2px 0 6px 14px;padding-left:10px;border-left:2px solid var(--sp-border)}
+.sp-subagents{margin:2px 0 6px 14px;padding-left:10px;border-left:1px solid var(--sp-border)}
 .sp-subagents summary{font-size:12px;color:var(--sp-text-3);cursor:pointer;padding:4px 6px}
 .sp-subagents ul{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:2px}
 .sp-subagent-row{width:100%;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:transparent;border:0;text-align:left;min-height:34px}
@@ -3034,3 +3034,275 @@ body.sp-native-console{margin:0;padding:0;max-width:none;height:100dvh;overflow:
  .gc-console .sp-inspector>.sp-pane-resizer{display:block;left:-4px;right:auto}
 }
 @container(max-width:880px){.gc-console .sp-inspector>.sp-pane-resizer{display:none}}
+
+/* ===== Datasheet world (2026-11 redesign). Final authority for look; layout stays with .gc-console above. =====
+   Calm, conversation-first chrome; one ink interactive colour; hairlines; Inter with tabular figures.
+   Numbers read as spec rows: label, tabular value, unit, trust. */
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel,body){font-family:var(--sp-font-sans)}
+:is(.sp-native-console,.sp-console-app,.sp-remote) :is(.sp-tile-value,.sp-session-tokens,.sp-session-time,time,.sp-meter-top,.sp-mini-value,.sp-heatmap-stats strong,td,.sp-activity-totals strong){font-variant-numeric:tabular-nums}
+/* Controls: shape tells what they do. Secondary = outlined surface, ghost = text with hover fill, primary = ink. */
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(.btn-control,.sp-console-action){background:var(--sp-surface);border:1px solid var(--sp-border-strong);color:var(--sp-text);border-radius:var(--sp-r-control);font-weight:500;transition:background-color var(--sp-dur) var(--sp-ease),border-color var(--sp-dur) var(--sp-ease)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(.btn-control,.sp-console-action):hover:not(:disabled){background:var(--sp-surface-2);border-color:var(--sp-border-strong)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(.btn-control,.sp-console-action,.btn-primary):active:not(:disabled){background-image:linear-gradient(var(--sp-pressed),var(--sp-pressed))}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(.btn-primary,button[type="submit"]:not(.btn-control)){background:var(--sp-primary);border-color:var(--sp-primary);color:var(--sp-on-primary);border-radius:var(--sp-r-control);font-weight:600}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(.btn-primary,button[type="submit"]:not(.btn-control)):hover:not(:disabled){background:var(--sp-cta-hover);border-color:var(--sp-cta-hover)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(button,.btn-control,.btn-primary):disabled{opacity:.5;cursor:not-allowed}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) .btn-danger{background:transparent;border:1px solid color-mix(in srgb,var(--sp-danger) 55%,transparent);color:var(--sp-danger)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) .btn-danger:hover:not(:disabled){background:var(--sp-danger-soft)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) :is(button,a,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid var(--sp-focus);outline-offset:2px}
+:is(.sp-native-console,.sp-console-app,.sp-remote) svg.gc-icon{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+:is(.sp-native-console,.sp-console-app,.sp-remote) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){background:var(--sp-surface);border:1px solid var(--sp-border-strong);border-radius:var(--sp-r-control);color:var(--sp-text)}
+:is(.sp-native-console,.sp-console-app,.sp-remote) :is(input,textarea)::placeholder{color:var(--sp-text-3);opacity:1}
+/* Links read as links. */
+.sp-link{color:var(--sp-accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--sp-accent) 45%,transparent);text-underline-offset:3px}
+.sp-link:hover{text-decoration-color:currentColor}
+
+/* Shell: rail and history share the ground; the work pane is the raised paper. */
+.gc-console>.sp-console-nav{background:var(--sp-bg);border-right:1px solid var(--sp-border)}
+.gc-console .app-brand{color:var(--sp-text)}
+.gc-console .sp-rail-tabs .tab-btn{color:var(--sp-text-3);border-radius:8px;transition:background-color var(--sp-dur) var(--sp-ease),color var(--sp-dur) var(--sp-ease)}
+.gc-console .sp-rail-tabs .tab-btn:hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .sp-rail-tabs .tab-btn.active{background:var(--sp-selected);color:var(--sp-accent)}
+.gc-console .sp-rail-tabs .tab-btn.active .rail-label{color:var(--sp-text)}
+.gc-console .sp-nav-footer{border-top-color:var(--sp-border)}
+.gc-console .sp-nav-footer button{color:var(--sp-text-3);border-radius:8px}
+.gc-console .sp-nav-footer button:hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console>.sp-console-content{background:var(--sp-surface)}
+.gc-console .console-context{border-bottom:1px solid var(--sp-border);background:var(--sp-surface);height:52px;min-height:52px;padding:0 24px}
+.gc-console .console-context h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.gc-console>.sp-console-content>main{padding:28px 32px}
+/* Workspace keeps its slim toolbar row (list toggle and title); notices flow beneath it. */
+.gc-console[data-view=sessions] .console-context{padding:0 12px}
+/* History column */
+.gc-console>.sp-chat-column{background:var(--sp-bg)}
+.gc-console .ide-sidebar-title h2{font-size:13px;font-weight:600;color:var(--sp-text)}
+.gc-console .ide-sidebar-actions .sp-sidebar-new-btn{background:var(--sp-primary);border-color:var(--sp-primary);color:var(--sp-on-primary);font-weight:600;gap:6px}
+.gc-console .ide-sidebar-actions .sp-sidebar-new-btn:hover{background:var(--sp-cta-hover)}
+.gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn){border:0;background:transparent;color:var(--sp-text-2)}
+.gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn):hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .ide-sidebar input[type=search]{background:var(--sp-surface);border-color:var(--sp-border)}
+.gc-console .sp-sidebar-quick-pills{padding:2px;border-radius:8px;background:var(--sp-surface-2);gap:2px}
+.gc-console .sp-sidebar-quick-pills button{border:0;background:transparent;color:var(--sp-text-2);font-weight:500}
+.gc-console .sp-sidebar-quick-pill[aria-pressed=true]{background:var(--sp-surface);color:var(--sp-text);box-shadow:0 1px 2px rgb(0 0 0 / .18)}
+.gc-console .ide-session{border-radius:8px}
+.gc-console .ide-session:hover{background:var(--sp-hover)}
+.gc-console .ide-session[aria-current=true]{background:var(--sp-selected)}
+.gc-console .sp-project-conversations>summary{color:var(--sp-text-3);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.gc-console .sp-project-conversations>div{border-left-color:var(--sp-border)}
+.gc-console .sp-all-chats-trigger{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.gc-console .pagination{color:var(--sp-text-3)}
+
+/* Conversation header: one row, title left, quiet tools right */
+.gc-console .conversation-heading{min-height:64px;padding-block:10px;gap:6px 12px}
+.gc-console .conversation-heading h2{font-size:15px;font-weight:600;letter-spacing:-.01em;line-height:1.35}
+.gc-console .conversation-heading p{color:var(--sp-text-3)}
+.gc-console .conversation-heading :is(.sp-overview-toggle,.sp-limits-popover-trigger,.conversation-menu>summary){border:0;background:transparent;color:var(--sp-text-2);border-radius:var(--sp-r-control)}
+.gc-console .conversation-heading :is(.sp-overview-toggle,.sp-limits-popover-trigger,.conversation-menu>summary):hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .conversation-heading .sp-overview-toggle[aria-pressed=true]{background:var(--sp-selected);color:var(--sp-accent)}
+.gc-console .conversation-menu>summary{display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:6px}
+.gc-console .conversation-menu>summary::before,.gc-console .conversation-menu>summary::after{display:none!important;content:none!important}
+.gc-console .conversation-menu>summary svg{width:18px;height:18px}
+.gc-console .conversation-menu>div{background:var(--sp-surface-overlay);border:1px solid var(--sp-border);border-radius:var(--sp-r-popover);box-shadow:var(--sp-shadow-popover);padding:4px}
+.gc-console .conversation-menu>div>button{justify-content:flex-start;width:100%;border:0;background:transparent;font-weight:400}
+.gc-console .conversation-menu>div>button:hover{background:var(--sp-hover)}
+.gc-console .conversation-menu>div>button.btn-danger{color:var(--sp-danger)}
+.gc-console .conversation-menu>div>button.btn-danger:hover{background:var(--sp-danger-soft)}
+.gc-console .sp-limits-view-link{display:inline-flex;align-items:center;gap:2px;color:var(--sp-text-2)}
+
+/* Transcript: user turns are soft bubbles, replies are open text; each message owns its time and copy. */
+.gc-console .sp-chat-stream{gap:20px}
+.gc-console .sp-chat-card{display:flex;flex-direction:column;margin:0}
+.gc-console .sp-chat-card>header{order:2}
+.gc-console .sp-chat-card.sp-chat-user>.sp-chat-body{border-radius:var(--sp-r-bubble) var(--sp-r-bubble) 6px var(--sp-r-bubble);padding:10px 14px}
+:is(.sp-native-console,.sp-remote) .sp-chat-assistant>header{align-self:flex-start;margin-top:4px}
+:is(.sp-native-console,.sp-remote) .sp-chat-card>header{color:var(--sp-text-3)}
+/* The message count is announced, not shown: the transcript itself shows the messages. */
+.gc-console .sp-chat-status[data-message-count=true]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:0}
+.gc-console .sp-chat-assistant{padding:0}
+.gc-console .sp-chat-status{max-width:var(--thread-w,800px);margin-inline:auto;color:var(--sp-text-3)}
+.gc-console .sp-readonly-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-radius:12px;background:var(--sp-surface-2);border:1px solid var(--sp-border);padding:12px 14px;font-size:13px;color:var(--sp-text-2)}
+.gc-console .sp-imported-actions{margin-top:0}
+.gc-console .sp-chat-composer{border-radius:14px;border:1px solid var(--sp-border-strong);background:var(--sp-surface);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+.gc-console .sp-chat-composer:focus-within{border-color:var(--sp-accent)}
+
+/* Tools pane */
+.gc-console .sp-inspector{background:var(--sp-surface);border-left:1px solid var(--sp-border)}
+.gc-console .sp-header-panel-toggles button{color:var(--sp-text-2);border-radius:var(--sp-r-control)}
+.gc-console .sp-header-panel-toggles button:hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .sp-header-panel-toggles button[aria-selected=true]{background:var(--sp-selected);color:var(--sp-accent)}
+.gc-console .sp-overview{background:var(--sp-surface-overlay);box-shadow:var(--sp-shadow-popover);border-radius:var(--sp-r-popover)}
+.gc-console .sp-overview-item:hover,.gc-console .sp-overview-item[aria-pressed=true]{background:var(--sp-hover)}
+
+/* Sections, cards and the spec row */
+.gc-console .sp-section-head h2,.gc-web .sp-section-head h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
+:is(.gc-console,.gc-web,.sp-remote) :is(.sp-card,.sp-provider-card,.sp-tile){background:var(--sp-surface);border:1px solid var(--sp-border);border-radius:var(--sp-r-card);box-shadow:none}
+:is(.gc-console,.gc-web) .sp-tile-label{font-size:var(--sp-fs-head);font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--sp-text-3)}
+:is(.gc-console,.gc-web) .sp-tile-value{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.15;color:var(--sp-text)}
+:is(.gc-console,.gc-web) .sp-tile-unit{margin-left:4px;font-size:13px;font-weight:500;color:var(--sp-text-3);letter-spacing:0}
+:is(.gc-console,.gc-web) .sp-tile-meta{font-size:12px;color:var(--sp-text-3)}
+:is(.gc-console,.gc-web,.sp-remote) .sp-chip{border-radius:var(--sp-r-control);font-weight:500}
+.sp-session-row{border-radius:0}
+.sp-session-row:hover{background:var(--sp-hover)}
+.sp-session-tokens{color:var(--sp-text-2)}
+.sp-session-tokens::after{content:" tok";color:var(--sp-text-3)}
+.sp-session-tokens:empty::after{content:none}
+.sp-copy{border-radius:var(--sp-r-control)}
+.sp-copy,.sp-code-btn{display:inline-flex;align-items:center;gap:6px}
+.sp-heat{border-radius:2px}
+
+/* Settings: binary preferences are switches; the hit area stays the row's control. */
+.gc-console .sp-settings-nav a{color:var(--sp-text-2)}
+.gc-console .sp-settings-nav a:hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .sp-settings-nav a[aria-current=true],.gc-console .sp-settings-nav a[aria-current=page]{background:var(--sp-selected);color:var(--sp-text);font-weight:500}
+:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]{appearance:none;-webkit-appearance:none;display:inline-block;position:relative;flex:0 0 36px;width:36px;min-width:36px;max-width:36px;height:20px;min-height:20px;max-height:20px;padding:0;margin:0;border-radius:999px;background:var(--sp-border-strong);border:0;cursor:pointer;transition:background-color var(--sp-dur) var(--sp-ease)}
+:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--sp-knob);box-shadow:0 1px 2px rgb(0 0 0 / .3);transition:transform var(--sp-dur) var(--sp-ease-out)}
+:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]:checked{background:var(--sp-primary)}
+:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]:checked::after{transform:translateX(16px)}
+:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
+@media(forced-colors:active){:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]{appearance:auto;-webkit-appearance:auto;width:auto;height:auto;background:none}:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]::after{content:none}}
+
+/* Floating layers: one material, one shadow, one entrance. */
+:is(.sp-native-console,.sp-console-app,.sp-remote,body) dialog{background:var(--sp-surface-overlay);color:var(--sp-text);border:1px solid var(--sp-border);border-radius:var(--sp-r-dialog);box-shadow:var(--sp-shadow-popover)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,body) dialog::backdrop{background:var(--sp-scrim)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,body) dialog[open]{animation:gc-rise 180ms var(--sp-ease-out)}
+@keyframes gc-rise{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+.sp-native-console #confirm-dialog h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.sp-native-console #confirm-dialog p{color:var(--sp-text-2)}
+.sp-native-console .app-notice{background:var(--sp-surface-overlay);border:1px solid var(--sp-border);border-radius:12px;box-shadow:var(--sp-shadow-popover);display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px}
+.sp-native-console .app-notice p{margin:0;flex:1}
+.sp-native-console .app-notice[hidden]{display:none}
+#tour-tip.app-notice{flex-wrap:wrap}
+@media(prefers-reduced-motion:reduce){:is(.sp-native-console,.sp-console-app,.sp-remote,body) dialog[open]{animation:none}:is(#view-settings,.gc-web,.sp-settings-page) .sp-setting-row input[type=checkbox]::after{transition:none}}
+
+/* Phone */
+@media(max-width:899px){
+ .gc-console>.sp-console-nav{background:color-mix(in srgb,var(--sp-bg) 92%,transparent);backdrop-filter:saturate(1.4) blur(12px);padding-bottom:env(safe-area-inset-bottom)}
+ .gc-console .sp-rail-tabs .tab-btn{border-radius:0;font-size:11px}
+ .gc-console .sp-rail-tabs .tab-btn.active{background:transparent;color:var(--sp-accent)}
+ .gc-console .console-context{height:48px;min-height:48px;padding:0 16px}
+ .gc-console>.sp-console-content>main{padding:16px}
+ .gc-console .conversation-heading{min-height:56px}
+}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) .btn-primary.btn-destructive{background:var(--sp-danger);border-color:var(--sp-danger);color:var(--sp-on-danger)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel) .btn-primary.btn-destructive:hover:not(:disabled){background:color-mix(in srgb,var(--sp-danger) 88%,var(--sp-text))}
+
+.sp-copy>span{display:inline-flex;align-items:center;gap:4px;line-height:1}
+/* Activity fills its card: cells grow with the width, months follow the same tracks. */
+.sp-heatmap-scroll{width:100%}
+.sp-heatmap-months{width:calc(max(100%, var(--cols,53) * 13px + 32px) - 32px);grid-template-columns:repeat(var(--cols,53),minmax(10px,1fr))}
+.sp-heatmap-grid{grid-template-columns:repeat(var(--cols,53),minmax(10px,1fr));gap:3px}
+.sp-heatmap-days{row-gap:3px}
+.sp-heatmap-months{column-gap:3px}
+.sp-heatmap-body{min-width:calc(var(--cols,53) * 13px + 32px)}
+.sp-heat{outline-color:color-mix(in srgb,var(--sp-text) 4%,transparent)}
+/* Menus show a caret, disclosures a chevron: the shape says what opens. */
+.sp-native-console .sp-export-menu>summary{gap:6px;min-height:40px;padding:8px 12px;border:1px solid var(--sp-border-strong);border-radius:var(--sp-r-control);background:var(--sp-surface);font-weight:500}
+.sp-native-console .sp-export-menu>summary::before,.sp-native-console .sp-export-menu>summary::after{display:none!important;content:none!important}
+.gc-console .timeline-bar :is(select,.btn-control){min-height:40px}
+/* Floating notices clear the bottom tab bar and the home indicator on phones. */
+@media(max-width:899px){.sp-native-console .app-notice{left:12px;right:12px;max-width:none;bottom:calc(56px + env(safe-area-inset-bottom) + 12px)}}
+#onboarding-dialog .onboarding-header .btn-control{border-color:transparent;background:transparent;color:var(--sp-text-2)}
+#onboarding-dialog .onboarding-header .btn-control:hover{background:var(--sp-hover);color:var(--sp-text)}
+
+/* Theme: segmented radio group, used in Settings, the site footer and menus. */
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel,body) .sp-theme-control{display:inline-flex;align-items:center;gap:2px;min-height:0;padding:2px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface-2)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel,body) .sp-theme-control button{min-height:30px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--sp-text-2);font:500 12px/1 var(--sp-font-sans);letter-spacing:0;text-transform:none;cursor:pointer}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel,body) .sp-theme-control button:hover{color:var(--sp-text)}
+:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel,body) .sp-theme-control button[aria-checked=true]{background:var(--sp-surface);color:var(--sp-text);box-shadow:0 1px 2px rgb(0 0 0 / .16)}
+@media(pointer:coarse){:is(.sp-native-console,.sp-console-app,.sp-remote,.sp-account-panel,body) .sp-theme-control button{min-height:40px}}
+
+/* Devices: grouped lists with counted heads; every action looks pressable, destructive ones say so. */
+.sp-devices .sp-group-label{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--sp-text-3)}
+.sp-devices .sp-group-label span{padding:1px 7px;border-radius:999px;background:var(--sp-surface-2);color:var(--sp-text-2);letter-spacing:0;font-size:11px}
+.sp-devices .sp-session-list{margin:0;padding:0;border:1px solid var(--sp-border);border-radius:var(--sp-r-card);background:var(--sp-surface);overflow:hidden}
+.sp-devices :is(button,a).sp-dev-secondary{background:var(--sp-surface);border-color:var(--sp-border-strong);color:var(--sp-text)}
+.sp-devices :is(button,a).sp-dev-secondary:hover:not(:disabled){background:var(--sp-surface-2)}
+.sp-devices :is(button,a).sp-dev-primary:hover:not(:disabled){filter:none;background:var(--sp-cta-hover)}
+.sp-devices :is(button,a).sp-dev-quiet{border-color:var(--sp-border-strong);color:var(--sp-text)}
+.sp-devices :is(button,a).sp-dev-quiet-danger{border-color:color-mix(in srgb,var(--sp-danger) 45%,transparent);color:var(--sp-danger)}
+.sp-devices :is(button,a).sp-dev-quiet-danger:hover:not(:disabled){background:var(--sp-danger-soft);color:var(--sp-danger)}
+.sp-devices .sp-empty{padding:16px;border:1px dashed var(--sp-border-strong);border-radius:var(--sp-r-card);color:var(--sp-text-2)}
+.sp-devices .sp-empty p{margin:0}
+.sp-dev-actions{justify-content:flex-start}
+@media(max-width:480px){
+ .sp-dev-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .sp-dev-actions>:first-child,.sp-dev-actions>.sp-section-meta{grid-column:1/-1}
+ .sp-dev-actions .sp-dev-quiet-danger{align-self:stretch;width:100%;padding-inline:8px;font-size:13px}
+ .sp-dev-actions>:only-child,.sp-dev-actions>:last-child:nth-child(odd):not(:first-child){grid-column:1/-1}
+}
+
+/* Remote, not yet in a conversation: an in-flow page with a gutter, never a full-screen layer. */
+.sp-remote .remote-reconnect{margin:0 0 20px;padding:14px 16px;border:1px solid var(--sp-border);border-radius:12px;background:var(--sp-surface-2);gap:10px 12px}
+.sp-remote .remote-reconnect strong{color:var(--sp-text);font-weight:600}
+.sp-remote .remote-reconnect p{font-size:13px}
+.sp-remote .remote-reconnect a{color:var(--sp-text)}
+.sp-remote.is-reconnecting .remote-reconnect{margin:0;border-width:0 0 1px;border-radius:0}
+@media(max-width:600px){.sp-remote .remote-reconnect>div{flex-basis:100%}.sp-remote .remote-reconnect>:is(button,a){flex:1 1 0}}
+.sp-remote:not(.is-paired):not(.is-reconnecting) .remote-heading{align-items:flex-start}
+.sp-remote:not(.is-paired):not(.is-reconnecting) .remote-heading>div{flex:1 1 auto;min-width:0}
+.sp-remote:not(.is-paired):not(.is-reconnecting) .remote-heading>:is(button,a){flex:none}
+
+/* Web settings: disclosures read as disclosures; sections are calm groups. */
+.gc-web .web-profile-section details{margin:12px 0;border:1px solid var(--sp-border);border-radius:var(--sp-r-card);background:var(--sp-surface)}
+.gc-web .web-profile-section details>summary{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;font-size:14px;font-weight:500;color:var(--sp-text);cursor:pointer;list-style:none}
+.gc-web .web-profile-section details>summary::-webkit-details-marker{display:none}
+.gc-web .web-profile-section details>summary::after{content:"";width:7px;height:7px;margin-left:auto;border-right:1.6px solid var(--sp-text-3);border-bottom:1.6px solid var(--sp-text-3);transform:rotate(45deg) translate(-2px,-2px);transition:transform var(--sp-dur) var(--sp-ease)}
+.gc-web .web-profile-section details[open]>summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.gc-web .web-profile-section details>:not(summary){margin:0 14px 14px}
+.gc-web .sp-data-details>summary{color:var(--sp-text-2);font-size:13px}
+.gc-web .sp-empty{color:var(--sp-text-2)}
+@media(prefers-reduced-motion:reduce){.gc-web .web-profile-section details>summary::after{transition:none}}
+.sp-devices :is(button,a):is(.sp-dev-secondary,.sp-dev-quiet,.sp-dev-quiet-danger){border-width:1px;border-style:solid}
+.gc-web .web-profile-section details>summary::before{content:none;display:none}
+@media(max-width:767px){.sp-remote:not(.is-paired):not(.is-reconnecting) .remote-heading{flex-wrap:nowrap}}
+
+/* Composers: one frame. The editor itself is borderless; the frame shows focus. */
+.sp-remote .remote-composer textarea,.sp-remote .remote-composer #remote-prompt,.gc-console .sp-chat-composer textarea{border:0!important;background:transparent!important;box-shadow:none!important;outline:0!important;resize:none;padding-inline:0}
+.sp-remote form.remote-composer{border:1px solid var(--sp-border-strong);border-radius:16px;background:var(--sp-surface);padding:10px 10px 8px 14px;box-shadow:0 1px 2px rgb(0 0 0 / .1);gap:4px}
+.sp-remote form.remote-composer:focus-within{border-color:var(--sp-accent);box-shadow:none}
+.sp-remote .remote-composer-toolbar{justify-content:flex-start;gap:4px;flex-wrap:nowrap}
+.sp-remote .remote-composer .remote-model-button{flex:0 1 auto;margin-right:auto;min-height:36px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--sp-text-2);font-size:13px;display:inline-flex;align-items:center;gap:4px}
+.sp-remote .remote-composer .remote-model-button:hover:not(:disabled){background:var(--sp-hover);color:var(--sp-text)}
+.sp-remote .remote-composer .sp-attach-trigger{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--sp-text-2)}
+.sp-remote .remote-composer .sp-attach-trigger:hover:not(:disabled){background:var(--sp-hover);color:var(--sp-text)}
+.sp-remote .remote-composer-toolbar>button[type=submit]{min-width:72px;min-height:36px;padding:0 16px;border-radius:10px;font-weight:600}
+@media(max-width:480px){.sp-remote .remote-composer .sp-attach-trigger .remote-btn-text{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.sp-remote .remote-composer .sp-attach-trigger{width:40px;justify-content:center;padding:0}}
+@media(pointer:coarse){.sp-remote .remote-composer :is(.remote-model-button,.sp-attach-trigger),.sp-remote .remote-composer-toolbar>button[type=submit]{min-height:44px}.sp-remote .remote-composer .sp-attach-trigger{width:44px}}
+/* Header controls in Remote are quiet icon buttons; the pressed one is tinted, not boxed. */
+.sp-remote .remote-heading :is(.sp-overview-toggle,.remote-notif-button,.remote-desktop-button,.remote-sidebar-toggle){border:0;background:transparent;color:var(--sp-text-2);border-radius:8px}
+.sp-remote .remote-heading :is(.sp-overview-toggle,.remote-notif-button,.remote-desktop-button,.remote-sidebar-toggle):hover{background:var(--sp-hover);color:var(--sp-text)}
+.sp-remote .remote-heading .sp-overview-toggle[aria-pressed=true]{background:var(--sp-selected);color:var(--sp-accent)}
+/* Phone: the conversation layer ends above the tab bar instead of covering it. */
+/* The tab bar shows up to 899px; the older rule above stopped at 767px. */
+@media(max-width:899px){.sp-remote.is-embedded:is(.is-paired,.is-reconnecting){height:calc(var(--remote-viewport-height,100dvh) - var(--rail-h,56px) - env(safe-area-inset-bottom))}}
+
+/* ===== Consistency: one control scale, one alignment rule =====
+   Page actions 36px, dense panes 32px, touch 44px. Label and icon centre on one axis with a 6px gap;
+   horizontal padding is 14px (page) or 10px (dense). Icon-only buttons are square and ghost. */
+.gc-console :is(.btn-control,.btn-primary,.sp-console-action){align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;font-size:13px;line-height:1.2;text-decoration:none;white-space:nowrap}
+.gc-console :is(.ide-sidebar,.conversation-heading,.sp-readonly-banner,.sp-workspace-modal-head,.composer-toolbar,.sp-approval-actions,.sp-inspector,.sp-overview,.conversation-menu) :is(.btn-control,.btn-primary){min-height:32px;padding:0 10px}
+.gc-console a:is(.btn-control,.btn-primary){text-decoration:none}
+.gc-console .console-context #chat-list-toggle{display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:var(--sp-text-2);border-radius:8px}
+.gc-console .console-context #chat-list-toggle:hover{background:var(--sp-hover);color:var(--sp-text)}
+.gc-console .console-context{gap:8px}
+.gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn){width:32px;min-width:32px;padding:0}
+.gc-console .conversation-menu>div>button{min-height:36px;padding:0 12px;border-radius:6px}
+/* Messages: hidden metadata takes no room until it shows; replies keep theirs on one line. */
+.gc-console .sp-chat-stream{gap:16px}
+.gc-console .sp-chat-user>header{height:0;margin:0;overflow:visible}
+.gc-console .sp-chat-user:is(:hover,:focus-within,[data-meta="shown"])>header{height:auto;margin-top:6px}
+/* Account: one heading scale shared with Settings. */
+.gc-console .sp-account-intro h2{font-size:22px;line-height:1.3;letter-spacing:-.015em;margin:0 0 8px}
+.gc-console .sp-account-panel h3{font-size:16px;line-height:1.4;margin:0 0 12px}
+.gc-console .sp-account-state #auth-cloud-status{font-size:15px;font-weight:600}
+.gc-console .sp-account-panel :is(.btn-control,.btn-primary){font:500 13px/1.2 var(--sp-font-sans);min-height:36px;padding:0 14px}
+.gc-console .sp-account-panel label{font:500 13px/1.5 var(--sp-font-sans);color:var(--sp-text)}
+.gc-console .sp-account-label{font-family:var(--sp-font-sans);letter-spacing:0}
+/* Section rhythm: more space above a heading than below it. */
+.gc-console :is(.sp-section-head,.sp-settings-section>h2){margin-top:0}
+@media(max-width:899px){
+ .gc-console :is(.btn-control,.btn-primary,.sp-console-action),.gc-console :is(.ide-sidebar,.conversation-heading,.sp-readonly-banner,.sp-workspace-modal-head,.composer-toolbar,.sp-approval-actions,.sp-inspector,.sp-overview,.conversation-menu) :is(.btn-control,.btn-primary){min-height:44px}
+ .gc-console .ide-sidebar-actions button:not(.sp-sidebar-new-btn),.gc-console .console-context #chat-list-toggle{width:44px;min-width:44px}
+ .gc-console .conversation-menu>div>button{min-height:44px}
+}
+@media(max-width:899px){.gc-console .timeline-bar :is(select,.btn-control),.sp-native-console .sp-export-menu>summary{min-height:44px}}
