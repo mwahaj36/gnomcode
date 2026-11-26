@@ -26,7 +26,7 @@ Launch official AI coding agent CLIs in one workspace, track usage and quota win
 
 ## Install
 
-**v1.2.0** gives the console, Remote and website one visual system (Inter, a single blue accent, switches for settings), fixes Remote getting stuck on "Reconnecting", and ships for Windows, macOS and Linux. Download the desktop app for your platform from [Downloads](https://gnomcode.vercel.app/downloads) or the [v1.2.0 release assets](https://github.com/mwahaj36/gnomcode/releases/tag/v1.2.0); see the [changelog](https://gnomcode.vercel.app/changelog) for details. Windows installers are unsigned and macOS apps are unnotarized; Windows automatic updates verify an Ed25519-signed manifest before installing.
+**v1.2.1** gives every button, select and panel one consistent look across the website, web console, Remote and desktop app, recolors the Gnomcode mark blue everywhere, and redesigns the Remote desktop panel. Download the desktop app for your platform from [Downloads](https://gnomcode.vercel.app/downloads) or the [v1.2.1 release assets](https://github.com/mwahaj36/gnomcode/releases/tag/v1.2.1); see the [changelog](https://gnomcode.vercel.app/changelog) for details. Windows installers are unsigned and macOS apps are unnotarized; Windows automatic updates verify an Ed25519-signed manifest before installing.
 
 ### npm (Windows, macOS, Linux)
 
@@ -44,7 +44,7 @@ Desktop ZIPs are available for macOS Intel/Apple Silicon and Linux x64, with a D
 
 ### Windows
 
-Download `Gnomcode-Setup.exe` or `Gnomcode-v1.2.0-windows-x64.zip` from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
+Download `Gnomcode-Setup.exe` or `Gnomcode-v1.2.1-windows-x64.zip` from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
 
 ```powershell
 irm https://gnomcode.vercel.app/downloads/install.ps1 | iex
