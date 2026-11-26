@@ -226,11 +226,18 @@ jobs:
         run: npm run build
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Check public pages (metadata, links, schemas, phone layouts)
+      - name: Check public pages and web screens (metadata, links, schemas, copy, layouts)
         run: |
           npx next start -p 43915 &
           for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:43915/ && break; sleep 2; done
           npm run test:seo
+          GNOMCODE_WEB_BASE_URL=http://127.0.0.1:43915 npx playwright test -c playwright.web.config.ts
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: web-test-results
+          path: web/web-test-results
+          if-no-files-found: ignore
 
   console-e2e:
     needs: changes
