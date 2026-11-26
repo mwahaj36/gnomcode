@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.2 - 2026-11-26
+
+- Windows setup reinstalls into its usual folder even when an earlier uninstall left stale files behind in the desktop subfolder; unrelated files still block the folder.
+- Update the website framework to Next.js 15.5.29 for three security fixes.
+- The home page no longer scrolls sideways on phones, and the home and downloads search descriptions fit in search results.
+- New answers on how to update and how to uninstall Gnomcode; agent support copy no longer names an old version.
+- CI now checks every public page (metadata, links, structured data, layouts) and runs the web screen tests against a production build.
+
 ## 1.2.1 - 2026-11-26
 
 - Restore padding, borders and fonts on web console and Remote buttons, selects and sheets: the website's base reset was overriding the console styles.
