@@ -1,6 +1,6 @@
 # Gnomcode Technical Specification & Model Reference
 
-Gnomcode is a local-first runtime and orchestrator for Claude Code, Codex and Antigravity. The current build is a Windows development build.
+Gnomcode is a local-first runtime and orchestrator for Claude Code, Codex and Antigravity. Release builds are available for Windows, macOS and Linux, and the CLI installs with `npm install -g gnomcode`.
 
 ## Architectural Principles & Invariants
 1. Local-First & Privacy: Redacted conversation history is stored strictly on the local machine in SQLite. Unencrypted chat content is never sent to cloud sync. Unrelated file contents and tool outputs are filtered prior to persistence.
