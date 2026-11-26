@@ -3,7 +3,7 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Free download for Windows (x64, ARM64 CLI), macOS (Apple Silicon and Intel) and Linux (x86_64, arm64, .deb). Run Claude Code, Codex and Antigravity in one local workspace. SHA-256 checksums included.");
+export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Download Gnomcode free for Windows, macOS and Linux: desktop app, CLI archives and .deb, with SHA-256 checksums for every file.");
 
 export default function DownloadsPage() {
   return (
