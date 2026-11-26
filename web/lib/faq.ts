@@ -19,6 +19,14 @@ export const faqGroups = [
         "answer": "Windows (x64 installer and ZIP, plus an ARM64 CLI), macOS (Apple Silicon and Intel) and Linux (x86_64 and arm64 archives and a .deb). The CLI also installs on all three with npm install -g gnomcode. On Windows, Gnomcode also discovers sessions inside WSL distros and can launch agents there."
       },
       {
+        "question": "How do I update Gnomcode?",
+        "answer": "On Windows, Gnomcode checks for updates unless you turn checks off, and installs only an installer whose Ed25519 signature matches the key built into your copy. You can also run the latest installer or the PowerShell install command again. On macOS and Linux, run the install script again or download the new archive. With npm, run npm install -g gnomcode@latest. Your sessions and settings are kept."
+      },
+      {
+        "question": "How do I uninstall Gnomcode?",
+        "answer": "On Windows, open Settings, Installed apps, and uninstall gnomcode; the uninstaller removes the files it installed, its shortcuts and Explorer entries, and keeps files it did not create. For an npm install, run npm uninstall -g gnomcode. Local history stays in your Gnomcode data folder until you delete it."
+      },
+      {
         "question": "Do I install agent CLIs separately?",
         "answer": "Yes. Install and authenticate the official CLI you want to launch, then let Gnomcode discover it on PATH. Gnomcode does not supply provider subscriptions or credentials."
       }
