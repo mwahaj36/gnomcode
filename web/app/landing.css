@@ -295,3 +295,9 @@ html body .sp-page .sp-tour-tabs button[aria-selected="true"]{color:var(--text);
 html body .sp-page :is(.sp-button-primary,.sp-button-outline,.sp-nav-cta,.sp-nav-login){border-radius:var(--sp-r-control)}
 .sp-start h2{font-size:40px;line-height:44px;font-weight:600;letter-spacing:-.025em;margin:0;max-width:20ch}
 @media(max-width:760px){.sp-start h2{font-size:28px;line-height:36px}}
+
+/* The wide footer grid above applies at every width; on phones keep two columns so links never push past the edge. */
+@media (max-width: 760px) {
+  .sp-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sp-footer-grid > div:first-child { grid-column: 1 / -1; }
+}

@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const base = process.argv[2] || 'http://127.0.0.1:43915';
 const guides = ['getting-started', 'model-switching', 'remote-access', 'supported-agents', 'quota-and-cost', 'model-pricing', 'automate-multiple-agents', 'prompt-from-phone', 'faq', 'quota-limits-explained', 'privacy', 'claude-code-vs-codex'];
-const routes = ['/', '/downloads', '/docs', '/pricing', '/remote', '/privacy', '/terms', ...guides.map(slug => `/docs/${slug}`)];
+const routes = ['/', '/downloads', '/docs', '/changelog', '/privacy', '/terms', ...guides.map(slug => `/docs/${slug}`)];
 const browser = await chromium.launch({ headless: true, executablePath: process.env.GNOMCODE_TEST_BROWSER });
 const titles = new Set();
 const descriptions = new Set();
@@ -32,7 +32,7 @@ try {
     }
   }
   await page.goto(base + '/docs/faq');
-  const faq = JSON.parse(await page.locator('script[type="application/ld+json"]').textContent());
+  const faq = (await page.locator('script[type="application/ld+json"]').allTextContents()).map(text => JSON.parse(text)).find(schema => schema['@type'] === 'FAQPage');
   assert.ok(faq.mainEntity.length >= 15);
   assert.equal(await page.locator('article h3').count(), faq.mainEntity.length);
   const imageResponse = await page.request.get(base + '/og-image.png');
@@ -40,7 +40,7 @@ try {
   assert.ok(imageResponse.headers()['content-type'].startsWith('image/png'));
   for (const route of ['/auth', '/console', '/settings']) {
     const html = await (await page.request.get(base + route)).text();
-    assert.match(html, /name="robots" content="noindex, nofollow"/, `private route: ${route}`);
+    assert.match(html, /name="robots" content="noindex, nofollow[^"]*"/, `private route: ${route}`);
   }
   const sitemap = await (await page.request.get(base + '/sitemap.xml')).text();
   for (const route of routes) assert.ok(sitemap.includes(`<loc>https://gnomcode.vercel.app${route === '/' ? '' : route}</loc>`), `sitemap: ${route}`);
