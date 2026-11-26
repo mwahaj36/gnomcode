@@ -82,7 +82,7 @@ html .sp-download-action.sp-download-action:not(.sp-download-primary) {
   transition: background-color var(--ctl-ease), border-color var(--ctl-ease);
 }
 html .sp-download-action.sp-download-action:not(.sp-download-primary):hover { background: var(--sp-surface-2); }
-html .sp-download-action.sp-download-action { border-radius: var(--ctl-radius); }
+html .sp-download-action.sp-download-action { border-radius: var(--ctl-radius); text-align: left; }
 
 /* ---------- Danger (outlined) ---------- */
 html :is(.sp-dev-quiet-danger.sp-dev-quiet-danger, .remote-sheet-forget.remote-sheet-forget, .btn-danger) {
@@ -112,28 +112,23 @@ html :is(.sp-dev-quiet.sp-dev-quiet, .btn-quiet):hover:not(:disabled) { backgrou
 /* ---------- Sizes and type ---------- */
 /* Marketing actions: 44px, 14px medium, sentence case. */
 html :is(.sp-button-primary, .sp-button-outline, .sp-docs-cta-primary, .sp-docs-cta-secondary) {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  align-items: center; justify-content: center; gap: 8px;
   min-height: var(--ctl-h-lg); padding: 0 18px;
   font: var(--ctl-font); letter-spacing: 0; text-transform: none; text-decoration: none; white-space: nowrap;
 }
 /* Header actions: 40px so they sit inside the 64px bar with even margins. */
 html :is(.sp-nav-cta.sp-nav-cta, .sp-account-cta.sp-account-cta, .sp-site-download) {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  align-items: center; justify-content: center; gap: 8px;
   min-height: 40px; padding: 0 16px;
   font: var(--ctl-font); letter-spacing: 0; text-transform: none; white-space: nowrap;
 }
-/* Console actions: 44px, matching the console's shared control height. */
+/* Console actions: height comes from the console's own touch-aware rules (40px, 44px on touch). */
 html body :is(.btn-control, .btn-primary, .btn-danger, .btn-quiet, .sp-console-action, .sp-settings-action,
   .sp-dev-primary.sp-dev-primary, .sp-dev-secondary.sp-dev-secondary, .sp-dev-quiet.sp-dev-quiet, .sp-dev-quiet-danger.sp-dev-quiet-danger,
   .remote-sheet-retry.remote-sheet-retry, .remote-sheet-forget.remote-sheet-forget) {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: var(--ctl-h); height: auto; margin: 0; padding: 0 14px;
+  align-items: center; justify-content: center; gap: 8px;
+  margin: 0; padding: 0 14px;
   font: var(--ctl-font-sm); letter-spacing: 0; text-transform: none; text-decoration: none; white-space: nowrap;
-}
-@media (max-width: 760px), (pointer: coarse) {
-  html :is(.btn-control, .btn-primary, .btn-danger, .btn-quiet, .sp-console-action, .sp-settings-action,
-    .sp-dev-primary.sp-dev-primary, .sp-dev-secondary.sp-dev-secondary, .sp-dev-quiet.sp-dev-quiet, .sp-dev-quiet-danger.sp-dev-quiet-danger,
-    .remote-sheet-retry.remote-sheet-retry, .remote-sheet-forget.remote-sheet-forget) { min-height: 44px; }
 }
 
 /* ---------- Tabs: underline, sentence case ---------- */
@@ -164,7 +159,7 @@ html .sp-theme-control.sp-theme-control button[aria-checked="true"] { color: var
 }
 
 /* ---------- Selects: same height, type and border as actions, with a drawn caret ---------- */
-html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not([hidden]) {
+html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not(#chat-model-select):not(.sp-chat-composer select) {
   appearance: none; -webkit-appearance: none;
   min-height: 40px; height: 40px; padding: 0 36px 0 12px;
   border: 1px solid var(--sp-border-strong); border-radius: var(--ctl-radius);
@@ -175,7 +170,12 @@ html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-a
   font: var(--ctl-font-sm); cursor: pointer;
   transition: border-color var(--ctl-ease), background-color var(--ctl-ease);
 }
-html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not([hidden]):hover { background-color: var(--sp-surface-2); }
+html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not(#chat-model-select):not(.sp-chat-composer select):hover { background-color: var(--sp-surface-2); }
+
+@media (max-width: 899px), (pointer: coarse) {
+  /* 44px touch target; 16px text stops iOS from zooming into the field. */
+  html body :is(.sp-console-app, .sp-remote, .sp-account-panel, .gc-web, .sp-web-app, .sp-console-workspace) select:not([multiple]):not([size]):not(#chat-model-select):not(.sp-chat-composer select) { min-height: 44px; height: 44px; font-size: 16px; }
+}
 
 /* Desktop picker scopes the whole page, so it sits on top as a quiet toolbar row. */
 html body .sp-console-timeline-filter.sp-desktop-picker {
