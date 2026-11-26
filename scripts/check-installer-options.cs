@@ -41,6 +41,10 @@ public static class CheckInstallerOptions {
                 Assert(unsafeRejected,"Archive must reject unsafe path: "+entry);
             }
             validate.Invoke(null, new object[] { files });
+            string residue = Path.Combine(files, "desktop", "resources", "bin");
+            Directory.CreateDirectory(residue);
+            File.WriteAllText(Path.Combine(residue, "spawnt.exe"), "stale build");
+            validate.Invoke(null, new object[] { files });
             File.WriteAllText(Path.Combine(files, "unrelated.txt"), "keep");
             bool rejected = false;
             try { validate.Invoke(null, new object[] { files }); } catch (TargetInvocationException) { rejected = true; }
