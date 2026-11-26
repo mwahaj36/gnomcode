@@ -34,7 +34,7 @@ html :is(button, [role="button"])[aria-busy="true"] { cursor: progress; opacity:
 
 /* ---------- Primary ---------- */
 html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primary, .sp-download-primary.sp-download-primary,
-  .sp-auth-submit, .btn-primary, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry) {
+  .sp-auth-submit, .btn-primary, .btn-control.sp-sidebar-new-btn, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry) {
   border: 1px solid var(--sp-primary);
   background: var(--sp-primary);
   color: var(--sp-on-primary) !important;
@@ -43,18 +43,18 @@ html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primar
   cursor: pointer;
 }
 html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primary, .sp-download-primary.sp-download-primary,
-  .sp-auth-submit, .btn-primary, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry):hover:not(:disabled) {
+  .sp-auth-submit, .btn-primary, .btn-control.sp-sidebar-new-btn, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry):hover:not(:disabled) {
   background: var(--ctl-primary-hover);
   border-color: var(--ctl-primary-hover);
 }
 html :is(.sp-button-primary, .sp-account-cta.sp-account-cta, .sp-docs-cta-primary, .sp-download-primary.sp-download-primary,
-  .sp-auth-submit, .btn-primary, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry):active:not(:disabled) {
+  .sp-auth-submit, .btn-primary, .btn-control.sp-sidebar-new-btn, .sp-dev-primary.sp-dev-primary, .remote-sheet-retry.remote-sheet-retry):active:not(:disabled) {
   background: var(--ctl-primary-press);
   transform: translateY(1px);
 }
 
 /* ---------- Secondary ---------- */
-html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control,
+html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control:not(.sp-sidebar-new-btn),
   .sp-dev-secondary.sp-dev-secondary, .sp-console-action, .sp-settings-action, .sp-auth-oauth) {
   border: 1px solid var(--sp-border-strong);
   background: var(--sp-surface);
@@ -63,12 +63,12 @@ html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs
   transition: background-color var(--ctl-ease), border-color var(--ctl-ease), color var(--ctl-ease), transform var(--ctl-ease);
   cursor: pointer;
 }
-html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control,
+html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control:not(.sp-sidebar-new-btn),
   .sp-dev-secondary.sp-dev-secondary, .sp-console-action, .sp-settings-action, .sp-auth-oauth):hover:not(:disabled) {
   background: var(--sp-surface-2);
   border-color: color-mix(in srgb, var(--sp-text) 28%, var(--sp-border-strong));
 }
-html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control,
+html :is(.sp-button-outline, .sp-nav-cta.sp-nav-cta, .sp-site-download, .sp-docs-cta-secondary, .btn-control:not(.sp-sidebar-new-btn),
   .sp-dev-secondary.sp-dev-secondary, .sp-console-action, .sp-settings-action, .sp-auth-oauth):active:not(:disabled) {
   background: color-mix(in srgb, var(--sp-surface-2) 80%, var(--sp-text));
   transform: translateY(1px);
