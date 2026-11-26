@@ -12,7 +12,8 @@
     "release-pack": "powershell -ExecutionPolicy Bypass -File ../.agents/skills/cut-release/scripts/package-release.ps1",
     "typecheck": "tsc --noEmit --incremental false",
     "test": "node --test test/*.test.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:seo": "node ../scripts/check-marketing-seo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

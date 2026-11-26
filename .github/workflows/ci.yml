@@ -222,6 +222,15 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Build the website
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check public pages (metadata, links, schemas, phone layouts)
+        run: |
+          npx next start -p 43915 &
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:43915/ && break; sleep 2; done
+          npm run test:seo
 
   console-e2e:
     needs: changes
