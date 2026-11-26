@@ -2,6 +2,7 @@ import branding from "../branding.json";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./gnomcode-console.css";
+import "./controls.css";
 import Navbar from "../components/Navbar";
 import FooterWrapper from "../components/FooterWrapper";
 

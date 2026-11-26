@@ -4,7 +4,11 @@ const nextConfig = {
   devIndicators: false,
   distDir: process.env.GNOMCODE_NEXT_DIST_DIR || '.next',
   async redirects() {
-    return [{ source: "/pricing", destination: "/docs/getting-started", permanent: true }];
+    return [
+      { source: "/pricing", destination: "/docs/getting-started", permanent: true },
+      // The pre-1.2 launcher was replaced by the console; keep old bookmarks and installed shortcuts working.
+      { source: "/app", destination: "/console", permanent: true },
+    ];
   },
   async rewrites() {
     return [
