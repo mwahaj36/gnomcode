@@ -29,6 +29,7 @@ test('Remote keeps retrying after the desktop stops answering and reconnects onc
     return route.fulfill({ json: url.pathname.endsWith('/spawnt_device_requests') ? (url.searchParams.has('id') ? { offer, state: 'approved', revoked: false } : [{ id: host, desktop_id: host, offer, state: 'approved', revoked: false }]) : url.pathname.endsWith('/user') ? { id: owner } : [] });
   });
   let awake = false;
+  let helloSeen = false;
   await page.routeWebSocket('ws://127.0.0.1:9999/**', ws => {
     let channel: any;
     const reply = async (value: object) => ws.send(Buffer.from(JSON.stringify(await channel.seal({ type: 'chunk', data: JSON.stringify(value), final: true }))));
@@ -36,6 +37,7 @@ test('Remote keeps retrying after the desktop stops answering and reconnects onc
     ws.onMessage(data => { chain = chain.then(async () => {
       const frame = JSON.parse(data.toString());
       if (frame.type === 'hello') {
+        helloSeen = true;
         if (!awake || channel) return; // Silent desktop; once awake, answer the first hello only.
         const nonce = 'a'.repeat(32);
         channel = await createChannel(keys, frame.public_key, `${host}:${nonce}`, 'desktop');
@@ -51,9 +53,17 @@ test('Remote keeps retrying after the desktop stops answering and reconnects onc
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => !!sessionStorage.getItem('gnomcode-pairing-offer'))).toBeTruthy();
   await page.goto('/console?view=chat');
+  // Start the fake clock only once the browser has said hello; advancing it before the connection timer exists races the page.
+  await expect.poll(() => helloSeen, { timeout: 15000 }).toBe(true);
   // Past the 30 s window with a silent desktop: the phone reports it, but must not stop there.
-  for (let i = 0; i < 12; i++) await page.clock.runFor(5000);
-  await expect(page.getByRole('status').filter({ hasText: 'Desktop unavailable' }).first()).toBeVisible();
+  // Remote alternates between unavailable and a quiet retry every 15 s, so step the clock until the outage is reported.
+  const unavailable = page.getByRole('status').filter({ hasText: 'Desktop unavailable' }).first();
+  let reported = false;
+  for (let i = 0; i < 16 && !reported; i++) {
+    await page.clock.runFor(5000);
+    reported = await unavailable.isVisible();
+  }
+  expect(reported, 'a silent desktop is reported as unavailable').toBe(true);
   awake = true;
   for (let i = 0; i < 8; i++) await page.clock.runFor(5000);
   await expect(page.getByText('Woke up').first()).toBeVisible({ timeout: 15000 });
