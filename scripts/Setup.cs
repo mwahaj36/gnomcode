@@ -419,7 +419,12 @@ public static class InstallerIntegration
         bool native = File.Exists(Path.Combine(installDir, "gnomcode.exe")) &&
             (File.Exists(Path.Combine(installDir, "Gnomcode-Uninstall.exe")) || File.Exists(Path.Combine(installDir, "open-console.vbs")));
         bool desktop = File.Exists(Path.Combine(installDir, "gnomcode-desktop.exe")) && File.Exists(Path.Combine(installDir, "Update.exe"));
-        if (!native && !desktop) throw new IOException("Choose an empty folder or an existing gnomcode installation.");
+        // An uninstall keeps files it did not write, which can leave only stale files under desktop\ (the folder
+        // this installer owns and replaces). Treat that residue as a previous installation instead of blocking the default path.
+        string owned = Path.Combine(installDir, "desktop") + Path.DirectorySeparatorChar;
+        bool residue = Array.TrueForAll(Directory.GetFiles(installDir, "*", SearchOption.AllDirectories),
+            f => f.StartsWith(owned, StringComparison.OrdinalIgnoreCase));
+        if (!native && !desktop && !residue) throw new IOException("Choose an empty folder or an existing gnomcode installation.");
     }
 
     private static void PruneEmptyAncestors(string startDir, string stopDir) {
