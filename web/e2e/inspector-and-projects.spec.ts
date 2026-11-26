@@ -11,7 +11,7 @@ test.describe('workspace inspector tabs, observed sessions, and usage projects',
     await openClaudeConversation(page);
 
     const tools = page.getByRole('complementary', { name: 'Conversation tools' });
-    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
     await tools.getByRole('button', { name: 'Files' }).click();
     await page.setViewportSize({ width: 920, height: 760 });
 

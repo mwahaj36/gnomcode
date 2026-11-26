@@ -1,6 +1,6 @@
 # Gnomcode — The Runtime for AI Coding Agents
 
-> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. The current packaged build targets Windows x64; macOS and Linux builds are not available yet.
+> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. It is free and open source (Apache-2.0) with release builds for Windows x64, macOS (Apple Silicon and Intel) and Linux (x86_64, arm64, .deb), plus an npm package (`npm i -g gnomcode`).
 
 ## Core Capabilities
 - **Model Switching**: Switch mid-conversation between Claude Code, OpenAI Codex and Antigravity. Compiles objectives, changed files, and recent turns into a local handoff.
@@ -21,6 +21,8 @@ Gnomcode 1.0 supports exactly these three agents.
 - [Model Switching](https://gnomcode.vercel.app/docs/model-switching): How handoffs compile conversation context and file changes.
 - [Prompt from Phone](https://gnomcode.vercel.app/docs/prompt-from-phone): Linking mobile devices with Gnomcode Remote over an end-to-end encrypted relay.
 - [Model Pricing](https://gnomcode.vercel.app/docs/model-pricing): Cost calculations, rate limit resets, and trust levels.
+- [Claude Code vs Codex](https://gnomcode.vercel.app/docs/claude-code-vs-codex): Differences, limits and using both.
+- [Quota limits explained](https://gnomcode.vercel.app/docs/quota-limits-explained): How agent usage windows and resets work.
 - [FAQ](https://gnomcode.vercel.app/docs/faq): Frequently asked questions on security, subscriptions, and integrations.
 
 ## Progressive Web App & Remote
@@ -29,7 +31,8 @@ Gnomcode 1.0 supports exactly these three agents.
 
 ## Downloads
 
-- [Windows downloads](https://gnomcode.vercel.app/downloads): The downloads page shows the package version and Windows x64 release-candidate installer/ZIP names. Review the published release notes and versioned SHA-256 checksums before installing. Windows installers are unsigned; updater signatures are separate from OS signing. macOS and Linux downloads are not available yet.
+- [Downloads](https://gnomcode.vercel.app/downloads): Current release installers and archives for Windows x64 (Setup.exe and ZIP), Windows ARM64 CLI, macOS Apple Silicon and Intel, and Linux x86_64/arm64 (tar.gz, .deb). Every release publishes versioned SHA-256 checksums. Windows installers are not Authenticode-signed and macOS apps are not notarized; Windows automatic updates verify an Ed25519 signature.
+- npm: `npm install -g gnomcode` installs the CLI for Windows, macOS and Linux (including musl).
 
 ## Files and project trust
 

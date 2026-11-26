@@ -16,7 +16,7 @@ test.describe('Accessibility and layout audit across all local console views', (
         await openConsole(hash);
         if (hash === '#sessions') {
           await openClaudeConversation(page);
-    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
           const tools = page.getByRole('complementary', { name: 'Conversation tools' });
           await tools.getByRole('button', { name: 'Files' }).click();
         }
@@ -110,7 +110,7 @@ test.describe('Accessibility and layout audit across all local console views', (
     await openConsole('#sessions');
     await page.getByRole('button', { name: 'Toggle conversations' }).click();
     await openClaudeConversation(page);
-    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Tools', exact: true }).click();
 
     // Open inspector on mobile via Actions menu -> Terminal
     await page.locator('details.conversation-menu > summary').click();
