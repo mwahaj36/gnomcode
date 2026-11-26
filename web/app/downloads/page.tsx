@@ -3,7 +3,7 @@ import Link from "next/link";
 import packageInfo from "../../package.json";
 import { PlatformDownloads } from "./PlatformDownloads";
 
-export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Download Gnomcode free for Windows, macOS and Linux: desktop app, CLI archives and .deb, with SHA-256 checksums for every file.");
+export const metadata = pageMetadata("/downloads", `Download Gnomcode v${packageInfo.version}`, "Download Gnomcode for Windows, macOS and Linux: desktop app, CLI archives and .deb, with SHA-256 checksums for every file.");
 
 export default function DownloadsPage() {
   return (

@@ -1,6 +1,6 @@
 # Gnomcode — The Runtime for AI Coding Agents
 
-> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. It is free and open source (Apache-2.0) with release builds for Windows x64, macOS (Apple Silicon and Intel) and Linux (x86_64, arm64, .deb), plus an npm package (`npm i -g gnomcode`).
+> Gnomcode is a local-first runtime, model orchestrator, and encrypted remote control for AI coding agents. It is open source (Apache-2.0) with release builds for Windows x64, macOS (Apple Silicon and Intel) and Linux (x86_64, arm64, .deb), plus an npm package (`npm i -g gnomcode`).
 
 ## Core Capabilities
 - **Model Switching**: Switch mid-conversation between Claude Code, OpenAI Codex and Antigravity. Compiles objectives, changed files, and recent turns into a local handoff.

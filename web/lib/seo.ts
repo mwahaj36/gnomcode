@@ -72,7 +72,7 @@ export function buildWebSiteJsonLd() {
     "@type": "WebSite",
     "name": "Gnomcode",
     "url": branding.baseUrl,
-    "description": "Free, open source local runtime for Claude Code, OpenAI Codex and Antigravity: switch agents with a handoff, track usage and quota, and control sessions from your phone.",
+    "description": "Open source local runtime for Claude Code, OpenAI Codex and Antigravity: switch agents with a handoff, track usage and quota, and control sessions from your phone.",
     "publisher": { "@type": "Organization", "name": "Gnomcode", "url": branding.baseUrl, "logo": `${branding.baseUrl}/icons/gnomcode-192.png`, "sameAs": ["https://github.com/mwahaj36/gnomcode"] }
   };
 }

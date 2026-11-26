@@ -47,7 +47,7 @@ export default function DocPage({
         <section>
           <h2>Try Gnomcode</h2>
           <p>
-            Download it free for Windows, macOS or Linux, choose your workspace and launch an agent.
+            Download it for Windows, macOS or Linux, choose your workspace and launch an agent.
           </p>
           <p>
             <Link href="/downloads">Download</Link> · <Link href="/docs/getting-started">Installation guide</Link>
