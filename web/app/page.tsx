@@ -1,15 +1,16 @@
 import LandingClient from "./LandingClient";
-import { pageMetadata, buildSoftwareAppJsonLd, buildFaqJsonLd } from "../lib/seo";
+import { pageMetadata, buildSoftwareAppJsonLd, buildFaqJsonLd, buildWebSiteJsonLd } from "../lib/seo";
 import { landingFaq } from "../lib/landing-faq";
 
 export const metadata = pageMetadata(
   "",
   "Gnomcode — Switch AI Coding Agents and Keep Working",
-  "Launch Claude Code, Codex and Antigravity, switch with a concise handoff and manage sessions locally. Local sessions and encrypted Remote; Windows build available."
+  "Launch Claude Code, Codex and Antigravity, switch with a concise handoff and manage sessions locally. Free and open source for Windows, macOS and Linux, with local history and encrypted phone Remote."
 );
 
 const softwareApp = buildSoftwareAppJsonLd();
 const faqSchema = buildFaqJsonLd(landingFaq);
+const webSite = buildWebSiteJsonLd();
 
 export default function LandingPage() {
   return (
@@ -21,6 +22,10 @@ export default function LandingPage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema).replace(/</g, "\\u003c") }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webSite).replace(/</g, "\\u003c") }}
       />
       <LandingClient />
     </>

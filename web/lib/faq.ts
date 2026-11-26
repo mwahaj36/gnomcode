@@ -7,12 +7,16 @@ export const faqGroups = [
         "answer": "No account is needed for local features. Optional account metadata sync and Remote discovery use a Gnomcode account; your agents keep separate vendor accounts."
       },
       {
+        "question": "Is Gnomcode free?",
+        "answer": "Yes. Gnomcode is free and open source under the Apache-2.0 license, with no paid plan, account or telemetry. You still use your own Claude Code, Codex or Antigravity subscription or API access."
+      },
+      {
         "question": "Does Gnomcode work offline?",
         "answer": "Local reporting, inspection and orchestration do not require Gnomcode cloud services. Official agent inference may still require the vendor network; disable update checks and leave optional services off to avoid Gnomcode network traffic."
       },
       {
         "question": "Which operating systems are supported?",
-        "answer": "Downloads are Windows x64 only. On Windows, Gnomcode also discovers sessions inside WSL distros and can launch agents there. macOS and Linux builds are not available."
+        "answer": "Windows (x64 installer and ZIP, plus an ARM64 CLI), macOS (Apple Silicon and Intel) and Linux (x86_64 and arm64 archives and a .deb). The CLI also installs on all three with npm install -g gnomcode. On Windows, Gnomcode also discovers sessions inside WSL distros and can launch agents there."
       },
       {
         "question": "Do I install agent CLIs separately?",
