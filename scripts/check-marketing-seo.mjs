@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
-const { chromium } = createRequire(import.meta.url)('playwright');
+const { chromium } = createRequire(new URL('../web/package.json', import.meta.url))('playwright');
 const base = process.argv[2] || 'http://127.0.0.1:43915';
 const guides = ['getting-started', 'model-switching', 'remote-access', 'supported-agents', 'quota-and-cost', 'model-pricing', 'automate-multiple-agents', 'prompt-from-phone', 'faq', 'quota-limits-explained', 'privacy', 'claude-code-vs-codex'];
 const routes = ['/', '/downloads', '/docs', '/changelog', '/privacy', '/terms', ...guides.map(slug => `/docs/${slug}`)];
