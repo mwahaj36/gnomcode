@@ -179,6 +179,9 @@ test('a refused pairing says so in red and keeps the token for another try', asy
 
 test('sign-in fields fill their column and the button sits under them', async ({ page, openConsole }) => {
   await openConsole('#auth');
+  // Measure after fonts and the auth column settle; a first measurement can land mid-layout on slower runners.
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(async () => (await page.getByLabel('Email').boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(300);
   const email = await page.getByLabel('Email').boundingBox();
   const password = await page.getByLabel('Password').boundingBox();
   const button = await page.getByRole('button', { name: 'Sign in', exact: true }).boundingBox();
