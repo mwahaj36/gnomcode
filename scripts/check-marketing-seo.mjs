@@ -28,7 +28,12 @@ try {
       assert.ok(await page.getByRole('heading', { name: 'Related guides', exact: true }).count());
     }
     for (const href of await page.locator('article a[href^="/"]').evaluateAll(nodes => [...new Set(nodes.map(n => n.getAttribute('href').split('#')[0]))])) {
-      assert.ok((await page.request.get(base + href)).ok(), `broken link: ${route} -> ${href}`);
+      // Release assets redirect to the GitHub release, which a version bump creates only after merging,
+      // so check the redirect target instead of following it; other links must load.
+      const response = await page.request.get(base + href, { maxRedirects: href.startsWith('/downloads/') ? 0 : 20 });
+      const location = response.headers()['location'] || '';
+      const releaseRedirect = href.startsWith('/downloads/') && response.status() >= 300 && response.status() < 400 && location.startsWith('https://github.com/mwahaj36/gnomcode/releases/download/v');
+      assert.ok(response.ok() || releaseRedirect, `broken link: ${route} -> ${href}`);
     }
   }
   await page.goto(base + '/docs/faq');
