@@ -23,6 +23,7 @@ Gnomcode 1.0 supports exactly these three agents.
 - [Model Pricing](https://gnomcode.vercel.app/docs/model-pricing): Cost calculations, rate limit resets, and trust levels.
 - [Claude Code vs Codex](https://gnomcode.vercel.app/docs/claude-code-vs-codex): Differences, limits and using both.
 - [Quota limits explained](https://gnomcode.vercel.app/docs/quota-limits-explained): How agent usage windows and resets work.
+- [Changelog](https://gnomcode.vercel.app/changelog): Release notes for every version.
 - [FAQ](https://gnomcode.vercel.app/docs/faq): Frequently asked questions on security, subscriptions, and integrations.
 
 ## Progressive Web App & Remote
