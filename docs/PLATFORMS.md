@@ -2,22 +2,22 @@
 
 This document records the exact verification status per operating system and architecture for Gnomcode 1.1. Marketing pages, download links, and release notes may only claim capabilities marked **Verified** below.
 
-Last updated: 2026-11-21.
+Last updated: 2026-11-26.
 
-Current release evidence: desktop/native packaging and platform tests in run `44884214524`; additional ARM64/static-musl builds in `44885881614`; actual offline npm tarball install, version, doctor and report checks on all seven native/Alpine targets in `44913532282`. These are CI/runtime checks, not physical desktop/provider acceptance. Older run numbers in the detailed sections below describe historical feature evidence.
+Current release evidence (v1.2.1): desktop/native packaging, packaged smoke and platform tests in run `45757249955`; Windows ARM64 and static-musl builds in `45757254066`; the Windows x64 installer, payload, updater and tray checks plus 204 console browser tests against the release binary ran locally. The npm win32-x64 tarballs were installed and smoke-tested locally; the all-target npm tarball smoke was last run for v1.1.0 (`44913532282`). These are CI/runtime checks, not physical desktop/provider acceptance. Older run numbers in the detailed sections below describe historical feature evidence.
 
-The [v1.1.0 release](https://github.com/mwahaj36/gnomcode/releases/tag/v1.1.0) includes manual downloads with SHA-256 manifests. OS signing/notarization and signed automatic updates remain separate.
+The [v1.2.1 release](https://github.com/mwahaj36/gnomcode/releases/tag/v1.2.1) includes manual downloads with SHA-256 manifests. Windows automatic updates install only installers whose Ed25519 signature matches the key built into Gnomcode; OS code signing and notarization remain separate.
 
 ## Summary
 
 | Platform | Daemon CLI | Desktop App Package | Live Runtime / Hardware Acceptance | Signing / Notarization |
 | :--- | :--- | :--- | :--- | :--- |
-| Windows x64 | Verified (CI + local) | Verified v1.1.0 setup and Electron payload | Partial (local smoke + console E2E; clean VM install/upgrade pending) | Unsigned (`NotSigned`) |
+| Windows x64 | Verified (CI + local) | Verified v1.2.1 setup and Electron payload | Partial (local smoke + console E2E; clean VM install/upgrade pending) | Unsigned (`NotSigned`) |
 | Windows arm64 | Verified ARM64 CLI build and packed install | CLI only | Native Windows ARM64 CI smoke; interactive agent workflows pending | Unsigned |
-| macOS arm64 (Apple Silicon) | Verified v1.1.0 CI tarball | Verified v1.1.0 CI `.zip` | Not verified on live device | Unsigned, not notarized |
-| macOS x64 (Intel) | Verified v1.1.0 CI tarball | Verified v1.1.0 CI `.zip` | Not verified on live device | Unsigned, not notarized |
-| Linux x64 (`ubuntu-22.04`) | Verified v1.1.0 CI tarball | Verified v1.1.0 CI `.deb` + `.zip` | Not verified on live desktop (X11/Wayland) | N/A |
-| Linux arm64 | Verified v1.1.0 CI tarball | Not built | Not verified | N/A |
+| macOS arm64 (Apple Silicon) | Verified v1.2.1 CI tarball | Verified v1.2.1 CI `.zip` | Not verified on live device | Unsigned, not notarized |
+| macOS x64 (Intel) | Verified v1.2.1 CI tarball | Verified v1.2.1 CI `.zip` | Not verified on live device | Unsigned, not notarized |
+| Linux x64 (`ubuntu-22.04`) | Verified v1.2.1 CI tarball | Verified v1.2.1 CI `.deb` + `.zip` | Not verified on live desktop (X11/Wayland) | N/A |
+| Linux arm64 | Verified v1.2.1 CI tarball | Not built | Not verified | N/A |
 | Linux x64 musl | Verified static binary and Alpine npm smoke | CLI only | CI CLI checks; live desktop workflows pending | N/A |
 
 ## Windows (x64)
