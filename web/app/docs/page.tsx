@@ -89,7 +89,7 @@ export default function DocsPage() {
               Supported agents & adapters
             </h2>
             <p className="text-muted text-sm leading-relaxed mb-6">
-              gnomcode 1.0 supports exactly Claude Code, OpenAI Codex and Google Antigravity. It reads their local activity files and needs no configuration in the agent for observation.
+              gnomcode supports exactly Claude Code, OpenAI Codex and Google Antigravity. It reads their local activity files and needs no configuration in the agent for observation.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
