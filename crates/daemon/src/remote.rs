@@ -31,13 +31,39 @@ pub enum RemoteError {
     Persistence,
 }
 
-/// Resolves the Remote relay URL: `GNOMCODE_REMOTE_RELAY_URL` override, else the bundled branding default.
+/// Relay URL most recently published in a verified update manifest, overriding the
+/// bundled branding default without requiring a new build (see [`set_manifest_relay_url`]).
+/// `RwLock::new` is a `const fn`, so this needs no lazy initialization.
+static MANIFEST_RELAY_URL: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+/// Records the Remote relay URL seen in the latest verified update manifest, if any.
+/// Called by the update checker on every successful fetch, regardless of whether the
+/// manifest's version is newer, so an already up-to-date desktop still picks up a relay
+/// change. Only ever narrows to a value [`gnomcode_core::update::is_valid_wss_relay_url`]
+/// accepts; the connection attempt itself is re-validated again before use.
+pub(crate) fn set_manifest_relay_url(url: Option<String>) {
+    let url = url.filter(|candidate| gnomcode_core::update::is_valid_wss_relay_url(candidate));
+    if let Ok(mut guard) = MANIFEST_RELAY_URL.write() {
+        *guard = url;
+    }
+}
+
+/// Resolves the Remote relay URL: `GNOMCODE_REMOTE_RELAY_URL` override, else the most
+/// recent value from a verified update manifest, else the bundled branding default.
 fn default_relay_url() -> String {
-    std::env::var("GNOMCODE_REMOTE_RELAY_URL").unwrap_or_else(|_| {
-        gnomcode_core::branding::branding()
-            .map(|b| b.remote_relay_url.clone())
-            .unwrap_or_default()
-    })
+    if let Ok(value) = std::env::var("GNOMCODE_REMOTE_RELAY_URL") {
+        return value;
+    }
+    if let Some(url) = MANIFEST_RELAY_URL
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone())
+    {
+        return url;
+    }
+    gnomcode_core::branding::branding()
+        .map(|b| b.remote_relay_url.clone())
+        .unwrap_or_default()
 }
 
 /// Current pairing state returned only by the authenticated loopback API.
