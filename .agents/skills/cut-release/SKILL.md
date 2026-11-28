@@ -35,6 +35,7 @@ node .agents/skills/cut-release/scripts/bump-version.mjs major
 | `scripts/install.ps1` | `Gnomcode-vX.Y.Z-windows-$Arch.zip` download URL and installation completion banner |
 | `web/public/downloads/install.ps1` | Direct mirror of `scripts/install.ps1` |
 | `web/app/downloads/page.tsx` | UI badge `Production Release • vX.Y.Z` and zip download href |
+| `mobile/package.json` | `"version": "X.Y.Z"`; the Android app's `versionName` and `versionCode` (`major*10000+minor*100+patch`) derive from it |
 | `apps/tray/src-tauri/tauri.conf.json` | `"version": "X.Y.Z"` (when present) |
 
 ---
@@ -106,6 +107,17 @@ This runs:
    ```
    Run this only after step 4's merge and tag are on `main` and step 5's Windows smoke test passes. It refuses to run unless `web/public/downloads/` already holds a *signed* `latest.json` and the matching Windows installer set — it never touches the private signing key itself. It triggers `ci.yml` (`package=true`) and `npm-release-build.yml` on GitHub Actions, waits for both (15-30 min), downloads every platform's binaries, assembles all 7 `npm/platform/*` packages plus the two supplementary assets those workflows don't produce (`Gnomcode-vX.Y.Z-windows-arm64-cli.zip`, `gnomcode-vX.Y.Z-linux-x86_64-musl.tar.gz`), regenerates `SHA256SUMS`/`SHA256SUMS-vX.Y.Z.txt` over the complete set, runs the repo's own release gates (`check-release-versions.mjs --artifacts`, `npm/check-release.cjs`, `npm/smoke-release.cjs`) and aborts on any failure, opens and merges the checksums PR, creates the GitHub release with every asset, deploys the website (`vercel deploy --prod`), and publishes all 8 npm packages (platform packages first, `gnomcode` shim last). Pass `--dry-run` to validate preconditions only, or `--no-publish` to stop before `npm publish` (e.g. to review the GitHub release and website first). It is safe to re-run after a partial failure: every step checks what already exists before acting.
    npm's own web/2FA publish approval (when the account requires it) cannot be clicked through by a script or an agent — it waits on each `npm publish`, same as it would for a person, and a human must approve it in their browser.
+
+7. **Android app (ADR 0066)**: build the signed APK and attach it to the GitHub release.
+   ```sh
+   cd mobile && npm ci
+   # JAVA_HOME = JDK 21, ANDROID_HOME = Android SDK (platform 36),
+   # GNOMCODE_ANDROID_SIGNING = signing properties file outside the repo,
+   # GNOMCODE_GOOGLE_SERVICES = google-services.json outside the repo (optional until push ships)
+   node scripts/build-apk.mjs
+   gh release upload vX.Y.Z dist/gnomcode-android-X.Y.Z.apk
+   ```
+   The APK loads the hosted `/remote` page, so web-only changes reach the app after the website deploy without a new APK; ship a new APK when anything under `mobile/` changes, and with every release so versions stay aligned. Before uploading, install it on a phone (`adb install -r`), open it, sign in, and add the Activity, Limits and Agents widgets to confirm they fill and show "Updated ... ago". Never commit the keystore, its properties file or `google-services.json`. Losing the keystore means users must uninstall to update, so back it up.
 
 ## Website deploys (manual)
 

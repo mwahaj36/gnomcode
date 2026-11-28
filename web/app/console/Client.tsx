@@ -9,6 +9,7 @@ import ThemeControl from "../../components/ThemeControl";
 import SettingsPanel from "../../components/SettingsPanel";
 import AppLockGate from "../../components/AppLockGate";
 import { supabase } from "../../lib/supabase";
+import { publishWidgetSnapshot } from "../../lib/widget-bridge";
 import { updateActivity, updateHeatmap, updateProviders, updateSessions, updateQuota, updateHomeSessions, updateTodayTiles, updatePeriodTiles, updateValue, mountProjectList, projectsFromSessions, type ActivityHeatmap } from "../../lib/console-presentation.js";
 
 // The four places of the console. `sessions` is the synced history reached from Home, so it keeps Home highlighted.
@@ -322,6 +323,7 @@ export default function ConsolePage({ initialView = "overview" }: { initialView?
         setRoiByProvider(snap?.roi_by_timeline?.[timeline]?.roi_by_provider || []);
         setCombinedRoi(snap?.roi_by_timeline?.[timeline]?.combined_roi || null);
         setSnapshotLoaded(Boolean(snap));
+        if (snap) publishWidgetSnapshot(snap.generated_at, snap.activity_heatmap, snap.quota || [], allSessions);
         // Sessions carry the desktop's own home_group; desktops that predate it fall back to their reported count.
         const grouped = allSessions.some((session: SessionItem) => session.home_group);
         setActiveCount(grouped ? allSessions.filter((session: SessionItem) => session.home_group === "needs_you" || session.home_group === "running").length : snap?.ongoing_count ?? snap?.active_count ?? null);
