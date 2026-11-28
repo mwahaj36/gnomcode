@@ -3,6 +3,11 @@ package dev.gnomcode.app;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
+import android.view.ViewGroup;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -12,7 +17,22 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(WidgetBridgePlugin.class);
         super.onCreate(savedInstanceState);
+        keepClearOfSystemBars();
         handleAuthReturn(getIntent());
+    }
+
+    /** Android 15+ draws edge to edge; keep the page out from under the status and navigation bars. */
+    private void keepClearOfSystemBars() {
+        if (bridge == null || bridge.getWebView() == null) return;
+        View web = bridge.getWebView();
+        ViewCompat.setOnApplyWindowInsetsListener(web, (view, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.ime());
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+            params.setMargins(bars.left, bars.top, bars.right, bars.bottom);
+            view.setLayoutParams(params);
+            return WindowInsetsCompat.CONSUMED;
+        });
+        ViewCompat.requestApplyInsets(web);
     }
 
     @Override
