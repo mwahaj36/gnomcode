@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
+import { finishNativeOAuth, isNativeApp, startNativeOAuth } from "../../lib/native-auth";
 
 type AuthMode = "signin" | "signup" | "forgot";
 
@@ -21,6 +22,13 @@ export default function AuthPage() {
   const busy=useRef(false);
 
   useEffect(() => {
+    const returned=new URLSearchParams(window.location.search);
+    const code=returned.get('code');
+    if(code && isNativeApp()){
+      window.history.replaceState(null,'',window.location.pathname);
+      setOauthLoading(true);
+      finishNativeOAuth(code).then(ok=>{if(ok)router.replace('/console');else setError('Sign-in did not finish. Try again.');}).finally(()=>setOauthLoading(false));
+    } else if(returned.has('error_description')) setError(returned.get('error_description')||'Sign-in was cancelled.');
     const fragment=new URLSearchParams(window.location.hash.slice(1));
     if(fragment.has('error')){setError('Your email link expired or could not be verified. Sign in or request a new confirmation below.');window.history.replaceState(null,'',window.location.pathname);}
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN' && session)router.replace('/console');});
@@ -37,6 +45,11 @@ export default function AuthPage() {
     setMessage("");
     setOauthLoading(true);
     try {
+      if (isNativeApp()) {
+        const failure = await startNativeOAuth(provider);
+        if (failure) setError(failure);
+        return;
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
