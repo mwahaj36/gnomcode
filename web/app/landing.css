@@ -105,7 +105,7 @@
 .sp-footer-grid .sp-footer-intro p{margin:0;max-width:34ch}
 .sp-footer-grid a:not(.sp-brand),.sp-footer-grid button{transition:color .18s,transform .18s}
 .sp-footer-grid a:not(.sp-brand):hover,.sp-footer-grid button:hover{transform:translateX(3px)}
-.sp-footer-wordmark{font-size:clamp(112px,19vw,240px);line-height:.8;font-weight:600;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;padding:0 0 32px}
+.sp-footer-wordmark{font-size:clamp(112px,18vw,220px);line-height:1;font-weight:600;letter-spacing:-.04em;white-space:nowrap;overflow:hidden;padding:0 0 32px}
 .sp-footer-wordmark span{color:var(--primary)}
 .sp-footer-bottom a{color:var(--text-2);transition:color .18s}
 .sp-footer-bottom a:hover{color:var(--primary-text)}
