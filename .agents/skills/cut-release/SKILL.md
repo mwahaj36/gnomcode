@@ -81,17 +81,31 @@ This runs:
    - Update `CHANGELOG.md` with Conventional Commits.
    - Bundle third-party notices (`cargo about generate about.hbs > dist/THIRD_PARTY_NOTICES.html`).
 
-4. **Commit & Tag**:
+4. **Commit & Tag** (never commit or push straight to `main` — branch, PR, merge, same as any other change):
    ```sh
-   git commit -am "chore(release): vX.Y.Z"
+   git checkout -b chore/vX.Y.Z-release
+   git add -A
+   git commit -m "chore(release): vX.Y.Z"
+   git push origin chore/vX.Y.Z-release
+   gh pr create --base main --title "chore(release): vX.Y.Z" --body "..."
+   # once CI is green:
+   gh pr merge --squash --delete-branch=false
+   git checkout main && git pull --ff-only origin main
    git tag -a vX.Y.Z -m "Gnomcode vX.Y.Z"
-   git push origin main --follow-tags
+   git push origin vX.Y.Z
    ```
 
-5. **Post-Release Verification**:
+5. **Post-Release Verification (Windows)**:
    - Smoke-test installer: `web/public/downloads/Gnomcode-Setup.exe`.
    - Verify Windows Settings -> "Installed apps" displays `Gnomcode Mission Control vX.Y.Z`.
    - Test `Gnomcode-Uninstall.exe` cleanly purges services, registry entries, and shortcuts.
+
+6. **Finish the cross-platform release** (macOS/Linux binaries, npm packages, GitHub release, website, npm publish — everything that needs no secret, only an authenticated `gh`/`npm`/`vercel`):
+   ```sh
+   node scripts/release/finish-cross-platform-release.mjs
+   ```
+   Run this only after step 4's merge and tag are on `main` and step 5's Windows smoke test passes. It refuses to run unless `web/public/downloads/` already holds a *signed* `latest.json` and the matching Windows installer set — it never touches the private signing key itself. It triggers `ci.yml` (`package=true`) and `npm-release-build.yml` on GitHub Actions, waits for both (15-30 min), downloads every platform's binaries, assembles all 7 `npm/platform/*` packages plus the two supplementary assets those workflows don't produce (`Gnomcode-vX.Y.Z-windows-arm64-cli.zip`, `gnomcode-vX.Y.Z-linux-x86_64-musl.tar.gz`), regenerates `SHA256SUMS`/`SHA256SUMS-vX.Y.Z.txt` over the complete set, runs the repo's own release gates (`check-release-versions.mjs --artifacts`, `npm/check-release.cjs`, `npm/smoke-release.cjs`) and aborts on any failure, opens and merges the checksums PR, creates the GitHub release with every asset, deploys the website (`vercel deploy --prod`), and publishes all 8 npm packages (platform packages first, `gnomcode` shim last). Pass `--dry-run` to validate preconditions only, or `--no-publish` to stop before `npm publish` (e.g. to review the GitHub release and website first). It is safe to re-run after a partial failure: every step checks what already exists before acting.
+   npm's own web/2FA publish approval (when the account requires it) cannot be clicked through by a script or an agent — it waits on each `npm publish`, same as it would for a person, and a human must approve it in their browser.
 
 ## Website deploys (manual)
 
