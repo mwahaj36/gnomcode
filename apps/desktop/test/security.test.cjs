@@ -72,6 +72,9 @@ test('terminal resources allow only the daemon PTY WebSocket while navigation st
 test('external links open only approved product pages without embedded credentials or query data', () => {
   const { isAllowedExternalUrl } = require('../dist/security.js');
   assert.equal(isAllowedExternalUrl('https://gnomcode.vercel.app/docs'), true);
+  assert.equal(isAllowedExternalUrl('https://abc.supabase.co/auth/v1/authorize?provider=github&code_challenge=x'), true);
+  assert.equal(isAllowedExternalUrl('https://abc.supabase.co/rest/v1/secrets?x=1'), false);
+  assert.equal(isAllowedExternalUrl('https://evil.example/auth/v1/authorize?provider=github'), false);
   assert.equal(isAllowedExternalUrl('https://gnomcode.vercel.app/pricing'), true);
   for (const value of ['https://evil.example/', 'http://gnomcode.vercel.app/', 'https://user@gnomcode.vercel.app/', 'https://gnomcode.vercel.app/docs?token=secret', 'https://gnomcode.vercel.app:444/']) {
     assert.equal(isAllowedExternalUrl(value), false);

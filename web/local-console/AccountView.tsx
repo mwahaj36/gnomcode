@@ -48,7 +48,7 @@ export function AccountView() {
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
-  const [busy, setBusy] = useState<'signin' | 'pair' | 'unpair' | null>(null);
+  const [busy, setBusy] = useState<'signin' | 'oauth' | 'pair' | 'unpair' | null>(null);
   const [status, setStatus] = useState<{ text: string; tone: Tone } | null>(null);
   const [onboardingPaused, setOnboardingPaused] = useState(() => isOnboardingPausedForAuth());
   const [localUsageCount, setLocalUsageCount] = useState<number | null>(null);
@@ -131,6 +131,39 @@ export function AccountView() {
         text: 'Sign-in failed. Check your email, password and connection. Browser accounts can use the connection option below.',
         tone: 'muted',
       });
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  };
+
+  // GitHub sign-in opens the system browser; the daemon finishes it on its loopback callback.
+  const signInWithGitHub = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy('oauth');
+    setStatus(null);
+    try {
+      if (!(await confirmAccountAccess())) return;
+      const { url } = await fetchLocalMutation<{ url: string }>('/api/v1/auth/oauth/start', {
+        method: 'POST',
+        body: { provider: 'github', remote_access_confirmed: true },
+      });
+      window.open(url, '_blank', 'noopener');
+      setStatus({ text: 'Finish signing in with GitHub in your browser, then come back here.', tone: 'muted' });
+      const deadline = Date.now() + 10 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const session = await fetchLocalJson<AccountState>('/api/v1/auth/session').catch(() => null);
+        if (session?.paired) {
+          setStatus({ text: 'Signed in. Your desktop will appear in Devices.', tone: 'muted' });
+          await check();
+          return;
+        }
+      }
+      setStatus({ text: 'GitHub sign-in timed out. Try again.', tone: 'muted' });
+    } catch {
+      setStatus({ text: 'GitHub sign-in could not start. Check your connection and try again.', tone: 'muted' });
     } finally {
       busyRef.current = false;
       setBusy(null);
@@ -278,6 +311,10 @@ export function AccountView() {
           </div>
           <div id="auth-unpaired-card" hidden={!unpaired}>
             <h3>Sign in on this desktop</h3>
+            <button id="auth-github-button" type="button" className="btn-control" disabled={busy === 'oauth'} onClick={() => void signInWithGitHub()}>
+              {busy === 'oauth' ? 'Waiting for GitHub...' : 'Continue with GitHub'}
+            </button>
+            <p className="sp-auth-divider">or use email</p>
             <form onSubmit={(event) => void signIn(event)}>
               <label htmlFor="auth-email">Email</label>
               <input id="auth-email" type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} />
