@@ -9,7 +9,7 @@ use axum::{
     Router,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
-    response::{IntoResponse, Json, Redirect},
+    response::{IntoResponse, Json},
     routing::{get, post},
 };
 
@@ -145,6 +145,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/fonts/jetbrains-mono.woff2", get(mono_font_handler))
         .route("/auth/callback", get(auth_callback_handler))
         .route("/api/v1/auth/signin", post(auth_signin_handler))
+        .route("/api/v1/auth/oauth/start", post(auth_oauth_start_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/doctor", get(doctor_handler))
         .route("/api/v1/onboarding/status", get(onboarding_status_handler))
@@ -451,10 +452,6 @@ async fn mono_font_handler() -> impl IntoResponse {
 
 async fn svg_icon_handler() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/svg+xml")], GNOMCODE_MARK_SVG)
-}
-
-async fn auth_callback_handler() -> impl IntoResponse {
-    Redirect::to("/")
 }
 
 pub(crate) fn validate_auth(headers: &HeaderMap, expected_token: &str) -> Result<(), StatusCode> {

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Gnomcode</string>
+    <string name="title_activity_main">Gnomcode</string>
+    <string name="package_name">dev.gnomcode.app</string>
+    <string name="custom_url_scheme">dev.gnomcode.app</string>
+    <string name="widget_activity_desc">Token activity heatmap from your desktop</string>
+    <string name="widget_limits_desc">Remaining limits for each agent</string>
+    <string name="widget_waiting_desc">Agents waiting for you</string>
+</resources>

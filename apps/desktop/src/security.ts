@@ -59,6 +59,8 @@ export function isAllowedResource(input: string, port: number): boolean {
 export function isAllowedExternalUrl(input: string): boolean {
   try {
     const url = new URL(input);
+    // Account sign-in with GitHub or Google opens the Supabase authorize page in the system browser.
+    if (url.protocol === 'https:' && url.hostname.endsWith('.supabase.co') && url.pathname === '/auth/v1/authorize' && !url.port && !url.username && !url.password) return true;
     return url.protocol === 'https:' && url.hostname === new URL(branding.baseUrl).hostname &&
       !url.port && !url.username && !url.password && !url.search && (!url.hash || url.hash === '#privacy');
   } catch {

@@ -138,6 +138,12 @@ for (const rel of ['apps/desktop/package.json', ...fs.readdirSync(path.join(ROOT
   manifest.version = newVersion;
   write(rel, JSON.stringify(manifest, null, 2) + '\n');
 }
+// Android app (ADR 0066): versionName/versionCode derive from this in mobile/android/app/build.gradle.
+const mobilePkg = read('mobile/package.json');
+if (mobilePkg) {
+  write('mobile/package.json', mobilePkg.replace(/("version":\s*")[^"]+(")/, `$1${newVersion}$2`));
+  results.push({ file: 'mobile/package.json', detail: `"version": "${newVersion}" (Android versionName)` });
+}
 const shimManifest = JSON.parse(read(npmFleetPath));
 for (const name of Object.keys(shimManifest.optionalDependencies || {})) shimManifest.optionalDependencies[name] = newVersion;
 write(npmFleetPath, JSON.stringify(shimManifest, null, 2) + '\n');

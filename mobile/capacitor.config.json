@@ -1,0 +1,18 @@
+{
+  "appId": "dev.gnomcode.app",
+  "appName": "Gnomcode",
+  "webDir": "www",
+  "server": {
+    "url": "https://gnomcode.vercel.app/remote",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "gnomcode.vercel.app",
+      "*.supabase.co"
+    ],
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "backgroundColor": "#0f1117",
+    "adjustMarginsForEdgeToEdge": "disable"
+  }
+}
