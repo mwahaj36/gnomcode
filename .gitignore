@@ -69,3 +69,18 @@ web/public/downloads/latest.json
 
 # Internal documentation, ADRs and session records (kept local, not published)
 /localdocs/
+
+# Release staging output (published to GitHub Releases / npm, never committed)
+web/public/downloads/*.tgz
+web/public/downloads/*.tar.gz
+web/public/downloads/*.deb
+web/public/downloads/*.zip
+web/public/downloads/*.exe
+web/public/downloads/*.dmg
+web/public/downloads/*.AppImage
+npm/gnomcode/LICENSE
+npm/platform/*/bin/
+npm/platform/*/LICENSE
+npm/platform/*/THIRD_PARTY_NOTICES.html
+web/tsconfig.tsbuildinfo
+web/test-results/
