@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.3 - 2026-11-28
+
+- Remote's relay moved off Cloudflare Workers to Fly.io after the account's Durable Objects free-tier duration limit started cutting off every browser connection (seen as an endless "Connecting / Reconnecting" loop in Workspace and the PWA).
+- The Remote relay URL is no longer baked into the desktop build: it can now be republished through the existing update manifest and desktops adopt it automatically, so a future relay change no longer needs a new release.
+
 ## 1.2.2 - 2026-11-26
 
 - Windows setup reinstalls into its usual folder even when an earlier uninstall left stale files behind in the desktop subfolder; unrelated files still block the folder.

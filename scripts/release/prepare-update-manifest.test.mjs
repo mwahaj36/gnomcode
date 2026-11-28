@@ -16,7 +16,7 @@ test('manifest uses package version, actual installer hash and only Windows x64'
     mkdirSync(path.join(fixture, 'web'), { recursive: true });
     cpSync(path.join(root, script), path.join(fixture, script));
     writeFileSync(path.join(fixture, 'web/package.json'), '{"version":"1.0.0"}');
-    writeFileSync(path.join(fixture, 'web/branding.json'), '{"releasesRepository":"https://github.com/example/binaries"}');
+    writeFileSync(path.join(fixture, 'web/branding.json'), '{"releasesRepository":"https://github.com/example/binaries","remoteRelayUrl":"wss://relay.example/relay"}');
     const bytes = Buffer.from('MZ-synthetic-reviewed-installer');
     const sha = createHash('sha256').update(bytes).digest('hex');
     writeFileSync(path.join(fixture, 'Gnomcode-Setup.exe'), bytes);
@@ -27,6 +27,7 @@ test('manifest uses package version, actual installer hash and only Windows x64'
     assert.equal(first.status, 0, first.stderr);
     const manifest = JSON.parse(readFileSync(output, 'utf8'));
     assert.equal(manifest.version, '1.0.0');
+    assert.equal(manifest.remote_relay_url, 'wss://relay.example/relay');
     assert.deepEqual(Object.keys(manifest.platforms), ['win32-x64']);
     assert.equal(manifest.platforms['win32-x64'].url, 'https://github.com/example/binaries/releases/download/v1.0.0/Gnomcode-Setup.exe');
     assert.equal(manifest.platforms['win32-x64'].sha256, sha);

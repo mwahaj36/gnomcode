@@ -39,6 +39,24 @@ pub struct UpdateManifest {
     /// Per-target packages (`win32-x64`, `darwin-arm64`, `linux-x64`, etc.).
     #[serde(default)]
     pub platforms: BTreeMap<String, UpdatePlatformAsset>,
+    /// Optional current Remote relay WebSocket URL, published alongside releases so the
+    /// relay backend can move (e.g. after a provider outage) without shipping a new build.
+    /// Desktops only adopt this when [`is_valid_wss_relay_url`] accepts it; the connection
+    /// itself is re-validated before use regardless (`SPEC` Remote relay notes).
+    #[serde(default)]
+    pub remote_relay_url: Option<String>,
+}
+
+/// Returns `true` when `url` is a clean, single-segment `wss://.../relay` endpoint: the
+/// shape required of a Remote relay URL published in the update manifest. Stricter than
+/// what a desktop accepts locally for development (plain `ws://127.0.0.1:*`/`localhost:*`
+/// is never valid here), since this value arrives over the network.
+#[must_use]
+pub fn is_valid_wss_relay_url(url: &str) -> bool {
+    url.starts_with("wss://")
+        && url.len() <= 512
+        && url.ends_with("/relay")
+        && !url.contains(['?', '#', '&'])
 }
 
 /// Lifecycle state of in-app desktop auto-update.
