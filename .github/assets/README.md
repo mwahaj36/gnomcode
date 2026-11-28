@@ -1,5 +1,7 @@
 # Assets
 
-`handoff-demo.gif` is referenced at the top of the repo README. Add a short
-screen recording of a Claude Code -> Codex handoff here with that exact name.
-Until it exists, the README shows a broken-image slot.
+- `console-demo.gif`: the README hero. Regenerate it from the real console seeded
+  with anonymized fixtures: in `web/`, run
+  `npx playwright test -c playwright.demo.config.ts`, then
+  `scripts/make-demo-gif.ps1` (needs ffmpeg).
+- `console-overview.png`: static console screenshot.

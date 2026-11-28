@@ -19,14 +19,14 @@ Launch official AI coding agent CLIs in one workspace, track usage and quota win
 </p>
 
 <p align="center">
-  <img src=".github/assets/console-overview.png" alt="Gnomcode console overview showing provider limits, activity heatmap, and daily totals" width="780">
+  <img src=".github/assets/console-demo.gif" alt="Gnomcode console tour: Home with sessions and provider limits, Usage with estimated spend, and the Workspace conversation view" width="780">
 </p>
 
 ---
 
 ## Install
 
-**v1.2.2** lets Windows setup reinstall over files an earlier uninstall left behind and updates the website framework for security fixes, on top of v1.2.1's consistent controls, blue brand mark and redesigned Remote desktop panel. Download the desktop app for your platform from [Downloads](https://gnomcode.vercel.app/downloads) or the [v1.2.2 release assets](https://github.com/mwahaj36/gnomcode/releases/tag/v1.2.2); see the [changelog](https://gnomcode.vercel.app/changelog) for details. Windows installers are unsigned and macOS apps are unnotarized; Windows automatic updates verify an Ed25519-signed manifest before installing.
+Download the desktop app for your platform from [Downloads](https://gnomcode.vercel.app/downloads) or the [latest release](https://github.com/mwahaj36/gnomcode/releases/latest); see the [changelog](https://gnomcode.vercel.app/changelog) for what changed. Windows installers are unsigned and macOS apps are unnotarized; Windows automatic updates verify an Ed25519-signed manifest before installing.
 
 ### npm (Windows, macOS, Linux)
 
@@ -44,7 +44,7 @@ Desktop ZIPs are available for macOS Intel/Apple Silicon and Linux x64, with a D
 
 ### Windows
 
-Download `Gnomcode-Setup.exe` or `Gnomcode-v1.2.2-windows-x64.zip` from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
+Download `Gnomcode-Setup.exe` or the `Gnomcode-v<version>-windows-x64.zip` archive from [Releases](https://github.com/mwahaj36/gnomcode/releases) or [Downloads](https://gnomcode.vercel.app/downloads), or run:
 
 ```powershell
 irm https://gnomcode.vercel.app/downloads/install.ps1 | iex
