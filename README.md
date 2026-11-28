@@ -19,7 +19,7 @@ Launch official AI coding agent CLIs in one workspace, track usage and quota win
 </p>
 
 <p align="center">
-  <img src=".github/assets/console-demo.gif" alt="Gnomcode console tour: Home with sessions and provider limits, Usage with estimated spend, and the Workspace conversation view" width="780">
+  <img src=".github/assets/console-demo.gif" alt="Gnomcode console tour with demo data: Home with sessions and provider limits, Usage with estimated spend, and the Workspace conversation view" width="780">
 </p>
 
 ---

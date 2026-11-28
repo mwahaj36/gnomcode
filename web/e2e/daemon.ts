@@ -55,9 +55,10 @@ async function seed(home: string, desktopClaude: boolean): Promise<void> {
 }
 
 /** Starts the real daemon on a free loopback port with an isolated `GNOMCODE_HOME` and fixture data. */
-export async function startDaemon(options: { seed?: boolean; desktopClaude?: boolean } = {}): Promise<Daemon> {
+export async function startDaemon(options: { seed?: boolean; desktopClaude?: boolean; seedWith?: (home: string) => Promise<void> } = {}): Promise<Daemon> {
   const home = await mkdtemp(path.join(tmpdir(), 'gnomcode-e2e-'));
-  if (options.seed !== false) await seed(home, options.desktopClaude === true);
+  if (options.seedWith) await options.seedWith(home);
+  else if (options.seed !== false) await seed(home, options.desktopClaude === true);
   const env = {
     ...process.env,
     GNOMCODE_HOME: home,
