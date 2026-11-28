@@ -1,0 +1,15 @@
+{
+  "name": "gnomcode-remote-relay-fly",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-knowledge end-to-end encrypted relay for Gnomcode remote companion, deployed on Fly.io Machines.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "SEE LICENSE IN ../LICENSE"
+}

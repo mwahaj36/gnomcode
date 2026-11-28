@@ -171,6 +171,10 @@ async fn check_and_stage_update(
         Err(_) => return fail_open(current_version, &now, "Malformed update manifest."),
     };
 
+    // Adopt a republished relay URL on every successful fetch, even when this desktop is
+    // already up to date, so a relay migration doesn't need a new release to reach it.
+    crate::remote::set_manifest_relay_url(manifest.remote_relay_url.clone());
+
     if !is_newer_version(current_version, &manifest.version) {
         return UpdateStatus {
             state: UpdateStateKind::UpToDate,

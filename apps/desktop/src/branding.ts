@@ -4,7 +4,7 @@ export const branding = {
   "baseUrl": "https://gnomcode.vercel.app",
   "sourceRepository": "https://github.com/mwahaj36/gnomcode",
   "releasesRepository": "https://github.com/mwahaj36/gnomcode",
-  "remoteRelayUrl": "wss://spawnt-remote-relay.mwahaj25.workers.dev/relay",
+  "remoteRelayUrl": "wss://gnomcode-remote-relay.fly.dev/relay",
   "supabaseUrl": "https://jjnuxngvhuvxkxrfmnqx.supabase.co",
   "supabasePublishableKey": "sb_publishable_o2ZiGak7RHq_cmL81BOeZQ_g7JJeyCI"
 } as const;
